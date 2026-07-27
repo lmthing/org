@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react'
+import { CheckCircle2, XCircle, Clock, AlertCircle } from '../../../elements/primitives/icons'
 import * as Prim from '../../../elements/primitives'
 import { Badge, BADGE_BASE, BADGE_VARIANT } from '../../../elements/content/badge'
 
@@ -62,7 +62,8 @@ export function GithubDeploymentStatus({
   if (isLoading) {
     return (
       <Badge variant="muted">
-        <Clock size={16} className="animate-spin" />
+        {/* The Tamagui icon takes no `className` — the animation class rides on a wrapper. */}
+        <Prim.Box className="animate-spin"><Clock size={16} /></Prim.Box>
         <Prim.Text>Loading...</Prim.Text>
       </Badge>
     )
@@ -82,7 +83,7 @@ export function GithubDeploymentStatus({
       if (data.conclusion === 'failure') return { icon: <XCircle size={16} />, label: 'Failed', variant: 'primary' as const }
       return { icon: <AlertCircle size={16} />, label: data.conclusion || 'Unknown', variant: 'muted' as const }
     }
-    return { icon: <Clock size={16} className="animate-pulse" />, label: 'In Progress', variant: 'muted' as const }
+    return { icon: <Prim.Box className="animate-pulse"><Clock size={16} /></Prim.Box>, label: 'In Progress', variant: 'muted' as const }
   }
 
   const statusInfo = getStatusInfo()

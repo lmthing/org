@@ -97,7 +97,7 @@ export function ExecutionTree(): React.ReactElement {
         {queue && <Prim.Text fontFamily="$mono">q {queue.active}/{queue.max}</Prim.Text>}
       </Prim.Row>
       {rootId ? <TreeRowById id={rootId} depth={0} now={now} /> : (
-        <Prim.Box color="var(--lm-muted)" paddingHorizontal="$3" paddingVertical="$4" fontSize="12px">No activity yet. Send a message to start.</Prim.Box>
+        <Prim.Box color="var(--lm-muted)" paddingHorizontal="$3" paddingVertical="$4" fontSize="12px"><Prim.Text>No activity yet. Send a message to start.</Prim.Text></Prim.Box>
       )}
     </Prim.Box>
   );

@@ -108,7 +108,7 @@ export function ReplChatView({
     if (block.type === 'error')
       return (
         <Prim.Box key={block.id} {...styles.errorBlock}>
-          {String(block.data)}
+          <Prim.Text>{String(block.data)}</Prim.Text>
         </Prim.Box>
       );
     return null;
@@ -116,7 +116,7 @@ export function ReplChatView({
 
   const userBubble = (m: { id: string; text: string }): React.ReactNode => (
     <Prim.Box key={m.id} style={styles.userMsg}>
-      {m.text}
+      <Prim.Text>{m.text}</Prim.Text>
     </Prim.Box>
   );
 
@@ -144,7 +144,7 @@ export function ReplChatView({
             {...styles.resyncButton}
             title="Restart the agent session"
           >
-            ↻ Restart
+            <Prim.Text>↻ Restart</Prim.Text>
           </Prim.Pressable>
         )}
       </Prim.Box>
@@ -180,7 +180,7 @@ export function ReplChatView({
           rows={2}
         />
         <Prim.Pressable onClick={handleSend} disabled={!isConnected || !inputValue.trim()} {...styles.sendButton}>
-          Send
+          <Prim.Text>Send</Prim.Text>
         </Prim.Pressable>
       </Prim.Box>
     </Prim.Box>
@@ -209,7 +209,7 @@ function WorkRow({
           <Prim.Text {...styles.workLabel}>{node.label}</Prim.Text>
           {elapsed && <Prim.Text {...styles.workElapsed}>{elapsed}</Prim.Text>}
         </Prim.Box>
-        {narration && <Prim.Box {...styles.workNarration}>{narration}</Prim.Box>}
+        {narration && <Prim.Box {...styles.workNarration}><Prim.Text>{narration}</Prim.Text></Prim.Box>}
       </Prim.Box>
     </Prim.Box>
   );

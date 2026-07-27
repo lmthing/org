@@ -120,7 +120,7 @@ export function Inspector(): React.ReactElement {
   const setTab = useStore((s) => s.setTab);
 
   if (!node) {
-    return <Prim.Box as="aside" display="flex" flexDirection="row" aria-label="inspector" color="var(--lm-muted)" height="100%" justifyContent="center" fontSize="12px" alignItems="center">Select a node to inspect.</Prim.Box>;
+    return <Prim.Box as="aside" display="flex" flexDirection="row" aria-label="inspector" color="var(--lm-muted)" height="100%" justifyContent="center" fontSize="12px" alignItems="center"><Prim.Text>Select a node to inspect.</Prim.Text></Prim.Box>;
   }
 
   return (
@@ -132,11 +132,11 @@ export function Inspector(): React.ReactElement {
           <KindBadge kind={node.kind} />
           {node.durationMs !== undefined && <Prim.Text color="var(--lm-muted)" fontSize="10px" fontFamily="$mono" marginLeft="auto">{fmtDuration(node.durationMs)}</Prim.Text>}
         </Prim.Row>
-        <Prim.Box color="var(--lm-muted)" fontSize="10px" fontFamily="$mono" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" marginTop="0.25rem" title={node.id}>{node.id}</Prim.Box>
+        <Prim.Box color="var(--lm-muted)" fontSize="10px" fontFamily="$mono" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" marginTop="0.25rem" title={node.id}><Prim.Text>{node.id}</Prim.Text></Prim.Box>
         {node.detail && Object.keys(node.detail).length > 0 && (
-          <Prim.Box color="var(--lm-muted)" fontSize="10px" fontFamily="$mono" marginTop="0.25rem">{preview(node.detail, 200)}</Prim.Box>
+          <Prim.Box color="var(--lm-muted)" fontSize="10px" fontFamily="$mono" marginTop="0.25rem"><Prim.Text>{preview(node.detail, 200)}</Prim.Text></Prim.Box>
         )}
-        {node.error && <Prim.Box color="var(--lm-red)" fontSize="11px" fontFamily="$mono" marginTop="0.25rem">{preview(node.error, 300)}</Prim.Box>}
+        {node.error && <Prim.Box color="var(--lm-red)" fontSize="11px" fontFamily="$mono" marginTop="0.25rem"><Prim.Text>{preview(node.error, 300)}</Prim.Text></Prim.Box>}
         {node.result !== undefined && <Prim.Box color="var(--lm-green)" fontSize="10px" fontFamily="$mono" marginTop="0.25rem">result: {preview(node.result, 200)}</Prim.Box>}
       </Prim.Box>
       <Tabs tabs={TABS} active={tab} onChange={setTab} />

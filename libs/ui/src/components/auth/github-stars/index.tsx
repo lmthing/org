@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Star } from 'lucide-react'
+import { Star } from '../../../elements/primitives/icons'
 import * as Prim from '../../../elements/primitives'
 import { BADGE_BASE } from '../../../elements/content/badge'
 import { Caption } from '../../../elements/typography/caption'

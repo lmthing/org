@@ -218,9 +218,20 @@ export function getSession(): AuthSession | null {
   }
 }
 
+/**
+ * True only in a real browser. React Native's own bootstrap (`setUpGlobals.js`) sets
+ * `global.window = global` for npm-package compatibility, so `typeof window !== 'undefined'` is
+ * true on native too — every other DOM-only property (`location`, `document`, `history`) is
+ * NOT shimmed, so reading through them unconditionally throws instead of falling through the
+ * `undefined` branch. `window.document` is a real signal RN never sets.
+ */
+export function isWeb(): boolean {
+  return typeof window !== 'undefined' && typeof window.document !== 'undefined'
+}
+
 /** Token injected by the pod bootstrap (window.__LM_ACCESS_TOKEN__), or null. */
 export function getPodInjectedToken(): string | null {
-  if (typeof window === 'undefined') return null
+  if (!isWeb()) return null
   const t = (window as unknown as { __LM_ACCESS_TOKEN__?: string }).__LM_ACCESS_TOKEN__
   return t && t.length > 0 ? t : null
 }
@@ -238,7 +249,7 @@ export function isPodEmbedded(): boolean {
  * real gateway auth is unaffected.
  */
 export function isLocalRun(): boolean {
-  if (typeof window === 'undefined') return false
+  if (!isWeb()) return false
   const host = window.location.hostname
   return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host.endsWith('.test')
 }

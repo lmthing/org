@@ -1,5 +1,9 @@
 import * as React from 'react'
-import { ChevronDown, ChevronRight, ChevronLeft, Plus, X, PanelLeft, Settings } from 'lucide-react'
+// `@tamagui/lucide-icons`, not `lucide-react`: the latter renders literal DOM `<svg>`/`<path>`
+// elements, which React Native has no host component for — `TurboModuleRegistry`/view-config
+// resolution throws the moment one mounts. `@tamagui/lucide-icons` wraps the same icon set in
+// `react-native-svg`'s `Svg`/`Path`, which both targets can render.
+import { ChevronDown, ChevronRight, ChevronLeft, Plus, X, PanelLeft, Settings } from '../../primitives/icons'
 import * as Prim from '../../primitives/index'
 import { CozyThingText } from '../../branding/cozy-text'
 
@@ -145,9 +149,15 @@ const SECTION_COUNT = {
 } as const
 
 /** `.app-sidebar__section-icon` / `__icon` — lucide SVGs, so a plain style. */
-const SECTION_ICON_STYLE = { width: 12, height: 12, flexShrink: 0 } as const
-const ICON_STYLE = { width: 12, height: 12 } as const
-const CHEVRON_STYLE = { width: 16, height: 16, flexShrink: 0 } as const
+// `@tamagui/lucide-icons` sizes itself via a `size` PROP, not a style width/height (its `Svg` root
+// sets `width`/`height` from `size` before spreading the rest of its props) — so the visual size
+// moved out of these `style` objects into `*_SIZE` below; `flexShrink` stays here, a real layout
+// concern the icon's own props don't touch.
+const SECTION_ICON_SIZE = 12
+const SECTION_ICON_FLEX_STYLE = { flexShrink: 0 } as const
+const ICON_SIZE = 12
+const CHEVRON_SIZE = 16
+const CHEVRON_FLEX_STYLE = { flexShrink: 0 } as const
 
 const DROPDOWN = { position: 'relative' } as const
 const DROPDOWN_TRIGGER = {
@@ -345,9 +355,9 @@ function SectionHeader({
   return (
     <Prim.Pressable onClick={onToggle} {...SECTION_HEADER}>
       {expanded ? (
-        <ChevronDown style={SECTION_ICON_STYLE} aria-hidden="true" />
+        <ChevronDown size={SECTION_ICON_SIZE} style={SECTION_ICON_FLEX_STYLE} aria-hidden={true} />
       ) : (
-        <ChevronRight style={SECTION_ICON_STYLE} aria-hidden="true" />
+        <ChevronRight size={SECTION_ICON_SIZE} style={SECTION_ICON_FLEX_STYLE} aria-hidden={true} />
       )}
       <Prim.Text {...SECTION_LABEL}>{label}</Prim.Text>
       {count !== undefined && count > 0 && (
@@ -407,7 +417,7 @@ function ProjectDropdown({
         <Prim.Text {...DROPDOWN_LABEL}>
           {active ? active.name || active.id : 'Select project'}
         </Prim.Text>
-        <ChevronDown style={CHEVRON_STYLE} aria-hidden="true" />
+        <ChevronDown size={CHEVRON_SIZE} style={CHEVRON_FLEX_STYLE} aria-hidden={true} />
       </Prim.Pressable>
 
       {open && (
@@ -423,7 +433,7 @@ function ProjectDropdown({
                   {...DROPDOWN_ITEM}
                   {...(p.id === activeProjectId ? DROPDOWN_ITEM_ACTIVE : {})}
                 >
-                  {p.name || p.id}
+                  <Prim.Text>{p.name || p.id}</Prim.Text>
                 </Prim.Pressable>
                 {onDeleteProject && p.id !== activeProjectId && (
                   <Prim.Pressable
@@ -431,7 +441,7 @@ function ProjectDropdown({
                     {...DROPDOWN_DELETE}
                     title="Delete project"
                   >
-                    <X style={ICON_STYLE} />
+                    <X size={ICON_SIZE} />
                   </Prim.Pressable>
                 )}
               </Prim.Box>
@@ -454,7 +464,7 @@ function ProjectDropdown({
                 {...DROPDOWN_ADD}
                 title="Create project"
               >
-                <Plus style={ICON_STYLE} />
+                <Plus size={ICON_SIZE} />
               </Prim.Pressable>
             </Prim.Box>
           )}
@@ -515,7 +525,7 @@ export function AppSidebar({
             aria-label="Expand sidebar"
             {...RAIL_BTN}
           >
-            <PanelLeft style={SECTION_ICON_STYLE} aria-hidden="true" />
+            <PanelLeft size={SECTION_ICON_SIZE} style={SECTION_ICON_FLEX_STYLE} aria-hidden={true} />
           </Prim.Pressable>
         </Prim.Box>
       </Prim.Box>
@@ -543,7 +553,7 @@ export function AppSidebar({
             aria-label="Collapse sidebar"
             {...COLLAPSE_BTN}
           >
-            <ChevronLeft style={SECTION_ICON_STYLE} aria-hidden="true" />
+            <ChevronLeft size={SECTION_ICON_SIZE} style={SECTION_ICON_FLEX_STYLE} aria-hidden={true} />
           </Prim.Pressable>
         )}
       </Prim.Box>
@@ -565,7 +575,7 @@ export function AppSidebar({
               title="Project settings"
               aria-label="Project settings"
             >
-              <Settings style={SECTION_ICON_STYLE} aria-hidden="true" />
+              <Settings size={SECTION_ICON_SIZE} style={SECTION_ICON_FLEX_STYLE} aria-hidden={true} />
             </Prim.Pressable>
           )}
         </Prim.Box>
@@ -575,7 +585,7 @@ export function AppSidebar({
             disabled={!activeProjectId || newChatBusy}
             {...NEW_CHAT}
           >
-            {newChatBusy ? '…' : '+ New chat'}
+            <Prim.Text>{newChatBusy ? '…' : '+ New chat'}</Prim.Text>
           </Prim.Pressable>
         )}
       </Prim.Box>
@@ -605,7 +615,7 @@ export function AppSidebar({
                     {...(s.id === activeSpaceId ? ITEM_ACTIVE : {})}
                     title={s.name}
                   >
-                    {s.name}
+                    <Prim.Text>{s.name}</Prim.Text>
                   </Prim.Pressable>
                 ))
               )}

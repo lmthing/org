@@ -65,25 +65,41 @@ Find them with `grep -rn "lm-fade-in\|lm-pulse\|animate-pulse" libs/ui/src`.
 **This step will move the P0 baseline** — it is the only remaining step that changes web output.
 Capture, review the computed-style diff, and commit the baseline as the review artefact.
 
-### Step 9 — docs (not started)
+### Step 9 — docs (page written 2026-07-27)
 
-`org/docs/` has **no mobile page**, and per [`org/docs/SYNC.md`](../../org/docs/SYNC.md) this work is
-not done without one. Write `org/docs/mobile/README.md`: the invariant, the three legal fork reasons,
-what the gates prove and what they do not. Then correct the two stale claims in
-`docs/react-native-tamagui-migration.md` (§1c and the "blocked on §1c" note — the className blocker
-died when Tailwind was deleted). `pnpm docs:check` must pass.
+[`org/docs/mobile/README.md`](../../../org/docs/mobile/README.md) now exists: the invariant, the
+three legal fork reasons, every translation the native seam performs and why, the boot order, and
+what the gates prove versus what they do not. Its citations resolve under `pnpm docs:check`.
 
-### Device verification (the honest gap)
+Still open from this step: the two stale claims in `docs/react-native-tamagui-migration.md` (§1c and
+the "blocked on §1c" note — the className blocker died when Tailwind was deleted). `pnpm docs:check`
+also has **pre-existing** failures unrelated to mobile (`terminal/index.tsx` line ranges, a deleted
+`button/index.css`, a moved `SettingsSchemaForm`).
 
-These are **device claims no harness can make**, and nothing below has been done:
+### Device verification (2026-07-27 — mostly closed)
 
-- a real SSO login completes end-to-end against the live gateway
-- the `lmthing://` scheme is registered and the redirect is intercepted
-- the chat transcript renders and streams on a device against a live pod
-- the Android back gesture dismisses an overlay (`platform/keyboard.native.ts`)
+Run on `Small_Phone_API_33` (Expo Go) against the **production** gateway and a live compute pod.
+What is now proven on a device:
 
-`app.json` already declares `"scheme": "lmthing"`. Point a dev build at a pod with
-`EXPO_PUBLIC_API_BASE=…` (Android emulator host loopback is `http://10.0.2.2:<port>`).
+- an authenticated session boots straight into chat; `compute/ensure` + the edge poll wake a
+  scaled-to-zero pod and mount `ChatShell`
+- sidebar, drawer, transcript and composer render
+- a message typed on the device reaches the pod, runs a turn, and the reply **streams back**
+
+Still NOT proven, and still honest gaps:
+
+- a real interactive SSO login end-to-end. Password login is disabled
+  (`.issues/zitadel-password-login-disabled.md`), so verification seeded an already-minted gateway
+  session through `EXPO_PUBLIC_TEST_SESSION` in `apps/mobile/App.tsx` — **inert unless that env var
+  is set at build time, and it is never set in a real build.** Delete it once real SSO is verified.
+- the `lmthing://` scheme being registered and its redirect intercepted (`app.json` declares it)
+- the Android back gesture dismissing an overlay (`platform/keyboard.native.ts`)
+- transcript **scrolling** — the transcript is a `Box`, not a `ScrollView`, so the DOM
+  `scrollIntoView` auto-follow is inert on native and now degrades instead of throwing. Porting it
+  is its own change.
+
+Point a dev build at a different pod with `EXPO_PUBLIC_API_BASE=…` (Android emulator host loopback
+is `http://10.0.2.2:<port>`); with no override `apiBase()` already points at production.
 
 ---
 
@@ -142,6 +158,41 @@ in-flight CSS animation samples and are non-deterministic. Anything else is a re
   resolve from `libs/ui` (that is why `expo-linking` is a devDependency there), even though the
   suites get the mock.
 - **Committed style is single-quote, no semicolons in `libs/ui`.** Do not run `prettier --write`.
+
+### Added by the 2026-07-27 device run
+
+Every one of these was invisible to a green `test:native` and cost a rebuild to find.
+
+- **`display: 'flex'` means ROW on web and COLUMN on native.** ~58 shared style objects were written
+  against the CSS default. The damage is not just layout: a label carrying the web truncation idiom
+  (`flexGrow: 1, flexBasis: '0%'`) has its main axis flipped, so `flexBasis: 0` sizes its HEIGHT and
+  the text **disappears with no error at all**. Fixed once, in `nativeSafeProps`.
+- **There is no `position: 'fixed'` in Yoga.** An overlay written the web way keeps `relative` and
+  rejoins normal flow — the chat `Drawer` laid out beside the transcript instead of over it. Also
+  translated in `nativeSafeProps`.
+- **A `$`-token that is not in the scale you think reaches Android as a raw string.**
+  `lineHeight="$6"` — `$6` is not a key in the lineHeight ramp (`xs`/`sm`/`base`/…) — crashed the
+  composer with `java.lang.String cannot be cast to java.lang.Double`. Same class killed the
+  transcript via the em-relative `letterSpacing` scale.
+- **`console.error` for the text-nesting invariant carries NO component stack.** Do not try to read
+  one off the device; reproduce it in the harness instead by walking the mounted tree
+  (`metro/suites/chat-shell.tsx`). Component-stack attribution guessed from the surrounding UI was
+  wrong for hours — the errors were never in the component they appeared to come from.
+- **DOM refs are not null on native, they are the wrong object.** `bottomRef.current?.scrollIntoView`
+  and `textareaRef.current.style.height` both survive a null-guard and then throw. Guard the METHOD
+  (`?.scrollIntoView?.()`), not the ref.
+- **`CI=1 expo start` disables the file watcher** — "reloads are disabled". After any source edit the
+  dev SERVER must be killed and restarted; force-stopping Expo Go re-serves the same stale bundle.
+  Confirm with `curl` against the served bundle before believing a fix did not work.
+- **Metro dies with `ENOSPC` if another Metro is running.** `lsof -ti:8081 | xargs -r kill -9` first.
+  Port 8081 left occupied also makes `expo start` bail in non-interactive mode.
+- **Run `pnpm install` from `sdk/org`, never only from the repo root.** The root install relinks
+  `libs/ui`/`apps/mobile` dependencies into the PARENT store, which is outside `apps/mobile`'s Metro
+  `watchFolders` — every one of them then fails to resolve. `pnpm install --force` from `sdk/org`
+  repairs it.
+- **Icons are a fork now.** Import from `elements/primitives/icons`, never `lucide-react` (no RN host
+  component for `<path>`) and never `@tamagui/lucide-icons-2` directly (drags React Native into the
+  web bundle — it took `apps/web` from 2638 to 4397 modules).
 
 ---
 

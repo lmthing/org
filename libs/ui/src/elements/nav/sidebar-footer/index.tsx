@@ -1,6 +1,6 @@
 import * as Prim from '../../primitives/index';
 import * as React from 'react'
-import { Settings } from 'lucide-react'
+import { Settings } from '../../primitives/icons'
 import { useAuth } from '@lmthing/auth'
 import { cn } from '../../../lib/utils'
 import { AppLinks } from '../app-links'
@@ -42,12 +42,12 @@ export function SidebarFooter({ current, children, className }: SidebarFooterPro
             {initials(displayName)}
           </Prim.Text>
         ) : (
-          <Settings size={16} style={{ flexShrink: 0 }} aria-hidden="true" />
+          <Settings size={16} style={{ flexShrink: 0 }} aria-hidden={true} />
         )}
         <Prim.Text flexGrow={1} flexShrink={1} flexBasis="0%" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" fontSize="$sm">
           {isAuthenticated && displayName ? displayName : 'Settings'}
         </Prim.Text>
-        <Settings size={16} style={{ flexShrink: 0, opacity: 0.6 }} aria-hidden="true" />
+        <Settings size={16} style={{ flexShrink: 0, opacity: 0.6 }} aria-hidden={true} />
       </Prim.Pressable>
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

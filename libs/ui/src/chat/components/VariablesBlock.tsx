@@ -12,7 +12,7 @@ export function VariablesBlock({ vars }: VariablesBlockProps): React.ReactElemen
     <Prim.Box
       backgroundColor="var(--muted)" borderWidth="1px" borderStyle="solid" borderColor="var(--border)" borderRadius={4} padding={12} fontFamily="monospace" fontSize={13}
     >
-      <Prim.Box fontWeight="bold" marginBottom={8} color="var(--muted-foreground)">VARIABLES</Prim.Box>
+      <Prim.Box fontWeight="bold" marginBottom={8} color="var(--muted-foreground)"><Prim.Text>VARIABLES</Prim.Text></Prim.Box>
       {entries.map(([name, value]) => (
         <Prim.Box key={name} marginBottom={4}>
           <Prim.Text color="var(--agent)">{name}</Prim.Text>

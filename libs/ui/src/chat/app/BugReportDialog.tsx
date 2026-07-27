@@ -95,7 +95,7 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
             rel="noreferrer"
             color="$agent" hoverStyle={{ textDecorationLine: "underline" }}
           >
-            View issue
+            <Prim.Text>View issue</Prim.Text>
           </Prim.Link>
           <Prim.Row justifyContent="flex-end">
             <Button variant="outline" size="sm" onClick={handleClose}>Close</Button>

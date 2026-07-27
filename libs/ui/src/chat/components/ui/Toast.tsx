@@ -51,7 +51,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             key={t.id}
             className="lm-fade-in" {...TOAST_VARIANT[t.variant ?? 'default']} paddingHorizontal="$4" paddingVertical="$3" borderRadius="$radius-xl" borderWidth={1} shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 10 }} shadowRadius={15} fontSize="$sm" maxWidth={384}
           >
-            {t.message}
+            <Prim.Text>{t.message}</Prim.Text>
           </Prim.Box>
         ))}
       </Prim.Col>

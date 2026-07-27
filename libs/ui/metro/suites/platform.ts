@@ -46,7 +46,7 @@ test('the storage seam round-trips through AsyncStorage', async () => {
   expect(await storage.getItem('metro-harness')).toBeNull()
 })
 
-test('the clipboard seam writes through RN Clipboard and reports success', async () => {
+test('the clipboard seam writes through Expo Clipboard and reports success', async () => {
   expect(await clipboard.writeText('copied')).toBe(true)
   // The seam swallows failures and returns '' — proving the happy path returns the string is what
   // distinguishes "wired up" from "silently degraded".

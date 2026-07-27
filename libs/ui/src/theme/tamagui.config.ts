@@ -9,7 +9,7 @@
  *
  * ## What genuinely differs by platform, and why
  *
- * Exactly three things, all branching on `isWeb` (a build-time-resolvable constant from
+ * Exactly four things, all branching on `isWeb` (a build-time-resolvable constant from
  * `@tamagui/core`, so each bundle keeps only its own branch):
  *
  *  1. **Colour tokens.** Web uses `webColorTokens` — every value is `var(--<name>)`. Native has no
@@ -20,6 +20,9 @@
  *     transition, and a JS driver would move style off the atomic-class path the whole migration is
  *     built on); `@tamagui/animations-react-native` on native. The NAMES and durations are identical
  *     on both, so a surface's `transition="quick"` means the same thing either way.
+ *  4. **The `letterSpacing` scale.** Tailwind's `tracking-*` ramp is em-relative, which React Native
+ *     has no unit for — a string there is a hard crash, not a fallback. Native gets the same ramp
+ *     converted to points; see `nativeLetterSpacings`.
  *
  * ## SPIKE A / A1 — the theming model, and the bug that must not come back
  *
@@ -170,17 +173,42 @@ const zIndexScale = { ...zIndexTokens } as Record<string, number>
  * (`$sm` === `text-sm`), `weight` its `font-*` weights, `letterSpacing` its `tracking-*` — all keyed
  * by Tailwind's names, which is why the codemod needed no lookup table.
  */
+/**
+ * The font size the em→point conversion below is anchored to — `$base`, i.e. `text-base`, 16px.
+ */
+const LETTER_SPACING_BASE_PX = 16
+
+/**
+ * Tailwind's `tracking-*` ramp, in POINTS, for the native target.
+ *
+ * The em strings the web branch keeps are valid CSS and invalid React Native: `letterSpacing` is a
+ * number of points there, and Android's view manager casts the value to a `Double` — so a string
+ * does not degrade, it CRASHES the screen (`java.lang.String cannot be cast to java.lang.Double`,
+ * raised by `RCTText` the moment a chat transcript mounted).
+ *
+ * Points are absolute where em is relative, so this is an approximation by construction: it is
+ * exact at 16px and drifts proportionally at other sizes. That is the trade React Native forces —
+ * there is no relative unit to convert INTO — and at this ramp's magnitudes (±0.05em, i.e. under a
+ * point) the drift is sub-pixel. Web is untouched, so the Tailwind parity tests still describe it.
+ */
+const nativeLetterSpacings = Object.fromEntries(
+  Object.entries(letterSpacings).map(([key, em]) => [key, Number.parseFloat(em) * LETTER_SPACING_BASE_PX]),
+) as Record<string, number>
+
 const makeFont = (family: string) => ({
   family,
   size: { ...fontSizes } as Record<string, number>,
   lineHeight: { ...lineHeights } as Record<string, number>,
   weight: { ...fontWeights } as Record<string, string>,
   // Tamagui types `GenericFont['letterSpacing']` as `number | Variable`, but Tailwind's `tracking-*`
-  // ramp is em-RELATIVE (`-0.05em`) and must stay a string — resolving it to px would break it at
-  // every font size. The runtime carries the string through unharmed; `tamagui-config.test.ts`
+  // ramp is em-RELATIVE (`-0.05em`) and must stay a string ON WEB — resolving it to px would break
+  // it at every font size. The runtime carries the string through unharmed; `tamagui-config.test.ts`
   // asserts every entry round-trips and that `$tight` still ends in `em`, which is what makes this
-  // cast safe rather than a silent lie.
-  letterSpacing: { ...letterSpacings } as unknown as Record<string, number>,
+  // cast safe rather than a silent lie. Native cannot take the string at all — see
+  // `nativeLetterSpacings`.
+  letterSpacing: (isWeb
+    ? ({ ...letterSpacings } as unknown as Record<string, number>)
+    : nativeLetterSpacings),
 })
 
 export const tamaguiConfig = createTamagui({

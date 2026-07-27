@@ -86,11 +86,11 @@ const EMPTY_MODULE = path.join(__dirname, 'mocks', 'empty.js')
 const THIRD_PARTY_MOCKS = {
   '@react-native-async-storage/async-storage':
     '@react-native-async-storage/async-storage/jest',
-  '@react-native-clipboard/clipboard': '@react-native-clipboard/clipboard/jest/clipboard-mock.js',
   'expo-secure-store': path.join(__dirname, 'mocks', 'expo-secure-store.js'),
   'expo-web-browser': path.join(__dirname, 'mocks', 'expo-web-browser.js'),
   'expo-linking': path.join(__dirname, 'mocks', 'expo-linking.js'),
   'expo-crypto': path.join(__dirname, 'mocks', 'expo-crypto.js'),
+  'expo-clipboard': path.join(__dirname, 'mocks', 'expo-clipboard.js'),
 }
 
 /** The marker a path inside any installed copy of react-native contains, exactly once. */

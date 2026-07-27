@@ -170,7 +170,7 @@ export function CatalogForm({
           {f.error ? <Prim.Text fontSize={10} color="var(--lm-red)">{f.error}</Prim.Text> : null}
         </Prim.Text>
       ))}
-      <Prim.Pressable {...btnProps(true)} alignSelf="flex-start" onClick={submit}>{spec.submitLabel}</Prim.Pressable>
+      <Prim.Pressable {...btnProps(true)} alignSelf="flex-start" onClick={submit}><Prim.Text>{spec.submitLabel}</Prim.Text></Prim.Pressable>
     </Prim.Box>
   );
 }

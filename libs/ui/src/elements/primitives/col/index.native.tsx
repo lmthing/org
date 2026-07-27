@@ -23,7 +23,9 @@ import type { LayoutPrimitiveProps } from '../_tamagui'
 export type ColProps = LayoutPrimitiveProps
 
 const Col = React.forwardRef<any, ColProps>(({ children, ...props }, ref) => (
-  <ColView ref={ref} {...nativeSafeProps(props)}>
+  // A `Col` that also writes `display: 'flex'` still means COLUMN — the seam's web-derived row
+  // default would otherwise turn the primitive inside out.
+  <ColView ref={ref} {...nativeSafeProps(props, { flexDirectionDefault: 'column' })}>
     {children}
   </ColView>
 ))

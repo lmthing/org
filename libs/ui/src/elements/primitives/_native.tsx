@@ -119,9 +119,52 @@ const NATIVE_EVENT_PROPS = new Set([
  * - **maps** `onClick` → `onPress` (an explicit `onPress` wins) and `onMouseEnter`/`onMouseLeave` →
  *   Tamagui's `onHoverIn`/`onHoverOut`, which are inert on a touch device and correct under
  *   react-native-web;
- * - **drops** the web-only attributes and DOM-only event handlers listed above.
+ * - **drops** the web-only attributes and DOM-only event handlers listed above;
+ * - **supplies the flex DIRECTION that `display: 'flex'` implies on web** (see below).
+ *
+ * ### `display: 'flex'` does not mean the same thing on the two targets
+ *
+ * On web, `display: flex` with no `flex-direction` lays children out in a **row** — that is the CSS
+ * initial value, and it is what ~58 shared style objects in this package were written against. On
+ * React Native there is no such default: Yoga's initial `flexDirection` is **column**. So a single
+ * shared component reading `display: 'flex', alignItems: 'center', gap: '$2'` — the sidebar section
+ * header, the project dropdown trigger, the settings row — rendered as a row on web and a STACK on
+ * native, silently, with no error and nothing in the type system to catch it.
+ *
+ * The second-order damage is worse than the layout: a label carrying the web truncation idiom
+ * (`flexGrow: 1, flexBasis: '0%'`) has its main axis flipped to vertical, so `flexBasis: 0` sizes
+ * its HEIGHT — and the text disappears completely. That is what made the sidebar render as bare
+ * chevrons with no `Spaces` / `Conversations` label at all.
+ *
+ * Reproducing the web default here fixes every one of those sites at once and cannot be forgotten
+ * at the next call site, which is the entire reason this seam exists. It only ever ADDS a direction
+ * the surface never stated; an explicit `flexDirection` always wins.
+ *
+ * ### `position: 'fixed'` does not exist on React Native
+ *
+ * Yoga implements `relative`, `absolute` and `static` — there is no `fixed`, and a node given one
+ * silently keeps the default `relative`. An overlay written the web way therefore stops overlaying
+ * and takes part in normal flow instead: the chat `Drawer` pins all four insets and renders as a
+ * modal sheet on web, but on a phone it laid out INLINE beside the transcript and shoved the
+ * conversation off the side of the screen.
+ *
+ * `absolute` is the faithful translation. Native has no scrolling viewport for `fixed` to be fixed
+ * against — an overlay is positioned against the root of the app either way — so the two coincide,
+ * and this is exactly the kind of host-element translation the forks exist to own.
  */
-export function nativeSafeProps(props: object): Record<string, unknown> {
+export interface NativeSafePropsOptions {
+  /**
+   * What a bare `display: 'flex'` means for THIS fork — see {@link nativeSafeProps}. `row` for
+   * every generic container, because that is what the surfaces were written against; `column` for
+   * `Col`, whose whole identity is the other axis.
+   */
+  flexDirectionDefault?: 'row' | 'column'
+}
+
+export function nativeSafeProps(
+  props: object,
+  { flexDirectionDefault = 'row' }: NativeSafePropsOptions = {},
+): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   let fromClick: (() => void) | undefined
   for (const [key, value] of Object.entries(props as Record<string, unknown>)) {
@@ -142,5 +185,9 @@ export function nativeSafeProps(props: object): Record<string, unknown> {
     out[key] = value
   }
   if (fromClick && out.onPress === undefined) out.onPress = fromClick
+  if (out.display === 'flex' && out.flexDirection === undefined) {
+    out.flexDirection = flexDirectionDefault
+  }
+  if (out.position === 'fixed') out.position = 'absolute'
   return out
 }

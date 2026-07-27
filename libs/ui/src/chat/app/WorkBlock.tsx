@@ -95,7 +95,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
           transition="quick" animateOnly={["color", "background-color", "border-color"]} maxWidth="180px" flexShrink={1} minWidth={0} textAlign="left" fontFamily="$mono" color="$muted-foreground" hoverStyle={{ color: "$foreground" }} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap"
           title={`${node.label} — open in inspector`}
         >
-          {node.label}
+          <Prim.Text>{node.label}</Prim.Text>
         </Prim.Pressable>
         {headline && (
           <Prim.Text flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0} color="$muted-foreground" opacity={0.7} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={headline}>
@@ -134,7 +134,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
               );
             })
           ) : (
-            <Prim.Box fontStyle="italic" opacity={0.7}>{isRunning ? 'working…' : ''}</Prim.Box>
+            <Prim.Box fontStyle="italic" opacity={0.7}><Prim.Text>{isRunning ? 'working…' : ''}</Prim.Text></Prim.Box>
           )}
           {count > 0 && (
             <Prim.Box opacity={0.6}>
@@ -143,7 +143,7 @@ export function WorkBlock({ nodeId }: { nodeId: string }): React.ReactElement | 
           )}
           {node.error && (
             <Prim.Box fontFamily="$mono" color="$destructive" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.error}>
-              {node.error}
+              <Prim.Text>{node.error}</Prim.Text>
             </Prim.Box>
           )}
         </Prim.Box>

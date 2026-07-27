@@ -1,6 +1,7 @@
 import * as React from 'react'
 import * as Prim from '../../primitives/index'
-import { User, Cpu, Terminal, CreditCard, GitBranch, Webhook, Share2, Zap, type LucideIcon } from 'lucide-react'
+// `@tamagui/lucide-icons`, not `lucide-react` — see elements/nav/app-sidebar/index.tsx.
+import { User, Cpu, Terminal, CreditCard, GitBranch, Webhook, Share2, Zap } from '../../primitives/icons'
 import {
   Dialog,
   DialogContent,
@@ -19,10 +20,14 @@ import { Triggers } from '../../settings/triggers'
 import { Sessions } from '../../settings/sessions'
 import { Hooks } from '../../settings/hooks'
 
+// `@tamagui/lucide-icons` doesn't export a shared icon type — every generated icon has the same
+// shape, so any one of them stands in for it.
+type IconComponent = typeof User
+
 interface TabDef {
   id: string
   label: string
-  icon: LucideIcon
+  icon: IconComponent
   title: string
   description?: string
   render: () => React.ReactNode
@@ -116,7 +121,10 @@ const PANEL = {
 const SECTION = { display: 'flex', flexDirection: 'column', gap: '$2' } as const
 
 /** `.settings-dialog__tab-icon` — w-4 h-4 shrink-0. Stays a style: the icon is a lucide SVG. */
-const TAB_ICON_STYLE = { width: 16, height: 16, flexShrink: 0 } as const
+// `@tamagui/lucide-icons` sizes itself via a `size` prop, not style width/height — see
+// elements/nav/app-sidebar/index.tsx's SECTION_ICON_SIZE comment.
+const TAB_ICON_SIZE = 16
+const TAB_ICON_FLEX_STYLE = { flexShrink: 0 } as const
 
 const TABS: TabDef[] = [
   {
@@ -234,8 +242,8 @@ export function SettingsDialog({ open, onOpenChange, initialTab = 'account' }: S
                   {...(t.id === active ? TAB_ACTIVE : {})}
                   aria-current={t.id === active ? 'page' : undefined}
                 >
-                  <Icon style={TAB_ICON_STYLE} aria-hidden="true" />
-                  {t.label}
+                  <Icon size={TAB_ICON_SIZE} style={TAB_ICON_FLEX_STYLE} aria-hidden={true} />
+                  <Prim.Text>{t.label}</Prim.Text>
                 </Prim.Pressable>
               )
             })}

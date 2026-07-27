@@ -76,7 +76,8 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
     if (dropdownOpen && dropdownRef.current) {
       const activeEl = dropdownRef.current.children[selectedIndex] as HTMLElement | undefined;
       if (activeEl) {
-        activeEl.scrollIntoView({ block: 'nearest' });
+        // DOM-only; the ref holds an RN instance on native (see `adjustHeight`).
+        activeEl.scrollIntoView?.({ block: 'nearest' });
       }
     }
   }, [dropdownOpen, selectedIndex]);
@@ -89,9 +90,16 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
       .catch(() => {});
   }, [projectId]);
 
+  /**
+   * Grow the textarea with its content. Web-only by construction: `el.style` is a DOM
+   * `CSSStyleDeclaration`, and on native the ref holds a React Native `TextInput` instance that has
+   * no `style` object to assign to — an unguarded write is "Cannot set property 'height' of
+   * undefined" on the FIRST keystroke, which took the composer down as soon as anything was typed.
+   * Native gets its auto-grow from `multiline`, so bailing out here is the whole native behaviour.
+   */
   const adjustHeight = () => {
     const el = textareaRef.current;
-    if (!el) return;
+    if (!el?.style) return;
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 180) + 'px';
   };
@@ -104,7 +112,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
     setAttachments([]);
     setAttachError(null);
     setDropdownOpen(false);
-    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    if (textareaRef.current?.style) textareaRef.current.style.height = 'auto';
   };
 
   /** Upload one File to /api/uploads and stage it as a pending attachment. Audio
@@ -265,7 +273,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
   if (mode === 'replay') {
     return (
       <Prim.Box className={className} paddingHorizontal="$4" paddingVertical="$3" fontSize="$sm" color="$muted-foreground" textAlign="center" borderTopWidth={1} borderColor="$border">
-        Replay mode — input disabled
+        <Prim.Text>Replay mode — input disabled</Prim.Text>
       </Prim.Box>
     );
   }
@@ -370,7 +378,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           rows={1}
           placeholder={budgetBlocked ? 'Budget reached — try again after it resets' : 'Message THING…'}
           data-testid="message-input"
-          flexGrow={1} flexShrink={1} flexBasis="0%" backgroundColor="transparent" color="$foreground" placeholderTextColor="$muted-foreground" fontSize="$sm" resize="none" minHeight="24px" maxHeight="180px" lineHeight="$6" focusStyle={{ outlineWidth: 0, outlineStyle: "none" }} disabledStyle={{ opacity: 0.5 }}
+          flexGrow={1} flexShrink={1} flexBasis="0%" backgroundColor="transparent" color="$foreground" placeholderTextColor="$muted-foreground" fontSize="$sm" resize="none" minHeight={24} maxHeight={180} lineHeight="$sm" focusStyle={{ outlineWidth: 0, outlineStyle: "none" }} disabledStyle={{ opacity: 0.5 }}
         />
 
         {/* Send */}

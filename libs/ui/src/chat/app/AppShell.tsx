@@ -139,16 +139,18 @@ export function AppShell({ singleSession }: AppShellProps) {
             position="absolute" top="$3" left="$3" zIndex={10} width="$8" height="$8" display="flex" alignItems="center" justifyContent="center" color="$muted-foreground" borderRadius="$radius-lg" $md={{ display: "none" }} hoverStyle={{ color: "$foreground", backgroundColor: "$muted" }}
             aria-label="Toggle sidebar"
           >
-            ☰
+            <Prim.Text>☰</Prim.Text>
           </Prim.Pressable>
         )}
 
         {/* No session selected in project mode */}
         {showSidebar && !activeSessionId ? (
           <Prim.Row justifyContent="center" color="$muted-foreground" fontSize="$sm" alignItems="center" flexGrow={1} flexShrink={1} flexBasis="0%" lineHeight="1.25rem">
-            {activeProjectId
-              ? 'Select or start a chat from the sidebar.'
-              : 'Select or create a project to get started.'}
+            <Prim.Text>
+              {activeProjectId
+                ? 'Select or start a chat from the sidebar.'
+                : 'Select or create a project to get started.'}
+            </Prim.Text>
           </Prim.Row>
         ) : (
           <ChatView

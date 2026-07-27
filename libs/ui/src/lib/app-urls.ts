@@ -1,3 +1,5 @@
+import { isWeb } from '@lmthing/auth'
+
 /**
  * Cross-app links for the lmthing product suite (studio / chat / computer).
  *
@@ -43,7 +45,7 @@ export function appUrl(app: LmthingApp): string {
   const env = readEnv()
   const override = env[ENV_KEY[app]] as string | undefined
   if (override) return override
-  const protocol = typeof window !== 'undefined' ? window.location.protocol : 'https:'
+  const protocol = isWeb() ? window.location.protocol : 'https:'
   return env.DEV ? `${protocol}//${app}.test` : `https://lmthing.${app}`
 }
 
@@ -64,7 +66,7 @@ export function appRoute(app: LmthingApp): string {
 export function crossAppOrigin(app: LmthingApp): string {
   const override = readEnv()[ENV_KEY[app]] as string | undefined
   if (override) return override.replace(/\/$/, '')
-  if (typeof window === 'undefined') return ''
+  if (!isWeb()) return ''
   if (window.location.hostname.startsWith('lmthing.')) return `https://lmthing.${app}`
   return ''
 }
@@ -93,8 +95,8 @@ export function dataPlaneOrigin(role: ApiRole): string {
       : env.VITE_COMPUTER_BASE_URL
   if (override) return override.replace(/\/$/, '')
 
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const hostname = isWeb() ? window.location.hostname : ''
+  const origin = isWeb() ? window.location.origin : ''
   if (!env.DEV) return role === 'cloud' ? 'https://lmthing.cloud' : origin
   if (hostname.endsWith('.test')) {
     return role === 'cloud' ? 'https://cloud.test' : 'https://computer.test'

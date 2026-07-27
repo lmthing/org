@@ -89,7 +89,7 @@ export function PlaybackBar(): React.ReactElement | null {
       >
         {[1, 2, 4, 8].map((s) => <Prim.Option key={s} value={s}>{s}×</Prim.Option>)}
       </Prim.Select>
-      <Prim.Pressable onClick={exitReplay} color="var(--lm-muted)" hoverStyle={{ color: "var(--lm-text)" }}>✕ live</Prim.Pressable>
+      <Prim.Pressable onClick={exitReplay} color="var(--lm-muted)" hoverStyle={{ color: "var(--lm-text)" }}><Prim.Text>✕ live</Prim.Text></Prim.Pressable>
     </Prim.Row>
   );
 }

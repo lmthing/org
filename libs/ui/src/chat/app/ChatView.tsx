@@ -126,15 +126,24 @@ export function ChatView({
   const blocks = model?.blocks ?? [];
   const groups = groupBlocks(blocks);
 
-  // Auto-scroll to bottom when following
+  // Auto-scroll to bottom when following.
+  //
+  // `scrollIntoView` is a DOM method and the ref holds a React Native component instance on native,
+  // so the call is OPTIONAL, not merely null-guarded — an unguarded one is a render-time
+  // "undefined is not a function" that takes the whole transcript down. Degrading to "no
+  // auto-scroll" is deliberate: native has no scrolling host here to drive (the transcript is a
+  // `Box`, not a `ScrollView`), and porting that is its own change — see docs/mobile-native-chat.md.
   React.useEffect(() => {
     if (follow && atBottom) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      bottomRef.current?.scrollIntoView?.({ behavior: 'smooth' });
     }
   }, [blocks.length, follow, atBottom]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
+    // Same story: these are DOM metrics. Without a scrolling host they are `undefined`, and the
+    // arithmetic would silently make `atBottom` false forever and stop follow-mode working.
+    if (typeof el?.scrollHeight !== 'number') return;
     setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 60);
   };
 
@@ -200,7 +209,7 @@ export function ChatView({
         aria-label="chat header"
       >
         <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
-          <Prim.Box fontSize="$sm" fontWeight="$medium" color="$foreground" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{title}</Prim.Box>
+          <Prim.Box fontSize="$sm" fontWeight="$medium" color="$foreground" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap"><Prim.Text>{title}</Prim.Text></Prim.Box>
           {/* THING's live "currently doing" line (setActivity, session scope). Sub-agent
               activities are shown by the LiveActivity/WorkBlock panel, not here. */}
           {activity && (
@@ -256,7 +265,7 @@ export function ChatView({
             fontSize="$xs" color="$muted-foreground" hoverStyle={{ color: "$foreground" }}
             title="Toggle theme"
           >
-            {theme === 'light' ? '☾' : '☀'}
+            <Prim.Text>{theme === 'light' ? '☾' : '☀'}</Prim.Text>
           </Prim.Pressable>
           {mode === 'live' && (
             <Prim.Pressable
@@ -307,11 +316,11 @@ export function ChatView({
       {/* Scroll to bottom button */}
       {!atBottom && (
         <Prim.Pressable
-          onClick={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })}
+          onClick={() => bottomRef.current?.scrollIntoView?.({ behavior: 'smooth' })}
           transition="quick" animateOnly={["color", "background-color", "border-color"]} position="absolute" bottom="$24" right="$6" width="$8" height="$8" borderRadius="$radius-full" backgroundColor="$card" borderWidth={1} borderColor="$border" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 4 }} shadowRadius={6} alignItems="center" justifyContent="center" color="$muted-foreground" zIndex={10} hoverStyle={{ color: "$foreground" }} display="flex"
           aria-label="Scroll to bottom"
         >
-          ↓
+          <Prim.Text>↓</Prim.Text>
         </Prim.Pressable>
       )}
 

@@ -238,7 +238,7 @@ export function Sidebar({ onProjectSettings, className, width, height, collapsib
                   onClick={() => void deleteSession(s.sessionId)}
                   display="none" width="$5" height="$5" alignItems="center" justifyContent="center" color="$muted-foreground" borderRadius="$radius" fontSize="$xs" flexShrink={0} $group-hover={{ display: "flex" }} hoverStyle={{ color: "$destructive" }}
                   title="Delete"
-                >×</Prim.Pressable>
+                ><Prim.Text>×</Prim.Text></Prim.Pressable>
               </Prim.Row>
             );
           })}

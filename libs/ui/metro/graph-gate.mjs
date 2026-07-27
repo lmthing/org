@@ -45,6 +45,11 @@ const WEB_ONLY = [
   ['/node_modules/@xterm/', 'xterm is a DOM terminal (belongs behind a *.web.tsx seam)'],
   ['/node_modules/modern-screenshot/', 'modern-screenshot walks the DOM'],
   ['/node_modules/jsdom/', 'jsdom is a test-only DOM'],
+  // Resolves fine (it is plain JS, no react-dom dependency of its own) and renders literal
+  // `<svg>`/`<path>` host elements, which only a DEVICE run catches: RN has no such host component,
+  // so the first icon mounted throws `TurboModuleRegistry`/view-config errors. `@tamagui/lucide-icons`
+  // is the cross-platform replacement (same icon set, `react-native-svg`-backed).
+  ['/node_modules/lucide-react/', 'lucide-react renders raw DOM svg/path elements — use @tamagui/lucide-icons'],
 ]
 
 /**

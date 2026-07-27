@@ -36,10 +36,18 @@ const redirectedStylesheets = []
  *   (see `native-mocks.cjs`) — required to EXECUTE a bundle off-device, omitted when the point is
  *   to prove the real graph resolves.
  */
+/**
+ * Directories Metro has no reason to watch: none of them are on the resolvable graph, and
+ * `scenarios/` alone holds hundreds of thousands of scenario-run snapshot files — watching it blows
+ * past the OS's inotify watch limit (`ENOSPC`) on a repo checkout that has run any scenarios.
+ */
+const UNWATCHED = /\/(scenarios|\.git|\.turbo|\.expo|\.expo-bundle-android|\.expo-bundle-ios)\//
+
 function createNativeMetroConfig({ mockNativeModules = false, quiet = true } = {}) {
   const base = getDefaultConfig(repoRoot)
   const mocks = mockNativeModules ? createNativeMockResolver() : null
   const emptyModule = require.resolve('./mocks/empty.js')
+  const blockList = new RegExp(`(?:${base.resolver.blockList.source})|(?:${UNWATCHED.source})`)
 
   /**
    * `.css` → the empty module (recorded), everything else to the native mocks if they are on, and
@@ -59,6 +67,7 @@ function createNativeMetroConfig({ mockNativeModules = false, quiet = true } = {
     watchFolders: [repoRoot],
     resolver: {
       resolveRequest,
+      blockList,
       // RN's preset runs `@babel/plugin-transform-runtime`, so EVERY transformed file may emit an
       // `@babel/runtime/helpers/*` import. Under pnpm's isolated store only `libs/ui` has that
       // package, so the moment the graph reaches a sibling lib (`@lmthing/auth`, pulled in by

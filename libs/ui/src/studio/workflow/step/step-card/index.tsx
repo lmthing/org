@@ -186,7 +186,7 @@ export function TaskCard({ task, isExpanded, isDraggable = false, onClick, onEdi
           shadowColor="rgba(0,0,0,0.1)"
           shadowOffset={{ width: 0, height: 10 }}
           shadowRadius={15}
-        >{task.order}</Prim.Box>
+        ><Prim.Text>{task.order}</Prim.Text></Prim.Box>
       </Prim.Box>
     </Prim.Box>
   )

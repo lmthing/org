@@ -66,7 +66,7 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
         <Prim.Box fontSize="$xs" color="$knowledge" fontFamily="$mono" marginBottom="0.5rem">✓ {preview(block.answer, 200)}</Prim.Box>
       )}
       {block.state === 'cancelled' && (
-        <Prim.Box fontSize="$xs" color="$muted-foreground" fontFamily="$mono" marginBottom="0.5rem">cancelled</Prim.Box>
+        <Prim.Box fontSize="$xs" color="$muted-foreground" fontFamily="$mono" marginBottom="0.5rem"><Prim.Text>cancelled</Prim.Text></Prim.Box>
       )}
       <Prim.Box style={inert ? { pointerEvents: 'none' } : undefined}>
         {d && isConsentDescriptor(d) ? (
@@ -224,7 +224,7 @@ export function Message({ block }: MessageProps) {
             )}
             {block.content && (
               <Prim.Box backgroundColor="$muted" color="$foreground" borderRadius="$radius-xl" borderTopRightRadius="$radius-sm" paddingHorizontal="$4" paddingVertical="$2.5" fontSize="$sm" lineHeight={1.625} whiteSpace="pre-wrap">
-                {block.content}
+                <Prim.Text>{block.content}</Prim.Text>
               </Prim.Box>
             )}
           </Prim.Col>
@@ -260,7 +260,7 @@ export function Message({ block }: MessageProps) {
     return (
       <Prim.Box className="lm-fade-in" paddingHorizontal="$4" paddingVertical="$2" data-testid="block">
         <Prim.Box borderColor="color-mix(in srgb, var(--destructive) 30%, transparent)" backgroundColor="color-mix(in srgb, var(--destructive) 10%, transparent)" borderWidth={1} borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$2" fontSize="$sm" color="$destructive" fontFamily="$mono">
-          {block.message}
+          <Prim.Text>{block.message}</Prim.Text>
         </Prim.Box>
       </Prim.Box>
     );

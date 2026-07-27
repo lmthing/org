@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import type { AuthSession, AuthConfig, AuthContextValue } from './types'
-import { getSession, clearSession, storeSession, redirectToLogin, handleAuthCallback, refreshSession, ensureValidToken, authFetch, isSessionExpired, onSessionChange, isPinSet, verifyPin, derivePinKey, getPodInjectedToken, isLocalRun } from './client'
+import { getSession, clearSession, storeSession, redirectToLogin, handleAuthCallback, refreshSession, ensureValidToken, authFetch, isSessionExpired, onSessionChange, isPinSet, verifyPin, derivePinKey, getPodInjectedToken, isLocalRun, isWeb } from './client'
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
@@ -24,7 +24,7 @@ const viteEnv = (): Record<string, string | boolean | undefined> =>
 function resolveConfig(appName: string, callbackPath: string): AuthConfig {
   const env = viteEnv()
   const isDev = Boolean(env.DEV)
-  const protocol = typeof window !== 'undefined' ? window.location.protocol : 'https:'
+  const protocol = isWeb() ? window.location.protocol : 'https:'
 
   return {
     comUrl: (env.VITE_COM_URL as string | undefined)
@@ -60,9 +60,10 @@ export function AuthProvider({ appName, callbackPath = '/', children }: AuthProv
   const [pinUnlocked, setPinUnlocked] = useState(false)
   const pinKeyRef = useRef<CryptoKey | null>(null)
 
-  // Accept session injected by a parent frame (e.g. lmthing.chat → lmthing.computer iframe)
+  // Accept session injected by a parent frame (e.g. lmthing.chat → lmthing.computer iframe).
+  // Iframes are a web-only concept — there is no `window` on native.
   useEffect(() => {
-    if (isDemo) return
+    if (isDemo || !isWeb()) return
     function onMessage(e: MessageEvent) {
       if (e.data?.type === 'lmthing:session' && e.data.session) {
         storeSession(e.data.session)
@@ -90,8 +91,11 @@ export function AuthProvider({ appName, callbackPath = '/', children }: AuthProv
       setIsLoading(false)
       return
     }
-    const url = new URL(window.location.href)
-    if (url.searchParams.has('code')) {
+    // A `?code=` in the URL only ever happens on a web redirect callback — on native,
+    // `redirectToLogin` already resolved the session in-process (see platform/sso.native.ts),
+    // so there is nothing in the URL to consume.
+    const url = isWeb() ? new URL(window.location.href) : null
+    if (url?.searchParams.has('code')) {
       handleAuthCallback(config)
         .then(sess => {
           if (sess) setSession(sess)
@@ -165,7 +169,8 @@ export function AuthProvider({ appName, callbackPath = '/', children }: AuthProv
 
   const login = useCallback(() => {
     if (isDemo) return
-    if (window !== window.top) {
+    // Iframe embedding is a web-only concept — native always calls redirectToLogin directly.
+    if (isWeb() && window !== window.top) {
       // Embedded as iframe — ask parent to provide the session instead of navigating
       window.parent.postMessage({ type: 'lmthing:auth-needed' }, '*')
       return

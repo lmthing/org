@@ -51,3 +51,21 @@ test('the Tailwind-parity space scale survives onto native ($4 === 16px)', () =>
   expect(space['4'].key).toBe('$4')
   expect(space['4'].val).toBe(16)
 })
+
+test('letterSpacing arrives as numbers of points, not CSS em strings', () => {
+  // Tailwind's `tracking-*` ramp is em-relative, which React Native has no unit for: `letterSpacing`
+  // is a number of points, and Android's view manager CASTS it, so a string is a red-screen crash
+  // (`java.lang.String cannot be cast to java.lang.Double` out of `RCTText`) rather than a fallback.
+  // The web branch keeps the em strings; this asserts the native branch converted them.
+  const fonts = tamaguiConfig.fonts as Record<string, { letterSpacing: Record<string, { val?: unknown }> }>
+  for (const [face, font] of Object.entries(fonts)) {
+    for (const [name, token] of Object.entries(font.letterSpacing ?? {})) {
+      const value = token?.val ?? token
+      if (typeof value !== 'number')
+        throw new Error(`fonts.${face}.letterSpacing.${name} is ${JSON.stringify(value)} — RN needs a number of points`)
+    }
+  }
+  // `-0.025em` against the 16px base.
+  const tight = fonts.body.letterSpacing['tight']
+  expect((tight?.val ?? tight) as number).toBe(-0.4)
+})

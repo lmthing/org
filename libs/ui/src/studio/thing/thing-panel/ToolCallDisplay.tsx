@@ -24,7 +24,7 @@ export function ToolCallDisplay({ content }: { content: string }) {
               borderColor="$border"
               opacity={0.8}
             >
-              {segment.toolContent}
+              <Prim.Text>{segment.toolContent}</Prim.Text>
             </Prim.Box>
             {segment.rest}
           </Prim.Text>

@@ -1,7 +1,11 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "strict": true,
+    // Shared `@lmthing/ui`/`@lmthing/auth` source ships with no build step, so every consumer
+    // typechecks it inside its OWN program (see libs/auth/src/AuthProvider.tsx's viteEnv() comment).
+    // `strict: false` matches every other consumer of that source (libs/ui's own tsconfig, apps/web) —
+    // this app's own code is written strict-clean regardless.
+    "strict": false,
     "noEmit": true,
     "jsx": "react-jsx",
     "moduleResolution": "Bundler",

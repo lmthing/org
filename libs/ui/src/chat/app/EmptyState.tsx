@@ -35,9 +35,9 @@ export function EmptyState({ projectName, onSuggestion, className }: EmptyStateP
       <Row
         backgroundColor="color-mix(in srgb, var(--brand-2) 20%, transparent)" width="$12" height="$12" borderRadius="$radius-xl" justifyContent="center" marginBottom="$5" fontSize="$2xl"
         alignItems="center"
-        lineHeight="2rem"
+        lineHeight={32}
       >
-        ✦
+        <Text>✦</Text>
       </Row>
       <Text as="h1" fontFamily="$heading" fontSize="$2xl" fontWeight="$bold" color="$foreground" marginBottom="$2">
         How can I help{projectName ? ` in ${projectName}` : ''}?
@@ -53,7 +53,7 @@ export function EmptyState({ projectName, onSuggestion, className }: EmptyStateP
               onClick={() => onSuggestion(s)}
               transition="quick" animateOnly={["color", "background-color", "border-color"]} paddingHorizontal="$3" paddingVertical="$1.5" borderRadius="$radius-full" borderWidth={1} borderColor="$border" fontSize="$sm" color="$muted-foreground" hoverStyle={{ color: "$foreground", borderColor: "color-mix(in srgb, var(--foreground) 30%, transparent)" }}
             >
-              {s}
+              <Text>{s}</Text>
             </Pressable>
           ))}
         </Row>
