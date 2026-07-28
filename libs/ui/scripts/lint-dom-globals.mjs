@@ -32,8 +32,16 @@ import { fileURLToPath } from 'node:url'
 
 const uiSrc = join(dirname(fileURLToPath(import.meta.url)), '..', 'src')
 
-/** Directories whose runtime must work on native. Grows as surfaces port — `studio/` is next. */
-const NATIVE_BOUND = ['chat', 'elements', 'platform']
+/**
+ * Directories whose runtime must work on native. Grows as surfaces port — `studio/` is next.
+ *
+ * **A surface that `apps/mobile` mounts and this list does not name is not covered.** `team/` and
+ * `dashboard/` were ported to native and left off, so the gate that exists for precisely their
+ * failure mode never looked at them, and the team surface shipped with a mouse-drag resize handle
+ * calling `window.addEventListener` on mount. Adding the directory here is part of porting a
+ * surface, not a follow-up.
+ */
+const NATIVE_BOUND = ['chat', 'elements', 'platform', 'team', 'dashboard']
 
 /** The globals that do not exist on React Native. */
 const FORBIDDEN = new Set(['document', 'window', 'navigator', 'localStorage', 'sessionStorage', 'alert'])

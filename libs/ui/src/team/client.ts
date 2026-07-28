@@ -104,7 +104,7 @@ export function createTeamClient(transport: TeamTransport): TeamClient {
       // Absolute base (native) or same-origin (web) — derived from the same
       // `baseUrl` the REST calls use, so the two can never point at different
       // pods. `ws:`/`wss:` is chosen from whichever scheme that base implies.
-      const base = transport.baseUrl || (typeof window !== 'undefined' ? window.location.origin : '')
+      const base = transport.baseUrl || globalThis.window?.location?.origin || ''
       const wsBase = base.replace(/^http/, 'ws')
       return `${wsBase}/api/team/ws?t=1&access_token=${encodeURIComponent(token)}`
     },

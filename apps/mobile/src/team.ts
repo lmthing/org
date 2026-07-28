@@ -13,14 +13,9 @@
  * outlives a role change is worse than a round trip.
  */
 
-const CLOUD_BASE_URL = 'https://lmthing.cloud'
+import { CLOUD_BASE_URL, TEAM_BASE_URL } from './hosts'
 
-/**
- * Where a TEAM's pod is reached. The edge routes by the team claim in the token,
- * so the host is the team surface's own domain and the pod is whichever one that
- * token names — there is no per-team hostname to construct.
- */
-export const TEAM_BASE_URL = 'https://lmthing.team'
+export { TEAM_BASE_URL }
 
 export interface TeamSummary {
   id: string

@@ -1,4 +1,5 @@
 import { isWeb } from '@lmthing/auth'
+import { cloudBaseOverride } from '../platform/api-base'
 
 /**
  * Cross-app links for the lmthing product suite (studio / chat / computer).
@@ -94,6 +95,11 @@ export function dataPlaneOrigin(role: ApiRole): string {
       ? (env.VITE_CLOUD_BASE_URL ?? env.VITE_CLOUD_URL)
       : env.VITE_COMPUTER_BASE_URL
   if (override) return override.replace(/\/$/, '')
+
+  // Native has no `window.location` to derive an answer from, so without this it fell through to
+  // the production constant below and a locally-pointed device build still asked production.
+  const nativeCloud = role === 'cloud' ? cloudBaseOverride() : ''
+  if (nativeCloud) return nativeCloud
 
   const hostname = isWeb() ? window.location.hostname : ''
   const origin = isWeb() ? window.location.origin : ''

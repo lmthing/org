@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback } from '../elements/content/avatar'
 import { Caption } from '../elements/typography/caption'
 import { AppIcon, SendIcon } from './icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { isWeb } from '@tamagui/core'
 import type { Directory, MemberProfile } from './types'
 import { initials, memberLabel } from './format'
 
@@ -106,11 +107,29 @@ export function Composer({
   // highlight can never point past the end of the list.
   useEffect(() => setHighlighted(0), [mention?.query])
 
+  // Auto-growing the box is done by measuring it, which only a DOM node can do: `style` and
+  // `scrollHeight` are both absent on a React Native host instance, so an unguarded assignment
+  // throws on the first keystroke. Native gets a fixed-height composer instead — RN's `TextInput`
+  // grows on its own with `multiline`, and wiring that is its own change.
   const grow = useCallback(() => {
     const el = ref.current
-    if (!el) return
+    if (!el || !isWeb) return
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, MAX_COMPOSER_HEIGHT)}px`
+  }, [])
+
+  // A caret moved by arrow keys or a click changes which mention (if any) is being typed, without
+  // changing the text at all.
+  //
+  // Read off the REF, never off the event. `nativeSafeProps` maps `onClick` to `onPress` and calls
+  // it with an EMPTY object — there is no DOM event on native to hand over — so the previous
+  // `e.target.value` here threw `Cannot read property 'value' of undefined` the moment anyone
+  // tapped the composer on a phone, before typing a single character. Nothing in a shared surface
+  // may read a synthesised event's contents; the ref is the same element, and it is real on web.
+  const syncCaret = useCallback(() => {
+    const el = ref.current
+    if (!el || !isWeb) return
+    setMention(activeMention(el.value, el.selectionStart ?? el.value.length))
   }, [])
 
   const change = (value: string, caret: number) => {
@@ -132,7 +151,10 @@ export function Composer({
       if (!el) return
       const caret = before.length + suggestion.token.length + 2
       el.focus()
-      el.setSelectionRange(caret, caret)
+      // `focus()` exists on both hosts; `setSelectionRange` is DOM-only — an RN `TextInput`
+      // spells it `setSelection` — so this is optional-called rather than assumed. Native just
+      // leaves the caret where it was, which is where the accepted mention ends anyway.
+      el.setSelectionRange?.(caret, caret)
       grow()
     })
   }
@@ -205,16 +227,8 @@ export function Composer({
           value={draft}
           disabled={disabled ?? false}
           onChange={(e) => change(e.target.value, e.target.selectionStart ?? e.target.value.length)}
-          onKeyUp={(e) => {
-            // A caret moved by arrow keys or a click changes which mention (if
-            // any) is being typed, without changing the text at all.
-            const el = e.target as HTMLTextAreaElement
-            setMention(activeMention(el.value, el.selectionStart ?? el.value.length))
-          }}
-          onClick={(e) => {
-            const el = e.target as HTMLTextAreaElement
-            setMention(activeMention(el.value, el.selectionStart ?? el.value.length))
-          }}
+          onKeyUp={syncCaret}
+          onClick={syncCaret}
           placeholder={placeholder}
           flex={1}
           rows={1}

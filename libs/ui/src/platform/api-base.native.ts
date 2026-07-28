@@ -28,3 +28,18 @@ export function apiUrl(path: string): string {
 export function wsUrl(path: string): string {
   return `${apiBase().replace(/^http/, 'ws')}${path}`
 }
+
+/**
+ * Where the GATEWAY lives on native — overridable with `EXPO_PUBLIC_CLOUD_BASE`.
+ *
+ * `dataPlaneOrigin('cloud')` derives its answer from `window.location`, which does not exist here,
+ * so it fell through to the production constant with no way to say otherwise. That meant a device
+ * build could be pointed at a local POD (`EXPO_PUBLIC_API_BASE`) while every shared surface that
+ * asks the GATEWAY a question — the Home dashboard's team list, first among them — still went to
+ * production and failed. Same variable the app's own `src/hosts.ts` reads, so the two halves of a
+ * build cannot disagree about which gateway they are talking to.
+ */
+export function cloudBaseOverride(): string {
+  const configured = process.env.EXPO_PUBLIC_CLOUD_BASE
+  return configured ? configured.replace(/\/+$/, '') : ''
+}

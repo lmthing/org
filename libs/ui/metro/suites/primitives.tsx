@@ -31,6 +31,7 @@ import {
 } from '../render'
 import {
   Box,
+  Scroll,
   Text,
   Row,
   Col,
@@ -276,3 +277,34 @@ test('a ref on a primitive yields a measurable native node', () => {
   render(<Box ref={handle as never} />)
   expect(typeof handle.current?.measureInWindow).toBe('function')
 })
+
+test('Scroll mounts a real ScrollView — a View with overflow:auto scrolls NOTHING here', () => {
+  // Yoga has no scrolling overflow: content past the parent's edge is CLIPPED, with no warning and
+  // no gesture to reach it. Every shared transcript was written as a `Box` with `overflow: 'auto'`,
+  // which is exactly right in a browser and is why a phone showed one screenful of a conversation
+  // and no way to see the rest.
+  const { tree } = render(<Scroll flex={1} />)
+  const hosts = hostTypes(tree)
+  expect(hosts.some((t) => /ScrollView/.test(t)), `mounts a ScrollView (saw ${hosts.join()})`).toBe(true)
+})
+
+test('Scroll puts the region props on the SCROLLER and the content props inside', () => {
+  // The split is the whole correctness of the fork. `flex: 1` means "take the space left over" —
+  // a statement about the REGION. Applied to the content instead it pins the content to exactly
+  // one viewport and the overflow is clipped again: the bug this component exists to fix,
+  // reintroduced one level in. That is not hypothetical; it is what the first version did, and a
+  // device opened a 19-message channel showing nine of them with no way to reach the rest.
+  const { tree } = render(<Scroll flex={1} padding="$4" />)
+  const scroller = find(tree, (t) => /ScrollView/.test(t))
+  const content = findByType(tree, NATIVE_VIEW)
+  const merged = (style: unknown) =>
+    Object.assign({}, ...(Array.isArray(style) ? style : [style]).filter(Boolean)) as Record<string, unknown>
+
+  // Asserted on `flex` alone: it is the prop whose misplacement clips the content, and the two
+  // targets resolve spacing tokens into different key shapes (`padding` vs the four sides), which
+  // would make a padding assertion a test of Tamagui's resolver rather than of this split.
+  expect(merged(scroller?.props.style).flex, 'flex sizes the region').toBe(1)
+  expect(merged(content?.props.style).flex, 'and never constrains the content').toBe(undefined)
+})
+
+

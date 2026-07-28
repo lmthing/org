@@ -8,6 +8,7 @@
  * reader needs is who said it and when.
  */
 
+import * as React from 'react'
 import * as Prim from '../elements/primitives/index'
 import { renderDescriptor, toRenderableDescriptor } from '../chat/index'
 import { Markdown } from '../elements/content/markdown'
@@ -21,6 +22,16 @@ import { initials, memberLabel, relativeTime } from './format'
 /** Consecutive same-sender messages within this window collapse under one
  * avatar/name/timestamp header. */
 const GROUP_WINDOW_MS = 5 * 60_000
+
+/**
+ * The gutter a message body sits in: the avatar's width plus the row gap.
+ *
+ * Named once because it is derived, not chosen — `Avatar size="sm"` is `$6` (24) and the row gap
+ * is `$3` (12), so anything that lines up with a message body is `$9`. It had been written as
+ * `$11`, which assumes the DEFAULT `$8` avatar, and every continuation line in a grouped run sat
+ * 8px to the right of the first one — visible on a device as a ragged left edge under each name.
+ */
+const BODY_GUTTER = '$9' as const
 
 export interface MessageGroup {
   key: string
@@ -288,33 +299,95 @@ export function MessageRow({
   message,
   showHeader,
   ctx,
+  onReply,
 }: {
   message: ChannelMessage
   showHeader: boolean
   ctx: MessageContext
+  /** Offer "reply in thread" on hover / long-press. Omitted where threads do not apply. */
+  onReply?: () => void
 }) {
   if (message.kind === 'system') return <SystemMessage message={message} ctx={ctx} />
   if (!showHeader) {
     return (
-      <Prim.Box paddingLeft="$11">
-        <MessageBody message={message} ctx={ctx} />
-      </Prim.Box>
+      <MessageActions onReply={onReply}>
+        <Prim.Box paddingLeft={BODY_GUTTER}>
+          <MessageBody message={message} ctx={ctx} />
+        </Prim.Box>
+      </MessageActions>
     )
   }
   const who = labelFor(ctx.members, message.userId, message.email)
   return (
-    <Prim.Row gap="$3" alignItems="flex-start">
-      <SenderAvatar kind={message.kind} senderId={senderKey(message)} label={who} />
-      <Prim.Col flex={1} minWidth={0} gap="$1">
-        <MessageHeader kind={message.kind} who={who} ts={message.ts} />
-        <MessageBody message={message} ctx={ctx} />
-      </Prim.Col>
-    </Prim.Row>
+    <MessageActions onReply={onReply}>
+      <Prim.Row gap="$3" alignItems="flex-start">
+        <SenderAvatar kind={message.kind} senderId={senderKey(message)} label={who} />
+        <Prim.Col flex={1} minWidth={0} gap="$1">
+          <MessageHeader kind={message.kind} who={who} ts={message.ts} />
+          <MessageBody message={message} ctx={ctx} />
+        </Prim.Col>
+      </Prim.Row>
+    </MessageActions>
+  )
+}
+
+/**
+ * Slack's message actions: revealed by the message you are pointing at, never occupying a line of
+ * their own.
+ *
+ * The two targets reveal it by the only gesture each one has. Web hovers — `onMouseEnter` is
+ * mapped to Tamagui's `onHoverIn` by `nativeSafeProps`, which is inert on a touch device, so the
+ * same two props are correct on both and the toolbar simply never appears on a phone. A phone
+ * long-presses instead, which is what Slack does there too.
+ *
+ * The toolbar is absolutely positioned so that revealing it does not reflow the transcript —
+ * a hover that moves the text under the pointer is its own bug.
+ */
+function MessageActions({ onReply, children }: { onReply?: () => void; children: React.ReactNode }) {
+  const [shown, setShown] = React.useState(false)
+  if (!onReply) return <>{children}</>
+  return (
+    <Prim.Box
+      position="relative"
+      onMouseEnter={() => setShown(true)}
+      onMouseLeave={() => setShown(false)}
+      onLongPress={onReply}
+    >
+      {children}
+      {shown ? (
+        <Prim.Box position="absolute" top={0} right={0}>
+          <Prim.Pressable
+            onClick={onReply}
+            backgroundColor="$background"
+            borderWidth={1}
+            borderColor="$border"
+            borderRadius="$radius-md"
+            paddingVertical="$1"
+            paddingHorizontal="$2"
+            hoverStyle={{ backgroundColor: '$muted' }}
+          >
+            <Prim.Row alignItems="center" gap="$1.5">
+              <ThreadIcon size={12} />
+              <Caption>Reply in thread</Caption>
+            </Prim.Row>
+          </Prim.Pressable>
+        </Prim.Box>
+      ) : null}
+    </Prim.Box>
   )
 }
 
 /** A collapsed run of consecutive same-sender messages under one header. */
-export function MessageGroupView({ group, ctx }: { group: MessageGroup; ctx: MessageContext }) {
+export function MessageGroupView({
+  group,
+  ctx,
+  onReply,
+}: {
+  group: MessageGroup
+  ctx: MessageContext
+  /** Given the message that was acted on — a thread hangs off one message, not off the run. */
+  onReply?: (message: ChannelMessage) => void
+}) {
   if (group.kind === 'system') {
     return (
       <Prim.Col gap="$1" alignItems={group.messages.some((m) => m.app) ? 'flex-start' : 'center'}>
@@ -332,7 +405,11 @@ export function MessageGroupView({ group, ctx }: { group: MessageGroup; ctx: Mes
       <Prim.Col flex={1} minWidth={0} gap="$1">
         <MessageHeader kind={group.kind} who={who} ts={first.ts} />
         {group.messages.map((m) => (
-          <MessageBody key={m.id} message={m} ctx={ctx} />
+          // Per MESSAGE, not per run: pointing at the third line of somebody's paragraph and
+          // getting a reply action for their first is how a thread ends up under the wrong thing.
+          <MessageActions key={m.id} onReply={onReply ? () => onReply(m) : undefined}>
+            <MessageBody message={m} ctx={ctx} />
+          </MessageActions>
         ))}
       </Prim.Col>
     </Prim.Row>
@@ -357,23 +434,19 @@ export function ThreadSummary({
   onOpen: () => void
   ctx: MessageContext
 }) {
-  if (!replies.length && !busy) {
-    return (
-      <Prim.Pressable onClick={onOpen} alignSelf="flex-start" marginLeft="$11" opacity={0.6} hoverStyle={{ opacity: 1 }}>
-        <Prim.Row alignItems="center" gap="$1.5">
-          <ThreadIcon size={12} />
-          <Caption>Reply in thread</Caption>
-        </Prim.Row>
-      </Prim.Pressable>
-    )
-  }
+  // Nothing at all under a message with no replies — this is the Slack rule, and it is what makes
+  // a channel readable: the eye should travel down a column of what people SAID, not a column of
+  // the same offer repeated after every line. The way to start a thread is `MessageActions` (a
+  // hover toolbar on web, a long-press on a phone), which costs no vertical space and appears only
+  // on the message being acted on.
+  if (!replies.length && !busy) return null
   const faces = [...new Map(replies.map((m) => [senderKey(m), m])).values()].slice(0, 3)
   const last = replies[replies.length - 1]
   return (
     <Prim.Pressable
       onClick={onOpen}
       alignSelf="flex-start"
-      marginLeft="$11"
+      marginLeft={BODY_GUTTER}
       borderRadius="$radius-md"
       paddingVertical="$1"
       paddingHorizontal="$1.5"

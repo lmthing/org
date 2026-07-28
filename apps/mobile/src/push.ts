@@ -14,7 +14,8 @@
 
 import { Platform } from 'react-native'
 
-const CLOUD_BASE_URL = 'https://lmthing.cloud'
+import { CLOUD_BASE_URL } from './hosts'
+
 
 /**
  * Ask for permission and register with the gateway. Returns the Expo token on

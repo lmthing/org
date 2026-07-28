@@ -13,7 +13,7 @@
  * turn produces an app, the app is pinned to the channel and opens beside it.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import * as Prim from '../elements/primitives/index'
 import { Button } from '../elements/forms/button'
 import { Caption } from '../elements/typography/caption'
@@ -69,7 +69,6 @@ export function TeamChannelsView({
   const activeId = activeChannelId ?? fallbackId
   const chat = useTeamChat(client, activeId)
   const meId = chat.meId
-  const transcriptRef = useRef<HTMLDivElement>(null)
   const { compact } = useTeamLayout()
   const [drawerOpen, setDrawerOpen] = useState(false)
 
@@ -130,12 +129,6 @@ export function TeamChannelsView({
   useEffect(() => {
     onMentionCount?.(chat.totalMentions)
   }, [chat.totalMentions, onMentionCount])
-
-  // Follow the conversation, the way a chat surface is expected to.
-  useEffect(() => {
-    const el = transcriptRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [chat.messages.length, activeId])
 
   const roots = useMemo(() => chat.messages.filter((m) => !m.threadId), [chat.messages])
   const repliesOf = useCallback(
@@ -227,7 +220,14 @@ export function TeamChannelsView({
           </Prim.Row>
         ) : null}
 
-        <Prim.Col ref={transcriptRef} flex={1} minHeight={0} overflow="auto" padding="$4" gap="$4">
+        {/* `Scroll`, not a `Col` with `overflow: auto` — the latter scrolls in a browser and
+            CLIPS on a phone, so the conversation ended at the first screenful with no way to
+            reach the rest of it. */}
+        {/* `Scroll`, not a `Col` with `overflow: auto` — the latter scrolls in a browser and
+            CLIPS on a phone, so the conversation ended at the first screenful with no way to
+            reach the rest of it. `stickToEnd` is the primitive's job because the two targets pin
+            to the bottom by different mechanisms and at different moments. */}
+        <Prim.Scroll stickToEnd flex={1} minHeight={0} padding="$4" gap="$4" flexDirection="column">
           {roots.length === 0 ? (
             <Prim.Col alignItems="center" justifyContent="center" flex={1} gap="$1">
               <Prim.Text fontSize="$sm" color="$muted-foreground">
@@ -242,7 +242,12 @@ export function TeamChannelsView({
             const replies = repliesOf(root.id)
             return (
               <Prim.Col key={root.id} gap="$1">
-                <MessageRow message={root} showHeader={showsHeader(roots[i - 1], root)} ctx={ctx} />
+                <MessageRow
+                  message={root}
+                  showHeader={showsHeader(roots[i - 1], root)}
+                  ctx={ctx}
+                  onReply={() => onOpenThread(root.id)}
+                />
                 <ThreadSummary
                   replies={replies}
                   busy={chat.thinking.has(root.id)}
@@ -252,15 +257,23 @@ export function TeamChannelsView({
               </Prim.Col>
             )
           })}
-        </Prim.Col>
+        </Prim.Scroll>
 
         {chat.typingHere.length > 0 ? <TypingStrip labels={chat.typingHere} /> : null}
 
         <Composer
+          // The `@thing` hint does not fit a phone: the composer is two lines tall, so the
+          // placeholder wrapped and the second line was clipped mid-word — the hint made the box
+          // look broken instead of teaching anything. It is only dropped where it does not fit;
+          // the empty state above still says it, in full, with room to say it.
           placeholder={
-            channel?.kind === 'dm'
-              ? `Message ${title}… (@thing to ask THING)`
-              : `Message #${title}… (@thing to ask THING)`
+            compact
+              ? channel?.kind === 'dm'
+                ? `Message ${title}`
+                : `Message #${title}`
+              : channel?.kind === 'dm'
+                ? `Message ${title}… (@thing to ask THING)`
+                : `Message #${title}… (@thing to ask THING)`
           }
           directory={chat.directory}
           meId={meId}
@@ -366,7 +379,9 @@ function ThreadRail({
         {busy ? <TypingStrip labels={['THING']} /> : null}
       </Prim.Col>
       <Composer
-        placeholder="Reply in thread… (@thing to ask THING)"
+        // Same reason as the channel composer: the rail is full-width on a phone but the box is
+        // still two lines, and the hint is what pushed it over.
+        placeholder={compact ? 'Reply in thread' : 'Reply in thread… (@thing to ask THING)'}
         directory={directory}
         meId={meId}
         onTyping={onTyping}

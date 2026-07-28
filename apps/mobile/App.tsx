@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useColorScheme } from 'react-native'
+import { KeyboardAvoidingView, Platform, useColorScheme } from 'react-native'
 import { TamaguiProvider } from '@tamagui/core'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
@@ -73,11 +73,26 @@ export default function App() {
           the invariant this app exists to keep.
         */}
         <SafeAreaView style={{ flex: 1 }}>
-          {authReady ? (
-            <AuthProvider appName="mobile">
-              <AuthGate />
-            </AuthProvider>
-          ) : null}
+          {/*
+            And the other thing a phone does that a browser does not: it puts a keyboard OVER the
+            app. `android:windowSoftInputMode="adjustResize"` is set and is no longer enough on its
+            own — React Native 0.86 draws edge-to-edge by default, so the window does not resize and
+            the composer of every surface sat underneath the keyboard, invisible, with its send
+            button unreachable. You could type into a box you could not see.
+
+            It belongs here rather than in each surface for the same reason `SafeAreaView` does: a
+            shared component knowing it is on a phone is the thing this app exists to avoid.
+          */}
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            {authReady ? (
+              <AuthProvider appName="mobile">
+                <AuthGate />
+              </AuthProvider>
+            ) : null}
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </TamaguiProvider>
     </SafeAreaProvider>

@@ -15,7 +15,7 @@
 export { storage } from './storage'
 export { clipboard } from './clipboard'
 export { getWindowSize, subscribeWindowSize, type Size } from './dimensions'
-export { apiBase, apiUrl, wsUrl } from './api-base'
+export { apiBase, apiUrl, wsUrl, cloudBaseOverride } from './api-base'
 export { readLinkParams, writeLinkParams } from './deep-link'
 export { onDismiss, onKeyDown } from './keyboard'
 export { openUrl, reloadApp, setAppTitle, currentUrl } from './navigation'

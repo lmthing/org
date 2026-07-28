@@ -185,19 +185,29 @@ export function RailPane({
     if (!dragging.current) return
     // The rail is anchored to the right edge, so its width is whatever is to the
     // right of the pointer.
-    setWidth(Math.min(RAIL_MAX, Math.max(RAIL_MIN, window.innerWidth - e.clientX)))
+    const viewport = globalThis.window?.innerWidth
+    if (viewport === undefined) return
+    setWidth(Math.min(RAIL_MAX, Math.max(RAIL_MIN, viewport - e.clientX)))
   }, [])
 
+  // Drag-to-resize is a MOUSE affordance, and the handle below only renders when the rail sits
+  // beside the conversation (`!compact`) — which a phone never is. The listeners, though, were
+  // being attached on every mount regardless, so the native target ran `window.addEventListener`
+  // on a global that has no such method and took the surface down before anything drew. There is
+  // nothing to port here: a touch device resizes by opening and closing the rail.
   useEffect(() => {
+    const win = globalThis.window
+    if (!win?.addEventListener) return
     const stop = () => {
       dragging.current = false
-      document.body.style.userSelect = ''
+      const body = globalThis.document?.body
+      if (body) body.style.userSelect = ''
     }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', stop)
+    win.addEventListener('mousemove', onMove)
+    win.addEventListener('mouseup', stop)
     return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', stop)
+      win.removeEventListener('mousemove', onMove)
+      win.removeEventListener('mouseup', stop)
       stop()
     }
   }, [onMove])
@@ -232,7 +242,8 @@ export function RailPane({
           onMouseDown={() => {
             dragging.current = true
             // Without this a drag selects the transcript text it passes over.
-            document.body.style.userSelect = 'none'
+            const body = globalThis.document?.body
+            if (body) body.style.userSelect = 'none'
           }}
         />
       )}

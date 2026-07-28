@@ -391,6 +391,7 @@ Text.displayName = 'Text'
 // `items-*`/`justify-*`/`gap-*` stay classes — `.is_Text` never sets them, so there is no conflict.
 export type PressableAs = 'button' | 'a' | 'div'
 export type PressablePrimitiveProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
+  GestureProps &
   Pick<
     React.AnchorHTMLAttributes<HTMLAnchorElement>,
     'href' | 'target' | 'rel' | 'download' | 'referrerPolicy' | 'hrefLang'
@@ -448,7 +449,21 @@ export type BoxAs =
   | 'div' | 'section' | 'nav' | 'header' | 'footer' | 'aside' | 'article' | 'main'
   | 'figure' | 'figcaption' | 'blockquote' | 'details' | 'summary' | 'dl' | 'fieldset'
 
+/**
+ * Gestures that exist on BOTH targets but have no DOM prop to be typed from.
+ *
+ * `nativeSafeProps` already forwards `onLongPress` (it is in `NATIVE_EVENT_PROPS`), so the runtime
+ * has always supported it — it simply appeared in no prop type, which made it unusable from shared
+ * code and pushed a phone-only affordance towards a `.native` fork of the surface. A long press is
+ * a touch device's right-click; on web it is inert, which is exactly the shape of every other prop
+ * here that only one target acts on.
+ */
+export interface GestureProps {
+  onLongPress?: () => void
+}
+
 export type BoxPrimitiveProps = React.HTMLAttributes<HTMLElement> &
+  GestureProps &
   TextStyleProps &
   LayoutStyleProps &
   MarginStyleProps &

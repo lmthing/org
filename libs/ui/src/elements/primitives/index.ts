@@ -4,6 +4,7 @@
 // See docs/react-native-tamagui-migration.md §1.5.
 export type { LayoutStyleProps, BoxStyleProps, TextStyleProps, MarginStyleProps, ControlStyleProps, PseudoStyleProps } from './_tamagui'
 export { Box, type BoxProps, type BoxAs } from './box/index'
+export { Scroll, type ScrollProps } from './scroll/index'
 export { Text, type TextProps, type TextAs } from './text/index'
 export { Pressable, type PressableProps, type PressableAs } from './pressable/index'
 export { Row, type RowProps } from './row/index'

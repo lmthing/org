@@ -128,6 +128,31 @@ test("THING's system app card mounts as an offer, not a bare sentence", () => {
   expect(!!findByText(tree, 'Open'), 'and a way to open it').toBe(true)
 })
 
+test('a message with no replies shows NOTHING under it — the Slack rule', () => {
+  // A permanent "Reply in thread" under every line turns a channel into a column of the same
+  // offer repeated after everything anyone said. Slack reveals the action on the message you are
+  // pointing at (hover on web, long-press on a phone) and spends no vertical space on it.
+  const { tree } = render(<ThreadSummary replies={[]} busy={false} onOpen={() => {}} ctx={CTX} />)
+  expect(tree === null, 'renders nothing at all').toBe(true)
+})
+
+test('a long press is what offers the thread on a touch device', () => {
+  // There is no hover on a phone, so if the reply action were hover-only it would be unreachable
+  // there — the affordance has to be carried by a gesture the target actually has.
+  const { tree } = render(
+    <MessageRow message={message()} showHeader={true} ctx={CTX} onReply={() => {}} />,
+  )
+  // Asserted through the touch RESPONDER system, which is how React Native implements a long
+  // press — `onLongPress` itself never reaches the host as a prop of that name.
+  const responds = (t: unknown) =>
+    findAll(t as never, () => true).some((n) => n.props?.onResponderGrant !== undefined)
+
+  expect(responds(tree), 'the message takes part in the touch responder system').toBe(true)
+
+  const inert = render(<MessageRow message={message()} showHeader={true} ctx={CTX} />)
+  expect(responds(inert.tree), 'and only where a reply is actually offered').toBe(false)
+})
+
 test('the thread summary mounts its reply count', () => {
   const { tree } = render(
     <ThreadSummary replies={[message({ id: 'r1', threadId: 'm1' })]} busy={false} onOpen={() => {}} ctx={CTX} />,

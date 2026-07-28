@@ -11,7 +11,8 @@
  */
 import { apiUrl } from '@lmthing/ui/platform'
 
-const CLOUD_BASE_URL = 'https://lmthing.cloud'
+import { CLOUD_BASE_URL } from './hosts'
+
 
 export async function ensureComputePod(getAccessToken: () => Promise<string>): Promise<void> {
   const token = await getAccessToken()

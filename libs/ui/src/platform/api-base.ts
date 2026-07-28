@@ -33,3 +33,12 @@ export function wsUrl(path: string): string {
   const proto = loc?.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${proto}//${loc?.host ?? ''}${path}`
 }
+
+/**
+ * Where the GATEWAY lives, for the shared surfaces that talk to it directly (the dashboard's team
+ * list, billing). Empty on web means "let `dataPlaneOrigin` decide from the hostname", which is
+ * what it already did — this seam exists for the native fork's sake.
+ */
+export function cloudBaseOverride(): string {
+  return ''
+}

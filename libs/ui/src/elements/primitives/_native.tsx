@@ -61,7 +61,16 @@ export const NativeText: React.ComponentType<any> = styled(TamaguiText, {
 /** The raw styled() factory + base, re-exported for forks that need an explicit flexDirection. */
 export { styled, View, TamaguiText }
 
-/** Map a web click handler onto RN's onPress without leaking DOM-only props into the RN element. */
+/**
+ * Map a web click handler onto RN's onPress without leaking DOM-only props into the RN element.
+ *
+ * **The event it hands over is EMPTY**, and it cannot be anything else: there is no DOM node and no
+ * mouse behind a native press. So a shared `onClick` may use the fact that it fired and nothing
+ * else — `e.target`, `e.currentTarget`, `e.clientX` are all `undefined` here, and reading one is a
+ * crash on first tap rather than a degradation. The team composer did exactly that (`e.target.value`
+ * to re-sync its `@` picker) and threw before a single character could be typed. Read component
+ * state or a ref instead; both are real on either target.
+ */
 export function toPressHandler(
   onClick?: React.MouseEventHandler,
 ): (() => void) | undefined {
@@ -204,6 +213,13 @@ export function nativeSafeProps(
     out[key] = value
   }
   if (fromClick && out.onPress === undefined) out.onPress = fromClick
+  // `inline-flex` is the SAME instruction as `flex` for everything Yoga can express — the part that
+  // differs, whether the box sits in the text flow, has no meaning on native. React Native accepts
+  // only `flex`/`none`/`contents`, so the raw value was reaching Yoga as garbage AND, because it
+  // was not literally `'flex'`, skipping the direction default below. Every multi-child `Button`
+  // therefore stacked its icon above its label on a device (`display: 'inline-flex'` is in that
+  // component's base style), as did 20 other shared sites.
+  if (out.display === 'inline-flex') out.display = 'flex'
   if (out.display === 'flex' && out.flexDirection === undefined) {
     out.flexDirection = flexDirectionDefault
   }

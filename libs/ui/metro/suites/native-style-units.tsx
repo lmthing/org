@@ -28,6 +28,7 @@ import { render, findAll, type NativeNode } from '../render'
 import { AuthProvider } from '@lmthing/auth'
 import { LoginScreen } from '../../src/components/auth/login-screen'
 import { Caption } from '../../src/elements/typography/caption'
+import { Button } from '../../src/elements/forms/button'
 import { ChannelSidebar } from '../../src/team/sidebar'
 import * as Prim from '../../src/elements/primitives'
 import type { Category, Channel, MemberProfile } from '../../src/team/types'
@@ -129,6 +130,33 @@ test('a CSS length written straight onto a primitive is dropped, not passed to t
     </Prim.Text>,
   )
   expect(uncastableStyles(tree).join(', '), 'no uncastable style').toBe('')
+})
+
+test('an inline-flex button lays its icon and label out in a ROW, not a stack', () => {
+  // `display: 'inline-flex'` is in `Button`'s base style. It is not literally `'flex'`, so it used
+  // to skip the direction default and Yoga fell back to `column` — the sidebar's "+ New category"
+  // rendered as a plus sign with its label underneath, on a device, while every suite was green.
+  const { tree } = render(
+    <Button size="sm" variant="ghost">
+      <Prim.Text>+</Prim.Text>
+      New category
+    </Button>,
+  )
+  const styles = (findAll(tree as never, () => true) as NativeNode[]).flatMap((n) =>
+    (Array.isArray(n.props?.style) ? n.props.style : [n.props?.style])
+      .flat()
+      .filter((l): l is Record<string, unknown> => !!l && typeof l === 'object'),
+  )
+  const flexed = styles.filter((s) => s.display === 'flex' || s.display === 'inline-flex')
+  expect(flexed.length > 0, 'the button mounts a flex container').toBe(true)
+  expect(
+    flexed.every((s) => s.display === 'flex'),
+    'no raw inline-flex reaches Yoga',
+  ).toBe(true)
+  expect(
+    flexed.every((s) => s.flexDirection === 'row'),
+    'every flex container states row',
+  ).toBe(true)
 })
 
 test('a real number and a $-token both survive the guard', () => {

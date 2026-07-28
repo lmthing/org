@@ -57,9 +57,23 @@ const ALLOWED = {
   'libs/ui/src/elements/primitives/misc.native.tsx': 'primitive',
   'libs/ui/src/elements/primitives/pressable/index.native.tsx': 'primitive',
   'libs/ui/src/elements/primitives/row/index.native.tsx': 'primitive',
+  // `primitive` — Yoga has no overflow scrolling, so a scrolling region is an RN `ScrollView`
+  // host component rather than a `View` with a style. See the fork's own header.
+  'libs/ui/src/elements/primitives/scroll/index.native.tsx': 'primitive',
   'libs/ui/src/elements/primitives/svg.native.tsx': 'primitive',
   'libs/ui/src/elements/primitives/table.native.tsx': 'primitive',
   'libs/ui/src/elements/primitives/text/index.native.tsx': 'primitive',
+
+  // `primitive` — an icon is a host element on both targets and the SAME element on neither:
+  // `lucide-react` emits a DOM `<svg>`, which React Native has no host component for, and
+  // `react-native-svg` drags React Native into a web bundle. Both directions are real, so the icon
+  // set is drawn once per host rather than once per icon.
+  'libs/ui/src/elements/primitives/icons/index.native.tsx': 'primitive',
+
+  // `primitive` — "show a page from the pod inside the surface" is an `<iframe>` on web and a
+  // `react-native-webview` on native. Same prop shape, same meaning, different host element; the
+  // WebView is provided by the APP, never by this package.
+  'libs/ui/src/team/app-view.native.tsx': 'primitive',
 
   // `primitive` — the overlays portal through `react-dom` on web and RN `Modal` on native. The
   // dropdown fork additionally re-anchors with `measureInWindow` because RN has no
