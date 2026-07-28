@@ -64,6 +64,14 @@ export interface DirectoryProject {
   hasApp: boolean
 }
 
+export interface ChannelUnread {
+  channelId: string
+  /** Anything at all since this member last looked. */
+  hasUnread: boolean
+  /** Messages that NAMED them — exact, because a wrong count is worse than none. */
+  mentions: number
+}
+
 export interface Directory {
   members: MemberProfile[]
   projects: DirectoryProject[]
@@ -119,8 +127,11 @@ async function call<T>(team: TeamAuth, path: string, options: RequestInit = {}):
 const body = (value: unknown) => ({ body: JSON.stringify(value) })
 
 export const teamPod = {
-  /** Channels and their categories in one round trip — neither renders without the other. */
-  channels: (t: TeamAuth) => call<{ channels: Channel[]; categories: Category[] }>(t, '/channels'),
+  /** Channels, their categories AND their unread state in one round trip — a
+   *  sidebar that draws itself and then re-draws with badges on is worse to look
+   *  at than one that waits. */
+  channels: (t: TeamAuth) =>
+    call<{ channels: Channel[]; categories: Category[]; unread: ChannelUnread[] }>(t, '/channels'),
 
   createChannel: (t: TeamAuth, name: string, categoryId?: string) =>
     call<{ channel: Channel; created: boolean }>(t, '/channels', {
@@ -146,6 +157,9 @@ export const teamPod = {
       method: 'POST',
       ...body({ text, ...(threadId ? { threadId } : {}) }),
     }),
+
+  markRead: (t: TeamAuth, channelId: string) =>
+    call<{ ok: true }>(t, `/channels/${channelId}/read`, { method: 'POST' }),
 
   openDm: (t: TeamAuth, userId: string) =>
     call<{ channel: Channel; created: boolean }>(t, '/dms', { method: 'POST', ...body({ userId }) }),

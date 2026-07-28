@@ -19,7 +19,7 @@ import {
   DropdownItem,
   DropdownTrigger,
 } from '@lmthing/ui/elements/overlays/dropdown'
-import { AppWindow, ExternalLink, Hash, Plus, X } from 'lucide-react'
+import { AppWindow, ExternalLink, Hash, Menu, Plus, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { appUrl, type Channel, type DirectoryProject } from '@/lib/team-pod'
 
@@ -41,6 +41,8 @@ export function ChannelHeader({
   projects,
   rail,
   isEditor,
+  compact,
+  onOpenMenu,
   onOpenApp,
   onAttachApp,
   onDetachApp,
@@ -51,6 +53,9 @@ export function ChannelHeader({
   projects: DirectoryProject[]
   rail: Rail
   isEditor: boolean
+  /** Compact: the sidebar is behind a menu button rather than always on screen. */
+  compact?: boolean
+  onOpenMenu?: () => void
   onOpenApp: (projectId: string) => void
   onAttachApp: (projectId: string) => void
   onDetachApp: (projectId: string) => void
@@ -69,7 +74,12 @@ export function ChannelHeader({
       borderColor="$border"
       flexShrink={0}
     >
-      <Prim.Row alignItems="baseline" gap="$2" flexShrink={0}>
+      {compact ? (
+        <Button size="icon" variant="ghost" onClick={onOpenMenu} aria-label="Channels">
+          <Menu size={16} aria-hidden={true} />
+        </Button>
+      ) : null}
+      <Prim.Row alignItems="baseline" gap="$2" flexShrink={0} minWidth={0}>
         {channel?.kind === 'dm' ? null : <Hash size={16} aria-hidden={true} />}
         <Prim.Text fontSize="$base" fontWeight="$semibold">
           {title}
@@ -163,12 +173,15 @@ export function RailPane({
   onClose,
   children,
   headerExtra,
+  compact,
 }: {
   title: string
   icon?: React.ReactNode
   onClose: () => void
   children: React.ReactNode
   headerExtra?: React.ReactNode
+  /** Compact: the rail covers the surface instead of sitting beside it. */
+  compact?: boolean
 }) {
   const [width, setWidth] = useState(RAIL_DEFAULT)
   const dragging = useRef(false)
@@ -195,20 +208,39 @@ export function RailPane({
   }, [onMove])
 
   return (
-    <Prim.Row height="100%" flexShrink={0} width={width}>
-      <Prim.Box
-        width={5}
-        flexShrink={0}
-        cursor="col-resize"
-        backgroundColor="$border"
-        opacity={0.5}
-        hoverStyle={{ opacity: 1, backgroundColor: '$primary' }}
-        onMouseDown={() => {
-          dragging.current = true
-          // Without this a drag selects the transcript text it passes over.
-          document.body.style.userSelect = 'none'
-        }}
-      />
+    <Prim.Row
+      height="100%"
+      flexShrink={0}
+      {...(compact
+        ? // Covering the surface, not sitting beside it. There is no room for two
+          // panes on a phone, and a 320px-minimum rail next to a 320px
+          // conversation is two unusable columns rather than one usable one.
+          ({
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+            zIndex: 30,
+            backgroundColor: '$background',
+          } as const)
+        : { width })}
+    >
+      {compact ? null : (
+        <Prim.Box
+          width={5}
+          flexShrink={0}
+          cursor="col-resize"
+          backgroundColor="$border"
+          opacity={0.5}
+          hoverStyle={{ opacity: 1, backgroundColor: '$primary' }}
+          onMouseDown={() => {
+            dragging.current = true
+            // Without this a drag selects the transcript text it passes over.
+            document.body.style.userSelect = 'none'
+          }}
+        />
+      )}
       <Prim.Col flex={1} minWidth={0} height="100%">
         <Prim.Row
           alignItems="center"

@@ -17,6 +17,7 @@ import {
   type Channel,
   type ChannelEvent,
   type ChannelMessage,
+  type ChannelUnread,
   type Directory,
   type MemberProfile,
 } from '@/lib/team-pod'
@@ -51,6 +52,10 @@ export interface TeamChat {
   thinking: Set<string>
   /** Display labels of members typing in the channel on screen. */
   typingHere: string[]
+  /** channelId → what is waiting there for this member. */
+  unread: Map<string, ChannelUnread>
+  /** Mentions across every channel — what the browser tab's badge counts. */
+  totalMentions: number
   send: (text: string, threadId?: string) => Promise<void>
   createChannel: (name: string, categoryId?: string) => Promise<Channel | null>
   createCategory: (name: string) => Promise<void>
@@ -78,7 +83,13 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
   const [error, setError] = useState<string | null>(null)
   const [thinking, setThinking] = useState<Set<string>>(new Set())
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map())
+  const [unread, setUnread] = useState<Map<string, ChannelUnread>>(new Map())
 
+  // The socket handler closes over these, and it is installed ONCE — rebuilding
+  // it on every channel switch would drop and remake the connection, losing
+  // whatever arrived in between.
+  const activeIdRef = useRef<string | null>(activeId)
+  activeIdRef.current = activeId
   const typingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const socket = useRef<WebSocket | null>(null)
   const lastTypingSent = useRef(0)
@@ -94,10 +105,11 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
     let cancelled = false
     void (async () => {
       try {
-        const { channels: list, categories: cats } = await teamPod.channels(team)
+        const { channels: list, categories: cats, unread: badges } = await teamPod.channels(team)
         if (cancelled) return
         setChannels(list)
         setCategories(cats)
+        setUnread(new Map(badges.map((u) => [u.channelId, u])))
       } catch (err) {
         if (!cancelled) fail(err)
       }
@@ -126,7 +138,9 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
     }
   }, [team, fail])
 
-  // History for the selected channel.
+  // History for the selected channel — and, having shown it, tell the pod it has
+  // been read. Opening a channel IS reading it; a separate "mark as read" would
+  // be an extra thing to do for something the member has already done.
   useEffect(() => {
     if (!activeId) return
     let cancelled = false
@@ -134,7 +148,17 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
     void (async () => {
       try {
         const { messages: history } = await teamPod.messages(team, activeId)
-        if (!cancelled) setMessages(history)
+        if (cancelled) return
+        setMessages(history)
+        setUnread((prev) => {
+          if (!prev.get(activeId)?.hasUnread && !prev.get(activeId)?.mentions) return prev
+          const next = new Map(prev)
+          next.set(activeId, { channelId: activeId, hasUnread: false, mentions: 0 })
+          return next
+        })
+        // Not awaited into the render path: the badge is already down locally,
+        // and this only has to reach the pod before the next device asks.
+        void teamPod.markRead(team, activeId).catch(() => {})
       } catch (err) {
         if (!cancelled) fail(err)
       }
@@ -167,6 +191,21 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
       if (parsed.type === 'message') {
         const incoming = parsed.message
         setMessages((prev) => (prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming]))
+        // Raise the badge locally rather than re-fetching the channel list on
+        // every message. The channel on screen is exempt — it is being read as it
+        // arrives, and `markRead` below tells the pod so.
+        setUnread((prev) => {
+          if (incoming.channelId === activeIdRef.current || incoming.userId === meIdRef.current) return prev
+          const current = prev.get(incoming.channelId)
+          const namesMe = !!meIdRef.current && incoming.mentions?.includes(meIdRef.current)
+          const next = new Map(prev)
+          next.set(incoming.channelId, {
+            channelId: incoming.channelId,
+            hasUnread: true,
+            mentions: (current?.mentions ?? 0) + (namesMe ? 1 : 0),
+          })
+          return next
+        })
         // Somebody who just spoke is no longer typing.
         setTypingUsers((prev) => {
           if (!incoming.userId || !prev.has(incoming.userId)) return prev
@@ -323,6 +362,8 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
   }, [])
 
   const meId = me?.userId ?? ''
+  const meIdRef = useRef(meId)
+  meIdRef.current = meId
 
   const visible = useMemo(
     () => messages.filter((m) => m.channelId === activeId),
@@ -353,6 +394,8 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
     error,
     thinking,
     typingHere,
+    unread,
+    totalMentions: [...unread.values()].reduce((sum, u) => sum + u.mentions, 0),
     send,
     createChannel,
     createCategory,

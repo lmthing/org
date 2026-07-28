@@ -49,7 +49,7 @@ import {
   handleListChannels, handleCreateChannel, handlePatchChannel, handleCreateDm,
   handleListCategories, handleCreateCategory, handlePatchCategory, handleDeleteCategory,
   handleDirectory, handleGetProfile, handlePutProfile,
-  handleListMessages, handlePostMessage,
+  handleListMessages, handlePostMessage, handleMarkRead,
 } from './routes/team-channels.js';
 import { guardRequest, guardWebSocket, isTeamMode } from './team-guard.js';
 import { handleListStoreSpaces, handleInstallStoreSpace, handleListProjectIntegrations } from './routes/store-spaces.js';
@@ -230,6 +230,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     router.add('PATCH', '/api/team/channels/:channelId', handlePatchChannel(effectiveLmthingRoot));
     router.add('GET', '/api/team/channels/:channelId/messages', handleListMessages(effectiveLmthingRoot));
     router.add('POST', '/api/team/channels/:channelId/messages', handlePostMessage(manager, effectiveLmthingRoot));
+    router.add('POST', '/api/team/channels/:channelId/read', handleMarkRead(effectiveLmthingRoot));
     router.add('POST', '/api/team/dms', handleCreateDm(effectiveLmthingRoot));
     router.add('GET', '/api/team/categories', handleListCategories(effectiveLmthingRoot));
     router.add('POST', '/api/team/categories', handleCreateCategory(effectiveLmthingRoot));

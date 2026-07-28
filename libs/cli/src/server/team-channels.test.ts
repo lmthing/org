@@ -31,7 +31,7 @@ import {
   handleListChannels,
   handleListMessages,
   handlePostMessage,
-  settleThingReplies,
+  settleChannelWork,
 } from './routes/team-channels.js';
 import { resetChannelSockets } from './ws/team-channels.js';
 
@@ -43,6 +43,10 @@ beforeEach(async () => {
   resetChannelSockets();
 });
 afterEach(async () => {
+  // A POST returns before its delivery bookkeeping finishes, by design. Draining
+  // it here stops that write racing the teardown below — which surfaced as an
+  // ENOTEMPTY on a directory being removed while it was still being written to.
+  await settleChannelWork();
   delete process.env['LMTHING_TEAM_MODE'];
   await rm(root, { recursive: true, force: true });
 });
@@ -117,7 +121,7 @@ function mkManager(reply: string | ((msg: string) => string) = 'ok') {
 }
 
 /** Wait for the out-of-band THING reply the POST handler kicked off. */
-const settle = settleThingReplies;
+const settle = settleChannelWork;
 
 // ─── Pure helpers ────────────────────────────────────────────────────────────
 

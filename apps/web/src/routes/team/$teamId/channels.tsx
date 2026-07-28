@@ -7,6 +7,7 @@ import { AppWindow, MessageSquare, X } from 'lucide-react'
 import { useTeamAuth } from '@/lib/team-auth'
 import { dmPartner, memberLabel, type ChannelMessage } from '@/lib/team-pod'
 import { useTeamChat } from '@/components/team/use-team-chat'
+import { useTeamLayout } from '@/components/team/use-layout'
 import { ChannelSidebar } from '@/components/team/sidebar'
 import { Composer } from '@/components/team/composer'
 import {
@@ -48,6 +49,8 @@ function ChannelsPage() {
   const chat = useTeamChat(team, activeId)
   const meId = chat.meId
   const transcriptRef = useRef<HTMLDivElement>(null)
+  const { compact } = useTeamLayout()
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   const isEditor = team.role === 'editor'
 
@@ -121,6 +124,20 @@ function ChannelsPage() {
     // pane the member had just closed.
   }, [lastMessageId])
 
+  useEffect(() => {
+    if (!compact) setDrawerOpen(false)
+  }, [compact])
+
+  // The browser tab is a notification surface too: it is often the only part of
+  // the app visible when somebody is working in another window.
+  useEffect(() => {
+    const base = 'lmthing'
+    document.title = chat.totalMentions > 0 ? `(${chat.totalMentions}) ${base}` : base
+    return () => {
+      document.title = base
+    }
+  }, [chat.totalMentions])
+
   // Follow the conversation, the way a chat surface is expected to.
   useEffect(() => {
     const el = transcriptRef.current
@@ -135,24 +152,46 @@ function ChannelsPage() {
 
   const title = channelTitle(channel, chat.directory.members, meId)
 
-  return (
-    <Prim.Row height="100%" minWidth={0}>
-      <ChannelSidebar
+  const sidebar = (
+    <ChannelSidebar
+      compact={compact}
+      onDismiss={() => setDrawerOpen(false)}
         channels={chat.channels}
         categories={chat.categories}
         members={chat.directory.members}
         meId={meId}
         activeId={activeId}
         isEditor={isEditor}
+        unread={chat.unread}
         onSelect={selectChannel}
         onCreateChannel={(name, categoryId) => void chat.createChannel(name, categoryId)}
         onCreateCategory={(name) => void chat.createCategory(name)}
         onDeleteCategory={(id) => void chat.deleteCategory(id)}
         onMoveChannel={(channelId, categoryId) => void chat.patchChannel(channelId, { categoryId })}
-        onOpenDm={(userId) => {
-          void chat.openDm(userId).then((channel) => channel && selectChannel(channel.id))
-        }}
-      />
+      onOpenDm={(userId) => {
+        void chat.openDm(userId).then((channel) => channel && selectChannel(channel.id))
+      }}
+    />
+  )
+
+  return (
+    // `relative`, because the rail positions against this when it is covering the
+    // surface rather than sitting beside it.
+    <Prim.Row height="100%" minWidth={0} position="relative" overflow="hidden">
+      {compact ? null : sidebar}
+
+      {/* The drawer. A scrim behind it, so tapping away closes — the gesture
+          everybody already has for a panel that slid over what they were reading. */}
+      {compact && drawerOpen ? (
+        <Prim.Row position="absolute" top={0} left={0} right={0} bottom={0} zIndex={40}>
+          {sidebar}
+          <Prim.Box
+            flex={1}
+            backgroundColor="rgba(0,0,0,0.4)"
+            onClick={() => setDrawerOpen(false)}
+          />
+        </Prim.Row>
+      ) : null}
 
       <Prim.Col flex={1} minWidth={0} height="100%">
         <ChannelHeader
@@ -162,6 +201,8 @@ function ChannelsPage() {
           projects={chat.directory.projects}
           rail={rail}
           isEditor={isEditor}
+          compact={compact}
+          onOpenMenu={() => setDrawerOpen(true)}
           onOpenApp={openApp}
           onAttachApp={(projectId) => {
             void chat.patchChannel(activeId!, { apps: [...(channel?.apps ?? []), projectId] })
@@ -243,6 +284,7 @@ function ChannelsPage() {
           directory={chat.directory}
           meId={meId}
           ctx={ctx}
+          compact={compact}
           onClose={closeRail}
           onSend={(text) => chat.send(text, rail.threadId)}
           onTyping={() => activeId && chat.notifyTyping(activeId)}
@@ -256,6 +298,7 @@ function ChannelsPage() {
           }
           icon={<AppWindow size={14} aria-hidden={true} />}
           headerExtra={<OpenAppExternally projectId={rail.projectId} />}
+          compact={compact}
           onClose={closeRail}
         >
           <AppFrame
@@ -286,6 +329,7 @@ function ThreadRail({
   directory,
   meId,
   ctx,
+  compact,
   onClose,
   onSend,
   onTyping,
@@ -296,13 +340,19 @@ function ThreadRail({
   directory: ReturnType<typeof useTeamChat>['directory']
   meId: string
   ctx: MessageContext
+  compact?: boolean
   onClose: () => void
   onSend: (text: string) => Promise<void>
   onTyping: () => void
 }) {
   const groups = useMemo(() => groupMessages(replies), [replies])
   return (
-    <RailPane title="Thread" icon={<MessageSquare size={14} aria-hidden={true} />} onClose={onClose}>
+    <RailPane
+      title="Thread"
+      icon={<MessageSquare size={14} aria-hidden={true} />}
+      compact={compact}
+      onClose={onClose}
+    >
       <Prim.Col flex={1} minHeight={0} overflow="auto" padding="$3" gap="$3">
         {root ? <MessageRow message={root} showHeader={true} ctx={ctx} /> : null}
         <Prim.Row alignItems="center" gap="$2">

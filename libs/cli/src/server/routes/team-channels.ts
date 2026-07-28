@@ -29,7 +29,15 @@ import { readBody, sendJson } from './utils.js';
 import { readCaller, type TeamCaller } from '../team-guard.js';
 import { listProjects } from '../projects.js';
 import { getOrCreateThreadSession } from '../webhook-threads.js';
-import { audienceFor, broadcastChannelEvent } from '../ws/team-channels.js';
+import { audienceFor, broadcastChannelEvent, connectedUserIds } from '../ws/team-channels.js';
+import {
+  addMentions,
+  markRead,
+  mentionAudience,
+  pushAudience,
+  unreadFor,
+} from '../team-reads.js';
+import { pushPayload, sendPushRequest } from '../team-push.js';
 import {
   appendMessage,
   createCategory,
@@ -54,6 +62,7 @@ import {
   HandleError,
   getMember,
   listMembers,
+  memberLabel,
   resolveMentions,
   setProfile,
   touchMember,
@@ -63,23 +72,35 @@ import {
 const THING_AGENT = 'thing';
 
 /**
- * THING replies that have been kicked off but not yet posted. A mention is
- * answered out-of-band so the composer never waits on an agent turn, which
- * leaves work in flight that nothing is awaiting — this is the handle onto it,
- * for a shutdown that would rather not drop a half-finished answer, and for
- * tests that need to know when the reply has landed.
+ * Work a POST kicked off but deliberately did not wait for: THING's answer to a
+ * mention, and the delivery bookkeeping (badges, push) for a stored message.
+ *
+ * Both are out-of-band on purpose — the composer must not wait on an agent turn,
+ * and the poster has no business waiting for somebody else's badge to go up. That
+ * leaves real work in flight that nothing is awaiting, which is a problem for a
+ * shutdown that would rather not drop a half-finished answer, and for any test
+ * that needs to know the work has landed.
+ *
+ * So it is all tracked in one place and drainable. Nothing outside this module
+ * gets to start untracked background work on the channel path.
  */
-const inFlightReplies = new Set<Promise<void>>();
+const inFlight = new Set<Promise<void>>();
 
-function trackReply(p: Promise<void>): void {
-  inFlightReplies.add(p);
-  void p.finally(() => inFlightReplies.delete(p));
+function track(p: Promise<void>): void {
+  inFlight.add(p);
+  void p.finally(() => inFlight.delete(p));
 }
 
-/** Resolve once every in-flight THING reply has been posted (or failed). */
-export async function settleThingReplies(): Promise<void> {
-  while (inFlightReplies.size > 0) {
-    await Promise.allSettled([...inFlightReplies]);
+/**
+ * Resolve once every background channel task has finished (or failed).
+ *
+ * The loop re-checks rather than awaiting one snapshot: a delivery can start
+ * another task (THING's reply delivers in turn), so a single `allSettled` would
+ * return with work still outstanding.
+ */
+export async function settleChannelWork(): Promise<void> {
+  while (inFlight.size > 0) {
+    await Promise.allSettled([...inFlight]);
   }
 }
 
@@ -142,7 +163,40 @@ export function handleListChannels(root: string | undefined): RouteHandler {
       listCategories(root),
     ]);
     const channels = all.filter((c) => isVisibleTo(c, caller?.userId ?? ''));
-    sendJson(res, 200, { channels, categories });
+    // Unread rides along for the same reason categories do: a sidebar that draws
+    // its channels and then re-draws them a moment later with badges on is a
+    // worse thing to look at than one that waits for both.
+    const unread = caller ? await unreadFor(root, caller.userId, channels) : [];
+    sendJson(res, 200, { channels, categories, unread });
+  };
+}
+
+/**
+ * `POST /api/team/channels/:channelId/read` — "I have seen this channel."
+ *
+ * Viewer-allowed, and has been in team-guard's allowlist since teams shipped;
+ * this is the handler that was missing behind it.
+ */
+export function handleMarkRead(root: string | undefined): RouteHandler {
+  return async (
+    req: IncomingMessage,
+    res: ServerResponse,
+    params: Record<string, string>,
+  ): Promise<void> => {
+    if (!requireRoot(root, res)) return;
+    const caller = readCaller(req);
+    if (!caller) {
+      sendJson(res, 401, { error: 'marking a channel read needs a verified caller' });
+      return;
+    }
+    const channelId = params['channelId'] ?? '';
+    if (!isValidChannelId(channelId)) {
+      sendJson(res, 400, { error: 'invalid channel id' });
+      return;
+    }
+    if (!(await requireVisibleChannel(root, channelId, caller, res))) return;
+    await markRead(root, caller.userId, channelId);
+    sendJson(res, 200, { ok: true });
   };
 }
 
@@ -494,10 +548,47 @@ export function handlePostMessage(
     // Answer now; THING (if addressed) replies onto the socket in its own time.
     sendJson(res, 201, { message });
 
+    // Bookkeeping the sender should never wait on, and whose failure must not
+    // turn a delivered message into an error the composer reports.
+    track(deliver(root, channel, message).catch(() => {}));
+
     if (mentionsThing(text)) {
-      trackReply(runThingReply(manager, root, message, channel));
+      track(runThingReply(manager, root, message, channel));
     }
   };
+}
+
+/**
+ * Everything that happens to a message AFTER it is stored and broadcast:
+ * badges for the people it names, and a push for those of them who are not here.
+ *
+ * Separated from the post handler because none of it is the poster's business —
+ * they have already had their 201, and a failure to raise somebody else's badge
+ * is not a failure to send.
+ */
+async function deliver(root: string, channel: Channel, message: ChannelMessage): Promise<void> {
+  const named = mentionAudience(channel, message);
+  await addMentions(root, channel.id, named, message.userId);
+  // Posting IS reading: without this, your own message leaves the channel it
+  // landed in looking unread to you, because unread is derived from the log's
+  // mtime and you just moved it.
+  if (message.userId) await markRead(root, message.userId, channel.id);
+
+  const targets = await pushAudience(root, channel, message, connectedUserIds());
+  if (!targets.length) return;
+
+  // The gateway addresses devices, not people-by-name, so the pod supplies the
+  // name: it is the only side that knows this team's directory.
+  const members = await listMembers(root);
+  const sender =
+    message.kind === 'thing'
+      ? 'THING'
+      : memberLabel(
+          members.find((m) => m.userId === message.userId),
+          message.email ?? 'Someone',
+        );
+  const teamId = process.env['LMTHING_TEAM_ID'] ?? '';
+  await sendPushRequest({ ...pushPayload(channel, message, sender, teamId), userIds: targets });
 }
 
 /**
@@ -550,8 +641,14 @@ async function runThingReply(
       ...answer,
       threadId,
       sessionId,
+      // An answer is addressed to whoever asked. Stamping it as a mention is
+      // what makes "you asked THING something and it finished while you were
+      // away" reach you — an agent turn can take minutes, which is exactly the
+      // span over which somebody closes the tab.
+      ...(message.userId ? { mentions: [message.userId] } : {}),
     });
     broadcastChannelEvent({ type: 'message', message: reply }, to);
+    track(deliver(root, channel, reply).catch(() => {}));
     broadcastChannelEvent(
       {
         type: 'thing_status',

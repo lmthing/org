@@ -152,6 +152,24 @@ export function connectedChannelSockets(): number {
   return sockets.size;
 }
 
+/**
+ * The user ids with a live socket right now.
+ *
+ * Used as the "do not push" set: somebody with the surface open is being told by
+ * the socket already, and a phone that buzzes about a message visible on the
+ * screen in front of you is the fastest way to get notifications turned off.
+ *
+ * An open socket is a weaker signal than an open EYE — a backgrounded tab still
+ * holds one — which is why the client also marks a channel read when it is
+ * actually on screen. This set only rules out the case where the message is
+ * being delivered live anyway.
+ */
+export function connectedUserIds(): Set<string> {
+  const ids = new Set<string>();
+  for (const subscriber of sockets) if (subscriber.userId) ids.add(subscriber.userId);
+  return ids;
+}
+
 /** Drop every socket — test teardown. */
 export function resetChannelSockets(): void {
   sockets.clear();

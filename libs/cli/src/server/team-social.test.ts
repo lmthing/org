@@ -17,6 +17,7 @@ import {
   createCategory,
   deleteCategory,
   dmChannelId,
+  ensureDefaultChannel,
   ensureDmChannel,
   isVisibleTo,
   listCategories,
@@ -32,6 +33,8 @@ import {
   setProfile,
   touchMember,
 } from './team-members.js';
+import { markRead, pushAudience } from './team-reads.js';
+import { pushPayload } from './team-push.js';
 import {
   handleCreateCategory,
   handleCreateChannel,
@@ -41,10 +44,11 @@ import {
   handleGetProfile,
   handleListChannels,
   handleListMessages,
+  handleMarkRead,
   handlePatchChannel,
   handlePostMessage,
   handlePutProfile,
-  settleThingReplies,
+  settleChannelWork,
 } from './routes/team-channels.js';
 import {
   broadcastChannelEvent,
@@ -61,6 +65,10 @@ beforeEach(async () => {
   resetChannelSockets();
 });
 afterEach(async () => {
+  // A POST returns before its delivery bookkeeping finishes, by design. Draining
+  // it here stops that write racing the teardown below — which surfaced as an
+  // ENOTEMPTY on a directory being removed while it was still being written to.
+  await settleChannelWork();
   delete process.env['LMTHING_TEAM_MODE'];
   await rm(root, { recursive: true, force: true });
 });
@@ -521,7 +529,7 @@ describe('apps beside a channel', () => {
       {} as any,
     );
     const ask = res.json().message;
-    await settleThingReplies();
+    await settleChannelWork();
 
     // 1. pinned to the channel, so it is a tab tomorrow as well as today
     expect((await listChannels(root)).find((c) => c.id === 'general')!.apps).toEqual(['standup']);
@@ -555,7 +563,7 @@ describe('apps beside a channel', () => {
       { channelId: 'general' },
       {} as any,
     );
-    await settleThingReplies();
+    await settleChannelWork();
     expect(bo.received.filter((e) => e.type === 'app_created')).toHaveLength(0);
     expect((await listChannels(root)).find((c) => c.id === 'general')).not.toHaveProperty('apps');
   });
@@ -573,7 +581,190 @@ describe('apps beside a channel', () => {
       { channelId: 'general' },
       {} as any,
     );
-    await settleThingReplies();
+    await settleChannelWork();
     expect(bo.received.filter((e) => e.type === 'app_created')).toHaveLength(0);
   });
 });
+
+// ─── Read state, unread and mentions ─────────────────────────────────────────
+
+describe('read state', () => {
+  const post = async (text: string, channelId = 'general', headers = ANA) => {
+    await handlePostMessage(mkManager(), root)(
+      mkReq('POST', `/api/team/channels/${channelId}/messages`, { text }, headers),
+      mkRes(),
+      { channelId },
+      {} as any,
+    )
+    // Badges are raised by the out-of-band delivery, not by the POST itself.
+    await settleChannelWork()
+  }
+
+  const channelsFor = async (headers: typeof ANA) => {
+    const res = mkRes()
+    await handleListChannels(root)(mkReq('GET', '/api/team/channels', undefined, headers), res, {}, {} as any)
+    return res.json().unread as Array<{ channelId: string; hasUnread: boolean; mentions: number }>
+  }
+  const unreadOf = async (headers: typeof ANA, channelId = 'general') =>
+    (await channelsFor(headers)).find((u) => u.channelId === channelId)!
+
+  it('an untouched channel is not unread, even for someone who has read nothing', async () => {
+    expect(await unreadOf(CAI)).toMatchObject({ hasUnread: false, mentions: 0 })
+  })
+
+  it('someone else‘s message makes it unread', async () => {
+    await post('morning')
+    expect(await unreadOf(BO)).toMatchObject({ hasUnread: true, mentions: 0 })
+  })
+
+  it('your OWN message does not leave the channel unread for you', async () => {
+    // Unread is derived from the log's mtime, and posting moves it — so without
+    // treating a post as a read, everyone would unread-badge their own messages.
+    await post('morning')
+    expect(await unreadOf(ANA)).toMatchObject({ hasUnread: false })
+  })
+
+  it('counts mentions exactly, and only for the person named', async () => {
+    await setProfile(root, 'u-bo', { handle: 'bo' })
+    await post('@bo one')
+    await post('@bo two')
+    expect(await unreadOf(BO)).toMatchObject({ hasUnread: true, mentions: 2 })
+    expect(await unreadOf(CAI)).toMatchObject({ mentions: 0 })
+  })
+
+  it('never counts a self-mention', async () => {
+    await setProfile(root, 'u-ana', { handle: 'ana' })
+    await post('note to self @ana')
+    expect(await unreadOf(ANA)).toMatchObject({ mentions: 0 })
+  })
+
+  it('every message in a DM counts as a mention of the other participant', async () => {
+    // A direct message IS addressed to you; requiring `@you` inside one would be
+    // asking somebody to address an already-addressed conversation.
+    const { channel } = await ensureDmChannel(root, ['u-ana', 'u-bo'], 'u-ana')
+    await post('hey', channel.id)
+    const forBo = (await channelsFor(BO)).find((u) => u.channelId === channel.id)!
+    expect(forBo).toMatchObject({ hasUnread: true, mentions: 1 })
+  })
+
+  it('marking read clears both the badge and the counter', async () => {
+    await setProfile(root, 'u-bo', { handle: 'bo' })
+    await post('@bo look')
+    const res = mkRes()
+    await handleMarkRead(root)(
+      mkReq('POST', '/api/team/channels/general/read', undefined, BO),
+      res,
+      { channelId: 'general' },
+      {} as any,
+    )
+    expect(res.statusCode).toBe(200)
+    expect(await unreadOf(BO)).toMatchObject({ hasUnread: false, mentions: 0 })
+  })
+
+  it('refuses to mark a DM read for somebody not in it', async () => {
+    const { channel } = await ensureDmChannel(root, ['u-ana', 'u-bo'], 'u-ana')
+    const res = mkRes()
+    await handleMarkRead(root)(
+      mkReq('POST', `/api/team/channels/${channel.id}/read`, undefined, CAI),
+      res,
+      { channelId: channel.id },
+      {} as any,
+    )
+    expect(res.statusCode).toBe(404)
+  })
+
+  it('THING‘s answer is a mention of whoever asked', async () => {
+    // An agent turn can take minutes — the span over which somebody closes the
+    // tab — so the answer has to be able to reach them.
+    await handlePostMessage(mkManager('42'), root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing what is 6*7?' }, BO),
+      mkRes(),
+      { channelId: 'general' },
+      {} as any,
+    )
+    await settleChannelWork()
+    const { messages } = await readMessages(root, 'general')
+    expect(messages.find((m) => m.kind === 'thing')!.mentions).toEqual(['u-bo'])
+  })
+})
+
+describe('who gets pushed', () => {
+  const dmWith = async () => (await ensureDmChannel(root, ['u-ana', 'u-bo'], 'u-ana')).channel
+
+  it('pushes somebody who was named and is not connected', async () => {
+    const channel = (await ensureDefaultChannel(root)).find((c) => c.id === 'general')!
+    const targets = await pushAudience(
+      root,
+      channel,
+      { mentions: ['u-bo'], userId: 'u-ana', ts: new Date().toISOString() },
+      new Set(),
+    )
+    expect(targets).toEqual(['u-bo'])
+  })
+
+  it('does NOT push somebody who has the surface open', async () => {
+    const channel = (await ensureDefaultChannel(root)).find((c) => c.id === 'general')!
+    const targets = await pushAudience(
+      root,
+      channel,
+      { mentions: ['u-bo'], userId: 'u-ana', ts: new Date().toISOString() },
+      new Set(['u-bo']),
+    )
+    expect(targets).toEqual([])
+  })
+
+  it('does NOT push the sender, even in a DM where they are a participant', async () => {
+    const channel = await dmWith()
+    const targets = await pushAudience(
+      root,
+      channel,
+      { userId: 'u-ana', ts: new Date().toISOString() },
+      new Set(),
+    )
+    expect(targets).toEqual(['u-bo'])
+  })
+
+  it('does NOT push a message somebody already read on another device', async () => {
+    const channel = (await ensureDefaultChannel(root)).find((c) => c.id === 'general')!
+    const sentAt = new Date(Date.now() - 60_000).toISOString()
+    await markRead(root, 'u-bo', 'general') // read just now, i.e. after it was sent
+    const targets = await pushAudience(
+      root,
+      channel,
+      { mentions: ['u-bo'], userId: 'u-ana', ts: sentAt },
+      new Set(),
+    )
+    expect(targets).toEqual([])
+  })
+
+  it('does not push a busy channel nobody was named in', async () => {
+    // The badge is for "there is activity"; a notification is for "somebody
+    // addressed me". Anything looser trains people to switch them off.
+    const channel = (await ensureDefaultChannel(root)).find((c) => c.id === 'general')!
+    expect(
+      await pushAudience(root, channel, { userId: 'u-ana', ts: new Date().toISOString() }, new Set()),
+    ).toEqual([])
+  })
+})
+
+describe('what a notification says', () => {
+  it('titles a channel message with the sender and the channel', () => {
+    const channel = { id: 'roadmap', name: 'Roadmap', createdBy: '', createdAt: '' }
+    const p = pushPayload(channel, { id: '1', ts: '', channelId: 'roadmap', kind: 'user', text: 'ping' }, 'Ana Kay', 't1')
+    expect(p.title).toBe('Ana Kay in #Roadmap')
+    expect(p.url).toBe('/team/t1/channels?channel=roadmap')
+    expect(p.tag).toBe('t1:roadmap')
+  })
+
+  it('titles a direct message with just the person', () => {
+    const dm = { id: 'dm-x', name: 'Direct message', createdBy: '', createdAt: '', kind: 'dm' as const, members: ['u-ana', 'u-bo'] }
+    expect(pushPayload(dm, { id: '1', ts: '', channelId: 'dm-x', kind: 'user', text: 'hi' }, 'Ana Kay', 't1').title).toBe('Ana Kay')
+  })
+
+  it('truncates a long body — a notification is a pointer, not the message', () => {
+    const channel = { id: 'c', name: 'c', createdBy: '', createdAt: '' }
+    const p = pushPayload(channel, { id: '1', ts: '', channelId: 'c', kind: 'user', text: 'x'.repeat(400) }, 'Ana', 't1')
+    expect(p.body).toHaveLength(140)
+    expect(p.body.endsWith('…')).toBe(true)
+  })
+})

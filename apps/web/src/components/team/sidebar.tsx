@@ -22,16 +22,27 @@ import {
 } from '@lmthing/ui/elements/overlays/dropdown'
 import { ChevronDown, ChevronRight, Hash, MoreVertical, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { dmPartner, memberLabel, type Category, type Channel, type MemberProfile } from '@/lib/team-pod'
+import {
+  dmPartner,
+  memberLabel,
+  type Category,
+  type Channel,
+  type ChannelUnread,
+  type MemberProfile,
+} from '@/lib/team-pod'
 import { initials } from '@/lib/team-format'
 
 export interface SidebarProps {
+  /** Compact: the sidebar is a slide-over, not a column, and closes on select. */
+  compact?: boolean
+  onDismiss?: () => void
   channels: Channel[]
   categories: Category[]
   members: MemberProfile[]
   meId: string
   activeId: string | null
   isEditor: boolean
+  unread: Map<string, ChannelUnread>
   onSelect: (channelId: string) => void
   onCreateChannel: (name: string, categoryId?: string) => void
   onCreateCategory: (name: string) => void
@@ -40,8 +51,37 @@ export interface SidebarProps {
   onOpenDm: (userId: string) => void
 }
 
+/**
+ * The unread treatment: a channel with anything new is BOLD, a channel that
+ * named you carries a count.
+ *
+ * Two levels rather than one, because they answer different questions. Bold says
+ * "there is something here" and can be ignored; a number says "somebody is
+ * waiting on you" and cannot. Collapsing them into one badge makes a busy
+ * channel shout as loudly as a direct question, which is how people end up
+ * muting everything.
+ */
+function MentionBadge({ count }: { count: number }) {
+  if (count <= 0) return null
+  return (
+    <Prim.Text
+      backgroundColor="$primary"
+      color="$primary-foreground"
+      fontSize="$xs"
+      fontWeight="$semibold"
+      borderRadius="$radius-full"
+      minWidth="$5"
+      paddingHorizontal="$1.5"
+      textAlign="center"
+      flexShrink={0}
+    >
+      {count > 99 ? '99+' : count}
+    </Prim.Text>
+  )
+}
+
 export function ChannelSidebar(props: SidebarProps) {
-  const { channels, categories, members, meId, activeId, isEditor } = props
+  const { channels, categories, members, meId, activeId, isEditor, unread, compact } = props
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [adding, setAdding] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -104,12 +144,19 @@ export function ChannelSidebar(props: SidebarProps) {
 
   return (
     <Prim.Col
-      width={230}
+      // As a drawer it must paint over the conversation, so it needs its own
+      // background — as a column it inherits the page's and does not.
+      width={compact ? 280 : 230}
+      maxWidth="85%"
       flexShrink={0}
       borderRightWidth={1}
       borderColor="$border"
       paddingVertical="$2"
       overflow="auto"
+      height="100%"
+      {...(compact
+        ? ({ backgroundColor: '$background', boxShadow: '0 0 40px rgba(0,0,0,0.18)' } as const)
+        : {})}
     >
       {sections.map((section) => (
         <Prim.Col key={section.key} marginBottom="$2">
@@ -159,7 +206,11 @@ export function ChannelSidebar(props: SidebarProps) {
                   active={channel.id === activeId}
                   categories={categories}
                   isEditor={isEditor}
-                  onSelect={() => props.onSelect(channel.id)}
+                  unread={unread.get(channel.id)}
+                  onSelect={() => {
+                    props.onSelect(channel.id)
+                    props.onDismiss?.()
+                  }}
                   onMove={(categoryId) => props.onMoveChannel(channel.id, categoryId)}
                 />
               ))}
@@ -197,8 +248,15 @@ export function ChannelSidebar(props: SidebarProps) {
         members={members}
         meId={meId}
         activeId={activeId}
-        onSelect={props.onSelect}
-        onOpenDm={props.onOpenDm}
+        unread={unread}
+        onSelect={(channelId) => {
+          props.onSelect(channelId)
+          props.onDismiss?.()
+        }}
+        onOpenDm={(userId) => {
+          props.onOpenDm(userId)
+          props.onDismiss?.()
+        }}
       />
     </Prim.Col>
   )
@@ -236,6 +294,7 @@ function ChannelRow({
   active,
   categories,
   isEditor,
+  unread,
   onSelect,
   onMove,
 }: {
@@ -243,22 +302,27 @@ function ChannelRow({
   active: boolean
   categories: Category[]
   isEditor: boolean
+  unread: ChannelUnread | undefined
   onSelect: () => void
   onMove: (categoryId: string | null) => void
 }) {
+  const bold = !!unread?.hasUnread && !active
   return (
     <Prim.Row alignItems="center" gap="$0.5">
       <Prim.Box flex={1} minWidth={0}>
         <ListItem selected={active} onClick={onSelect}>
           <Hash size={14} aria-hidden={true} />
-          <Prim.Text fontSize="$sm" marginLeft="$1.5" flex={1} minWidth={0}>
+          <Prim.Text
+            fontSize="$sm"
+            marginLeft="$1.5"
+            flex={1}
+            minWidth={0}
+            fontWeight={bold ? '$semibold' : '$normal'}
+            color={bold ? '$foreground' : undefined}
+          >
             {channel.name}
           </Prim.Text>
-          {channel.apps?.length ? (
-            <Prim.Text fontSize="$xs" color="$muted-foreground">
-              {channel.apps.length}
-            </Prim.Text>
-          ) : null}
+          <MentionBadge count={unread?.mentions ?? 0} />
         </ListItem>
       </Prim.Box>
       {isEditor && categories.length ? (
@@ -337,6 +401,7 @@ function DirectMessages({
   members,
   meId,
   activeId,
+  unread,
   onSelect,
   onOpenDm,
 }: {
@@ -344,6 +409,7 @@ function DirectMessages({
   members: MemberProfile[]
   meId: string
   activeId: string | null
+  unread: Map<string, ChannelUnread>
   onSelect: (channelId: string) => void
   onOpenDm: (userId: string) => void
 }) {
@@ -380,18 +446,28 @@ function DirectMessages({
         {others.map((member) => {
           const existing = channelByPartner.get(member.userId)
           const label = memberLabel(member, member.userId)
+          const active = !!existing && existing.id === activeId
+          const badge = existing ? unread.get(existing.id) : undefined
+          const bold = !!badge?.hasUnread && !active
           return (
             <ListItem
               key={member.userId}
-              selected={!!existing && existing.id === activeId}
+              selected={active}
               onClick={() => (existing ? onSelect(existing.id) : onOpenDm(member.userId))}
             >
               <Avatar size="sm">
                 <AvatarFallback colorKey={member.userId}>{initials(label)}</AvatarFallback>
               </Avatar>
-              <Prim.Text fontSize="$sm" marginLeft="$1.5" flex={1} minWidth={0}>
+              <Prim.Text
+                fontSize="$sm"
+                marginLeft="$1.5"
+                flex={1}
+                minWidth={0}
+                fontWeight={bold ? '$semibold' : '$normal'}
+              >
                 {label}
               </Prim.Text>
+              <MentionBadge count={badge?.mentions ?? 0} />
             </ListItem>
           )
         })}
