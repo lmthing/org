@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite-plus'
+import { defineConfig, loadEnv } from 'vite-plus'
 import react from '@vitejs/plugin-react'
 import { tamaguiPlugin } from '@tamagui/vite-plugin'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
@@ -91,6 +91,37 @@ function sharedFaviconPlugin(faviconDir) {
     },
   }
 }
+/**
+ * `VITE_*` overrides, as `define` replacements.
+ *
+ * Stock Vite loads `.env*` and exposes `VITE_`-prefixed keys on `import.meta.env`. `vp` (vite-plus)
+ * serves these apps and does NOT: the file was read by nothing and the key was `undefined` at
+ * runtime, which made every override in `apps/web/src/lib/config.ts` — `VITE_CLOUD_BASE_URL`,
+ * `VITE_COMPUTER_BASE_URL`, `VITE_STRIPE_PUBLISHABLE_KEY` — dead in dev, the exact case they exist
+ * for. Pointing the SPA at a local pod then meant hand-editing `config.ts` and remembering not to
+ * commit it.
+ *
+ * So load them here (both the `.env*` files and the process environment, the latter winning) and
+ * inject them as `define` replacements, which is what stock Vite's `import.meta.env` compiles to
+ * anyway. Only keys that are actually set are injected, so an unset override still falls through
+ * `config.ts`'s `??` chain to `resolveApiOrigin`.
+ *
+ * @param {string} dirname
+ * @param {string} mode
+ */
+function viteEnvDefines(dirname, mode) {
+  const fromFiles = loadEnv(mode, dirname, 'VITE_')
+  const fromProcess = Object.fromEntries(
+    Object.entries(process.env).filter(([key, value]) => key.startsWith('VITE_') && value !== undefined),
+  )
+  return Object.fromEntries(
+    Object.entries({ ...fromFiles, ...fromProcess }).map(([key, value]) => [
+      `import.meta.env.${key}`,
+      JSON.stringify(value),
+    ]),
+  )
+}
+
 const emptyStub = path.resolve(__utilsDir, 'stubs/empty.ts')
 const aiSdkStub = path.resolve(__utilsDir, 'stubs/ai-sdk-provider.ts')
 
@@ -133,7 +164,7 @@ export function createViteConfig(dirname, overrides, opts = {}) {
   const libsDir = path.resolve(orgRoot, 'libs')
   const faviconDir = path.resolve(orgRoot, 'common/favicon.ico')
 
-  return defineConfig({
+  return defineConfig(({ mode }) => ({
     plugins: [
       ghPages404Plugin(),
       sharedFaviconPlugin(faviconDir),
@@ -243,9 +274,10 @@ export function createViteConfig(dirname, overrides, opts = {}) {
     },
     define: {
       'process.env': '{}',
+      ...viteEnvDefines(dirname, mode),
       ...overrides?.define,
     },
-  })
+  }))
 }
 
 // retrigger: root lockfile sync
