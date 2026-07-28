@@ -10,8 +10,9 @@ const wire = (event: TraceEvent): WireEvent => ({ seq: ++seq, event });
  * setActivity() reaches the client as a fire-and-forget `activity` trace event.
  * The top-level SESSION scope drives THING's MAIN "currently doing" line (store
  * `activity`, shown under the header title). A fork/delegate scope instead sets
- * that work node's narration (`ExecNode.activity`, shown by WorkBlock) — NOT the
- * header line.
+ * that work node's narration (`ExecNode.activity`) — NOT the store field. Both
+ * feed the SAME single header sentence (`StatusLine`), which prefers a running
+ * sub-agent over THING's own line.
  */
 describe('feedLive — activity: THING main line', () => {
   beforeEach(() => {

@@ -4,7 +4,7 @@ import { useStore } from '../store/store';
 import type { ConvoBlock, UploadedAttachment } from '../store/model';
 import { Message, AssistantTurn } from './Message';
 import { Composer } from './Composer';
-import { LiveActivity } from './LiveActivity';
+import { StatusLine } from './StatusLine';
 import { EmptyState } from './EmptyState';
 import { useTheme } from '../../theme/theme';
 import { TraceLoader } from './replay';
@@ -109,7 +109,6 @@ export function ChatView({
   const spaceName = useStore(s => s.spaceName);
   const agentSlug = useStore(s => s.agentSlug);
   const sessionTitle = useStore(s => s.sessionTitle);
-  const activity = useStore(s => s.activity);
   const sessionCostUsd = useStore(s => s.sessionCostUsd + s.sessionCostInflight);
   const projects = useStore(s => s.projects);
   const activeProjectId = useStore(s => s.activeProjectId);
@@ -210,19 +209,9 @@ export function ChatView({
       >
         <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
           <Prim.Box fontSize="$sm" fontWeight="$medium" color="$foreground" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap"><Prim.Text>{title}</Prim.Text></Prim.Box>
-          {/* THING's live "currently doing" line (setActivity, session scope). Sub-agent
-              activities are shown by the LiveActivity/WorkBlock panel, not here. */}
-          {activity && (
-            <Prim.Row
-              marginTop="$0.5" gap="$1.5" fontSize="$xs" color="$muted-foreground" alignItems="center" minWidth={0} lineHeight="1rem"
-              aria-live="polite"
-              data-testid="activity"
-              title={activity}
-            >
-              <Prim.Text className="animate-pulse" width="$1.5" height="$1.5" borderRadius="$radius-full" backgroundColor="$agent" flexShrink={0} aria-hidden />
-              <Prim.Text fontStyle="italic" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{activity}</Prim.Text>
-            </Prim.Row>
-          )}
+          {/* The one live "currently doing" sentence — a running sub-agent's narration
+              when one is in flight, otherwise THING's own setActivity line. */}
+          <StatusLine />
         </Prim.Box>
         {sessionCostUsd > 0 && (
           <Prim.Text fontSize="$xs" color="$muted-foreground" flexShrink={0} title="Session cost">
@@ -290,9 +279,14 @@ export function ChatView({
       </Prim.Box>
 
       {/* Messages */}
-      <Prim.Box as="main"
+      {/* `Prim.Scroll`, not a `Box` with `overflowY: auto` — Yoga has no overflow scrolling, so on
+          a phone the transcript was CLIPPED at one screenful with no gesture to reach the rest, and
+          long output ran under the composer. `stickToEnd` follows the conversation on both targets;
+          see the primitive for why that is a prop and not an effect. */}
+      <Prim.Scroll as="main"
         ref={scrollRef}
-        flexGrow={1} flexShrink={1} flexBasis="0%" overflowY="auto"
+        stickToEnd={follow && atBottom}
+        flexGrow={1} flexShrink={1} flexBasis="0%"
         onScroll={handleScroll}
         aria-label="conversation"
         aria-live="polite"
@@ -315,12 +309,7 @@ export function ChatView({
           )}
           <Prim.Box ref={bottomRef} />
         </Prim.Col>
-      </Prim.Box>
-
-      {/* Ephemeral sub-agent activity (delegates/forks/tasklists). Pinned above
-          the composer; renders nothing and takes no space when nothing runs, and
-          writes nothing to the transcript. */}
-      <LiveActivity />
+      </Prim.Scroll>
 
       {/* Scroll to bottom button */}
       {!atBottom && (

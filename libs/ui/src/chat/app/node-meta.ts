@@ -1,11 +1,11 @@
-import type { SessionModel, StatementEntry, NodeStatus, NodeKind, ExecNode } from '../store/model';
+import type { SessionModel, StatementEntry, NodeKind, ExecNode } from '../store/model';
 
 /** Node kinds that represent sub-agent work (delegates/forks/tasklists/tasks). */
 export const WORK_KINDS = new Set<NodeKind>(['fork', 'delegate', 'tasklist', 'task']);
 
 // ─── Presentation constants (single source of truth) ────────────────────────
-// Shared by ActivityStrip (chips under ask forms) and WorkBlock (inline chat
-// blocks). Previously these lived inline in ActivityStrip.tsx.
+// Shared by ActivityStrip (chips under ask forms) and the REPL chat's work rows.
+// Previously these lived inline in ActivityStrip.tsx.
 
 export const KIND_ICON: Record<string, string> = {
   run: '⟳',
@@ -35,13 +35,6 @@ export const STATUS_COLOR: Record<string, Record<string, string>> = {
   },
   pending: { color: '$muted-foreground', backgroundColor: '$muted', borderColor: '$border' },
 };
-
-/** Map a node status onto a STATUS_COLOR key (queued → pending, skipped → done). */
-export function statusColorKey(status: NodeStatus): string {
-  if (status === 'queued') return 'pending';
-  if (status === 'skipped') return 'done';
-  return status;
-}
 
 export function fmtDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -106,27 +99,6 @@ export function latestSubtreeStatement(m: SessionModel, nodeId: string): Stateme
   return best;
 }
 
-/** The last `n` statements in the subtree by `ts` (ascending — oldest first). */
-export function recentSubtreeStatements(m: SessionModel, nodeId: string, n: number): StatementEntry[] {
-  const all: StatementEntry[] = [];
-  visitSubtree(m, nodeId, (id) => {
-    const node = m.nodes[id];
-    if (node) all.push(...node.statements);
-  });
-  all.sort((a, b) => a.ts - b.ts);
-  return all.slice(-n);
-}
-
-/** Total statements across the subtree. */
-export function subtreeStmtCount(m: SessionModel, nodeId: string): number {
-  let count = 0;
-  visitSubtree(m, nodeId, (id) => {
-    const node = m.nodes[id];
-    if (node) count += node.statements.length;
-  });
-  return count;
-}
-
 /** Number of work-kind ancestors — used to indent nested work blocks
  *  (delegate ▸ tasklist ▸ fork). Walks parentId, not full subtree. */
 export function workDepth(m: SessionModel, nodeId: string): number {
@@ -143,8 +115,8 @@ export function workDepth(m: SessionModel, nodeId: string): number {
 }
 
 /** All currently in-flight work nodes (fork/delegate/tasklist/task that are
- *  running or queued), sorted oldest-first. Drives the ephemeral LiveActivity
- *  box — nothing here is persisted into `model.blocks`. */
+ *  running or queued), sorted oldest-first. Nothing here is persisted into
+ *  `model.blocks`. */
 export function selectActiveWork(m: SessionModel): ExecNode[] {
   const out: ExecNode[] = [];
   for (const id in m.nodes) {
@@ -153,4 +125,33 @@ export function selectActiveWork(m: SessionModel): ExecNode[] {
   }
   out.sort((a, b) => (a.startTs ?? 0) - (b.startTs ?? 0));
   return out;
+}
+
+/** The ONE in-flight node that answers "what is being done right now?": a
+ *  running node beats a merely queued one, and among those the most recently
+ *  started wins (the innermost thing that just began). Undefined when idle. */
+export function currentWorkNode(m: SessionModel): ExecNode | undefined {
+  let best: ExecNode | undefined;
+  for (const n of selectActiveWork(m)) {
+    if (!best) { best = n; continue; }
+    const nRunning = n.status === 'running';
+    if (nRunning !== (best.status === 'running')) {
+      if (nRunning) best = n;
+      continue;
+    }
+    if ((n.startTs ?? 0) >= (best.startTs ?? 0)) best = n;
+  }
+  return best;
+}
+
+/** ONE sentence for the current sub-agent work — the whole of what the chat
+ *  shows about delegation now (the indented tree of work blocks is gone: on a
+ *  phone it was a wall of rows nobody could act on). The sub-agent's own
+ *  `setActivity()` text wins; otherwise the `//`-comment narration of its newest
+ *  statement anywhere in the subtree; otherwise its label. '' when idle. */
+export function currentWorkSentence(m: SessionModel): string {
+  const node = currentWorkNode(m);
+  if (!node) return '';
+  const headline = node.activity || narrationOf(latestSubtreeStatement(m, node.id)?.code ?? '');
+  return headline || `${node.label}…`;
 }

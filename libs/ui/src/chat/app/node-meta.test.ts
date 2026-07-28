@@ -4,10 +4,10 @@ import type { TraceEvent } from '@lmthing/core';
 import {
   narrationOf,
   latestSubtreeStatement,
-  recentSubtreeStatements,
-  subtreeStmtCount,
   workDepth,
   selectActiveWork,
+  currentWorkNode,
+  currentWorkSentence,
 } from './node-meta';
 
 let seq = 0;
@@ -51,18 +51,6 @@ describe('node-meta helpers', () => {
     expect(m.nodes['d1']!.statements).toHaveLength(0);
     const latest = latestSubtreeStatement(m, 'd1');
     expect(latest?.code).toContain('inside the delegate run');
-    expect(subtreeStmtCount(m, 'd1')).toBe(1);
-  });
-
-  it('recentSubtreeStatements returns the last N by ts across the subtree', () => {
-    reset();
-    const m = buildModel([
-      ev({ ts: 1, type: 'node_start', nodeId: 'd1', parentId: null, kind: 'delegate', label: 'd', context: 'd', status: 'running' }),
-      ev({ ts: 2, type: 'statement', context: 'd', nodeId: 'd1', code: '// a' }),
-      ev({ ts: 3, type: 'statement', context: 'd', nodeId: 'd1', code: '// b' }),
-      ev({ ts: 4, type: 'statement', context: 'd', nodeId: 'd1', code: '// c' }),
-    ]);
-    expect(recentSubtreeStatements(m, 'd1', 2).map((s) => s.code)).toEqual(['// b', '// c']);
   });
 
   it('workDepth counts only work-kind ancestors (excludes run/session)', () => {
@@ -99,7 +87,59 @@ describe('node-meta helpers', () => {
       ev({ ts: 2, type: 'node_end', nodeId: 'd1', status: 'done', durationMs: 9 }),
     ]);
     expect(selectActiveWork(m)).toEqual([]);
-    // The ephemeral box reads the node tree only — it must leave no block behind.
+    // The status line reads the node tree only — it must leave no block behind.
     expect(m.blocks).toHaveLength(0);
+  });
+});
+
+// The chat shows ONE sentence about delegation, not a tree of work rows — these
+// pin down which of N in-flight nodes that sentence is about, and what it says.
+describe('currentWorkNode / currentWorkSentence', () => {
+  it('picks the most recently started running node, preferring running over queued', () => {
+    reset();
+    const m = buildModel([
+      ev({ ts: 10, type: 'node_start', nodeId: 'd1', parentId: null, kind: 'delegate', label: 'researcher', context: 'd1', status: 'running' }),
+      ev({ ts: 20, type: 'node_start', nodeId: 'f1', parentId: 'd1', kind: 'fork', label: 'reader', context: 'f1', status: 'running' }),
+      // Queued work started LAST, but nothing is happening in it yet.
+      ev({ ts: 30, type: 'node_start', nodeId: 'f2', parentId: 'd1', kind: 'fork', label: 'later', context: 'f2', status: 'queued' }),
+    ]);
+    expect(currentWorkNode(m)?.id).toBe('f1');
+  });
+
+  it('says the sub-agent setActivity() text when it set one', () => {
+    reset();
+    const m = buildModel([
+      ev({ ts: 1, type: 'node_start', nodeId: 'd1', parentId: null, kind: 'delegate', label: 'geocoder', context: 'd1', status: 'running' }),
+      ev({ ts: 2, type: 'statement', context: 'd1', nodeId: 'd1', code: '// looping over rows\nrows.map(f)' }),
+      ev({ ts: 3, type: 'activity', context: 'geocoder', nodeId: 'd1', scope: 'delegate', text: 'Geocoding 42 addresses' }),
+    ]);
+    expect(currentWorkSentence(m)).toBe('Geocoding 42 addresses');
+  });
+
+  it('falls back to the subtree narration, then to the label', () => {
+    reset();
+    // A delegate's statements land on its inner `run` child — the sentence must
+    // still find them.
+    const m = buildModel([
+      ev({ ts: 1, type: 'node_start', nodeId: 'd1', parentId: null, kind: 'delegate', label: 'researcher', context: 'd1', status: 'running' }),
+      ev({ ts: 2, type: 'node_start', nodeId: 'r1', parentId: 'd1', kind: 'run', label: 'run', context: 'run', status: 'running' }),
+      ev({ ts: 3, type: 'statement', context: 'run', nodeId: 'r1', code: '// Searching the web for tide tables\nawait webSearch("x")' }),
+    ]);
+    expect(currentWorkSentence(m)).toBe('Searching the web for tide tables');
+
+    reset();
+    const bare = buildModel([
+      ev({ ts: 1, type: 'node_start', nodeId: 'd1', parentId: null, kind: 'delegate', label: 'researcher', context: 'd1', status: 'running' }),
+    ]);
+    expect(currentWorkSentence(bare)).toBe('researcher…');
+  });
+
+  it('is empty when no sub-agent work is in flight (the line falls back to THING)', () => {
+    reset();
+    const m = buildModel([
+      ev({ ts: 1, type: 'node_start', nodeId: 'd1', parentId: null, kind: 'delegate', label: 'd1', context: 'd1', status: 'running' }),
+      ev({ ts: 2, type: 'node_end', nodeId: 'd1', status: 'done', durationMs: 9 }),
+    ]);
+    expect(currentWorkSentence(m)).toBe('');
   });
 });

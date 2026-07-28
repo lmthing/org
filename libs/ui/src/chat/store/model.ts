@@ -63,8 +63,8 @@ export interface ExecNode {
   error?: string;
   eventSeqs: number[];
   /** Agent-authored live narration, set by this sub-agent's setActivity(). When
-   *  present it is the authoritative "currently doing" line WorkBlock shows,
-   *  overriding the //-comment `narrationOf` heuristic. Cleared by an empty
+   *  present it is the authoritative "currently doing" line the chat's status
+   *  line shows, overriding the //-comment `narrationOf` heuristic. Cleared by an empty
    *  setActivity('') and irrelevant once the node ends (it stops being active). */
   activity?: string;
 }
@@ -138,7 +138,7 @@ export function applyWireEvent(m: SessionModel, we: WireEvent): void {
   if (ev.type === 'activity') {
     // Session-scope drives the header's main "currently doing" line (handled in
     // the store slice). A fork/delegate scope sets that work node's authoritative
-    // narration (shown by WorkBlock); an empty text clears it (falls back to the
+    // narration (shown by `StatusLine` while it is the current work); an empty text clears it (falls back to the
     // //-comment narration). Ephemeral — no phantom node for a session-scope one.
     if (ev.scope !== 'session' && ev.nodeId) {
       ensureNode(m, ev.nodeId).activity = ev.text || undefined;

@@ -54,7 +54,8 @@ export interface AppState {
   /** Live "currently doing" status (THING's main line), set via setActivity() from the
    *  top-level session scope. '' = none. Clears when the turn goes idle (setDone) and on
    *  session switch/reset. Fork/delegate sub-activities live on their execution node
-   *  (`ExecNode.activity`, shown by WorkBlock), not here. */
+   *  (`ExecNode.activity`), not here — the header `StatusLine` prefers a running
+   *  sub-agent's sentence over this one while work is in flight. */
   activity: string;
   replay: ReplayState | null;
   /** Running token cost for the current live session (resets on session switch). */

@@ -82,7 +82,7 @@ export function createSessionSlice(
         if (ev.type === 'session_meta' && ev.title) titleUpdate = ev.title;
         // The MAIN "currently doing" line: only the top-level session (THING) scope.
         // Fork/delegate sub-activities are handled by applyWireEvent (they set the
-        // work node's narration, shown by WorkBlock — not this header line).
+        // work node's narration — not this field).
         else if (ev.type === 'activity' && ev.scope === 'session') activityUpdate = ev.text;
         // Track in-flight turns for real-time cost estimate
         if (ev.type === 'llm_request') {
