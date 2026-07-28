@@ -209,7 +209,72 @@ export function nativeSafeProps(
   }
   if (out.position === 'fixed') out.position = 'absolute'
   if (!isNativeLineHeight(out.lineHeight)) delete out.lineHeight
+  for (const key of NUMERIC_ONLY_STYLE_PROPS) {
+    if (key in out) {
+      const scalar = toNativeScalar(out[key])
+      if (scalar === undefined) delete out[key]
+      else out[key] = scalar
+    }
+  }
   return out
+}
+
+/**
+ * Style props whose Android view manager casts straight to a `Double`, so a STRING is a red-screen
+ * crash rather than a value it ignores.
+ *
+ * This is the general form of the `lineHeight` rule below, and it exists because that rule was
+ * written for one property when the trap belongs to a whole class of them. `letterSpacing={'-0.02em'
+ * as unknown as number}` — the double cast is what got it past the type checker — threw
+ * `java.lang.String cannot be cast to java.lang.Double` out of `RCTText` and took the ENTIRE tree
+ * with it: the login screen rendered as a blank white page on a device while every render suite
+ * passed, because `react-test-renderer` never invokes a view manager. Only a device sees this.
+ *
+ * Deliberately NOT listed: `width`/`height`/`margin*`/`padding*`/`top`/`flexBasis` and friends.
+ * React Native accepts a percentage STRING for those, so they are not numeric-only, and a bad unit
+ * there lays out wrong instead of crashing.
+ */
+const NUMERIC_ONLY_STYLE_PROPS = [
+  'letterSpacing',
+  'fontSize',
+  'borderWidth',
+  'borderTopWidth',
+  'borderRightWidth',
+  'borderBottomWidth',
+  'borderLeftWidth',
+  'borderRadius',
+  'borderTopLeftRadius',
+  'borderTopRightRadius',
+  'borderBottomLeftRadius',
+  'borderBottomRightRadius',
+  'shadowRadius',
+  'elevation',
+  'opacity',
+  'zIndex',
+  'aspectRatio',
+  'flex',
+  'flexGrow',
+  'flexShrink',
+  'gap',
+  'rowGap',
+  'columnGap',
+] as const
+
+/**
+ * The number React Native can use for a numeric-only style prop, or `undefined` to drop it.
+ *
+ * A `$`-prefixed string is a Tamagui token and is left alone — resolving it is the config's job,
+ * and it resolves to a number. A bare or `px` number is converted. Everything else is a CSS unit
+ * with no native meaning (`em`/`rem` are font-relative, `vh`/`vw` need a viewport) and is dropped,
+ * on the same reasoning as `isNativeLineHeight`: the surface gets the platform default, which is
+ * what it would have got had it said nothing, instead of a crash.
+ */
+function toNativeScalar(value: unknown): number | string | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined
+  if (typeof value !== 'string') return undefined
+  if (value.startsWith('$')) return value
+  const px = /^(-?[0-9]*\.?[0-9]+)(px)?$/.exec(value.trim())
+  return px ? Number(px[1]) : undefined
 }
 
 /**
