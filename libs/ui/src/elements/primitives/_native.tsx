@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { themes as TOKEN_THEMES } from '@lmthing/css/tamagui-tokens'
 import { styled, View, Text as TamaguiText } from '../../theme/tamagui.config'
 
 /**
@@ -232,7 +233,104 @@ export function nativeSafeProps(
       else out[key] = scalar
     }
   }
+  for (const key of COLOR_STYLE_PROPS) {
+    if (typeof out[key] === 'string') out[key] = toNativeColor(out[key] as string)
+  }
+  // …and inside `style`, because a computed tint is usually written there rather than as a prop —
+  // `AvatarFallback` builds `{backgroundColor: 'color-mix(…)', color: …}` from a spectrum key, which
+  // is why every avatar on the phone was an uncoloured circle with uncoloured initials.
+  if (out.style) out.style = withNativeColors(out.style)
   return out
+}
+
+/** Map the colour entries of a style object (or array of them) through {@link toNativeColor}. */
+function withNativeColors(style: unknown): unknown {
+  if (Array.isArray(style)) return style.map(withNativeColors)
+  if (!style || typeof style !== 'object') return style
+  let changed = false
+  const out: Record<string, unknown> = { ...(style as Record<string, unknown>) }
+  for (const key of COLOR_STYLE_PROPS) {
+    const value = out[key]
+    if (typeof value !== 'string') continue
+    const native = toNativeColor(value)
+    if (native !== value) {
+      out[key] = native
+      changed = true
+    }
+  }
+  return changed ? out : style
+}
+
+/** Style props whose value is a colour, and which therefore may carry a `color-mix()`. */
+const COLOR_STYLE_PROPS = [
+  'backgroundColor',
+  'color',
+  'borderColor',
+  'borderTopColor',
+  'borderRightColor',
+  'borderBottomColor',
+  'borderLeftColor',
+  'shadowColor',
+  'placeholderTextColor',
+] as const
+
+/** `color-mix(in srgb, <colour> <pct>%, transparent)` — the one form this codebase writes. */
+const COLOR_MIX_WITH_TRANSPARENT =
+  /^color-mix\(\s*in\s+srgb\s*,\s*(.+?)\s+([\d.]+)%\s*,\s*transparent\s*\)$/i
+
+/** `var(--token)` / `var(--token, fallback)`. */
+const CSS_VAR = /^var\(\s*--([a-z0-9-]+)\s*(?:,[^)]*)?\)$/i
+
+/**
+ * A colour React Native can actually use.
+ *
+ * `color-mix(in srgb, var(--primary) 12%, transparent)` is how every tint in this package is
+ * written — a chip's fill, THING's avatar, the active app tab, a destructive banner. It is CSS, and
+ * React Native's colour parser has never heard of it, so on a device the whole declaration is
+ * dropped and the element renders with NO background at all. That is a silent, shape-preserving
+ * failure: THING's ✦ avatar lost its circle and the "app is pinned" chip lost its fill, on every
+ * screen, while every render suite passed (`react-test-renderer` stores the string and never asks a
+ * view manager to parse it).
+ *
+ * Mixing with `transparent` in sRGB is exactly an alpha multiply, so the translation is `opacity`
+ * on the Tamagui token — `$primary` stays a token the theme resolves, and the percentage becomes
+ * an `rgba()` only when the colour is already a literal. A `var(--x)` is rewritten to `$x`, which
+ * is the same token by the generator's own naming
+ * (`libs/css/src/tamagui/tokens.generated.ts`).
+ */
+function toNativeColor(value: string): string {
+  const mix = COLOR_MIX_WITH_TRANSPARENT.exec(value)
+  if (!mix) return toNativeColorToken(value)
+  const base = toNativeColorToken(mix[1]!.trim())
+  const alpha = Math.max(0, Math.min(1, Number(mix[2]) / 100))
+  const hex = base.startsWith('$') ? TOKEN_HEX[base.slice(1)] : base
+  const rgb = hex ? /^#([0-9a-f]{6})$/i.exec(hex) : null
+  if (!rgb) return base
+  const n = parseInt(rgb[1]!, 16)
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
+}
+
+/**
+ * Token → hex, so a tint can carry an alpha.
+ *
+ * A Tamagui token cannot: `$primary` is a name the theme resolves at render, and there is nowhere
+ * to hang 12% on it. Since the whole point of these values is a WASH of a colour, the alpha is the
+ * part that matters, so the token is resolved here instead and the result is a literal `rgba()`.
+ *
+ * Resolved against the LIGHT theme, and that is a deliberate, bounded compromise: this function has
+ * no theme context (it maps props, it does not render). Of the 99 tokens, the ones actually used for
+ * tints — `primary`, `brand-*`, the `spectrum-*` avatar palette — are byte-identical in both themes,
+ * so those are exact. The handful that differ (`destructive`, `agent`, `muted`) shift hue slightly
+ * in dark mode under a 12–22% wash. That is a far smaller error than the alternatives: the raw
+ * `color-mix()` is dropped by React Native outright (no background at all), and the bare token is
+ * the colour at FULL strength, which for a destructive banner is a red block.
+ */
+const TOKEN_HEX: Record<string, string> = TOKEN_THEMES.light
+
+/** `var(--muted-foreground)` → `$muted-foreground`; anything else unchanged. */
+function toNativeColorToken(value: string): string {
+  const variable = CSS_VAR.exec(value)
+  return variable ? `$${variable[1]}` : value
 }
 
 /**

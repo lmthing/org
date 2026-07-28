@@ -159,6 +159,45 @@ test('an inline-flex button lays its icon and label out in a ROW, not a stack', 
   ).toBe(true)
 })
 
+/** Colour props a device parses, and the `color-mix()` it cannot. */
+const COLOR_PROPS = ['backgroundColor', 'color', 'borderColor', 'shadowColor']
+
+function cssOnlyColors(tree: unknown): string[] {
+  const bad: string[] = []
+  for (const node of findAll(tree as never, () => true) as NativeNode[]) {
+    const style = node.props?.style
+    for (const layer of (Array.isArray(style) ? style : [style]).flat()) {
+      if (!layer || typeof layer !== 'object') continue
+      for (const key of COLOR_PROPS) {
+        const value = (layer as Record<string, unknown>)[key]
+        if (typeof value === 'string' && /color-mix\(|^var\(/.test(value)) {
+          bad.push(`${node.type}.${key}=${value}`)
+        }
+      }
+    }
+  }
+  return bad
+}
+
+test('a color-mix() tint becomes a colour a device can parse', () => {
+  // Every tint in this package is written `color-mix(in srgb, var(--x) 12%, transparent)`, which
+  // React Native's colour parser has never heard of — so the WHOLE declaration was dropped and the
+  // element rendered with no background at all. Shape-preserving and silent: on the emulator THING's
+  // ✦ avatar was a bare glyph with no circle behind it, and the render suites were green because
+  // `react-test-renderer` stores the string without asking a view manager to parse it.
+  const { tree } = render(
+    <Prim.Box backgroundColor="color-mix(in srgb, var(--brand-2) 20%, transparent)">
+      <Prim.Text color="var(--muted-foreground)">hi</Prim.Text>
+    </Prim.Box>,
+  )
+  expect(cssOnlyColors(tree).join(', '), 'no CSS-only colour reaches a view manager').toBe('')
+})
+
+test('the team sidebar carries no colour a device would drop', () => {
+  const { tree } = render(<ChannelSidebar {...SIDEBAR_PROPS} team={{ id: 't1', name: 'Local Team' }} />)
+  expect(cssOnlyColors(tree).join(', '), 'no CSS-only colour reaches a view manager').toBe('')
+})
+
 test('a real number and a $-token both survive the guard', () => {
   // Dropping the bad values is only correct if the good ones are untouched — otherwise the fix is
   // "native typography no longer works" and every suite would still be green.

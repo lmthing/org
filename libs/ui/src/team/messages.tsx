@@ -187,8 +187,12 @@ export function SenderAvatar({
   label: string
 }) {
   if (kind === 'thing') {
+    // A `Box` around a `Text`, not a `Text` styled as a circle. React Native does not centre a
+    // Text's own content the way a flex container centres a child — on a device the ✦ sat in the
+    // top-left corner of its circle, on every THING message. The View does the layout, the Text
+    // does the glyph, which is the shape both targets agree on.
     return (
-      <Prim.Text
+      <Prim.Box
         backgroundColor="color-mix(in srgb, var(--brand-2) 20%, transparent)"
         flexShrink={0}
         width="$8"
@@ -196,13 +200,13 @@ export function SenderAvatar({
         borderRadius="$radius-full"
         alignItems="center"
         justifyContent="center"
-        fontSize="$sm"
-        userSelect="none"
         display="flex"
         aria-hidden="true"
       >
-        ✦
-      </Prim.Text>
+        <Prim.Text fontSize="$sm" userSelect="none">
+          ✦
+        </Prim.Text>
+      </Prim.Box>
     )
   }
   return (
@@ -248,7 +252,8 @@ function AppCard({ message, ctx }: { message: ChannelMessage; ctx: MessageContex
     <Prim.Row
       alignItems="center"
       gap="$3"
-      alignSelf="flex-start"
+      alignSelf="stretch"
+      maxWidth={420}
       borderWidth={1}
       borderColor="$border"
       borderRadius="$radius-md"
@@ -268,15 +273,20 @@ function AppCard({ message, ctx }: { message: ChannelMessage; ctx: MessageContex
       >
         <AppIcon size={16} />
       </Prim.Box>
-      <Prim.Col gap="$0.5">
+      {/* `flex`+`minWidth: 0` on the text column, `flexShrink: 0` on the button: without them the
+          card sized itself to its content and the "Open" it exists to offer was clipped off the
+          right edge of a phone. */}
+      <Prim.Col gap="$0.5" flex={1} minWidth={0}>
         <Prim.Text fontSize="$sm" fontWeight="$medium">
           {app.name}
         </Prim.Text>
         <Caption>Ready — pinned to this channel</Caption>
       </Prim.Col>
-      <Button size="sm" variant="outline" onClick={() => ctx.onOpenApp(app.projectId)}>
-        Open
-      </Button>
+      <Prim.Box flexShrink={0}>
+        <Button size="sm" variant="outline" onClick={() => ctx.onOpenApp(app.projectId)}>
+          Open
+        </Button>
+      </Prim.Box>
     </Prim.Row>
   )
 }
