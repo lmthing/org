@@ -229,7 +229,13 @@ export function ChatView({
             {formatCost(sessionCostUsd)}
           </Prim.Text>
         )}
-        <Prim.Row gap="$2" alignItems="center" flexShrink={0}>
+        {/* The workbench controls — everything that is a DEVELOPER affordance rather than part of
+            chatting. A phone is 360dp wide: seven of these plus the title do not fit, and the ones
+            that fought hardest for the room are the ones a touch user cannot even use (`Load trace`
+            opens a file picker; `Restart CLI` restarts a local process). They are hidden below the
+            `md` breakpoint — base styles ARE the mobile styles here, `$md` is the desktop override —
+            leaving the phone header as hamburger · title · cost · theme. */}
+        <Prim.Row gap="$2" alignItems="center" flexShrink={0} display="none" $md={{ display: 'flex' }}>
           {mode === 'live' && (
             <Prim.Pressable
               onClick={() => setFollow(!follow)}
@@ -240,7 +246,7 @@ export function ChatView({
                 : { color: '$muted-foreground', hoverStyle: { color: '$foreground' } })}
               title="Follow mode"
             >
-              {follow ? '⊙' : '○'}
+              <Prim.Text>{follow ? '⊙' : '○'}</Prim.Text>
             </Prim.Pressable>
           )}
           <ConnectionDot />
@@ -250,22 +256,14 @@ export function ChatView({
             {...(devPanelOpen ? INSPECT_ON : INSPECT_OFF)} transition="quick" animateOnly={["color", "background-color", "border-color"]} fontSize="$xs" paddingHorizontal="$2" paddingVertical="$1" borderRadius="$radius-lg"
             title="Toggle DevPanel (⌥I)"
           >
-            Inspect
+            <Prim.Text>Inspect</Prim.Text>
           </Prim.Pressable>
           <Prim.Pressable
             onClick={() => { void openBugReport(); }}
             fontSize="$xs" color="$muted-foreground" hoverStyle={{ color: "$foreground" }}
             title="Report a bug"
           >
-            Report bug
-          </Prim.Pressable>
-          <Prim.Pressable
-            onClick={toggleTheme}
-            data-testid="theme-toggle"
-            fontSize="$xs" color="$muted-foreground" hoverStyle={{ color: "$foreground" }}
-            title="Toggle theme"
-          >
-            <Prim.Text>{theme === 'light' ? '☾' : '☀'}</Prim.Text>
+            <Prim.Text>Report bug</Prim.Text>
           </Prim.Pressable>
           {mode === 'live' && (
             <Prim.Pressable
@@ -274,10 +272,21 @@ export function ChatView({
               fontSize="$xs" color="$muted-foreground" hoverStyle={{ color: "$foreground" }} disabledStyle={{ opacity: 0.4 }}
               title="Restart CLI process (reloads .env)"
             >
-              {restarting ? '↻' : '⏻'}
+              <Prim.Text>{restarting ? '↻' : '⏻'}</Prim.Text>
             </Prim.Pressable>
           )}
         </Prim.Row>
+
+        {/* Theme is the one control that survives onto a phone: it is a reader preference rather
+            than a workbench tool, and it costs a single glyph of width. */}
+        <Prim.Pressable
+          onClick={toggleTheme}
+          data-testid="theme-toggle"
+          fontSize="$xs" color="$muted-foreground" flexShrink={0} hoverStyle={{ color: "$foreground" }}
+          title="Toggle theme"
+        >
+          <Prim.Text>{theme === 'light' ? '☾' : '☀'}</Prim.Text>
+        </Prim.Pressable>
       </Prim.Box>
 
       {/* Messages */}

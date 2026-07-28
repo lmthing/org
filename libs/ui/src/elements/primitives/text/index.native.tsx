@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { NativeText, nativeSafeProps } from '../_native'
+import { NativeText, nativeSafeProps, textTruncationProps } from '../_native'
 
 /**
  * Text (native fork). Renders a Tamagui/RN `Text`. Same prop shape as the web `Text` (so surfaces
@@ -43,7 +43,8 @@ export type TextProps = TextPrimitiveProps
 const Text = React.forwardRef<any, TextProps>(
   // `block` is a web display hint with no RN equivalent (an RN Text is already a block box).
   ({ children, block: _block, ...props }, ref) => (
-    <NativeText ref={ref} {...nativeSafeProps(props)}>
+    // `textTruncationProps` FIRST so an explicit `numberOfLines` from the caller still wins.
+    <NativeText ref={ref} {...textTruncationProps(props)} {...nativeSafeProps(props)}>
       {children}
     </NativeText>
   ),

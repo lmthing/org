@@ -105,6 +105,25 @@ const NATIVE_EVENT_PROPS = new Set([
 ])
 
 /**
+ * Translate the web one-line-truncation idiom into the React Native one.
+ *
+ * On web, "one line, cut with an ellipsis" is spelled `whiteSpace: 'nowrap'` +
+ * `textOverflow: 'ellipsis'` + `overflow: 'hidden'` — three style properties, none of which exists
+ * on native. React Native spells the same thing as two PROPS on the text element itself.
+ *
+ * Left untranslated it is not a cosmetic difference. Every truncating label in the product — the
+ * chat header's session title, a message bubble, a sidebar row — simply wrapped instead, so a long
+ * title took two lines and pushed the header's own controls out of the row.
+ *
+ * Returns the RN props when a caller asked for truncation, and nothing at all when it did not, so
+ * text that is *supposed* to wrap keeps wrapping.
+ */
+export function textTruncationProps(props: Record<string, unknown>): Record<string, unknown> {
+  const wantsOneLine = props.whiteSpace === 'nowrap' && props.textOverflow === 'ellipsis'
+  return wantsOneLine ? { numberOfLines: 1, ellipsizeMode: 'tail' } : {}
+}
+
+/**
  * Make a web prop bag safe to spread onto a Tamagui/RN element — **without throwing the styling
  * away**.
  *
@@ -189,5 +208,31 @@ export function nativeSafeProps(
     out.flexDirection = flexDirectionDefault
   }
   if (out.position === 'fixed') out.position = 'absolute'
+  if (!isNativeLineHeight(out.lineHeight)) delete out.lineHeight
   return out
+}
+
+/**
+ * Is this `lineHeight` a value React Native can actually use?
+ *
+ * RN takes ONE form: a number of points. CSS takes three, and the surfaces use all of them:
+ *
+ * - **a unitless multiplier** (`lineHeight={1.625}` — "1.625 × the font size", the Tailwind
+ *   `leading-relaxed` idiom). Native reads the bare number as 1.625 POINTS, so an assistant message
+ *   rendered as a two-pixel sliver of its first line with the rest cut off. It looked like a
+ *   clipping bug, not a units bug, which is what made it expensive to find.
+ * - **a CSS length string** (`'1.25rem'`, `'2rem'`, `'1.375em'`). Android's view manager casts the
+ *   property to a `Double`, so a string is a red-screen crash rather than a fallback.
+ * - **a real number of points**, which is what the `$`-token ramp resolves to and the only form
+ *   that survives.
+ *
+ * Dropping the other two is deliberate: React Native's own default line height is derived from the
+ * font size, which is exactly what the multiplier was asking for, and it is what the surface would
+ * have got had it said nothing. Web is untouched — this runs only in the native forks.
+ *
+ * The threshold is a units test, not a magic number: no real line height is under 4dp, and no CSS
+ * multiplier in this codebase is over it.
+ */
+function isNativeLineHeight(value: unknown): boolean {
+  return typeof value === 'number' && value >= 4
 }

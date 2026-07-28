@@ -2,10 +2,13 @@ import * as React from 'react'
 import { useColorScheme } from 'react-native'
 import { TamaguiProvider } from '@tamagui/core'
 import { StatusBar } from 'expo-status-bar'
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { AuthProvider, hydrateAuth, useAuth, getSession, storeSession } from '@lmthing/auth'
 import { tamaguiConfig } from '@lmthing/ui/theme/tamagui.config'
 import { LoginScreen } from '@lmthing/ui/components/auth/login-screen'
 import { ChatShell } from '@lmthing/ui/chat'
+import { DashboardHome, openTeamsSurface } from '@lmthing/ui/dashboard'
+import { BottomNav, type BottomNavTab } from '@lmthing/ui/elements/nav/bottom-nav'
 import * as Prim from '@lmthing/ui/elements/primitives'
 import { ensureComputePod, waitForPodEdge } from './src/ensure-pod'
 
@@ -57,14 +60,26 @@ export default function App() {
   }, [])
 
   return (
-    <TamaguiProvider config={tamaguiConfig} defaultTheme={scheme}>
-      <StatusBar style="auto" />
-      {authReady ? (
-        <AuthProvider appName="mobile">
-          <AuthGate />
-        </AuthProvider>
-      ) : null}
-    </TamaguiProvider>
+    <SafeAreaProvider>
+      <TamaguiProvider config={tamaguiConfig} defaultTheme={scheme}>
+        <StatusBar style="auto" />
+        {/*
+          The shared surfaces are written for a viewport that begins at the top of the window,
+          because on web it does. A phone's does not: the status bar and the gesture pill are drawn
+          OVER the app, so the chat header rendered underneath the system clock and the composer sat
+          under the home indicator. `SafeAreaView` insets the whole tree instead of asking every
+          shared component to know it is on a phone — the surfaces stay target-agnostic, which is
+          the invariant this app exists to keep.
+        */}
+        <SafeAreaView style={{ flex: 1 }}>
+          {authReady ? (
+            <AuthProvider appName="mobile">
+              <AuthGate />
+            </AuthProvider>
+          ) : null}
+        </SafeAreaView>
+      </TamaguiProvider>
+    </SafeAreaProvider>
   )
 }
 
@@ -117,5 +132,47 @@ function AuthGate() {
     )
   }
 
-  return <ChatShell />
+  return <HomeShell />
+}
+
+/**
+ * The signed-in app: a Home dashboard and the chat surface, switched by the tab bar.
+ *
+ * Both are mounted at once and one is hidden, rather than unmounted — `ChatShell` holds a live
+ * WebSocket to the pod and a transcript, and tearing that down every time someone glances at Home
+ * would drop a streaming turn mid-sentence. Hiding costs a little memory; unmounting costs the
+ * user's conversation.
+ *
+ * `Teams` is a cross-surface hop, not a third pane: teams live at `lmthing.team`, and this app does
+ * not host that surface yet. Selecting it hands off to the system browser through
+ * `platform/navigation` and leaves Home as the SELECTED tab, because that is where the user still
+ * is when they come back — showing "Teams" as selected over a Home screen would be a lie.
+ */
+function HomeShell() {
+  const [tab, setTab] = React.useState<BottomNavTab>('home')
+
+  return (
+    <Prim.Box flex={1}>
+      {/* `flexDirection` is stated, not implied. `nativeSafeProps` reads a bare `display: 'flex'`
+          as the WEB default (row), which is right for the ~58 shared style objects written that way
+          — but these two panes are columns, and leaving it unsaid laid the whole chat surface out
+          sideways into a blank screen. An explicit direction always wins over the seam's default. */}
+      <Prim.Box flex={1} flexDirection="column" display={tab === 'home' ? 'flex' : 'none'}>
+        <DashboardHome onNewChat={() => setTab('chat')} onOpenConversation={() => setTab('chat')} />
+      </Prim.Box>
+      <Prim.Box flex={1} flexDirection="column" display={tab === 'chat' ? 'flex' : 'none'}>
+        <ChatShell />
+      </Prim.Box>
+      <BottomNav
+        current={tab}
+        onSelect={(next) => {
+          if (next === 'teams') {
+            openTeamsSurface()
+            return
+          }
+          setTab(next)
+        }}
+      />
+    </Prim.Box>
+  )
 }

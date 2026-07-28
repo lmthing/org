@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./chat": "./src/chat/index.ts",
+    "./dashboard": "./src/dashboard/index.ts",
     "./chat/css": "./src/chat/app/styles.css",
     "./studio": "./src/studio/index.ts",
     "./computer": "./src/computer/index.ts",

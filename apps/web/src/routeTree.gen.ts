@@ -12,12 +12,14 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as InstallRouteImport } from './routes/install'
 import { Route as TeamRouteRouteImport } from './routes/team/route'
 import { Route as StudioRouteRouteImport } from './routes/studio/route'
+import { Route as HomeRouteRouteImport } from './routes/home/route'
 import { Route as ComputerRouteRouteImport } from './routes/computer/route'
 import { Route as ChatRouteRouteImport } from './routes/chat/route'
 import { Route as AppsRouteRouteImport } from './routes/apps/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TeamIndexRouteImport } from './routes/team/index'
 import { Route as StudioIndexRouteImport } from './routes/studio/index'
+import { Route as HomeIndexRouteImport } from './routes/home/index'
 import { Route as ComputerIndexRouteImport } from './routes/computer/index'
 import { Route as ChatIndexRouteImport } from './routes/chat/index'
 import { Route as AppsIndexRouteImport } from './routes/apps/index'
@@ -82,6 +84,11 @@ const StudioRouteRoute = StudioRouteRouteImport.update({
   path: '/studio',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HomeRouteRoute = HomeRouteRouteImport.update({
+  id: '/home',
+  path: '/home',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ComputerRouteRoute = ComputerRouteRouteImport.update({
   id: '/computer',
   path: '/computer',
@@ -111,6 +118,11 @@ const StudioIndexRoute = StudioIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => StudioRouteRoute,
+} as any)
+const HomeIndexRoute = HomeIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => HomeRouteRoute,
 } as any)
 const ComputerIndexRoute = ComputerIndexRouteImport.update({
   id: '/',
@@ -389,6 +401,7 @@ export interface FileRoutesByFullPath {
   '/apps': typeof AppsRouteRouteWithChildren
   '/chat': typeof ChatRouteRouteWithChildren
   '/computer': typeof ComputerRouteRouteWithChildren
+  '/home': typeof HomeRouteRouteWithChildren
   '/studio': typeof StudioRouteRouteWithChildren
   '/team': typeof TeamRouteRouteWithChildren
   '/install': typeof InstallRoute
@@ -401,6 +414,7 @@ export interface FileRoutesByFullPath {
   '/apps/': typeof AppsIndexRoute
   '/chat/': typeof ChatIndexRoute
   '/computer/': typeof ComputerIndexRoute
+  '/home/': typeof HomeIndexRoute
   '/studio/': typeof StudioIndexRoute
   '/team/': typeof TeamIndexRoute
   '/studio/$projectId/$spaceId': typeof StudioProjectIdSpaceIdRouteRouteWithChildren
@@ -453,6 +467,7 @@ export interface FileRoutesByTo {
   '/apps': typeof AppsIndexRoute
   '/chat': typeof ChatIndexRoute
   '/computer': typeof ComputerIndexRoute
+  '/home': typeof HomeIndexRoute
   '/studio': typeof StudioIndexRoute
   '/team': typeof TeamIndexRoute
   '/team/$teamId/channels': typeof TeamTeamIdChannelsRoute
@@ -499,6 +514,7 @@ export interface FileRoutesById {
   '/apps': typeof AppsRouteRouteWithChildren
   '/chat': typeof ChatRouteRouteWithChildren
   '/computer': typeof ComputerRouteRouteWithChildren
+  '/home': typeof HomeRouteRouteWithChildren
   '/studio': typeof StudioRouteRouteWithChildren
   '/team': typeof TeamRouteRouteWithChildren
   '/install': typeof InstallRoute
@@ -511,6 +527,7 @@ export interface FileRoutesById {
   '/apps/': typeof AppsIndexRoute
   '/chat/': typeof ChatIndexRoute
   '/computer/': typeof ComputerIndexRoute
+  '/home/': typeof HomeIndexRoute
   '/studio/': typeof StudioIndexRoute
   '/team/': typeof TeamIndexRoute
   '/studio/$projectId/$spaceId': typeof StudioProjectIdSpaceIdRouteRouteWithChildren
@@ -560,6 +577,7 @@ export interface FileRouteTypes {
     | '/apps'
     | '/chat'
     | '/computer'
+    | '/home'
     | '/studio'
     | '/team'
     | '/install'
@@ -572,6 +590,7 @@ export interface FileRouteTypes {
     | '/apps/'
     | '/chat/'
     | '/computer/'
+    | '/home/'
     | '/studio/'
     | '/team/'
     | '/studio/$projectId/$spaceId'
@@ -624,6 +643,7 @@ export interface FileRouteTypes {
     | '/apps'
     | '/chat'
     | '/computer'
+    | '/home'
     | '/studio'
     | '/team'
     | '/team/$teamId/channels'
@@ -669,6 +689,7 @@ export interface FileRouteTypes {
     | '/apps'
     | '/chat'
     | '/computer'
+    | '/home'
     | '/studio'
     | '/team'
     | '/install'
@@ -681,6 +702,7 @@ export interface FileRouteTypes {
     | '/apps/'
     | '/chat/'
     | '/computer/'
+    | '/home/'
     | '/studio/'
     | '/team/'
     | '/studio/$projectId/$spaceId'
@@ -729,6 +751,7 @@ export interface RootRouteChildren {
   AppsRouteRoute: typeof AppsRouteRouteWithChildren
   ChatRouteRoute: typeof ChatRouteRouteWithChildren
   ComputerRouteRoute: typeof ComputerRouteRouteWithChildren
+  HomeRouteRoute: typeof HomeRouteRouteWithChildren
   StudioRouteRoute: typeof StudioRouteRouteWithChildren
   TeamRouteRoute: typeof TeamRouteRouteWithChildren
   InstallRoute: typeof InstallRoute
@@ -755,6 +778,13 @@ declare module '@tanstack/react-router' {
       path: '/studio'
       fullPath: '/studio'
       preLoaderRoute: typeof StudioRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/home': {
+      id: '/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof HomeRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/computer': {
@@ -798,6 +828,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/studio/'
       preLoaderRoute: typeof StudioIndexRouteImport
       parentRoute: typeof StudioRouteRoute
+    }
+    '/home/': {
+      id: '/home/'
+      path: '/'
+      fullPath: '/home/'
+      preLoaderRoute: typeof HomeIndexRouteImport
+      parentRoute: typeof HomeRouteRoute
     }
     '/computer/': {
       id: '/computer/'
@@ -1190,6 +1227,18 @@ const ComputerRouteRouteWithChildren = ComputerRouteRoute._addFileChildren(
   ComputerRouteRouteChildren,
 )
 
+interface HomeRouteRouteChildren {
+  HomeIndexRoute: typeof HomeIndexRoute
+}
+
+const HomeRouteRouteChildren: HomeRouteRouteChildren = {
+  HomeIndexRoute: HomeIndexRoute,
+}
+
+const HomeRouteRouteWithChildren = HomeRouteRoute._addFileChildren(
+  HomeRouteRouteChildren,
+)
+
 interface StudioProjectIdSpaceIdRouteRouteChildren {
   StudioProjectIdSpaceIdIndexRoute: typeof StudioProjectIdSpaceIdIndexRoute
   StudioProjectIdSpaceIdAgentIndexRoute: typeof StudioProjectIdSpaceIdAgentIndexRoute
@@ -1356,6 +1405,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppsRouteRoute: AppsRouteRouteWithChildren,
   ChatRouteRoute: ChatRouteRouteWithChildren,
   ComputerRouteRoute: ComputerRouteRouteWithChildren,
+  HomeRouteRoute: HomeRouteRouteWithChildren,
   StudioRouteRoute: StudioRouteRouteWithChildren,
   TeamRouteRoute: TeamRouteRouteWithChildren,
   InstallRoute: InstallRoute,
