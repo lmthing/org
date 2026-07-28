@@ -32,3 +32,4 @@ tests/visual/dist/
 tests/visual/test-results/
 tests/visual/playwright-report/
 test-results/
+apps/web/.tanstack/
