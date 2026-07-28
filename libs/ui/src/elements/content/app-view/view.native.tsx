@@ -1,8 +1,8 @@
 import { WebView } from 'react-native-webview'
-import * as Prim from '../elements/primitives/index'
+import * as Prim from '../../primitives/index'
 
 /**
- * A project's app, running beside the conversation — the NATIVE half of the seam.
+ * A project's app, embedded — the NATIVE half of the seam.
  *
  * A `WebView`, for the same reason web uses an iframe: a project app is a
  * separately built web bundle the pod serves at its own URL. There is no native

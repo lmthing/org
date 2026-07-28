@@ -14,6 +14,8 @@
  * Both default to production, so a build that sets nothing behaves exactly as before.
  */
 
+import { apiBase } from '@lmthing/ui/platform'
+
 /** Strip a trailing slash so callers can always write `${base}/api/...`. */
 function host(configured: string | undefined, fallback: string): string {
   return configured ? configured.replace(/\/+$/, '') : fallback
@@ -28,3 +30,14 @@ export const CLOUD_BASE_URL = host(process.env.EXPO_PUBLIC_CLOUD_BASE, 'https://
  * hostname to construct.
  */
 export const TEAM_BASE_URL = host(process.env.EXPO_PUBLIC_TEAM_BASE, 'https://lmthing.team')
+
+/**
+ * Where a PERSONAL project's app pages are served.
+ *
+ * The same reserved `/app/` prefix the team pod uses — the difference is only which pod answers,
+ * and that is the whole reason the two bases are separate constants rather than one. `apiBase()`
+ * rather than a fourth literal, because the personal pod is the pod this app already talks to.
+ */
+export function appUrl(projectId: string): string {
+  return `${apiBase()}/app/${projectId}/`
+}

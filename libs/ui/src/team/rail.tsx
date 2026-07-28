@@ -22,7 +22,7 @@ import {
 import { AppIcon, CloseIcon, ExternalLinkIcon, HashIcon, MenuIcon, PlusIcon } from './icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Channel, DirectoryProject, Rail } from './types'
-import { AppView } from './app-view'
+import { AppView } from '../elements/content/app-view'
 
 /** The rail's width, in px, clamped so neither pane can be squeezed to nothing. */
 const RAIL_MIN = 320

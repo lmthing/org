@@ -73,7 +73,7 @@ const ALLOWED = {
   // `primitive` — "show a page from the pod inside the surface" is an `<iframe>` on web and a
   // `react-native-webview` on native. Same prop shape, same meaning, different host element; the
   // WebView is provided by the APP, never by this package.
-  'libs/ui/src/team/app-view.native.tsx': 'primitive',
+  'libs/ui/src/elements/content/app-view/view.native.tsx': 'primitive',
 
   // `primitive` — the overlays portal through `react-dom` on web and RN `Modal` on native. The
   // dropdown fork additionally re-anchors with `measureInWindow` because RN has no

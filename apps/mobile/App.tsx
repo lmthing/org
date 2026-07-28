@@ -12,6 +12,7 @@ import { BottomNav, type BottomNavTab } from '@lmthing/ui/elements/nav/bottom-na
 import * as Prim from '@lmthing/ui/elements/primitives'
 import { ensureComputePod, waitForPodEdge } from './src/ensure-pod'
 import { TeamScreen } from './src/TeamScreen'
+import { AppScreen } from './src/AppScreen'
 
 /**
  * Root of the LMThing mobile app.
@@ -169,6 +170,15 @@ function AuthGate() {
  */
 function HomeShell() {
   const [tab, setTab] = React.useState<BottomNavTab>('home')
+  // Which project's app is open, if any. State here rather than a route because native has no URL —
+  // the same reason `TeamScreen` owns its rail.
+  const [openApp, setOpenApp] = React.useState<{ id: string; name: string } | null>(null)
+
+  // Covers the tabs rather than replacing a pane: an app is a place you go INTO and come back from,
+  // and the chat socket behind it should not be torn down to look at one.
+  if (openApp) {
+    return <AppScreen projectId={openApp.id} name={openApp.name} onClose={() => setOpenApp(null)} />
+  }
 
   return (
     <Prim.Box flex={1}>
@@ -177,7 +187,13 @@ function HomeShell() {
           — but these two panes are columns, and leaving it unsaid laid the whole chat surface out
           sideways into a blank screen. An explicit direction always wins over the seam's default. */}
       <Prim.Box flex={1} flexDirection="column" display={tab === 'home' ? 'flex' : 'none'}>
-        <DashboardHome onNewChat={() => setTab('chat')} onOpenConversation={() => setTab('chat')} />
+        <DashboardHome
+          onNewChat={() => setTab('chat')}
+          onOpenConversation={() => setTab('chat')}
+          // `DashboardHome` has always offered this and this app never passed it, so tapping a
+          // project on Home did nothing at all — a personal app could not be opened on a phone.
+          onOpenProject={(project) => setOpenApp({ id: project.id, name: project.name })}
+        />
       </Prim.Box>
       <Prim.Box flex={1} flexDirection="column" display={tab === 'chat' ? 'flex' : 'none'}>
         <ChatShell />

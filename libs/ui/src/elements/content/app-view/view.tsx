@@ -1,7 +1,11 @@
-import * as Prim from '../elements/primitives/index'
+import * as Prim from '../../primitives/index'
 
 /**
- * A project's app, running beside the conversation — the WEB half of the seam.
+ * A project's app, embedded — the WEB half of the seam.
+ *
+ * A shared element rather than part of `team/`, because "show a page this pod serves" is not a
+ * team idea: a personal project has an app too, and on a phone this is the ONLY way to look at
+ * one. It lived under `team/` purely because that is where it was first needed.
  *
  * An embedded document rather than a mounted component on either target: a
  * project app is a separately built bundle the pod serves at its own URL with its
@@ -14,7 +18,8 @@ import * as Prim from '../elements/primitives/index'
  * only — no colour crosses this boundary, which is what keeps `lint:tokens` a
  * meaningful gate.
  *
- * Native takes `./app-view.native.tsx`, which renders a `WebView`.
+ * Native takes `./view.native.tsx`, which renders a `WebView`; `index.ts` explains why the fork is
+ * one level in rather than at the entry.
  */
 export function AppView({ url, title }: { url: string; title: string }) {
   return (

@@ -170,7 +170,11 @@ export function DashboardHome({
   }
 
   return (
-    <Prim.Box className={className} flexGrow={1} flexShrink={1} flexBasis="0%" backgroundColor="$background">
+    // `Prim.Scroll`: Home is a list of everything you were doing, so it outgrows a phone screen
+    // immediately — and on native a `Box` CLIPS instead of scrolling, so the projects section was
+    // simply unreachable. Worse than invisible: a swipe over a conversation card was delivered as a
+    // TAP, so trying to scroll navigated you into a chat.
+    <Prim.Scroll className={className} flexGrow={1} flexShrink={1} flexBasis="0%" backgroundColor="$background">
       <Prim.Col paddingHorizontal="$4" paddingVertical="$6" gap="$2" maxWidth={768} width="100%" alignSelf="center">
         <Prim.Text fontFamily="$heading" fontSize="$2xl" fontWeight="$bold" color="$foreground">
           {greeting(new Date().getHours())}, {name}
@@ -317,6 +321,6 @@ export function DashboardHome({
           </Section>
         )}
       </Prim.Col>
-    </Prim.Box>
+    </Prim.Scroll>
   )
 }

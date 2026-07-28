@@ -86,6 +86,33 @@ describe('buildProjectPages', () => {
     expect(res.assetManifest).toContain(jsAsset);
   }, 30_000);
 
+  it('emits no bare `process` reference — a browser has none, and the page dies on load', async () => {
+    // React and Tamagui read `process.env.*` at MODULE SCOPE. Without an esbuild `define` the first
+    // line of the bundle throws `ReferenceError: process is not defined` and the page renders
+    // nothing at all: no error on screen, just white. Found by opening a built app in a WebView on
+    // a phone, but it fails identically in any browser — `platform: 'browser'` governs resolution,
+    // not globals.
+    const root = await scratchProject();
+    // A page that reads `process.env` the way React and Tamagui do at module scope. Without a
+    // fixture that actually references it this test passes against the bug — the stock scratch
+    // project pulls in nothing that reads the environment.
+    await writeFile(
+      join(root, 'pages', 'index.tsx'),
+      `const MODE = process.env.NODE_ENV;
+const FLAG = process.env.SOME_FLAG;
+export default function Home() {
+  return <div>{String(MODE)}{String(FLAG)}</div>;
+}
+`,
+    );
+    const res = await buildProjectPages(root);
+    const jsAsset = res.assetManifest.find((f) => /^assets\/entry-.*\.js$/.test(f));
+    const code = await readFile(join(res.outDir, jsAsset!), 'utf8');
+
+    expect(code).not.toMatch(/\bprocess\s*\.\s*env\b/);
+    expect(code).not.toMatch(/\bprocess\s*\.\s*[a-zA-Z]/);
+  }, 30_000);
+
   it('a second build with no changes is a cache hit (built:false)', async () => {
     const root = await scratchProject();
     const first = await buildProjectPages(root);

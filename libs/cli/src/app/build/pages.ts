@@ -330,6 +330,18 @@ async function runBuild(
     assetNames: 'assets/[name]-[hash]',
     chunkNames: 'assets/[name]-[hash]',
     loader: { '.css': 'css', '.png': 'file', '.svg': 'file', '.jpg': 'file' },
+    // A browser has no `process`. React and Tamagui both read `process.env.*` at MODULE SCOPE, so
+    // without this the very first line of the bundle threw `ReferenceError: process is not defined`
+    // and the page rendered nothing at all — no error on screen, just white. `platform: 'browser'`
+    // does not imply this: it governs resolution, not globals.
+    //
+    // `process.env` → `{}` makes every unlisted read `undefined`, which is what those libraries
+    // expect from an unset variable. `NODE_ENV` is named separately because they branch on it, and
+    // esbuild applies the more specific definition.
+    define: {
+      'process.env.NODE_ENV': JSON.stringify(opts.minify === false ? 'development' : 'production'),
+      'process.env': '{}',
+    },
     alias: aliases,
     nodePaths,
     plugins: [
