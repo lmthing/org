@@ -1,6 +1,6 @@
 import * as React from 'react'
-import * as Prim from '../../primitives/index'
 import { Home, Sparkles, Users } from '../../primitives/icons'
+import { BottomTabs, type BottomTab } from '../bottom-tabs/index'
 
 /**
  * The mobile tab bar — Home · Chat · Teams.
@@ -14,8 +14,8 @@ import { Home, Sparkles, Users } from '../../primitives/icons'
  * different answers living in two files, and the repo's whole native story is that a screen may not
  * do that (see `docs/mobile-native-chat-CONTINUE.md`).
  *
- * Base styles ARE the phone styles here — `$md` is min-width 768, so the `$md` block is the desktop
- * override. That is the same convention the chat header uses to hide its workbench controls.
+ * The bar itself is `nav/bottom-tabs`, which the team workspace also uses for its own four tabs.
+ * This file is now only the app shell's THREE — the tabs, not the bar.
  */
 
 export type BottomNavTab = 'home' | 'chat' | 'teams'
@@ -24,59 +24,29 @@ export interface BottomNavProps {
   current: BottomNavTab
   onSelect: (tab: BottomNavTab) => void
   className?: string
+  /** Unread badges, by tab. A tab with no entry is drawn plain. */
+  badges?: Partial<Record<BottomNavTab, number>>
 }
 
-const TABS: { id: BottomNavTab; label: string; icon: typeof Home }[] = [
+const TABS: readonly BottomTab<BottomNavTab>[] = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'chat', label: 'Chat', icon: Sparkles },
   { id: 'teams', label: 'Teams', icon: Users },
 ]
 
-const BAR = {
-  display: 'flex',
-  flexDirection: 'row',
-  alignItems: 'stretch',
-  flexShrink: 0,
-  borderTopWidth: 1,
-  borderColor: '$border',
-  backgroundColor: '$card',
-} as const
-
-const TAB = {
-  flexGrow: 1,
-  flexShrink: 1,
-  flexBasis: '0%',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '$1',
-  paddingVertical: '$2',
-} as const
-
-const ICON_SIZE = 20
-
-export function BottomNav({ current, onSelect, className }: BottomNavProps) {
+export function BottomNav({ current, onSelect, className, badges }: BottomNavProps) {
+  const tabs = React.useMemo(
+    () => TABS.map((tab) => ({ ...tab, ...(badges?.[tab.id] ? { badge: badges[tab.id] } : {}) })),
+    [badges],
+  )
   return (
-    <Prim.Box className={className} {...BAR} $md={{ display: 'none' }} aria-label="main navigation">
-      {TABS.map(({ id, label, icon: Icon }) => {
-        const active = id === current
-        return (
-          <Prim.Pressable
-            key={id}
-            onClick={() => onSelect(id)}
-            {...TAB}
-            color={active ? '$primary' : '$muted-foreground'}
-            aria-label={label}
-            title={label}
-          >
-            <Icon size={ICON_SIZE} aria-hidden={true} />
-            <Prim.Text fontSize="$xs" color={active ? '$primary' : '$muted-foreground'}>
-              {label}
-            </Prim.Text>
-          </Prim.Pressable>
-        )
-      })}
-    </Prim.Box>
+    <BottomTabs
+      tabs={tabs}
+      current={current}
+      onSelect={onSelect}
+      {...(className !== undefined ? { className } : {})}
+      compactOnly
+      aria-label="main navigation"
+    />
   )
 }

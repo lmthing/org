@@ -170,6 +170,10 @@ function AuthGate() {
  */
 function HomeShell() {
   const [tab, setTab] = React.useState<BottomNavTab>('home')
+  // Mentions waiting in the team, badged on the tab. The Teams pane stays mounted while hidden, so
+  // it keeps hearing the channel socket — without surfacing the count here, a member on Home had no
+  // way at all to learn that somebody had named them.
+  const [teamMentions, setTeamMentions] = React.useState(0)
   // Which project's app is open, if any. State here rather than a route because native has no URL —
   // the same reason `TeamScreen` owns its rail.
   const [openApp, setOpenApp] = React.useState<{ id: string; name: string } | null>(null)
@@ -199,9 +203,13 @@ function HomeShell() {
         <ChatShell />
       </Prim.Box>
       <Prim.Box flex={1} flexDirection="column" display={tab === 'teams' ? 'flex' : 'none'}>
-        <TeamScreen />
+        <TeamScreen onMentionCount={setTeamMentions} />
       </Prim.Box>
-      <BottomNav current={tab} onSelect={setTab} />
+      <BottomNav
+        current={tab}
+        onSelect={setTab}
+        {...(teamMentions > 0 && tab !== 'teams' ? { badges: { teams: teamMentions } } : {})}
+      />
     </Prim.Box>
   )
 }

@@ -82,6 +82,13 @@ export interface ComposerProps {
   /** Called on every change, so the pod can tell the others someone is typing. */
   onTyping?: () => void
   onSend: (text: string) => Promise<void> | void
+  /**
+   * Text to drop into the box and focus — how a suggestion elsewhere on the surface ("Ask THING")
+   * hands the member a half-written message instead of sending one for them. Cleared by the caller
+   * through `onPrefillApplied`, so the same suggestion can be offered twice.
+   */
+  prefill?: string | null
+  onPrefillApplied?: () => void
 }
 
 export function Composer({
@@ -91,6 +98,8 @@ export function Composer({
   disabled,
   onTyping,
   onSend,
+  prefill,
+  onPrefillApplied,
 }: ComposerProps) {
   const [draft, setDraft] = useState('')
   const [mention, setMention] = useState<{ query: string; start: number } | null>(null)
@@ -106,6 +115,20 @@ export function Composer({
   // Reset the cursor whenever the candidate list changes underneath it, so the
   // highlight can never point past the end of the list.
   useEffect(() => setHighlighted(0), [mention?.query])
+
+  // A prefill is a suggestion, not a send: the text lands in the box with the caret after it and
+  // the member decides what to do with it. Appended rather than assigned, so tapping a suggestion
+  // never eats something already half-typed.
+  useEffect(() => {
+    if (!prefill) return
+    setDraft((current) => (current ? `${current.replace(/\s*$/, '')} ${prefill}` : prefill))
+    // OPTIONAL-called rather than web-guarded: a React Native `TextInput` instance has `focus()`
+    // too, and on a phone the point of a suggestion is that you can carry on typing — landing the
+    // text without raising the keyboard makes the member tap the box themselves.
+    ;(ref.current as { focus?: () => void } | null)?.focus?.()
+    onPrefillApplied?.()
+    // `onPrefillApplied` is the caller's reset and would re-run this on every render if depended on.
+  }, [prefill])
 
   // Auto-growing the box is done by measuring it, which only a DOM node can do: `style` and
   // `scrollHeight` are both absent on a React Native host instance, so an unguarded assignment

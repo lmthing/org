@@ -88,6 +88,12 @@ export const ChevronRightIcon = (p: IconProps) => (
   </Icon>
 )
 
+export const ChevronLeftIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <Prim.Path d="m15 18-6-6 6-6" />
+  </Icon>
+)
+
 export const MoreVerticalIcon = (p: IconProps) => (
   <Icon {...p}>
     <Prim.Circle cx="12" cy="12" r="1" />

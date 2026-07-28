@@ -19,7 +19,15 @@ import {
   DropdownItem,
   DropdownTrigger,
 } from '../elements/overlays/dropdown'
-import { AppIcon, CloseIcon, ExternalLinkIcon, HashIcon, MenuIcon, PlusIcon } from './icons'
+import {
+  AppIcon,
+  ChevronLeftIcon,
+  CloseIcon,
+  ExternalLinkIcon,
+  HashIcon,
+  MenuIcon,
+  PlusIcon,
+} from './icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Channel, DirectoryProject, Rail } from './types'
 import { AppView } from '../elements/content/app-view'
@@ -169,6 +177,7 @@ export function RailPane({
   children,
   headerExtra,
   compact,
+  backLabel,
 }: {
   title: string
   icon?: React.ReactNode
@@ -177,6 +186,8 @@ export function RailPane({
   headerExtra?: React.ReactNode
   /** Compact: the rail covers the surface instead of sitting beside it. */
   compact?: boolean
+  /** Where closing returns to — named, and shown as a back row when the rail covers the screen. */
+  backLabel?: string
 }) {
   const [width, setWidth] = useState(RAIL_DEFAULT)
   const dragging = useRef(false)
@@ -257,14 +268,53 @@ export function RailPane({
           borderColor="$border"
           flexShrink={0}
         >
+          {/* Covering the screen, the rail is a PLACE you went into, so it gets the affordance a
+              place gets: a back control on the left, naming what it returns to. A lone `×` in the
+              top-right is both the least reachable corner one-handed and no answer at all to "where
+              does this put me back". Beside the conversation it is a panel, not a place, and the
+              close button on the right is right. */}
+          {compact ? (
+            <Prim.Pressable
+              onClick={onClose}
+              display="flex"
+              flexDirection="row"
+              alignItems="center"
+              gap="$1"
+              marginLeft="-$1"
+              paddingVertical="$1"
+              paddingHorizontal="$1"
+              borderRadius="$radius-md"
+              flexShrink={0}
+              pressStyle={{ opacity: 0.6 }}
+              hoverStyle={{ backgroundColor: '$muted' }}
+              aria-label={backLabel ? `Back to ${backLabel}` : 'Back'}
+            >
+              <ChevronLeftIcon size={16} />
+              {backLabel ? (
+                <Prim.Text fontSize="$sm" color="$muted-foreground" maxWidth={110} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+                  {backLabel}
+                </Prim.Text>
+              ) : null}
+            </Prim.Pressable>
+          ) : null}
           {icon}
-          <Prim.Text fontSize="$sm" fontWeight="$semibold" flex={1} minWidth={0}>
+          <Prim.Text
+            fontSize="$sm"
+            fontWeight="$semibold"
+            flex={1}
+            minWidth={0}
+            overflow="hidden"
+            textOverflow="ellipsis"
+            whiteSpace="nowrap"
+          >
             {title}
           </Prim.Text>
           {headerExtra}
-          <Button size="icon" variant="ghost" onClick={onClose} aria-label="Close">
-            <CloseIcon size={14} />
-          </Button>
+          {compact ? null : (
+            <Button size="icon" variant="ghost" onClick={onClose} aria-label="Close">
+              <CloseIcon size={14} />
+            </Button>
+          )}
         </Prim.Row>
         {children}
       </Prim.Col>

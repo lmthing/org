@@ -79,7 +79,15 @@ async function call<T>(
     }
     throw new Error(message)
   }
-  return (await res.json()) as T
+  try {
+    return (await res.json()) as T
+  } catch {
+    // A 200 that is not JSON is nearly always an edge or a dev server answering with the SPA's own
+    // `index.html`. The parser's own words for that are `Unexpected token '<', "<!doctype "... is
+    // not valid JSON`, and every page here renders a caught error verbatim — so that string was
+    // being shown to members, in red, at the top of their settings.
+    throw new Error(`The server sent an unexpected reply (${res.status}). Try again in a moment.`)
+  }
 }
 
 export const teamApi = {

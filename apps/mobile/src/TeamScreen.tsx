@@ -17,7 +17,7 @@ import { registerForPush } from './push'
  * up here would be a fork of the product wearing a file path — see this app's
  * `scripts/lint-barrel-imports.mjs`.
  */
-export function TeamScreen() {
+export function TeamScreen({ onMentionCount }: { onMentionCount?: (count: number) => void }) {
   const { getAccessToken } = useAuth()
   const [teams, setTeams] = React.useState<TeamSummary[] | null>(null)
   const [teamId, setTeamId] = React.useState<string | null>(null)
@@ -81,6 +81,20 @@ export function TeamScreen() {
       onOpenApp={(projectId) => setRail({ kind: 'app', projectId })}
       onCloseRail={() => setRail(null)}
       appUrl={teamAppUrl}
+      // The tab is mounted-but-hidden while somebody is on Home or Chat, so it is still receiving
+      // the channel socket's events — which makes it the only thing that can say a mention arrived
+      // while the member was somewhere else. Web spends the same number on the tab title.
+      {...(onMentionCount ? { onMentionCount } : {})}
+      // This screen already knows both of these and used to keep them to itself: it opened
+      // `teams[0]` without ever saying which team that was, and a member on two teams had no way
+      // to reach the second one.
+      team={{ id: team.id, name: team.name }}
+      teams={teams.map((t) => ({ id: t.id, name: t.name }))}
+      onSwitchTeam={(id) => {
+        setTeamId(id)
+        setActiveChannelId(null)
+        setRail(null)
+      }}
     />
   )
 }

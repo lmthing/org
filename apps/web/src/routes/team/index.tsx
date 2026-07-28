@@ -39,8 +39,11 @@ function TeamsIndex() {
   const load = useCallback(async () => {
     try {
       const data = await teamApi.list(authFetch)
-      setTeams(data.teams)
-      setInvites(data.invites)
+      // Defaulted, not trusted: this screen renders `invites.length` and `teams.length` directly,
+      // so ONE absent key in the payload replaced the whole page with "Something went wrong!
+      // Cannot read properties of undefined". An empty list is a screen a member can still use.
+      setTeams(data.teams ?? [])
+      setInvites(data.invites ?? [])
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

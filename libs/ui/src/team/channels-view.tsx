@@ -13,7 +13,7 @@
  * turn produces an app, the app is pinned to the channel and opens beside it.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as Prim from '../elements/primitives/index'
 import { Button } from '../elements/forms/button'
 import { Caption } from '../elements/typography/caption'
@@ -49,6 +49,11 @@ export interface TeamChannelsViewProps {
   onCloseRail: () => void
   /** Where a project's pages are served, which differs per target. */
   appUrl: (projectId: string) => string
+  /** The team on screen. Named in the sidebar, which is the only chrome both targets have. */
+  team?: { id: string; name: string }
+  /** Every team the member is on, for the sidebar's switcher. */
+  teams?: readonly { id: string; name: string }[]
+  onSwitchTeam?: (teamId: string) => void
   /** Called with the total mention count whenever it changes (tab badge, app icon badge). */
   onMentionCount?: (count: number) => void
 }
@@ -64,6 +69,9 @@ export function TeamChannelsView({
   onCloseRail,
   appUrl,
   onMentionCount,
+  team,
+  teams,
+  onSwitchTeam,
 }: TeamChannelsViewProps) {
   const [fallbackId, setFallbackId] = useState<string | null>(null)
   const activeId = activeChannelId ?? fallbackId
@@ -71,6 +79,9 @@ export function TeamChannelsView({
   const meId = chat.meId
   const { compact } = useTeamLayout()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // Text a suggestion elsewhere on the surface wants dropped into the composer, cleared as soon as
+  // the composer has taken it.
+  const [prefill, setPrefill] = useState<string | null>(null)
 
   // Land on a channel when the host names none — the first named one, since a
   // direct message is a poor thing to open somebody into by default.
@@ -105,7 +116,21 @@ export function TeamChannelsView({
   // else gets the tab in the header and the card in the thread — an offer, not a
   // pane thrown open over work they were in the middle of.
   const lastMessageId = chat.messages[chat.messages.length - 1]?.id
+  // The transcript this channel was ALREADY showing when it opened. A card that
+  // was already there is history, not an arrival — without this the effect fired
+  // on mount every single time, so opening a channel whose last message happened
+  // to be an app threw the app over the conversation before it was read. On a
+  // phone the pane is the whole screen, so the channel was never visible at all.
+  const settled = useRef(false)
   useEffect(() => {
+    settled.current = false
+  }, [activeId])
+  useEffect(() => {
+    if (!lastMessageId) return
+    if (!settled.current) {
+      settled.current = true
+      return
+    }
     const last = chat.messages[chat.messages.length - 1]
     if (!last?.app) return
     // The card is threaded under the message that asked for it, so the root of
@@ -143,6 +168,9 @@ export function TeamChannelsView({
     <ChannelSidebar
       compact={compact}
       onDismiss={() => setDrawerOpen(false)}
+        team={team}
+        teams={teams}
+        onSwitchTeam={onSwitchTeam}
         channels={chat.channels}
         categories={chat.categories}
         members={chat.directory.members}
@@ -229,14 +257,11 @@ export function TeamChannelsView({
             to the bottom by different mechanisms and at different moments. */}
         <Prim.Scroll stickToEnd flex={1} minHeight={0} padding="$4" gap="$4" flexDirection="column">
           {roots.length === 0 ? (
-            <Prim.Col alignItems="center" justifyContent="center" flex={1} gap="$1">
-              <Prim.Text fontSize="$sm" color="$muted-foreground">
-                {channel?.kind === 'dm'
-                  ? `This is the start of your conversation with ${title}.`
-                  : `This is the start of #${title}.`}
-              </Prim.Text>
-              <Caption>Say something — mention @thing to bring THING in.</Caption>
-            </Prim.Col>
+            <ChannelEmptyState
+              title={title}
+              isDm={channel?.kind === 'dm'}
+              onAskThing={() => setPrefill('@thing ')}
+            />
           ) : null}
           {roots.map((root, i) => {
             const replies = repliesOf(root.id)
@@ -278,6 +303,8 @@ export function TeamChannelsView({
           directory={chat.directory}
           meId={meId}
           disabled={!activeId}
+          prefill={prefill}
+          onPrefillApplied={() => setPrefill(null)}
           onTyping={() => activeId && chat.notifyTyping(activeId)}
           onSend={(text) => chat.send(text)}
         />
@@ -292,6 +319,7 @@ export function TeamChannelsView({
           meId={meId}
           ctx={ctx}
           compact={compact}
+          backLabel={channel?.kind === 'dm' ? title : `#${title}`}
           onClose={closeRail}
           onSend={(text) => chat.send(text, rail.threadId)}
           onTyping={() => activeId && chat.notifyTyping(activeId)}
@@ -306,6 +334,7 @@ export function TeamChannelsView({
           icon={<AppIcon size={14} />}
           headerExtra={<OpenAppExternally url={appUrl(rail.projectId)} />}
           compact={compact}
+          backLabel={channel?.kind === 'dm' ? title : `#${title}`}
           onClose={closeRail}
         >
           <AppFrame
@@ -317,6 +346,58 @@ export function TeamChannelsView({
         </RailPane>
       ) : null}
     </Prim.Row>
+  )
+}
+
+/**
+ * What a channel says before anybody has said anything.
+ *
+ * It replaces two grey sentences. An empty room should tell you what it is FOR and give you the
+ * first move — and the first move on this surface is genuinely unusual (a colleague can ask the
+ * team's agent to build something, in a message), so it is worth spelling out rather than leaving
+ * to a hint in a placeholder that a phone drops for width.
+ */
+function ChannelEmptyState({
+  title,
+  isDm,
+  onAskThing,
+}: {
+  title: string
+  isDm: boolean
+  onAskThing: () => void
+}) {
+  return (
+    <Prim.Col alignItems="center" justifyContent="center" flex={1} gap="$3" padding="$4">
+      {/* A `Box` around a `Text` — a Text does not centre its own content on React Native, and the
+          glyph rendered in the corner of the circle on a device. */}
+      <Prim.Box
+        width={56}
+        height={56}
+        borderRadius="$radius-full"
+        backgroundColor="color-mix(in srgb, var(--brand-2) 18%, transparent)"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        aria-hidden="true"
+      >
+        <Prim.Text fontSize="$xl">{isDm ? '👋' : '✦'}</Prim.Text>
+      </Prim.Box>
+      <Prim.Col alignItems="center" gap="$1">
+        <Prim.Text fontSize="$base" fontWeight="$semibold" textAlign="center">
+          {isDm ? `You and ${title}` : `#${title} is all yours`}
+        </Prim.Text>
+        <Prim.Text fontSize="$sm" color="$muted-foreground" textAlign="center" maxWidth={280}>
+          {isDm
+            ? 'Nothing here yet. Say hello — nobody else can read this.'
+            : 'Nothing here yet. Say something, or ask THING to build the team something.'}
+        </Prim.Text>
+      </Prim.Col>
+      {isDm ? null : (
+        <Button size="sm" variant="outline" onClick={onAskThing}>
+          Ask THING
+        </Button>
+      )}
+    </Prim.Col>
   )
 }
 
@@ -337,6 +418,7 @@ function ThreadRail({
   meId,
   ctx,
   compact,
+  backLabel,
   onClose,
   onSend,
   onTyping,
@@ -348,6 +430,7 @@ function ThreadRail({
   meId: string
   ctx: MessageContext
   compact?: boolean
+  backLabel?: string
   onClose: () => void
   onSend: (text: string) => Promise<void>
   onTyping: () => void
@@ -358,9 +441,13 @@ function ThreadRail({
       title="Thread"
       icon={<ThreadIcon size={14} />}
       compact={compact}
+      {...(backLabel ? { backLabel } : {})}
       onClose={onClose}
     >
-      <Prim.Col flex={1} minHeight={0} overflow="auto" padding="$3" gap="$3">
+      {/* `Scroll`, not a `Col` with `overflow: auto` — the same reason the channel transcript is
+          one: `overflow` scrolls in a browser and CLIPS under Yoga, so on a phone a thread ended at
+          the first screenful and the newest reply was the one you could not reach. */}
+      <Prim.Scroll stickToEnd flex={1} minHeight={0} padding="$3" gap="$3" flexDirection="column">
         {root ? <MessageRow message={root} showHeader={true} ctx={ctx} /> : null}
         <Prim.Row alignItems="center" gap="$2">
           <Prim.Box flex={1} height={1} backgroundColor="$border" />
@@ -377,7 +464,7 @@ function ThreadRail({
           <MessageGroupView key={group.key} group={group} ctx={ctx} />
         ))}
         {busy ? <TypingStrip labels={['THING']} /> : null}
-      </Prim.Col>
+      </Prim.Scroll>
       <Composer
         // Same reason as the channel composer: the rail is full-width on a phone but the box is
         // still two lines, and the hint is what pushed it over.

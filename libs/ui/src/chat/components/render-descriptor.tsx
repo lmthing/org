@@ -2,6 +2,7 @@ import * as Prim from '../../elements/primitives/index';
 import React from 'react';
 import { isRenderableType, parseDescriptorPayload } from '@lmthing/core/ui';
 import { Markdown } from '../../elements/content/markdown';
+import { CodeBlock } from '../../elements/content/code-block';
 import { preview } from '../app/common';
 // `.lm-prose` lives in the shared markdown stylesheet; state the dependency where it is used.
 
@@ -74,7 +75,21 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'muted': return <Prim.Text key={key} color="var(--lm-muted)">{body}</Prim.Text>;
     case 'kbd': return <Prim.Text as="kbd" key={key} borderColor="var(--lm-border)" backgroundColor="var(--lm-panel)" fontFamily="$mono" fontSize="11px" borderWidth={1} borderRadius="$radius" paddingHorizontal="$1">{body}</Prim.Text>;
     case 'code': return <Prim.Text as="code" key={key} color="var(--lm-cyan)" backgroundColor="var(--lm-bg)" fontFamily="$mono" paddingHorizontal="$1" borderRadius="$radius">{body}</Prim.Text>;
-    case 'codeblock': return <Prim.Pre key={key} fontFamily="$mono" fontSize="12px" color="var(--lm-text)" backgroundColor="var(--lm-bg)" borderWidth={1} borderColor="var(--lm-border)" borderRadius="$radius" padding="$2" marginVertical="$1" overflowX="auto"><Prim.Text as="code">{body}</Prim.Text></Prim.Pre>;
+    // A `CodeBlock` is the ONE descriptor whose size is unbounded — THING answers a "build me an
+    // app" turn with whole source files, and on a phone each one was thirty screenfuls between one
+    // sentence and the next. `CodeBlock` (the element) keeps a short block exactly as it was and
+    // opens a long one collapsed. `body` may be a node array when the agent nested children, so the
+    // collapsible path is taken only when the content is genuinely a string.
+    case 'codeblock': {
+      const source = typeof body === 'string'
+        ? body
+        : (d.children ?? []).every((c) => typeof c === 'string')
+          ? (d.children as string[]).join('')
+          : null;
+      const preProps = { fontFamily: '$mono', fontSize: '12px', color: 'var(--lm-text)', backgroundColor: 'var(--lm-bg)', borderWidth: 1, borderColor: 'var(--lm-border)', borderRadius: '$radius', padding: '$2', marginVertical: '$1', overflowX: 'auto', whiteSpace: 'pre-wrap' } as const;
+      if (source === null) return <Prim.Pre key={key} {...preProps}><Prim.Text as="code">{body}</Prim.Text></Prim.Pre>;
+      return <CodeBlock key={key} code={source} {...(typeof props['lang'] === 'string' ? { language: props['lang'] } : {})} preProps={preProps} fadeColor="var(--lm-bg)" />;
+    }
     case 'markdown': {
       let markdown = text;
       if (!markdown && d.children && d.children.length > 0) {

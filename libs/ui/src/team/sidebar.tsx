@@ -20,7 +20,14 @@ import {
   DropdownItem,
   DropdownTrigger,
 } from '../elements/overlays/dropdown'
-import { ChevronDownIcon, ChevronRightIcon, HashIcon, MoreVerticalIcon, PlusIcon } from './icons'
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  HashIcon,
+  MoreVerticalIcon,
+  PlusIcon,
+} from './icons'
 import { useMemo, useState } from 'react'
 import type { Category, Channel, ChannelUnread, MemberProfile } from './types'
 import { dmPartner, initials, memberLabel } from './format'
@@ -29,6 +36,11 @@ export interface SidebarProps {
   /** Compact: the sidebar is a slide-over, not a column, and closes on select. */
   compact?: boolean
   onDismiss?: () => void
+  /** The team this sidebar belongs to. On a phone this is the ONLY place it is named. */
+  team?: { id: string; name: string } | undefined
+  /** Every team the member is on, for the switcher. One entry hides the affordance. */
+  teams?: readonly { id: string; name: string }[] | undefined
+  onSwitchTeam?: ((teamId: string) => void) | undefined
   channels: Channel[]
   categories: Category[]
   members: MemberProfile[]
@@ -151,6 +163,38 @@ export function ChannelSidebar(props: SidebarProps) {
         ? ({ backgroundColor: '$background', boxShadow: '0 0 40px rgba(0,0,0,0.18)' } as const)
         : {})}
     >
+      <SidebarHeader
+        team={props.team}
+        teams={props.teams}
+        isEditor={isEditor}
+        memberCount={members.length}
+        compact={compact}
+        {...(props.onSwitchTeam ? { onSwitchTeam: props.onSwitchTeam } : {})}
+        {...(props.onDismiss ? { onDismiss: props.onDismiss } : {})}
+      />
+
+      {/* Creating a channel used to live only inside a section's `⋮`, next to "Delete category" —
+          so the commonest thing an editor does here was two taps into a 24px menu, while the rarer
+          "New category" had a row of its own. On a phone that menu is the hardest target on the
+          screen. */}
+      {isEditor ? (
+        <Prim.Box paddingHorizontal="$2" marginBottom="$2">
+          <Button
+            size="sm"
+            variant="outline"
+            width="100%"
+            justifyContent="flex-start"
+            onClick={() => {
+              setAdding(sections[sections.length - 1]?.key ?? '')
+              setDraft('')
+            }}
+          >
+            <PlusIcon size={12} />
+            New channel
+          </Button>
+        </Prim.Box>
+      ) : null}
+
       {sections.map((section) => (
         <Prim.Col key={section.key} marginBottom="$2">
           <Prim.Row alignItems="center" gap="$0.5" paddingHorizontal="$2" paddingRight="$1">
@@ -252,6 +296,109 @@ export function ChannelSidebar(props: SidebarProps) {
         }}
       />
     </Prim.Col>
+  )
+}
+
+/**
+ * Which team this is — and, when there is more than one, the way to another.
+ *
+ * It lives in the sidebar because that is the one piece of chrome BOTH targets have. The native app
+ * renders `TeamChannelsView` and nothing else: it took the first team the gateway listed, never said
+ * which, and gave no way to reach a second. A member on two teams could only see one of them, and
+ * could not tell which one they were reading.
+ */
+function SidebarHeader({
+  team,
+  teams,
+  isEditor,
+  memberCount,
+  compact,
+  onSwitchTeam,
+  onDismiss,
+}: {
+  team?: { id: string; name: string } | undefined
+  teams?: readonly { id: string; name: string }[] | undefined
+  isEditor: boolean
+  memberCount: number
+  compact?: boolean
+  onSwitchTeam?: (teamId: string) => void
+  onDismiss?: () => void
+}) {
+  const others = (teams ?? []).filter((t) => t.id !== team?.id)
+  const canSwitch = Boolean(onSwitchTeam) && others.length > 0
+  if (!team) return null
+
+  const identity = (
+    <Prim.Row alignItems="center" gap="$2" flex={1} minWidth={0}>
+      <Avatar size="sm">
+        <AvatarFallback colorKey={team.id}>{initials(team.name)}</AvatarFallback>
+      </Avatar>
+      <Prim.Col flex={1} minWidth={0}>
+        <Prim.Text
+          fontSize="$sm"
+          fontWeight="$semibold"
+          overflow="hidden"
+          textOverflow="ellipsis"
+          whiteSpace="nowrap"
+        >
+          {team.name}
+        </Prim.Text>
+        <Caption>
+          {isEditor ? 'Editor' : 'Viewer'} · {memberCount === 1 ? '1 member' : `${memberCount} members`}
+        </Caption>
+      </Prim.Col>
+      {canSwitch ? <ChevronDownIcon size={12} /> : null}
+    </Prim.Row>
+  )
+
+  return (
+    <Prim.Row
+      alignItems="center"
+      gap="$1"
+      paddingHorizontal="$2"
+      paddingBottom="$2"
+      marginBottom="$2"
+      borderBottomWidth={1}
+      borderColor="$border"
+    >
+      {canSwitch ? (
+        <Dropdown>
+          <DropdownTrigger asChild>
+            <Prim.Pressable
+              flex={1}
+              minWidth={0}
+              display="flex"
+              borderRadius="$radius-md"
+              paddingVertical="$1"
+              paddingHorizontal="$1"
+              hoverStyle={{ backgroundColor: '$muted' }}
+              pressStyle={{ opacity: 0.7 }}
+              aria-label="Switch team"
+            >
+              {identity}
+            </Prim.Pressable>
+          </DropdownTrigger>
+          <DropdownContent>
+            {others.map((other) => (
+              <DropdownItem key={other.id} onClick={() => onSwitchTeam?.(other.id)}>
+                {other.name}
+              </DropdownItem>
+            ))}
+          </DropdownContent>
+        </Dropdown>
+      ) : (
+        <Prim.Box flex={1} minWidth={0} paddingVertical="$1" paddingHorizontal="$1">
+          {identity}
+        </Prim.Box>
+      )}
+      {/* A drawer that can only be dismissed by hitting the strip of scrim beside it is a drawer
+          people learn to be afraid of. */}
+      {compact && onDismiss ? (
+        <Button size="icon" variant="ghost" onClick={onDismiss} aria-label="Close channels">
+          <CloseIcon size={14} />
+        </Button>
+      ) : null}
+    </Prim.Row>
   )
 }
 

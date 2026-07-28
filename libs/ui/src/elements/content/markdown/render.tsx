@@ -3,6 +3,7 @@ import { marked, type Token, type Tokens } from 'marked'
 import { isWeb } from '@tamagui/core'
 import * as Prim from '../../primitives/index'
 import { PRESETS, type MarkdownPreset, type MarkdownPresetName } from './presets'
+import { CodeBlock } from '../code-block/index'
 
 /**
  * Markdown rendered as REACT ELEMENTS, from `marked`'s token stream — one implementation for web
@@ -111,15 +112,22 @@ function renderBlock(token: Token, p: MarkdownPreset, key: string): React.ReactN
         </Prim.Text>
       )
     }
-    case 'code':
+    case 'code': {
+      const code = token as Tokens.Code
       // `Prim.Text as="pre"` rather than `Prim.Pre`: Pre is a host-passthrough primitive that
       // ignores style props (it forwards to a raw tag), so a preset spread onto it would silently
-      // style nothing. `as="pre"` is a real Tamagui per-tag component.
+      // style nothing. `as="pre"` is a real Tamagui per-tag component. `CodeBlock` keeps that and
+      // adds the one thing a phone needs: a long block opens collapsed instead of burying the rest
+      // of the message under it.
       return (
-        <Prim.Text key={key} as="pre" {...p.code}>
-          {(token as Tokens.Code).text}
-        </Prim.Text>
+        <CodeBlock
+          key={key}
+          code={code.text}
+          {...(code.lang ? { language: code.lang } : {})}
+          preProps={p.code}
+        />
       )
+    }
     case 'blockquote':
       return (
         <Prim.Box key={key} as="blockquote" {...p.blockquote}>

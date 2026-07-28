@@ -52,7 +52,11 @@ function MembersPage() {
 
   const load = useCallback(async () => {
     try {
-      setDetail(await teamApi.get(authFetch, teamId))
+      const team = await teamApi.get(authFetch, teamId)
+      // Normalised once here so nothing below has to ask twice. Reading `detail?.members.length`
+      // on a payload whose `members` key was absent took the whole page down with a raw
+      // "Cannot read properties of undefined" — a list this page can render as empty instead.
+      setDetail({ ...team, members: team.members ?? [], invites: team.invites ?? [] })
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

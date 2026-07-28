@@ -1,7 +1,12 @@
 import * as Prim from '@lmthing/ui/elements/primitives'
 import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { loadStripe } from '@stripe/stripe-js'
+// `/pure`, not the package root: importing the root INJECTS `js.stripe.com/v3` into the document
+// as a side effect of the import itself. Every route module is statically imported by
+// `routeTree.gen.ts`, so that side effect ran on every page of the app — a phone opening a channel
+// paid for a third-party script it would only ever need on the billing tab. The `/pure` entry loads
+// the script when `loadStripe()` is actually called.
+import { loadStripe } from '@stripe/stripe-js/pure'
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from '@stripe/react-stripe-js'
 import { useAuth } from '@lmthing/auth'
 import { Heading } from '@lmthing/ui/elements/typography/heading'
@@ -178,7 +183,16 @@ function YourProfile({ team }: { team: ReturnType<typeof useTeamAuth> }) {
         Your profile
       </Heading>
       <Caption>How you appear in this team, and the handle colleagues type to reach you.</Caption>
-      <Prim.Row gap="$2" marginTop="$3" alignItems="flex-start">
+      {/* Two fields and a button across a 390px phone leave each field about 130px wide, which is
+          narrower than the words they are asking for. Stacked below `md`, side by side above it —
+          base styles ARE the phone styles here, the `$md` block is the desktop override. */}
+      <Prim.Box
+        display="flex"
+        flexDirection="column"
+        gap="$2"
+        marginTop="$3"
+        $md={{ flexDirection: 'row', alignItems: 'flex-start' }}
+      >
         <Prim.Col flex={1} gap="$1">
           <Input
             value={displayName}
@@ -199,7 +213,7 @@ function YourProfile({ team }: { team: ReturnType<typeof useTeamAuth> }) {
         <Button onClick={() => void save()} disabled={busy || !loaded}>
           Save
         </Button>
-      </Prim.Row>
+      </Prim.Box>
       {error ? (
         <Caption color="$destructive" marginTop="$2">
           {error}
