@@ -15,10 +15,12 @@
  * asserts on the native element tree.
  */
 import * as React from 'react'
+import { act } from 'react-test-renderer'
 import { test, expect } from '../harness'
-import { render, findAll, findByText, NATIVE_TEXT } from '../render'
+import { render, findAll, findByText, findTextInput, NATIVE_TEXT } from '../render'
 import { ChannelSidebar } from '../../src/team/sidebar'
 import { MessageRow, TypingStrip, ThreadSummary } from '../../src/team/messages'
+import { Composer } from '../../src/team/composer'
 import { HashIcon, SendIcon } from '../../src/team/icons'
 import type { Category, Channel, ChannelMessage, MemberProfile } from '../../src/team/types'
 
@@ -126,6 +128,39 @@ test("THING's system app card mounts as an offer, not a bare sentence", () => {
   )
   expect(!!findByText(tree, 'Standup tracker'), 'the app name').toBe(true)
   expect(!!findByText(tree, 'Open'), 'and a way to open it').toBe(true)
+})
+
+test('every @ suggestion is actually pressable on a touch device', () => {
+  // The rows were wired with `onMouseDown` — correct on web, where a click would blur the textarea
+  // and unmount the picker before it landed, and DROPPED by `nativeSafeProps`, which forwards no
+  // DOM-only handler. So on a phone a suggestion could be seen, highlighted and tapped, and nothing
+  // happened at all. Silence is the worst shape for this bug: nothing logs and nothing throws.
+  const { tree, current } = render(
+    <Composer
+      placeholder="Message #general"
+      directory={{ members: MEMBERS, projects: [] }}
+      meId="u-nobody"
+      onSend={() => {}}
+    />,
+  )
+  // The picker exists only while an `@` is being typed, so drive it the way a member does.
+  const input = findTextInput(tree)
+  expect(!!input, 'the composer mounts a text input').toBe(true)
+  act(() => {
+    ;(input?.props as { onChangeText?: (t: string) => void }).onChangeText?.('@')
+  })
+
+  // The picker must actually be showing, or the rest of this asserts nothing.
+  expect(!!findByText(current(), 'THING'), 'the picker offers THING').toBe(true)
+
+  // And the node that RESPONDS must be the one holding the suggestion — the composer and its
+  // wrapper respond too, so "something in this tree is pressable" would pass either way.
+  const holdsThing = (n: unknown): boolean =>
+    !!findByText(n as never, 'THING')
+  const row = findAll(current() as never, () => true).find(
+    (n) => typeof n.props?.onResponderRelease === 'function' && holdsThing(n),
+  )
+  expect(!!row, 'the suggestion row itself responds to touch').toBe(true)
 })
 
 test('a message with no replies shows NOTHING under it — the Slack rule', () => {

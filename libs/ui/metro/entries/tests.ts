@@ -19,6 +19,7 @@ import '../suites/auth'
 import '../suites/auth-login'
 import '../suites/team'
 import '../suites/native-style-units'
+import '../suites/string-children'
 import { runRegisteredCases } from '../harness'
 
 void runRegisteredCases()

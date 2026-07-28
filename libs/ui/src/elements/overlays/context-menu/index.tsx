@@ -1,5 +1,6 @@
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
+import { labelled } from '../../primitives/labelled'
 import * as Prim from '../../primitives/index'
 import { cn } from '../../../lib/utils'
 
@@ -84,7 +85,7 @@ function Item({ className, onClick, children, ...props }: React.HTMLAttributes<H
       onClick={(e) => { onClick?.(e as unknown as React.MouseEvent<HTMLDivElement>); close() }}
       {...(props as React.HTMLAttributes<HTMLElement>)}
     >
-      {children}
+      {labelled(children)}
     </Prim.Pressable>
   )
 }

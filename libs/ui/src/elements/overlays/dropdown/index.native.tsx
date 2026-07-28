@@ -1,5 +1,7 @@
 import * as React from 'react'
 import { Modal } from 'react-native'
+import { getWindowSize } from '../../../platform/dimensions'
+import { labelled } from '../../primitives/labelled'
 import { NativeView } from '../../primitives/_native'
 import { DROPDOWN_CONTENT_SHARED, DROPDOWN_ITEM_SHARED } from './styles'
 
@@ -117,7 +119,19 @@ function DropdownTrigger({ asChild, children, ...props }: { asChild?: boolean; c
     setOpen(!open)
   }
   if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children as React.ReactElement<any>, { onClick: toggle })
+    // The clone gets the handler, and a wrapper carries the measuring ref.
+    //
+    // The ref cannot go on the clone: `asChild` accepts whatever element the caller passes, and
+    // most of them — `Button` among them — are plain function components that forward no ref, so
+    // it would silently land nowhere. That is what used to happen: `measureInWindow` never fired,
+    // the anchor stayed `null`, and `DropdownContent` fell back to `top: 0, left: 0` — a menu
+    // across the top of the screen, over the status bar, nowhere near the control that opened it.
+    // Measuring a wrapper measures the same box without asking anything of the child.
+    return (
+      <NativeView ref={triggerRef} collapsable={false}>
+        {React.cloneElement(children as React.ReactElement<any>, { onClick: toggle })}
+      </NativeView>
+    )
   }
   return (
     // `collapsable={false}` keeps Android from optimising the trigger away as a pure layout view —
@@ -133,7 +147,8 @@ function DropdownTrigger({ asChild, children, ...props }: { asChild?: boolean; c
       onPress={toggle}
       {...props}
     >
-      {children}
+      {/* A menu item's children are almost always a bare label, and this View would DROP it. */}
+      {labelled(children)}
     </NativeView>
   )
 }
@@ -150,7 +165,14 @@ function DropdownContent({ children, ...props }: Record<string, unknown> & { chi
           // The measured anchor, as props — see the context menu fork for why these are not inline
           // styles on this target.
           top={anchor ? anchor.y + anchor.height : 0}
-          left={anchor ? anchor.x : 0}
+          // Left-aligned with the trigger, EXCEPT when the trigger sits in the right half of the
+          // screen, where a left-aligned panel runs off the edge and its labels are cut in half.
+          // A phone has no room to spare, and the section menus that use this are all pinned to the
+          // right of their header. Anchoring the panel's right edge to the trigger's is what a menu
+          // near an edge does everywhere else.
+          {...(anchor && anchor.x + anchor.width > getWindowSize().width / 2
+            ? { right: Math.max(0, getWindowSize().width - (anchor.x + anchor.width)) }
+            : { left: anchor ? anchor.x : 0 })}
           {...props}
         >
           {children}
@@ -169,7 +191,8 @@ function DropdownItem({ onClick, children, ...props }: Record<string, unknown> &
       onPress={() => { onClick?.({}); setOpen(false) }}
       {...props}
     >
-      {children}
+      {/* A menu item's children are almost always a bare label, and this View would DROP it. */}
+      {labelled(children)}
     </NativeView>
   )
 }

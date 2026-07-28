@@ -285,12 +285,22 @@ function MentionPicker({
           cursor="pointer"
           backgroundColor={i === highlighted ? '$muted' : 'transparent'}
           onMouseEnter={() => onHover(i)}
-          // `onMouseDown`, not `onClick`: a click would first blur the textarea,
-          // and the picker unmounts on blur before the click ever lands.
-          onMouseDown={(e: React.MouseEvent) => {
-            e.preventDefault()
-            onPick(s)
-          }}
+          // Branched, because the two targets need genuinely different events here.
+          //
+          // Web wants `onMouseDown`, not `onClick`: a click would first blur the textarea, and the
+          // picker unmounts on blur before the click ever lands. But `onMouseDown` is a DOM-only
+          // handler and `nativeSafeProps` DROPS it, so on a phone these rows had no press handler
+          // at all — tapping a suggestion did nothing whatsoever, silently. `onPress` is the native
+          // event, and it is not spread on web, where Tamagui would map it back to a click and pick
+          // the suggestion twice.
+          {...(isWeb
+            ? {
+                onMouseDown: (e: React.MouseEvent) => {
+                  e.preventDefault()
+                  onPick(s)
+                },
+              }
+            : { onPress: () => onPick(s) })}
         >
           <SuggestionIcon suggestion={s} />
           <Prim.Text fontSize="$sm" flex={1} minWidth={0}>

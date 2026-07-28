@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { labelled } from '../../primitives/labelled'
 import * as Prim from '../../primitives/index'
 
 /**
@@ -48,7 +49,8 @@ function ListItem({ selected, label, meta, children, ...props }: ListItemProps) 
           )}
         </>
       ) : (
-        children
+        // A caller may pass a bare string here, which React Native drops. See `labelled`.
+        labelled(children)
       )}
     </Prim.Box>
   )

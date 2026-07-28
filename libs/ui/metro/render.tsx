@@ -244,6 +244,23 @@ export function styleOf(node: Rendered, type: string): Record<string, unknown> {
 }
 
 /** The first node carrying `prop` === `value`. */
+/**
+ * The first node that is actually LISTENING for a press.
+ *
+ * Locating a control by its label is fragile in a way that matters here: any component that wraps
+ * its children — `labelled()` putting a bare string into a `Text`, an `asChild` trigger gaining a
+ * measuring wrapper — moves the text one level away from the handler, and a test written against
+ * the old shape then fails for a reason that has nothing to do with what it was checking. This asks
+ * the question the device asks: which node responds to a touch?
+ */
+export function findPressable(node: Rendered): NativeNode | null {
+  return (
+    findAll(node, () => true).find(
+      (n) => typeof (n.props as Record<string, unknown>).onResponderRelease === 'function',
+    ) ?? null
+  )
+}
+
 export function findByProp(node: Rendered, prop: string, value: unknown): NativeNode | null {
   return findAll(node, () => true).find((n) => n.props[prop] === value) ?? null
 }

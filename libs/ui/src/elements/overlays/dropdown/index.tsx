@@ -1,5 +1,6 @@
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
+import { labelled } from '../../primitives/labelled'
 import * as Prim from '../../primitives/index'
 import { DROPDOWN_CONTENT_SHARED, DROPDOWN_ITEM_SHARED } from './styles'
 
@@ -196,7 +197,7 @@ function DropdownContent({ children, ...props }: React.HTMLAttributes<HTMLDivEle
   )
 }
 
-function DropdownItem({ onClick, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+function DropdownItem({ onClick, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   const { setOpen } = React.useContext(DropdownContext)
   return (
     <Prim.Pressable
@@ -205,7 +206,10 @@ function DropdownItem({ onClick, ...props }: React.HTMLAttributes<HTMLDivElement
       {...DROPDOWN_ITEM}
       onClick={(e) => { onClick?.(e as unknown as React.MouseEvent<HTMLDivElement>); setOpen(false) }}
       {...(props as React.HTMLAttributes<HTMLElement>)}
-    />
+    >
+      {/* A menu item's children are almost always a bare label, which React Native drops. */}
+      {labelled(children)}
+    </Prim.Pressable>
   )
 }
 

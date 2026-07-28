@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { Modal, type GestureResponderEvent } from 'react-native'
+import { labelled } from '../../primitives/labelled'
 import { NativeView } from '../../primitives/_native'
 
 /**
@@ -63,7 +64,8 @@ function Trigger({ asChild: _asChild, children, ...props }: { asChild?: boolean;
   }
   return (
     <NativeView onLongPress={onLongPress} {...props}>
-      {children}
+      {/* A menu item's children are almost always a bare label, and this View would DROP it. */}
+      {labelled(children)}
     </NativeView>
   )
 }
@@ -109,7 +111,8 @@ function Item({ onClick, children, ...props }: Record<string, unknown> & { onCli
       onPress={() => { onClick?.({}); close() }}
       {...props}
     >
-      {children}
+      {/* A menu item's children are almost always a bare label, and this View would DROP it. */}
+      {labelled(children)}
     </NativeView>
   )
 }

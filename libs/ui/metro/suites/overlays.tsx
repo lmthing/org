@@ -19,6 +19,7 @@ import {
   findByText,
   findByType,
   findByProp,
+  findPressable,
   findByStyle,
   flattenStyle,
   press,
@@ -52,6 +53,9 @@ import {
   SheetTrigger,
 } from '../../src/elements/overlays/sheet'
 import * as ContextMenu from '../../src/elements/overlays/context-menu'
+import { Button } from '../../src/elements/forms/button'
+import { getWindowSize } from '../../src/platform/dimensions'
+import * as Prim from '../../src/elements/primitives'
 
 type Tree = ReturnType<typeof render>['tree']
 
@@ -283,7 +287,7 @@ test('selecting a ContextMenu item fires onClick and closes the menu', async () 
     </ContextMenu.Root>,
   )
   await longPress(findByType(tree, NATIVE_VIEW), { pageX: 10, pageY: 20 })
-  press(findByText(current(), 'rename'))
+  press(findByProp(current(), 'accessibilityRole', 'menuitem'))
   expect(chosen).toBe(1)
   expect(openModalOf(current())).toBeNull()
 })
@@ -358,7 +362,7 @@ test('selecting a Dropdown item fires onClick and closes the menu', () => {
       </DropdownContent>
     </Dropdown>,
   )
-  press(findByText(tree, 'rename'))
+  press(findByProp(tree, 'accessibilityRole', 'menuitem'))
   expect(chosen).toBe(1)
   expect(openModalOf(current())).toBeNull()
 })
@@ -381,4 +385,53 @@ test('the panel is placed under the measured trigger', () => {
   const panel = findByProp(current(), 'accessibilityRole', 'menu')
   // Directly under the trigger: y + height, and left-aligned with it.
   expect(flattenStyle(panel?.props.style)).toMatchObject({ top: 54, left: 12 })
+})
+
+test('the panel is placed under an asChild trigger too — the form every caller uses', () => {
+  // `asChild` is not an edge case: the sidebar, the header and the message actions all pass their
+  // own `Button` as the trigger, and the plain-children form above is used almost nowhere. The
+  // clone was given `onClick` but not the measuring REF, so `measureInWindow` never fired, the
+  // anchor stayed null, and the menu rendered at (0, 0) — a full-width bar across the status bar
+  // at the top of the phone, nowhere near the control that opened it.
+  const { tree, current } = render(
+    <Dropdown>
+      <DropdownTrigger asChild>
+        <Button size="icon" aria-label="Section actions">
+          <Prim.Text>+</Prim.Text>
+        </Button>
+      </DropdownTrigger>
+      <DropdownContent>
+        <DropdownItem>Add channel</DropdownItem>
+      </DropdownContent>
+    </Dropdown>,
+    { measureRect: { x: 12, y: 30, width: 100, height: 24 } },
+  )
+  // The measuring wrapper deliberately carries no `accessibilityRole` — the caller's own `Button`
+  // is the button, and nesting two would be worse a11y than the bug this test covers.
+  press(findPressable(tree))
+
+  const panel = findByProp(current(), 'accessibilityRole', 'menu')
+  expect(flattenStyle(panel?.props.style)).toMatchObject({ top: 54, left: 12 })
+})
+
+test('a menu opened near the right edge is right-aligned, not run off the screen', () => {
+  // The section menus all sit at the right of their header. Left-aligning the panel with such a
+  // trigger pushes it past the edge and cuts its labels in half — visible on the emulator with
+  // "Add channel" clipped by the screen. Anchoring the panel's right edge to the trigger's is what
+  // a menu near an edge does everywhere else.
+  const { width } = getWindowSize()
+  const { tree, current } = render(
+    <Dropdown>
+      <DropdownTrigger>menu</DropdownTrigger>
+      <DropdownContent>
+        <DropdownItem>Add channel</DropdownItem>
+      </DropdownContent>
+    </Dropdown>,
+    { measureRect: { x: width - 40, y: 30, width: 32, height: 24 } },
+  )
+  press(findByProp(tree, 'accessibilityRole', 'button'))
+
+  const style = flattenStyle(findByProp(current(), 'accessibilityRole', 'menu')?.props.style)
+  expect(style.right, "anchored to the trigger's right edge").toBe(8)
+  expect(style.left, 'and NOT left-anchored, which is what overflowed').toBe(undefined)
 })
