@@ -17,6 +17,7 @@ import '../suites/dashboard'
 import '../suites/descriptor'
 import '../suites/auth'
 import '../suites/auth-login'
+import '../suites/team'
 import { runRegisteredCases } from '../harness'
 
 void runRegisteredCases()

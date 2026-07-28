@@ -26,7 +26,7 @@ import {
   DropdownItem,
 } from '@lmthing/ui/elements/overlays/dropdown'
 import { Mail, MoreVertical, Plus, UserMinus } from 'lucide-react'
-import { initials } from '@/lib/team-format'
+import { initials } from '@lmthing/ui/team'
 import { teamApi, type TeamDetail, type TeamRole } from '@/lib/team-api'
 import { useTeamAuth } from '@/lib/team-auth'
 

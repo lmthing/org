@@ -8,8 +8,8 @@
  * the gate green — which is also the moment its web-only imports have to move behind a `*.web.tsx`
  * seam. Do not add an import "to be checked later": a red gate blocks the whole harness.
  *
- * Not yet here: the rest of `chat/`, `studio/`, `computer/` and the `elements/` layer above the
- * primitives, the overlays and markdown. (The §1c className blocker this note used to cite is gone
+ * Not yet here: the rest of `chat/`, `studio/`, `computer/`, and the parts of `elements/` the team
+ * surface does not use. (The §1c className blocker this note used to cite is gone
  * — Tailwind was deleted; see docs/mobile-native-chat.md.)
  */
 import * as Primitives from '../../src/elements/primitives'
@@ -31,8 +31,14 @@ import * as ChatAuth from '../../src/chat/app/auth'
 // the primitives, the markdown renderer, the transport seam, the session store and the deep-link
 // seam are all reached THROUGH this import now.
 import * as Chat from '../../src/chat'
+// The team surface. It is the first thing here that renders a whole PRODUCT screen
+// from shared source — `apps/mobile` mounts the same `TeamChannelsView` the web app
+// does — so this import is what proves the claim. It drags in the `elements/` layer
+// (avatar, list-item, button, input, textarea, separator, caption) and the inline
+// SVG icon set, all of which had to resolve for native before it could land.
+import * as Team from '../../src/team'
 
 // Referenced, not just imported: Metro does not tree-shake in dev, but an unused namespace import
 // is exactly the kind of thing a future bundler flag would drop, and a gate that silently stops
 // covering its subject is worse than no gate.
-export const surface = { Primitives, Platform, Dialog, Sheet, ContextMenu, Dropdown, Markdown, ChatAuth, Chat }
+export const surface = { Primitives, Platform, Dialog, Sheet, ContextMenu, Dropdown, Markdown, ChatAuth, Chat, Team }

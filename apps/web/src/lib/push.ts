@@ -47,12 +47,16 @@ function supported(): boolean {
  * Browsers do not do this conversion, and passing the string silently produces a
  * subscription no server can sign for.
  */
-function urlBase64ToUint8Array(base64: string): Uint8Array {
+function urlBase64ToUint8Array(base64: string): BufferSource {
   const padded = (base64 + '='.repeat((4 - (base64.length % 4)) % 4))
     .replace(/-/g, '+')
     .replace(/_/g, '/')
   const raw = atob(padded)
-  const out = new Uint8Array(raw.length)
+  // Allocate the buffer explicitly: a bare `new Uint8Array(n)` is typed over
+  // `ArrayBufferLike`, which `applicationServerKey` (a `BufferSource`) will not
+  // accept because it could be a `SharedArrayBuffer`.
+  const buffer = new ArrayBuffer(raw.length)
+  const out = new Uint8Array(buffer)
   for (let i = 0; i < raw.length; i += 1) out[i] = raw.charCodeAt(i)
   return out
 }

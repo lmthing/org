@@ -8,15 +8,15 @@
  * reader needs is who said it and when.
  */
 
-import * as Prim from '@lmthing/ui/elements/primitives'
-import { renderDescriptor, toRenderableDescriptor } from '@lmthing/ui/chat'
-import { Markdown } from '@lmthing/ui/elements/content/markdown'
-import { Avatar, AvatarFallback } from '@lmthing/ui/elements/content/avatar'
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { AppWindow, MessageSquare } from 'lucide-react'
-import { memberLabel, type ChannelMessage, type MemberProfile } from '@/lib/team-pod'
-import { initials, relativeTime } from '@/lib/team-format'
+import * as Prim from '../elements/primitives/index'
+import { renderDescriptor, toRenderableDescriptor } from '../chat/index'
+import { Markdown } from '../elements/content/markdown'
+import { Avatar, AvatarFallback } from '../elements/content/avatar'
+import { Button } from '../elements/forms/button'
+import { Caption } from '../elements/typography/caption'
+import { AppIcon, ThreadIcon } from './icons'
+import type { ChannelMessage, MemberProfile } from './types'
+import { initials, memberLabel, relativeTime } from './format'
 
 /** Consecutive same-sender messages within this window collapse under one
  * avatar/name/timestamp header. */
@@ -255,7 +255,7 @@ function AppCard({ message, ctx }: { message: ChannelMessage; ctx: MessageContex
         justifyContent="center"
         flexShrink={0}
       >
-        <AppWindow size={16} aria-hidden={true} />
+        <AppIcon size={16} />
       </Prim.Box>
       <Prim.Col gap="$0.5">
         <Prim.Text fontSize="$sm" fontWeight="$medium">
@@ -361,7 +361,7 @@ export function ThreadSummary({
     return (
       <Prim.Pressable onClick={onOpen} alignSelf="flex-start" marginLeft="$11" opacity={0.6} hoverStyle={{ opacity: 1 }}>
         <Prim.Row alignItems="center" gap="$1.5">
-          <MessageSquare size={12} aria-hidden={true} />
+          <ThreadIcon size={12} />
           <Caption>Reply in thread</Caption>
         </Prim.Row>
       </Prim.Pressable>

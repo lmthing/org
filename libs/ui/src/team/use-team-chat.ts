@@ -11,17 +11,16 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  teamPod,
-  type Category,
-  type Channel,
-  type ChannelEvent,
-  type ChannelMessage,
-  type ChannelUnread,
-  type Directory,
-  type MemberProfile,
-} from '@/lib/team-pod'
-import { teamWsTokenSuffix, type TeamAuth } from '@/lib/team-auth'
+import type { TeamClient } from './client'
+import type {
+  Category,
+  Channel,
+  ChannelEvent,
+  ChannelMessage,
+  ChannelUnread,
+  Directory,
+  MemberProfile,
+} from './types'
 
 /** How long a `typing` event is believed without a follow-up (the server has
  * no explicit "stopped typing" event — it just stops sending). */
@@ -74,7 +73,7 @@ export interface TeamChat {
  *   message set the hook's copy while the URL kept the old one, and the sidebar
  *   highlighted a conversation the transcript never switched to.
  */
-export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
+export function useTeamChat(client: TeamClient, activeId: string | null): TeamChat {
   const [channels, setChannels] = useState<Channel[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [directory, setDirectory] = useState<Directory>({ members: [], projects: [] })
@@ -105,7 +104,7 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
     let cancelled = false
     void (async () => {
       try {
-        const { channels: list, categories: cats, unread: badges } = await teamPod.channels(team)
+        const { channels: list, categories: cats, unread: badges } = await client.channels()
         if (cancelled) return
         setChannels(list)
         setCategories(cats)
@@ -116,7 +115,7 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
     })()
     void (async () => {
       try {
-        const dir = await teamPod.directory(team)
+        const dir = await client.directory()
         if (!cancelled) setDirectory(dir)
       } catch {
         // The picker degrades to THING-only; the surface still works.
@@ -126,7 +125,7 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
     // directory, so opening the surface is what puts you in everyone's DM list.
     void (async () => {
       try {
-        const { profile } = await teamPod.profile(team)
+        const { profile } = await client.profile()
         if (!cancelled) setMe(profile)
       } catch {
         // Without it, `meId` stays empty: nothing is "mine", which renders a
@@ -136,7 +135,7 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
     return () => {
       cancelled = true
     }
-  }, [team, fail])
+  }, [client, fail])
 
   // History for the selected channel — and, having shown it, tell the pod it has
   // been read. Opening a channel IS reading it; a separate "mark as read" would
@@ -147,7 +146,7 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
     setMessages([])
     void (async () => {
       try {
-        const { messages: history } = await teamPod.messages(team, activeId)
+        const { messages: history } = await client.messages(activeId)
         if (cancelled) return
         setMessages(history)
         setUnread((prev) => {
@@ -158,7 +157,7 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
         })
         // Not awaited into the render path: the badge is already down locally,
         // and this only has to reach the pod before the next device asks.
-        void teamPod.markRead(team, activeId).catch(() => {})
+        void client.markRead(activeId).catch(() => {})
       } catch (err) {
         if (!cancelled) fail(err)
       }
@@ -166,22 +165,19 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
     return () => {
       cancelled = true
     }
-  }, [activeId, team, fail])
+  }, [activeId, client, fail])
 
   // One socket for the whole surface. The pod sends a member only what they are
   // entitled to (a DM never reaches a non-participant's socket at all), so
   // everything that arrives here can be trusted into state.
   useEffect(() => {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const url = `${proto}//${window.location.host}/api/team/ws?t=1${teamWsTokenSuffix(team)}`
-    let ws: WebSocket
-    try {
-      ws = new WebSocket(url)
-    } catch {
-      return
-    }
-    socket.current = ws
-    ws.onmessage = (event) => {
+    let ws: WebSocket | null = null
+    let closed = false
+
+    // Declared before it is attached: the URL is now awaited (the token comes
+    // from the transport), so the connect is async and must not close over a
+    // handler that is still in its temporal dead zone.
+    const onFrame = (event: { data: unknown }) => {
       let parsed: ChannelEvent
       try {
         parsed = JSON.parse(String(event.data)) as ChannelEvent
@@ -248,27 +244,40 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
         setCategories(parsed.categories)
       }
     }
+    void (async () => {
+      const url = await client.socketUrl()
+      if (closed) return
+      try {
+        ws = new WebSocket(url)
+      } catch {
+        return
+      }
+      socket.current = ws
+      ws.onmessage = onFrame
+    })()
+
     const timers = typingTimers.current
     return () => {
-      ws.close()
+      closed = true
+      ws?.close()
       socket.current = null
       timers.forEach((t) => clearTimeout(t))
       timers.clear()
     }
-  }, [team])
+  }, [client])
 
   const send = useCallback(
     async (text: string, threadId?: string) => {
       if (!activeId) return
-      await teamPod.postMessage(team, activeId, text, threadId)
+      await client.postMessage(activeId, text, threadId)
     },
-    [activeId, team],
+    [activeId, client],
   )
 
   const createChannel = useCallback(
     async (name: string, categoryId?: string) => {
       try {
-        const { channel } = await teamPod.createChannel(team, name, categoryId)
+        const { channel } = await client.createChannel(name, categoryId)
         // The socket delivers it too; adding it here means the creator's own
         // click is not waiting on a round trip through the hub.
         setChannels((prev) => (prev.some((c) => c.id === channel.id) ? prev : [...prev, channel]))
@@ -278,25 +287,25 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
         return null
       }
     },
-    [team, fail],
+    [client, fail],
   )
 
   const createCategory = useCallback(
     async (name: string) => {
       try {
-        const { category } = await teamPod.createCategory(team, name)
+        const { category } = await client.createCategory(name)
         setCategories((prev) => (prev.some((c) => c.id === category.id) ? prev : [...prev, category]))
       } catch (err) {
         fail(err)
       }
     },
-    [team, fail],
+    [client, fail],
   )
 
   const deleteCategory = useCallback(
     async (categoryId: string) => {
       try {
-        await teamPod.deleteCategory(team, categoryId)
+        await client.deleteCategory(categoryId)
         setCategories((prev) => prev.filter((c) => c.id !== categoryId))
         setChannels((prev) =>
           prev.map((c) => (c.categoryId === categoryId ? { ...c, categoryId: undefined } : c)),
@@ -305,25 +314,25 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
         fail(err)
       }
     },
-    [team, fail],
+    [client, fail],
   )
 
   const patchChannel = useCallback<TeamChat['patchChannel']>(
     async (channelId, patch) => {
       try {
-        const { channel } = await teamPod.patchChannel(team, channelId, patch)
+        const { channel } = await client.patchChannel(channelId, patch)
         setChannels((prev) => prev.map((c) => (c.id === channel.id ? channel : c)))
       } catch (err) {
         fail(err)
       }
     },
-    [team, fail],
+    [client, fail],
   )
 
   const openDm = useCallback(
     async (userId: string) => {
       try {
-        const { channel } = await teamPod.openDm(team, userId)
+        const { channel } = await client.openDm(userId)
         setChannels((prev) => (prev.some((c) => c.id === channel.id) ? prev : [...prev, channel]))
         return channel
       } catch (err) {
@@ -331,12 +340,12 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
         return null
       }
     },
-    [team, fail],
+    [client, fail],
   )
 
   const setProfile = useCallback<TeamChat['setProfile']>(
     async (patch) => {
-      const { profile } = await teamPod.setProfile(team, patch)
+      const { profile } = await client.setProfile(patch)
       setMe(profile)
       setDirectory((prev) => ({
         ...prev,
@@ -345,7 +354,7 @@ export function useTeamChat(team: TeamAuth, activeId: string | null): TeamChat {
           : [...prev.members, profile],
       }))
     },
-    [team],
+    [client],
   )
 
   const notifyTyping = useCallback((channelId: string) => {

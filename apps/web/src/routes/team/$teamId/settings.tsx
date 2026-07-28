@@ -1,6 +1,6 @@
 import * as Prim from '@lmthing/ui/elements/primitives'
 import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from '@stripe/react-stripe-js'
 import { useAuth } from '@lmthing/auth'
@@ -23,7 +23,7 @@ import {
 import { Trash2 } from 'lucide-react'
 import { STRIPE_PUBLISHABLE_KEY } from '@/lib/config'
 import { teamApi, type TeamBillingUsage } from '@/lib/team-api'
-import { teamPod } from '@/lib/team-pod'
+import { createTeamClient } from '@lmthing/ui/team'
 import { disablePush, enablePush, pushStatus, type PushStatus } from '@/lib/push'
 import { useTeamAuth } from '@/lib/team-auth'
 
@@ -128,6 +128,10 @@ function Notifications() {
  * and the gateway's membership row has no business holding it.
  */
 function YourProfile({ team }: { team: ReturnType<typeof useTeamAuth> }) {
+  const client = useMemo(
+    () => createTeamClient({ baseUrl: '', getToken: team.getTeamToken }),
+    [team],
+  )
   const [handle, setHandle] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [loaded, setLoaded] = useState(false)
@@ -139,7 +143,7 @@ function YourProfile({ team }: { team: ReturnType<typeof useTeamAuth> }) {
     let cancelled = false
     void (async () => {
       try {
-        const { profile } = await teamPod.profile(team)
+        const { profile } = await client.profile()
         if (cancelled) return
         setHandle(profile?.handle ?? '')
         setDisplayName(profile?.displayName ?? '')
@@ -152,14 +156,14 @@ function YourProfile({ team }: { team: ReturnType<typeof useTeamAuth> }) {
     return () => {
       cancelled = true
     }
-  }, [team])
+  }, [client])
 
   const save = async () => {
     setBusy(true)
     setError(null)
     setSaved(false)
     try {
-      await teamPod.setProfile(team, { handle: handle.trim() || null, displayName: displayName.trim() || null })
+      await client.setProfile({ handle: handle.trim() || null, displayName: displayName.trim() || null })
       setSaved(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

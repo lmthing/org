@@ -8,15 +8,15 @@
  * mention is a link into the app rail rather than something that gets notified).
  */
 
-import * as Prim from '@lmthing/ui/elements/primitives'
-import { Textarea } from '@lmthing/ui/elements/forms/textarea'
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Avatar, AvatarFallback } from '@lmthing/ui/elements/content/avatar'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { AppWindow, Send } from 'lucide-react'
+import * as Prim from '../elements/primitives/index'
+import { Textarea } from '../elements/forms/textarea'
+import { Button } from '../elements/forms/button'
+import { Avatar, AvatarFallback } from '../elements/content/avatar'
+import { Caption } from '../elements/typography/caption'
+import { AppIcon, SendIcon } from './icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { memberLabel, type Directory, type MemberProfile } from '@/lib/team-pod'
-import { initials } from '@/lib/team-format'
+import type { Directory, MemberProfile } from './types'
+import { initials, memberLabel } from './format'
 
 /** How tall the composer grows before it scrolls instead. */
 const MAX_COMPOSER_HEIGHT = 180
@@ -223,7 +223,7 @@ export function Composer({
           onKeyDown={onKeyDown}
         />
         <Button size="icon" onClick={() => void submit()} disabled={!draft.trim()}>
-          <Send size={14} aria-hidden={true} />
+          <SendIcon size={14} />
         </Button>
       </Prim.Row>
     </Prim.Box>
@@ -320,7 +320,7 @@ function SuggestionIcon({ suggestion }: { suggestion: Suggestion }) {
         justifyContent="center"
         flexShrink={0}
       >
-        <AppWindow size={12} aria-hidden={true} />
+        <AppIcon size={12} />
       </Prim.Box>
     )
   }

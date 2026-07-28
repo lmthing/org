@@ -7,10 +7,11 @@ import { AuthProvider, hydrateAuth, useAuth, getSession, storeSession } from '@l
 import { tamaguiConfig } from '@lmthing/ui/theme/tamagui.config'
 import { LoginScreen } from '@lmthing/ui/components/auth/login-screen'
 import { ChatShell } from '@lmthing/ui/chat'
-import { DashboardHome, openTeamsSurface } from '@lmthing/ui/dashboard'
+import { DashboardHome } from '@lmthing/ui/dashboard'
 import { BottomNav, type BottomNavTab } from '@lmthing/ui/elements/nav/bottom-nav'
 import * as Prim from '@lmthing/ui/elements/primitives'
 import { ensureComputePod, waitForPodEdge } from './src/ensure-pod'
+import { TeamScreen } from './src/TeamScreen'
 
 /**
  * Root of the LMThing mobile app.
@@ -143,10 +144,13 @@ function AuthGate() {
  * would drop a streaming turn mid-sentence. Hiding costs a little memory; unmounting costs the
  * user's conversation.
  *
- * `Teams` is a cross-surface hop, not a third pane: teams live at `lmthing.team`, and this app does
- * not host that surface yet. Selecting it hands off to the system browser through
- * `platform/navigation` and leaves Home as the SELECTED tab, because that is where the user still
- * is when they come back — showing "Teams" as selected over a Home screen would be a lie.
+ * `Teams` is a real pane now, not a hop to the browser: `@lmthing/ui/team` renders the same surface
+ * the web app does, so there is nothing left to hand off to. `TeamScreen` is the host that supplies
+ * the two native-specific things (an absolute pod URL, and rail/channel state where web uses a URL).
+ *
+ * It is mounted like the others — hidden, never unmounted — for the same reason: it holds a live
+ * socket to the team's pod, and tearing that down on every tab glance would drop whatever arrived
+ * while the member was looking at Home.
  */
 function HomeShell() {
   const [tab, setTab] = React.useState<BottomNavTab>('home')
@@ -163,16 +167,10 @@ function HomeShell() {
       <Prim.Box flex={1} flexDirection="column" display={tab === 'chat' ? 'flex' : 'none'}>
         <ChatShell />
       </Prim.Box>
-      <BottomNav
-        current={tab}
-        onSelect={(next) => {
-          if (next === 'teams') {
-            openTeamsSurface()
-            return
-          }
-          setTab(next)
-        }}
-      />
+      <Prim.Box flex={1} flexDirection="column" display={tab === 'teams' ? 'flex' : 'none'}>
+        <TeamScreen />
+      </Prim.Box>
+      <BottomNav current={tab} onSelect={setTab} />
     </Prim.Box>
   )
 }

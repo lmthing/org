@@ -99,7 +99,11 @@ function AvatarFallback({ colorKey, style, ...props }: AvatarFallbackProps) {
         return { backgroundColor: `color-mix(in srgb, ${c} 22%, transparent)`, color: c, ...style }
       })()
     : style
-  return <Prim.Box {...AVATAR_FALLBACK} style={tint} {...(props as Record<string, unknown>)} />
+  // `Prim.Text`, not `Prim.Box`: the fallback's whole content is a string (the
+  // initials), and a string child of a `View` is dropped by React Native with a
+  // warning — the avatars rendered as blank tinted circles on a device. A span on
+  // web with the same style props is visually identical to the div it replaces.
+  return <Prim.Text {...AVATAR_FALLBACK} style={tint} {...(props as Record<string, unknown>)} />
 }
 
 export { Avatar, AvatarImage, AvatarFallback }

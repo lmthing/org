@@ -12,7 +12,7 @@ import { Heading } from '@lmthing/ui/elements/typography/heading'
 import { Caption } from '@lmthing/ui/elements/typography/caption'
 import { Avatar, AvatarFallback } from '@lmthing/ui/elements/content/avatar'
 import { Mail, Plus, Users } from 'lucide-react'
-import { initials } from '@/lib/team-format'
+import { initials } from '@lmthing/ui/team'
 import {
   teamApi,
   type TeamInviteSummary,

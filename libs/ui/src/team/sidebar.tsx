@@ -8,29 +8,22 @@
  * up rearranges everyone else's sidebar.
  */
 
-import * as Prim from '@lmthing/ui/elements/primitives'
-import { ListItem } from '@lmthing/ui/elements/content/list-item'
-import { Avatar, AvatarFallback } from '@lmthing/ui/elements/content/avatar'
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Input } from '@lmthing/ui/elements/forms/input'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
+import * as Prim from '../elements/primitives/index'
+import { ListItem } from '../elements/content/list-item'
+import { Avatar, AvatarFallback } from '../elements/content/avatar'
+import { Button } from '../elements/forms/button'
+import { Input } from '../elements/forms/input'
+import { Caption } from '../elements/typography/caption'
 import {
   Dropdown,
   DropdownContent,
   DropdownItem,
   DropdownTrigger,
-} from '@lmthing/ui/elements/overlays/dropdown'
-import { ChevronDown, ChevronRight, Hash, MoreVertical, Plus } from 'lucide-react'
+} from '../elements/overlays/dropdown'
+import { ChevronDownIcon, ChevronRightIcon, HashIcon, MoreVerticalIcon, PlusIcon } from './icons'
 import { useMemo, useState } from 'react'
-import {
-  dmPartner,
-  memberLabel,
-  type Category,
-  type Channel,
-  type ChannelUnread,
-  type MemberProfile,
-} from '@/lib/team-pod'
-import { initials } from '@/lib/team-format'
+import type { Category, Channel, ChannelUnread, MemberProfile } from './types'
+import { dmPartner, initials, memberLabel } from './format'
 
 export interface SidebarProps {
   /** Compact: the sidebar is a slide-over, not a column, and closes on select. */
@@ -171,9 +164,9 @@ export function ChannelSidebar(props: SidebarProps) {
               paddingVertical="$1"
             >
               {collapsed.has(section.key) ? (
-                <ChevronRight size={12} aria-hidden={true} />
+                <ChevronRightIcon size={12} />
               ) : (
-                <ChevronDown size={12} aria-hidden={true} />
+                <ChevronDownIcon size={12} />
               )}
               <Prim.Text
                 fontSize="$xs"
@@ -276,7 +269,7 @@ function SectionMenu({
     <Dropdown>
       <DropdownTrigger asChild>
         <Button size="icon" variant="ghost" aria-label="Section actions">
-          <MoreVertical size={14} aria-hidden={true} />
+          <MoreVerticalIcon size={14} />
         </Button>
       </DropdownTrigger>
       <DropdownContent>
@@ -311,7 +304,7 @@ function ChannelRow({
     <Prim.Row alignItems="center" gap="$0.5">
       <Prim.Box flex={1} minWidth={0}>
         <ListItem selected={active} onClick={onSelect}>
-          <Hash size={14} aria-hidden={true} />
+          <HashIcon size={14} />
           <Prim.Text
             fontSize="$sm"
             marginLeft="$1.5"
@@ -329,7 +322,7 @@ function ChannelRow({
         <Dropdown>
           <DropdownTrigger asChild>
             <Button size="icon" variant="ghost" aria-label={`Move #${channel.name}`}>
-              <MoreVertical size={12} aria-hidden={true} />
+              <MoreVerticalIcon size={12} />
             </Button>
           </DropdownTrigger>
           <DropdownContent>
@@ -361,7 +354,7 @@ function NewCategory({ onCreate }: { onCreate: (name: string) => void }) {
     return (
       <Prim.Box paddingHorizontal="$2" marginBottom="$2">
         <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
-          <Plus size={12} aria-hidden={true} />
+          <PlusIcon size={12} />
           New category
         </Button>
       </Prim.Box>

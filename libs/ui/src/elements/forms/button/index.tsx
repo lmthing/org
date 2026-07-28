@@ -77,8 +77,28 @@ function Button({ variant = 'primary', size = 'default', asChild = false, childr
   }
   return (
     <Prim.Pressable {...(styleProps as Record<string, unknown>)} {...(props as React.HTMLAttributes<HTMLElement>)}>
-      {children}
+      {labelled(children)}
     </Prim.Pressable>
+  )
+}
+
+/**
+ * Wrap bare string children in a text node.
+ *
+ * `Prim.Pressable` is a `View` on native, and React Native refuses a string
+ * child of a View — it raises "Text strings must be rendered within a <Text>
+ * component" and then DROPS the string, so `<Button><Plus /> New category
+ * </Button>` renders on a device as a lone `+` with no label and no error. Every
+ * call site could wrap its own label, but a button whose label vanishes on one
+ * platform is the button's bug, not each caller's.
+ *
+ * Only strings are touched: an icon, or a caller's own `<Text>`, passes through
+ * unchanged. On web this adds a `<span>`, which inherits the button's typography
+ * and changes nothing visually.
+ */
+function labelled(children: React.ReactNode): React.ReactNode {
+  return React.Children.map(children, (child) =>
+    typeof child === 'string' || typeof child === 'number' ? <Prim.Text>{child}</Prim.Text> : child,
   )
 }
 

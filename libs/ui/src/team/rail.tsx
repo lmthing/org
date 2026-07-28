@@ -9,30 +9,25 @@
  * than stacking beside it.
  */
 
-import * as Prim from '@lmthing/ui/elements/primitives'
-import { Button } from '@lmthing/ui/elements/forms/button'
-import { Caption } from '@lmthing/ui/elements/typography/caption'
-import { Separator } from '@lmthing/ui/elements/content/separator'
+import * as Prim from '../elements/primitives/index'
+import { Button } from '../elements/forms/button'
+import { Caption } from '../elements/typography/caption'
+import { Separator } from '../elements/content/separator'
 import {
   Dropdown,
   DropdownContent,
   DropdownItem,
   DropdownTrigger,
-} from '@lmthing/ui/elements/overlays/dropdown'
-import { AppWindow, ExternalLink, Hash, Menu, Plus, X } from 'lucide-react'
+} from '../elements/overlays/dropdown'
+import { AppIcon, CloseIcon, ExternalLinkIcon, HashIcon, MenuIcon, PlusIcon } from './icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { appUrl, type Channel, type DirectoryProject } from '@/lib/team-pod'
+import type { Channel, DirectoryProject, Rail } from './types'
+import { AppView } from './app-view'
 
 /** The rail's width, in px, clamped so neither pane can be squeezed to nothing. */
 const RAIL_MIN = 320
 const RAIL_MAX = 900
 const RAIL_DEFAULT = 420
-
-/** What the rail is showing. */
-export type Rail =
-  | { kind: 'thread'; threadId: string }
-  | { kind: 'app'; projectId: string }
-  | null
 
 export function ChannelHeader({
   channel,
@@ -76,11 +71,11 @@ export function ChannelHeader({
     >
       {compact ? (
         <Button size="icon" variant="ghost" onClick={onOpenMenu} aria-label="Channels">
-          <Menu size={16} aria-hidden={true} />
+          <MenuIcon size={16} />
         </Button>
       ) : null}
       <Prim.Row alignItems="baseline" gap="$2" flexShrink={0} minWidth={0}>
-        {channel?.kind === 'dm' ? null : <Hash size={16} aria-hidden={true} />}
+        {channel?.kind === 'dm' ? null : <HashIcon size={16} />}
         <Prim.Text fontSize="$base" fontWeight="$semibold">
           {title}
         </Prim.Text>
@@ -113,7 +108,7 @@ export function ChannelHeader({
               cursor="pointer"
               onClick={() => onOpenApp(projectId)}
             >
-              <AppWindow size={12} aria-hidden={true} />
+              <AppIcon size={12} />
               <Prim.Text fontSize="$xs" fontWeight="$medium" whiteSpace="nowrap">
                 {nameOf(projectId)}
               </Prim.Text>
@@ -129,7 +124,7 @@ export function ChannelHeader({
                   opacity={0.6}
                   hoverStyle={{ opacity: 1 }}
                 >
-                  <X size={11} aria-hidden={true} />
+                  <CloseIcon size={11} />
                 </Prim.Pressable>
               ) : null}
             </Prim.Row>
@@ -145,7 +140,7 @@ export function ChannelHeader({
         <Dropdown>
           <DropdownTrigger asChild>
             <Button size="icon" variant="ghost" aria-label="Pin an app to this channel">
-              <Plus size={14} aria-hidden={true} />
+              <PlusIcon size={14} />
             </Button>
           </DropdownTrigger>
           <DropdownContent>
@@ -257,7 +252,7 @@ export function RailPane({
           </Prim.Text>
           {headerExtra}
           <Button size="icon" variant="ghost" onClick={onClose} aria-label="Close">
-            <X size={14} aria-hidden={true} />
+            <CloseIcon size={14} />
           </Button>
         </Prim.Row>
         {children}
@@ -267,33 +262,19 @@ export function RailPane({
 }
 
 /**
- * A project's app, running beside the conversation.
- *
- * An iframe rather than a mounted component: a project app is a separately built
- * bundle served by the pod at its own URL with its own router, and the pod
- * already serves it that way for `lmthing.app`. Rendering it inline would mean a
- * second copy of the app runtime inside this SPA.
+ * The app pane: the URL is supplied by the caller, because where a project's
+ * pages live differs per target (a path on web, an absolute pod URL on native)
+ * and this component has no business knowing which one it is on.
  */
-export function AppFrame({ projectId, name }: { projectId: string; name: string }) {
-  return (
-    <Prim.Box flex={1} minHeight={0} backgroundColor="$background">
-      {/* A real `<iframe>`: `Prim.Box`'s `as` is a closed set of semantic block
-          tags, and nothing in the design system wraps an embedded document. The
-          inline style carries only layout — no color crosses this boundary. */}
-      <iframe
-        src={appUrl(projectId)}
-        title={name}
-        style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
-      />
-    </Prim.Box>
-  )
+export function AppFrame({ url, name }: { url: string; name: string }) {
+  return <AppView url={url} title={name} />
 }
 
 /** "Open in a full tab" — for the app the rail is currently showing. */
-export function OpenAppExternally({ projectId }: { projectId: string }) {
+export function OpenAppExternally({ url }: { url: string }) {
   return (
     <Prim.Link
-      href={appUrl(projectId)}
+      href={url}
       target="_blank"
       rel="noreferrer"
       display="flex"
@@ -302,7 +283,7 @@ export function OpenAppExternally({ projectId }: { projectId: string }) {
       hoverStyle={{ opacity: 1 }}
       aria-label="Open in a new tab"
     >
-      <ExternalLink size={14} aria-hidden={true} />
+      <ExternalLinkIcon size={14} />
     </Prim.Link>
   )
 }
