@@ -24,6 +24,7 @@ import { Trash2 } from 'lucide-react'
 import { STRIPE_PUBLISHABLE_KEY } from '@/lib/config'
 import { teamApi, type TeamBillingUsage } from '@/lib/team-api'
 import { teamPod } from '@/lib/team-pod'
+import { disablePush, enablePush, pushStatus, type PushStatus } from '@/lib/push'
 import { useTeamAuth } from '@/lib/team-auth'
 
 /**
@@ -47,6 +48,71 @@ const UPGRADE_TIERS = [
 ] as const
 
 const stripePromise = STRIPE_PUBLISHABLE_KEY ? loadStripe(STRIPE_PUBLISHABLE_KEY) : null
+
+/**
+ * Notifications on this device.
+ *
+ * Per DEVICE, not per account, which is why it lives next to the profile rather
+ * than in a team setting: a push subscription is a browser's, and turning it on
+ * here says nothing about the member's phone.
+ *
+ * The permission prompt is fired only from the button. Asking on load is the
+ * most reliable way to get a permanent block, and a blocked site cannot re-ask —
+ * the only way back is through browser settings, which is why `denied` says so
+ * instead of offering a button that would do nothing.
+ */
+function Notifications() {
+  const { authFetch } = useAuth()
+  const [status, setStatus] = useState<PushStatus | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    void pushStatus().then((s) => {
+      if (!cancelled) setStatus(s)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const toggle = async () => {
+    setBusy(true)
+    try {
+      setStatus(status?.enabled ? await disablePush(authFetch) : await enablePush(authFetch))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const explanation: Record<PushStatus['state'], string> = {
+    unsupported: 'This browser cannot deliver notifications.',
+    unconfigured: 'Notifications are not configured on this server yet.',
+    denied: 'Blocked for this site. Re-allow it in your browser settings to turn them back on.',
+    prompt: 'Get notified when somebody mentions you or sends a direct message — even with the app closed.',
+    subscribed: 'On for this device. You will be notified for mentions and direct messages.',
+  }
+
+  return (
+    <Prim.Box marginBottom="$6">
+      <Heading level={4} marginBottom="$1">
+        Notifications
+      </Heading>
+      <Caption>{status ? explanation[status.state] : 'Checking…'}</Caption>
+      {status && (status.state === 'prompt' || status.state === 'subscribed') ? (
+        <Prim.Box marginTop="$3">
+          <Button
+            variant={status.enabled ? 'outline' : 'primary'}
+            onClick={() => void toggle()}
+            disabled={busy}
+          >
+            {status.enabled ? 'Turn off on this device' : 'Turn on notifications'}
+          </Button>
+        </Prim.Box>
+      ) : null}
+    </Prim.Box>
+  )
+}
 
 /**
  * What you are called in this team, and the `@handle` colleagues type to reach
@@ -240,6 +306,12 @@ function SettingsPage() {
       {notice ? <Caption marginBottom="$3">{notice}</Caption> : null}
 
       <YourProfile team={team} />
+
+      <Prim.Box marginBottom="$6">
+        <Separator />
+      </Prim.Box>
+
+      <Notifications />
 
       <Prim.Box marginBottom="$6">
         <Separator />

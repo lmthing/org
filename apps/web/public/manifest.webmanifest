@@ -1,0 +1,37 @@
+{
+  "name": "lmthing",
+  "short_name": "lmthing",
+  "description": "Your team's workspace — channels, projects and THING.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#0b0b0c",
+  "background_color": "#fdfcfb",
+  "icons": [
+    {
+      "src": "/favicon.ico/web-app-manifest-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.ico/web-app-manifest-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.ico/web-app-manifest-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "Team", "url": "/team" },
+    { "name": "Chat", "url": "/chat" },
+    { "name": "Studio", "url": "/studio" }
+  ]
+}
