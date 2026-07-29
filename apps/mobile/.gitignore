@@ -11,3 +11,11 @@ ios/
 # The Google Play service account `eas submit` authenticates with (eas.json points at
 # it). A private key that can publish to the store — never in the repo.
 play-service-account.json
+
+# The OTA code-signing PRIVATE key. Whoever holds it can push JavaScript into every
+# installed copy of the app, so it lives in Ansible Vault and reaches the update
+# server as an env var — never here.
+#
+# `certs/certificate.pem` is deliberately NOT ignored: it is the PUBLIC half, it is
+# compiled into the app binary, and the build fails without it.
+certs/private-key.pem

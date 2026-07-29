@@ -50,6 +50,35 @@ module.exports = {
     icon: './assets/icon.png',
     primaryColor: color('primary'),
 
+    // Over-the-air updates, served by our own expo-open-ota rather than EAS Update.
+    //
+    // `url` is COMPILED INTO THE BINARY. Changing it later is a store release, not a
+    // config edit, so it names a host we control and can re-point behind DNS.
+    updates: {
+      url: 'https://updates.lmthing.cloud/manifest',
+      enabled: true,
+      // Launch from the cached bundle immediately and fetch in the background; the new
+      // one starts next launch. The alternative blocks the splash on a network round
+      // trip, which is the opposite of what the cold-wake work bought.
+      fallbackToCacheTimeout: 0,
+      // The PUBLIC half of the signing pair. Without this the client accepts any
+      // manifest the URL returns, so anyone able to answer as that host — a hostile
+      // DNS answer on a café network — executes code inside the app.
+      codeSigningCertificate: './certs/certificate.pem',
+      codeSigningMetadata: { keyid: 'main', alg: 'rsa-v1_5-sha256' },
+      requestHeaders: {
+        'expo-channel-name': process.env.EXPO_UPDATES_CHANNEL ?? 'production',
+      },
+    },
+
+    // An OTA can only ever replace JAVASCRIPT. `fingerprint` hashes the native project,
+    // so adding a native module or bumping the SDK changes this automatically and old
+    // binaries stop being offered a bundle they cannot run. The `appVersion` policy
+    // relies on a human remembering to bump `version` in the same commit as a native
+    // change; forgetting once means every installed copy launches a bundle whose native
+    // modules are absent, which is a crash loop with no way out but a store release.
+    runtimeVersion: { policy: 'fingerprint' },
+
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'org.lmthing.mobile',
