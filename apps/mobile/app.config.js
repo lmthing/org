@@ -27,6 +27,27 @@ if (process.env.EAS_BUILD_PROFILE === 'production' && process.env.EXPO_PUBLIC_TE
   )
 }
 
+// The app's identity on the update server: the Application UUID from the eoas
+// dashboard (control-plane mode), which is NOT the EAS projectId.
+//
+// It is compiled into the binary as a request header, so a store build made without it
+// can never receive an update — the server answers "No app id provided" forever, and
+// the fix is a new store release. That is the same failure as shipping without
+// expo-updates at all, so a production build refuses rather than producing a binary
+// whose OTA is quietly dead.
+//
+// Empty is fine for a local/dev build, which never asks the server for anything.
+const OTA_APP_ID = process.env.EXPO_OTA_APP_ID ?? ''
+
+if (process.env.EAS_BUILD_PROFILE === 'production' && !OTA_APP_ID) {
+  throw new Error(
+    'EXPO_OTA_APP_ID is unset. It is the Application UUID from the eoas dashboard ' +
+      '(https://lmthing.cloud/ota/dashboard/), and it is baked into the binary — a ' +
+      'store build without it can never receive an OTA update, and no config change ' +
+      'fixes that afterwards. Set it in the production profile env in eas.json.',
+  )
+}
+
 // The launcher icon is set on the DARK ground (see scripts/generate-icons.py), so the
 // splash uses it in both themes as well. A light-mode splash would either flash a
 // different colour than the icon that launched it, or put brand-1 yellow on a near
@@ -74,6 +95,11 @@ module.exports = {
       codeSigningMetadata: { keyid: 'main', alg: 'rsa-v1_5-sha256' },
       requestHeaders: {
         'expo-channel-name': process.env.EXPO_UPDATES_CHANNEL ?? 'production',
+        // Which app on the update server this binary is. In control-plane mode this
+        // is the Application UUID created in the eoas dashboard — NOT the EAS
+        // projectId, and there is no fallback: without it the server answers every
+        // manifest request "No app id provided".
+        'expo-app-id': OTA_APP_ID,
       },
     },
 
