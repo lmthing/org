@@ -99,7 +99,10 @@ module.exports = {
       codeSigningCertificate: './certs/certificate.pem',
       codeSigningMetadata: { keyid: 'main', alg: 'rsa-v1_5-sha256' },
       requestHeaders: {
-        'expo-channel-name': process.env.EXPO_UPDATES_CHANNEL ?? 'production',
+        // RELEASE_CHANNEL, because that is the name the eoas CLI already uses for this
+        // concept when it publishes. Two names for one value is how a build ends up
+        // asking for a channel nothing was ever published to.
+        'expo-channel-name': process.env.RELEASE_CHANNEL ?? 'production',
         // Which app on the update server this binary is. In control-plane mode this
         // is the Application UUID created in the eoas dashboard — NOT the EAS
         // projectId, and there is no fallback: without it the server answers every
