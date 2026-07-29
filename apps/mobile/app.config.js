@@ -53,9 +53,15 @@ module.exports = {
     // Over-the-air updates, served by our own expo-open-ota rather than EAS Update.
     //
     // `url` is COMPILED INTO THE BINARY. Changing it later is a store release, not a
-    // config edit, so it names a host we control and can re-point behind DNS.
+    // config edit.
+    //
+    // A path on the existing gateway host rather than an `updates.` subdomain: that
+    // reuses the `cloud-https` listener, its certificate and its DNS, so standing the
+    // update server up adds one HTTPRoute instead of a listener pair, a cert-manager
+    // Certificate and a DNS record. Envoy strips the `/ota` prefix, and the server's
+    // BASE_URL carries it so the asset URLs it hands out come back to the same place.
     updates: {
-      url: 'https://updates.lmthing.cloud/manifest',
+      url: 'https://lmthing.cloud/ota/manifest',
       enabled: true,
       // Launch from the cached bundle immediately and fetch in the background; the new
       // one starts next launch. The alternative blocks the splash on a network round
