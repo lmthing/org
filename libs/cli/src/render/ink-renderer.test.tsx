@@ -23,57 +23,57 @@ function desc(type: string, children: unknown[] = [], props: Record<string, unkn
 
 describe('renderDescriptor', () => {
   it('renders known block elements as Box', () => {
-    const el = renderDescriptor(desc('p', ['hello'])) as React.ReactElement;
+    const el = renderDescriptor(desc('p', ['hello'])) as React.ReactElement<Record<string, any>>;
     expect(el.type).toBe(Box);
   });
 
   it('renders unknown element types as Box, not Text', () => {
-    const el = renderDescriptor(desc('div', [])) as React.ReactElement;
+    const el = renderDescriptor(desc('div', [])) as React.ReactElement<Record<string, any>>;
     expect(el.type).toBe(Box);
   });
 
   it('does not nest Box inside Text for div > p', () => {
     // div renders as Box; p renders as Box inside Box — no Box-inside-Text
-    const el = renderDescriptor(desc('div', [desc('p', ['hello'])])) as React.ReactElement;
+    const el = renderDescriptor(desc('div', [desc('p', ['hello'])])) as React.ReactElement<Record<string, any>>;
     expect(el.type).toBe(Box);
   });
 
   it('renders span as Text', () => {
-    const el = renderDescriptor(desc('span', ['hi'])) as React.ReactElement;
+    const el = renderDescriptor(desc('span', ['hi'])) as React.ReactElement<Record<string, any>>;
     expect(el.type).toBe(Text);
   });
 
   it('renders h1 as Text', () => {
-    const el = renderDescriptor(desc('h1', ['Title'])) as React.ReactElement;
+    const el = renderDescriptor(desc('h1', ['Title'])) as React.ReactElement<Record<string, any>>;
     expect(el.type).toBe(Text);
   });
 
   it('renders plain string as Text', () => {
-    const el = renderDescriptor('hello') as React.ReactElement;
+    const el = renderDescriptor('hello') as React.ReactElement<Record<string, any>>;
     expect(el.type).toBe(Text);
   });
 
   // ── design-system display catalog ──
   it('renders Stack/stack (case-insensitive) as a column Box', () => {
-    const el = renderDescriptor(desc('Stack', ['a'])) as React.ReactElement;
+    const el = renderDescriptor(desc('Stack', ['a'])) as React.ReactElement<Record<string, any>>;
     expect(el.type).toBe(Box);
     expect(el.props.flexDirection).toBe('column');
   });
 
   it('renders a Table from columns + rows', () => {
-    const el = renderDescriptor(desc('table', [], { columns: ['A', 'B'], rows: [[1, 2]] })) as React.ReactElement;
+    const el = renderDescriptor(desc('table', [], { columns: ['A', 'B'], rows: [[1, 2]] })) as React.ReactElement<Record<string, any>>;
     expect(el.type).toBe(Box);
     // header + one row
     expect(React.Children.toArray(el.props.children).length).toBe(2);
   });
 
   it('renders a ProgressBar as Text', () => {
-    const el = renderDescriptor(desc('progressbar', [], { value: 0.5 })) as React.ReactElement;
+    const el = renderDescriptor(desc('progressbar', [], { value: 0.5 })) as React.ReactElement<Record<string, any>>;
     expect(el.type).toBe(Text);
   });
 
   it('renders a List from items prop', () => {
-    const el = renderDescriptor(desc('list', [], { items: ['x', 'y'] })) as React.ReactElement;
+    const el = renderDescriptor(desc('list', [], { items: ['x', 'y'] })) as React.ReactElement<Record<string, any>>;
     expect(el.type).toBe(Box);
     expect(React.Children.toArray(el.props.children).length).toBe(2);
   });

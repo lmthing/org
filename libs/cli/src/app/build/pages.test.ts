@@ -110,7 +110,17 @@ export default function Home() {
     const code = await readFile(join(res.outDir, jsAsset!), 'utf8');
 
     expect(code).not.toMatch(/\bprocess\s*\.\s*env\b/);
-    expect(code).not.toMatch(/\bprocess\s*\.\s*[a-zA-Z]/);
+    // Any OTHER `process.x` must be reached only behind a `typeof process` guard. React 19's
+    // error reporting ships exactly that shape (`typeof process === 'object' && typeof
+    // process.emit === 'function'`), and a guarded read cannot throw in a browser — so flagging
+    // every `process.` outright fails on safe code and teaches nobody anything. What kills the
+    // page is an UNGUARDED module-scope read, which is what the assertion above and this one
+    // together still catch.
+    const unguarded = [...code.matchAll(/\bprocess\s*\.\s*[a-zA-Z]/g)].filter((m) => {
+      const before = code.slice(Math.max(0, m.index - 120), m.index);
+      return !/typeof\s+process\b/.test(before);
+    });
+    expect(unguarded.map((m) => code.slice(m.index - 40, m.index + 40))).toEqual([]);
   }, 30_000);
 
   it('a second build with no changes is a cache hit (built:false)', async () => {
