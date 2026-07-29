@@ -294,7 +294,8 @@ const CSS_VAR = /^var\(\s*--([a-z0-9-]+)\s*(?:,[^)]*)?\)$/i
  *
  * Mixing with `transparent` in sRGB is exactly an alpha multiply, so the translation is `opacity`
  * on the Tamagui token — `$primary` stays a token the theme resolves, and the percentage becomes
- * an `rgba()` only when the colour is already a literal. A `var(--x)` is rewritten to `$x`, which
+ * an `rgba()` only when the colour is already a literal (ds-lint-ok: prose, not a style value).
+ * A `var(--x)` is rewritten to `$x`, which
  * is the same token by the generator's own naming
  * (`libs/css/src/tamagui/tokens.generated.ts`).
  */
@@ -307,7 +308,9 @@ function toNativeColor(value: string): string {
   const rgb = hex ? /^#([0-9a-f]{6})$/i.exec(hex) : null
   if (!rgb) return base
   const n = parseInt(rgb[1]!, 16)
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
+  // A Tamagui token carries no alpha, and React Native's colour parser drops the `color-mix()`
+  // this replaces — silently, leaving no background at all. So the literal IS the fix here.
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})` // ds-lint-ok
 }
 
 /**
@@ -315,7 +318,8 @@ function toNativeColor(value: string): string {
  *
  * A Tamagui token cannot: `$primary` is a name the theme resolves at render, and there is nowhere
  * to hang 12% on it. Since the whole point of these values is a WASH of a colour, the alpha is the
- * part that matters, so the token is resolved here instead and the result is a literal `rgba()`.
+ * part that matters, so the token is resolved here instead and the result is a literal
+ * `rgba()` (ds-lint-ok: prose, not a style value).
  *
  * Resolved against the LIGHT theme, and that is a deliberate, bounded compromise: this function has
  * no theme context (it maps props, it does not render). Of the 99 tokens, the ones actually used for
