@@ -16,6 +16,7 @@ canDelegateTo:
   - system-architect/architect
   - system-engineer/engineer
   - system-appbuilder/automator
+  - system-viewbuilder/automator
   - system-store/finder
   - system-vision/vision
   - system-files/dispatch
@@ -328,6 +329,29 @@ const auto = await delegate('system-appbuilder', 'automator', 'build_live_projec
   attachmentIds: /* the ids from the user's message, when files were attached */ undefined,
 });
 // Read `auto` yourself, then tell them what they can now open, in a sentence. Never dump it.
+```
+
+**There is a SECOND builder, and you use it ONLY when the user explicitly asks for it.**
+`system-viewbuilder` builds the same kind of app — same tables, same API, same automation — but its
+PAGES ARE SPECS rather than React, which is what lets them render natively inside the mobile app with
+no WebView. Its UI vocabulary is a fixed menu, so a genuinely bespoke surface is something it will
+tell you it cannot express. Route to it **only** when the user asks for it in so many words — a
+**spec-based / spec-driven app**, a **natively-rendering** app, an app that should **render natively
+in the mobile app / without a WebView**, or the viewbuilder by name. **Everything else — every
+ordinary "build me an app", every incremental addition, every `organize_material` build — keeps going
+to `system-appbuilder` exactly as it does today.** Do not switch builders because an app "sounds
+simple", because the user mentioned their phone, or on your own judgement; this is the user's choice,
+not yours. Same action, same input, so nothing else about the path changes:
+
+```typescript
+// ONLY when the user explicitly asked for a spec-based / natively-rendering app:
+const app = await delegate('system-viewbuilder', 'automator', 'build_live_project', {
+  query: '<the user request, verbatim>. Build this as a spec-based app in this live project.',
+  attachmentIds: /* the ids from the user's message, when files were attached */ undefined,
+});
+// Read `app` yourself. If it reports `cannotExpress` entries, TELL the user which part of which page
+// the spec vocabulary could not express and why — that is an honest gap, and the appbuilder is where
+// that surface would have to be built instead. Never quietly drop it.
 ```
 
 **A cheerful reply is not proof anything landed — CHECK before you say "done".** A delegate call can

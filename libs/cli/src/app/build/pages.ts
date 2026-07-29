@@ -96,8 +96,14 @@ const CACHE_FILE = join('.data', 'pages-cache.json');
  *       button and responsive open/close panel instead of filling its parent's
  *       box, so an already-built app's hand-rolled `_layout` dock chrome would
  *       double up with it until rebuilt.
+ * `8` = VIEW SPECS: `writeProjectView` generates `pages/<route>.tsx` wrappers that render a spec
+ *       through `@lmthing/ui/view`'s `ViewRenderer`. This is the bump that makes RENDERER
+ *       improvements retroactive — a spec app's UI lives in the renderer, not in its pages, so a
+ *       new element, a fixed layout or a better empty state reaches every already-built app on
+ *       its next build rather than only apps built afterwards. The improvement-loop ratchet
+ *       (buckets 1 and 4, both marked "retroactive: yes") depends on exactly this.
  */
-const BUILDER_VERSION = '7';
+const BUILDER_VERSION = '8';
 
 interface CacheMeta {
   hash: string;

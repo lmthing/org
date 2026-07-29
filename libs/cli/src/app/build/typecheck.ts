@@ -297,7 +297,35 @@ ${dataHooks}
 
   export function navigate(to: string): void;
 
+  export function resolveAppBase(pathname: string, override?: string): string;
+
   export const Chat: (props: { agent: string; [k: string]: any }) => any;
+}
+
+/**
+ * The shared **view renderer** — the module a \`writeProjectView\` wrapper page imports, and the
+ * SAME one the mobile app imports to render the identical spec natively.
+ *
+ * Declared loosely on purpose. A wrapper is HOST-GENERATED (\`app/view-spec/wrapper.ts\`), never
+ * authored, so there is no model mistake for a precise type to catch here — the spec's real
+ * contract is enforced at write time by \`app/view-spec/validate.ts\`, against the project's
+ * endpoints, in a form a JSON-Schema-shaped \`.d.ts\` could not express anyway. Its only job is to
+ * stop \`tsc\` reporting "Cannot find module" on every spec page in the project.
+ */
+declare module '@lmthing/ui/view' {
+  export const ViewRenderer: (props: {
+    spec: any;
+    components?: any;
+    shell?: any;
+    client?: any;
+    [k: string]: any;
+  }) => any;
+
+  export function createViewClient(opts: {
+    baseUrl?: string;
+    getToken?: () => string | undefined | Promise<string | undefined>;
+    endpoints?: Record<string, { method: string; routePath: string }>;
+  }): any;
 }
 `;
 

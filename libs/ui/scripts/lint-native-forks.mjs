@@ -60,6 +60,13 @@ const ALLOWED = {
   // `primitive` — Yoga has no overflow scrolling, so a scrolling region is an RN `ScrollView`
   // host component rather than a `View` with a style. See the fork's own header.
   'libs/ui/src/elements/primitives/scroll/index.native.tsx': 'primitive',
+  // `primitive` — the HORIZONTAL twin of the above, for the same Yoga reason. It is a
+  // separate file rather than a prop on `primitives/scroll` because that fork routes every
+  // unrecognised prop onto its inner content view, so a `horizontal` passed through it
+  // would silently scroll the wrong axis. The view renderer's `scroll: 'x'` (a wide table,
+  // a week grid) is native CORRECTNESS, not cosmetics: without a real scrolling host the
+  // overflow is clipped with no gesture to reach it.
+  'libs/ui/src/view/hscroll.native.tsx': 'primitive',
   'libs/ui/src/elements/primitives/svg.native.tsx': 'primitive',
   'libs/ui/src/elements/primitives/table.native.tsx': 'primitive',
   'libs/ui/src/elements/primitives/text/index.native.tsx': 'primitive',

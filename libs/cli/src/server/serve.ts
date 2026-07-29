@@ -45,6 +45,7 @@ import {
   handleListRows, handleUpdateRow, handleBuildStatus, handleRebuild, handleAppCheck,
 } from './routes/app-admin.js';
 import { handleListApps, handleInstallApp } from './routes/apps.js';
+import { handleAppViews } from './routes/app-views.js';
 import {
   handleListChannels, handleCreateChannel, handlePatchChannel, handleCreateDm,
   handleListCategories, handleCreateCategory, handlePatchCategory, handleDeleteCategory,
@@ -321,6 +322,13 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
       pageBuildCache.delete(projectId);
     }),
   );
+
+  // The view specs of an installed app (`system-viewbuilder`), for a client that
+  // renders them itself. The mobile app is that client: it has no host page to
+  // inject `window.__APP_ENDPOINTS__` into, which is why the endpoint manifest
+  // travels in this payload alongside the specs. `{ views: [] }` means the project
+  // is an appbuilder app and the caller should keep using the page bundle.
+  router.add('GET', '/api/apps/:id/views', handleAppViews(manager, effectiveLmthingRoot));
 
   // Store-installable integration spaces (a project installs the ones it needs
   // into its OWN `spaces/` dir, rather than every session always carrying all

@@ -262,6 +262,38 @@ export const PROJECT_API_DTS = `declare function writeProjectApi(route: string, 
 // typed surface for shared UI (there is no space-rooted fs writer for components anymore).
 export const PROJECT_COMPONENT_DTS = `declare function writeProjectComponent(name: string, src: string): { ok: boolean; error?: string };`;
 
+// `views:write` — a SEPARATE capability from `pages:write`, and the mechanism behind
+// `system-viewbuilder`'s zero-WebView guarantee.
+//
+// It earns the VIEW-SPEC writers: the medium where a page is DATA (a validated object literal)
+// rather than TSX, rendered by one shared `ViewRenderer` on the web bundle AND natively in the
+// mobile app. `writeProjectView` persists `pages/<route>.view.json` and generates the wrapper
+// `pages/<route>.tsx` that bundles it, so the page build needs no changes at all;
+// `writeProjectViewComponent` writes a reusable element composition with typed props;
+// `writeProjectViewShell` writes the app's navigation.
+//
+// **Why its own id and not a share of `pages:write`.** A capability profile lists capability IDs,
+// not globals — so a space granted `pages:write` receives `writeProjectPage` AND
+// `writeProjectComponent` AND their DTS as one indivisible unit. Bundling the view writers there
+// would mean a spec-only space must also hold the TSX writers, freehand UI would TYPECHECK, and
+// the only thing left standing between a weak model and a WebView-bound page would be an
+// instruction. Split, the invariant does the work instead: not granted ⇒ not injected AND absent
+// from the DTS, so freehand UI in a viewbuilder agent is a typecheck error it can see and retry.
+// (`buildApp` stays under `pages:write` for the same reason — the viewbuilder gates its build
+// HOST-side through a code node's `buildProjectApp`, not through a model-facing global.)
+//
+// All three validate against the project's REAL endpoint contracts at save time and reject with a
+// menu-shaped error naming the instance path, the offence and the finite valid set — which is why
+// the parameters are `unknown` rather than an imported spec type: the model emits a TypeScript
+// OBJECT LITERAL (trailing commas and comments legal, never a JSON string), and the host, not the
+// DTS, is what tells it which of the eight section kinds and twenty-four elements exist.
+export const PROJECT_VIEW_DTS = `/** Write a page as a validated VIEW SPEC (pages/<route>.view.json) + its generated wrapper. Sections: list|detail|create|stats|markdown|chat|toolbar|timeline. Bindings are paths ($.field), never expressions. */
+declare function writeProjectView(route: string, spec: unknown): { ok: boolean; error?: string };
+/** Write a reusable element composition with typed props, referenced from any view as { use: '<Name>' }. PascalCase. */
+declare function writeProjectViewComponent(name: string, def: unknown): { ok: boolean; error?: string };
+/** Write the app shell — nav entries/groups, per-entity subnav, brand, assistant dock. Every target must be a real static route. */
+declare function writeProjectViewShell(shell: unknown): { ok: boolean; error?: string };`;
+
 // `pages:write` ALSO earns `buildApp` — build + PROGRAMMATICALLY CHECK the live app: the
 // project-app typecheck, THEN the per-endpoint contract generation, THEN the esbuild bundle,
 // each only if the previous phase passed. Three phases, not four — the write-time contract lint
@@ -351,6 +383,7 @@ declare function writeKnowledge(domain: string, field: string, option: string, m
 export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
   'api:call': API_CALL_DTS,
   'pages:write': [PROJECT_PAGE_DTS, PROJECT_COMPONENT_DTS, BUILD_APP_DTS].join('\n'),
+  'views:write': PROJECT_VIEW_DTS,
   'api:write': PROJECT_API_DTS,
   'hooks:write': PROJECT_AUTHORING_DTS,
   'knowledge:write': KNOWLEDGE_WRITE_DTS,

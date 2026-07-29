@@ -146,6 +146,7 @@ describe('system-space smoke: the new frontmatter allow-list gate breaks nothing
     // system agent parses to {}.
     const capBearing = (dir: string): boolean =>
       dir.endsWith('system-appbuilder') ||
+      dir.endsWith('system-viewbuilder') ||
       dir.includes('integration-') ||
       dir.endsWith('system-engineer') ||
       dir.endsWith('system-store') ||
@@ -181,5 +182,41 @@ describe('system-space smoke: the new frontmatter allow-list gate breaks nothing
       'pages:write': true,
       'api:write': true,
     });
+  });
+
+  /**
+   * The `system-viewbuilder` guarantee is enforced by capability ABSENCE, not by prose. Its whole
+   * premise is that the UI is 100% spec — which is what lets the same app render natively in the
+   * mobile app with no WebView — and the mechanism is that no agent in that space holds
+   * `pages:write`. Not granted ⇒ `writeProjectPage`/`writeProjectComponent` are neither injected nor
+   * in the DTS, so an attempt to author freehand TSX is a typecheck error the model can see and
+   * retry, rather than a rule it is asked to respect. A well-meaning "just add pages:write so it can
+   * also write a component" would silently dissolve that, and nothing else in the repo would notice.
+   */
+  it('every system-viewbuilder agent holds views:write and NEVER pages:write', async () => {
+    const dirs = defaultSystemSpaceDirs();
+    const spaces = await loadSystemSpaces(dirs);
+    const viewbuilder = spaces.find((s) => s.dir.endsWith('system-viewbuilder'));
+    expect(viewbuilder, 'system-viewbuilder loads').toBeTruthy();
+
+    for (const [slug, agent] of Object.entries(viewbuilder!.agents)) {
+      expect(agent.capabilities?.['pages:write'], `${slug} must not hold pages:write`).toBeUndefined();
+    }
+
+    const automator = viewbuilder!.agents['automator'];
+    expect(automator, 'automator agent present').toBeTruthy();
+    expect(automator!.capabilities).toEqual({
+      'hooks:write': true,
+      'db:schema': {},
+      'db:read': {},
+      'db:write': {},
+      'api:write': true,
+      'views:write': true,
+    });
+
+    // The spec-builder is the narrow specialist: it authors views and reads data, nothing else.
+    const specBuilder = viewbuilder!.agents['spec-builder'];
+    expect(specBuilder, 'spec-builder agent present').toBeTruthy();
+    expect(specBuilder!.capabilities).toEqual({ 'views:write': true, 'db:read': {} });
   });
 });

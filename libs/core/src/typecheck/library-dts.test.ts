@@ -11,6 +11,7 @@ import {
   API_CALL_DTS,
   PROJECT_PAGE_DTS,
   PROJECT_COMPONENT_DTS,
+  PROJECT_VIEW_DTS,
   BUILD_APP_DTS,
   PROJECT_API_DTS,
   PROJECT_AUTHORING_DTS,
@@ -240,6 +241,7 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
     expect(CAPABILITY_DTS_FRAGMENTS).toEqual({
       'api:call': API_CALL_DTS,
       'pages:write': [PROJECT_PAGE_DTS, PROJECT_COMPONENT_DTS, BUILD_APP_DTS].join('\n'),
+      'views:write': PROJECT_VIEW_DTS,
       'api:write': PROJECT_API_DTS,
       'hooks:write': PROJECT_AUTHORING_DTS,
       'project:manage': PROJECT_MANAGE_DTS,
@@ -278,6 +280,44 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
     expect(CAPABILITY_DTS_FRAGMENTS['pages:write']).toContain('writeProjectComponent(');
     // api:write → writeProjectApi (live project)
     expect(CAPABILITY_DTS_FRAGMENTS['api:write']).toContain('writeProjectApi(');
+  });
+
+  // `system-viewbuilder`'s central guarantee — "100% spec, zero WebView by construction" — is not
+  // enforced by prose telling the model to avoid TSX. It is enforced HERE: a viewbuilder agent
+  // holds `views:write` and NOT `pages:write`, so `writeProjectPage` is absent from its ambient
+  // DTS and a freehand-TSX attempt is a typecheck error it can see and retry.
+  //
+  // A capability profile lists capability IDs, not globals, so this only works while the two ids
+  // stay separate. Merging the view writers back into the `pages:write` bundle would silently hand
+  // every spec-only space the TSX writers, freehand UI would typecheck, and nothing but an
+  // instruction would remain. That is what these two assertions exist to prevent.
+  it('views:write and pages:write are DISJOINT — the two authoring media, separated by capability', () => {
+    const views = CAPABILITY_DTS_FRAGMENTS['views:write'];
+    const pages = CAPABILITY_DTS_FRAGMENTS['pages:write'];
+
+    // views:write earns the three spec writers…
+    expect(views).toContain('writeProjectView(');
+    expect(views).toContain('writeProjectViewComponent(');
+    expect(views).toContain('writeProjectViewShell(');
+    // …and NOT the TSX writers. (`writeProjectViewComponent` contains the substring
+    // `writeProjectView`, so the TSX names are matched with their own open-paren.)
+    expect(views).not.toContain('writeProjectPage(');
+    expect(views).not.toContain('writeProjectComponent(');
+
+    // pages:write earns the TSX writers and NOT the spec writers.
+    expect(pages).toContain('writeProjectPage(');
+    expect(pages).toContain('writeProjectComponent(');
+    expect(pages).not.toContain('writeProjectView(');
+    expect(pages).not.toContain('writeProjectViewComponent(');
+    expect(pages).not.toContain('writeProjectViewShell(');
+  });
+
+  it('buildApp stays under pages:write — the viewbuilder gates its build host-side', () => {
+    // Moving `buildApp` to `views:write` would look like a convenience and would be the same
+    // mistake in reverse: the viewbuilder's build gate is `16-verify`, a HOST-run code node calling
+    // `buildProjectApp`, precisely so the verdict is exit status rather than a model self-report.
+    expect(CAPABILITY_DTS_FRAGMENTS['pages:write']).toContain('buildApp(');
+    expect(CAPABILITY_DTS_FRAGMENTS['views:write']).not.toContain('buildApp(');
   });
 });
 

@@ -42,6 +42,12 @@ export default defineConfig({
       // resolution, host→surface routing. DOM/component tests live in libs/ui;
       // keep only node-safe suites matched here.
       'apps/web/src/**/*.test.ts',
+      // apps/mobile is an Expo shell excluded from the workspace, so nothing here can
+      // import React Native — but the one decision it genuinely owns, whether a project
+      // renders natively or in a WebView, is pure fetch logic over the pod's spec route.
+      // That is the whole point of the viewbuilder pipeline, so it gets a node-safe suite
+      // rather than resting on `pnpm test:native`, which proves resolution, not policy.
+      'apps/mobile/src/**/*.test.ts',
       // The live-scenario harness is plain Node ESM (zero-dep, no build step). It had NO
       // coverage at all, so a transport regression in it only ever surfaced as a dead
       // multi-hour prod run. Its pure units (retry/backoff policy) are node-safe.

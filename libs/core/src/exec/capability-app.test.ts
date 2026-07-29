@@ -80,6 +80,36 @@ describe('buildAmbientDts — app-capability DTS composition', () => {
     expect(dtsFor({ 'hooks:write': true })).toContain('writeProjectHook');
   });
 
+  /**
+   * The TWO AUTHORING MEDIA are separated by capability, and this is where that separation is
+   * observable end to end: through the real composer, not the fragment map.
+   *
+   * `system-viewbuilder` promises apps that are 100% spec and render natively with no WebView.
+   * Nothing in a prompt can promise that — a weak model told "do not write TSX" will write TSX. The
+   * guarantee is that `writeProjectPage` is NOT IN ITS DTS, so the attempt is a typecheck error it
+   * sees and retries. That holds only while `views:write` and `pages:write` are distinct ids: a
+   * profile grants IDs, not globals, so one shared id would hand a spec-only space both writers.
+   */
+  it('views:write ⇔ pages:write: each medium is absent from the other agent\'s DTS', () => {
+    const viewsOnly = dtsFor({ 'views:write': true });
+    expect(viewsOnly).toContain('writeProjectView(');
+    expect(viewsOnly).toContain('writeProjectViewComponent(');
+    expect(viewsOnly).toContain('writeProjectViewShell(');
+    // The whole point: a viewbuilder agent cannot author freehand TSX, because it cannot NAME it.
+    expect(viewsOnly).not.toContain('writeProjectPage(');
+    expect(viewsOnly).not.toContain('writeProjectComponent(');
+
+    const pagesOnly = dtsFor({ 'pages:write': true });
+    expect(pagesOnly).toContain('writeProjectPage(');
+    expect(pagesOnly).toContain('writeProjectComponent(');
+    expect(pagesOnly).not.toContain('writeProjectView(');
+    expect(pagesOnly).not.toContain('writeProjectViewShell(');
+  });
+
+  it('a read-only role loses views:write like every other authoring grant', () => {
+    expect(intersectAppCaps({ 'views:write': true }, false)['views:write']).toBeUndefined();
+  });
+
   it('db:schema ⇒ writeProjectTable authoring global in ADDITION to db.createTable', () => {
     const dts = dtsFor({ 'db:schema': {} });
     expect(dts).toContain('createTable('); // the db member

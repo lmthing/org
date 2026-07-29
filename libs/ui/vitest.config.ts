@@ -38,6 +38,12 @@ export default defineConfig({
       // Pure codemod-mapping tests (node-safe, no DOM) — the objective correctness gate for the
       // P3 classnames-to-props codemod. See docs/tamagui-idiomatic-migration.md §5.
       'scripts/**/*.test.mjs',
+      // The view renderer (`src/view/**`) — the shared ViewRenderer the viewbuilder's specs
+      // render through. Needs only jsdom + react-dom + the Tamagui provider, all already here.
+      // NB: jsdom cannot see the native target (`isWeb` is always true), so the fork selection
+      // and the mounting claims are proven by `metro/suites/view.tsx` instead.
+      'src/view/**/*.test.ts',
+      'src/view/**/*.test.tsx',
     ],
     setupFiles: ['./vitest.setup.ts'],
     css: false,

@@ -41,7 +41,7 @@ const uiSrc = join(dirname(fileURLToPath(import.meta.url)), '..', 'src')
  * calling `window.addEventListener` on mount. Adding the directory here is part of porting a
  * surface, not a follow-up.
  */
-const NATIVE_BOUND = ['chat', 'elements', 'platform', 'team', 'dashboard']
+const NATIVE_BOUND = ['chat', 'elements', 'platform', 'team', 'dashboard', 'view']
 
 /** The globals that do not exist on React Native. */
 const FORBIDDEN = new Set(['document', 'window', 'navigator', 'localStorage', 'sessionStorage', 'alert'])

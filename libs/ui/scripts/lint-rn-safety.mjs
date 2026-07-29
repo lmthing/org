@@ -28,7 +28,7 @@ const uiSrc = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
 // `elements/**` is the shared vocabulary layer, the part that most has to be RN-safe.
 const DEFAULT_DIRS = [
   join(uiSrc, 'chat'), join(uiSrc, 'studio'), join(uiSrc, 'computer'),
-  join(uiSrc, 'elements'), join(uiSrc, 'components'),
+  join(uiSrc, 'elements'), join(uiSrc, 'components'), join(uiSrc, 'view'),
 ];
 
 const isExempt = (p) =>

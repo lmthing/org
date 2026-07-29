@@ -12,6 +12,7 @@
  */
 
 import Ajv from 'ajv';
+import { X_OPTIONS_KEYWORD } from '../view-spec/schema.js';
 import type { InputValidator } from '../api/input.js';
 import type { EndpointContract } from './schema.js';
 
@@ -34,6 +35,18 @@ const AjvCtor: typeof import('ajv').Ajv =
  * fills schema-declared defaults into the coerced value.
  */
 const ajv = new AjvCtor({ coerceTypes: true, allErrors: true, useDefaults: true });
+
+/**
+ * `x-options` is an ANNOTATION, not a constraint — it tells the view renderer's schema-form where
+ * a foreign-key field's options come from (`../view-spec/schema.ts#XOptions`), and says nothing
+ * about whether a request is valid.
+ *
+ * Declaring it here is not optional decoration: ajv v8 runs in strict mode by default and THROWS
+ * on an unknown keyword at compile time, so an endpoint carrying the annotation would take down
+ * `makeValidatorMap` — and with it every endpoint's input validation — the moment an api author
+ * wrote one. Registered with no `validate`/`code`, so it costs nothing per request.
+ */
+ajv.addKeyword({ keyword: X_OPTIONS_KEYWORD });
 
 /**
  * Compile a single endpoint `inputSchema` into an {@link InputValidator}.

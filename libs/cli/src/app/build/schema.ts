@@ -32,6 +32,7 @@ import {
   type ColumnType,
   type RelationSchema,
 } from '@lmthing/core';
+import { X_OPTIONS_KEYWORD } from '../view-spec/schema.js';
 import type { Endpoint } from '../api/loader.js';
 import type { HttpMethod } from '../api/input.js';
 
@@ -290,8 +291,32 @@ function buildGeneratorConfig(file: string, contractDtsPath: string | undefined)
     skipTypeCheck: true,
     expose: 'all',
     additionalProperties: false,
+    extraTags: EXTRA_TAGS,
   };
 }
+
+/**
+ * JSDoc annotations `ts-json-schema-generator` must CARRY INTO the generated JSON Schema instead
+ * of dropping (its default is to keep only the tags it knows).
+ *
+ * `x-options` is the only one, and it is what makes a foreign-key form field usable. A `create`
+ * section declares no fields — they derive from the mutation's Input schema — so "where do this
+ * field's options come from" has nowhere to live except that same contract:
+ *
+ * ```ts
+ * // api/expenses/POST.ts
+ * export interface Input {
+ *   amount: number;
+ *   /** @x-options {"query":"listTravelers","label":"$.name","value":"$.id"} *\/
+ *   paidByTravelerId: string;
+ * }
+ * ```
+ *
+ * Without the carry-through the annotation is silently discarded here and the renderer's
+ * schema-form has no choice but a raw UUID text box — which T0 measured blocking 2 of 10
+ * desk-checked pages outright. See `../view-spec/schema.ts#XOptions`.
+ */
+const EXTRA_TAGS = [X_OPTIONS_KEYWORD];
 
 function generatorConfig(file: string): Config {
   return {
@@ -301,6 +326,7 @@ function generatorConfig(file: string): Config {
     skipTypeCheck: true,
     expose: 'all',
     additionalProperties: false,
+    extraTags: EXTRA_TAGS,
   };
 }
 

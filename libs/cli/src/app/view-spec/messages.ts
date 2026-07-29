@@ -1,0 +1,612 @@
+/**
+ * **Menu-shaped errors** — the model-facing half of the view-spec contract.
+ *
+ * Every rejection this module builds names three things, in this order:
+ *
+ *   1. **the instance path** — `sections[1].mutation`, so the model edits ONE field;
+ *   2. **the offence** — what it wrote and why that is not a thing;
+ *   3. **the finite valid set** — the actual menu, from the actual project.
+ *
+ * ```
+ * sections[1].mutation: "addRecipies" is not an endpoint. Did you mean addRecipe?
+ * Mutations: addRecipe, importRecipe, importRecipeText
+ * ```
+ *
+ * This is not polish. The plan measures **retry convergence** (Part 3, bucket 2: "model retries
+ * >1 on a writer error" is a classified failure with its own fix layer), and an error that says
+ * only *"invalid"* costs a fork per attempt while the model guesses at a set it cannot see. A
+ * menu costs one retry, because the answer is IN the message. That makes this text part of the
+ * interface: `messages.test.ts` asserts it verbatim, and changing it is a contract change.
+ *
+ * ## The two `$`-shaped failures are DIFFERENT failures
+ *
+ * `schema.ts#looksLikeExpression` answers "is this `$`-string wrong at all". It cannot say
+ * which of the two ways it is wrong, and they need opposite advice:
+ *
+ *  - **an expression** (`'$.price * $.qty'`, `'{{ n }} left'`) — the language has none, by
+ *    design, so the fix is at the ENDPOINT (a computed Output field) or a named policy
+ *    (`format`, `toneMap`, `poll.while`). Telling this model "not a valid path" invites it to
+ *    keep rewriting the same arithmetic;
+ *  - **a mistyped path** (`'$params.id'`, `'$item.name'`) — the fix is one token, and the
+ *    message should hand it over.
+ *
+ * {@link classifyBadBinding} splits them on the presence of operator/whitespace characters, and
+ * the two produce visibly different text.
+ */
+
+import type { JsonSchema } from './schema.js';
+
+/**
+ * The eight binding roots (schema §2, T0 S3) as a MENU, because that is how a rejection has to
+ * present them. Kept beside the messages rather than in `schema.ts` so the contract file stays
+ * shape-only; `messages.test.ts` asserts this list against `BINDING_PATTERN`, so a root added
+ * there without a menu entry here fails a test rather than shipping a lying error.
+ */
+export const BINDING_ROOTS_HELP = {
+  roots: ['$', '$props', '$route', '$data', '$result', '$form', '$client'] as const,
+  sentence:
+    'Bindings are paths from one of eight roots: $ (the current row/record), $.field, ' +
+    '$props.name (inside a component), $route.param, $data.<sectionId>.path (another section on ' +
+    'this page), $result.field (under onSuccess), $form.field (under create.prefill.input), ' +
+    '$client.timezone.',
+};
+
+/** What kind of thing was rejected — the handle a fix router (`17-fix`) groups findings by. */
+export type ViewErrorCode =
+  /** ajv shape failure (unknown property, wrong type, missing required, bad enum). */
+  | 'shape'
+  /** A `query`/`mutation`/`prefill.endpoint`/`mutate`/`download`/`invalidates` name that is not an endpoint. */
+  | 'unknown-endpoint'
+  /** The endpoint exists but its HTTP method is wrong for the slot (a POST used as a `query`). */
+  | 'wrong-method'
+  /** An input key the endpoint's Input schema does not declare — silently dropped at runtime. */
+  | 'unknown-input'
+  /** A `$.field` that the bound endpoint's Output does not declare. */
+  | 'unknown-field'
+  /** An expression where the language has only paths. */
+  | 'expression'
+  /** A `$`-string whose root is not one of the eight. */
+  | 'bad-binding'
+  /** A `{ use: … }` naming a component the app does not define. */
+  | 'unknown-component'
+  /** A component reference passing a prop the def does not declare, or omitting one it requires. */
+  | 'bad-prop'
+  /** Component definitions that reference each other in a cycle. */
+  | 'component-cycle'
+  /** A `reveals` / `$data.<id>` target that is not a section id on this page. */
+  | 'unknown-section'
+  /** A `navigate` / nav / subnav target that is not a route the app has. */
+  | 'unknown-route'
+  /** A page no navigation reaches. */
+  | 'orphan-route'
+  /** A component nothing references (warning). */
+  | 'dead-component'
+  /** A page with no data-bound section — it renders, and shows nothing real. */
+  | 'no-data'
+  /** A view artifact on disk that did not parse. */
+  | 'malformed'
+  /** The renderer threw while mounting the spec against live data. */
+  | 'render-error'
+  /** A binding that is contract-valid but null on every live row — usually an uncomputed Output field. */
+  | 'null-binding'
+  /** A page that mounted cleanly and produced nothing visible. */
+  | 'empty-render';
+
+/** One structured finding. Never a free-form string: the fix loop routes on `code` and `path`. */
+export interface ViewError {
+  code: ViewErrorCode;
+  /** Instance path into the artifact — `sections[1].item.title`. `''` for artifact-level findings. */
+  path: string;
+  /** The full menu-shaped sentence. This text is the interface; assert it in tests. */
+  message: string;
+  /** `warning` findings are reported but do not fail the gate. */
+  severity: 'error' | 'warning';
+  /** Which artifact carries it (`pages/index.view.json`), when the finding is app-wide. */
+  file?: string;
+  /**
+   * The endpoint to fix instead of the view. Set by `renderSmokeViews` for an always-null
+   * binding: the view named a field the contract declares, so the defect is that the endpoint
+   * never computes it. Routing this finding at the page would have the model delete the binding.
+   */
+  endpoint?: string;
+}
+
+/** The shape every validator returns. Scalars first — see {@link ViewValidationResult}. */
+export interface ViewValidationResult {
+  /** No `severity: 'error'` finding. Warnings do not clear it to `false`. */
+  ok: boolean;
+  /** `errors.filter(e => e.severity === 'error').length` — a code node can branch on a scalar. */
+  errorCount: number;
+  warningCount: number;
+  /** How many artifacts were examined. `0` with `ok:true` means NOTHING RAN, not "clean". */
+  checked: number;
+  /** Every finding, errors and warnings together, in artifact order. */
+  errors: ViewError[];
+}
+
+/** Assemble a {@link ViewValidationResult} from a finding list. */
+export function resultOf(errors: ViewError[], checked: number): ViewValidationResult {
+  const errorCount = errors.filter((e) => e.severity === 'error').length;
+  return {
+    ok: errorCount === 0,
+    errorCount,
+    warningCount: errors.length - errorCount,
+    checked,
+    errors,
+  };
+}
+
+// ── the "did you mean" ────────────────────────────────────────────────────────
+
+/** Classic Levenshtein. Inputs here are identifiers, so the O(n·m) table is free. */
+function editDistance(a: string, b: string): number {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  let prev = Array.from({ length: cols }, (_, j) => j);
+  for (let i = 1; i < rows; i++) {
+    const cur = [i, ...new Array<number>(cols - 1).fill(0)];
+    for (let j = 1; j < cols; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+    }
+    prev = cur;
+  }
+  return prev[cols - 1];
+}
+
+/**
+ * The nearest candidate to `bad`, or `undefined` when nothing is near enough to be a
+ * *suggestion* rather than a guess.
+ *
+ * The threshold is half the word (minimum 2, capped at 4). Two is the floor because the commonest
+ * real mistake is a TRANSPOSITION — `titel` for `title` — which plain Levenshtein scores as 2, and
+ * a threshold of 1 would silently withhold the answer in exactly the case the model most needs it.
+ * Case-insensitive comparison; the SUGGESTION comes back in its real casing.
+ */
+export function suggest(bad: string, candidates: readonly string[]): string | undefined {
+  if (!bad || candidates.length === 0) return undefined;
+  const lower = bad.toLowerCase();
+  const threshold = Math.min(4, Math.max(2, Math.floor(bad.length / 2)));
+  let best: string | undefined;
+  let bestScore = Infinity;
+  for (const c of candidates) {
+    const d = editDistance(lower, c.toLowerCase());
+    if (d < bestScore) {
+      bestScore = d;
+      best = c;
+    }
+  }
+  return bestScore <= threshold ? best : undefined;
+}
+
+/** `Did you mean addRecipe? ` — or `''`. Always ends with a space when present. */
+function didYouMean(bad: string, candidates: readonly string[], prefix = ''): string {
+  const s = suggest(bad, candidates);
+  return s ? `Did you mean ${prefix}${s}? ` : '';
+}
+
+/** `Mutations: a, b, c` — or an honest sentence when the menu is empty. */
+function menu(label: string, items: readonly string[]): string {
+  const sorted = [...items].sort();
+  return sorted.length ? `${label}: ${sorted.join(', ')}` : `${label}: (none — this app has none yet)`;
+}
+
+// ── path rendering ────────────────────────────────────────────────────────────
+
+/** ajv's `/sections/1/item/title` → the model's `sections[1].item.title`. */
+export function prettyPath(instancePath: string): string {
+  const segs = instancePath.split('/').filter((s) => s.length > 0);
+  let out = '';
+  for (const seg of segs) {
+    const key = seg.replace(/~1/g, '/').replace(/~0/g, '~');
+    if (/^\d+$/.test(key)) out += `[${key}]`;
+    else out += out ? `.${key}` : key;
+  }
+  return out;
+}
+
+/** Prefix a path onto a message, or return the message alone at the artifact root. */
+function at(path: string, rest: string): string {
+  return path ? `${path}: ${rest}` : rest;
+}
+
+// ── the builders ──────────────────────────────────────────────────────────────
+
+const err = (code: ViewErrorCode, path: string, message: string, extra?: Partial<ViewError>): ViewError => ({
+  code,
+  path,
+  message,
+  severity: 'error',
+  ...extra,
+});
+
+const warn = (code: ViewErrorCode, path: string, message: string, extra?: Partial<ViewError>): ViewError => ({
+  code,
+  path,
+  message,
+  severity: 'warning',
+  ...extra,
+});
+
+/** `sections[1].mutation: "addRecipies" is not an endpoint. Did you mean addRecipe? Mutations: …` */
+export function unknownEndpoint(path: string, bad: string, label: string, names: readonly string[]): ViewError {
+  return err(
+    'unknown-endpoint',
+    path,
+    at(path, `"${bad}" is not an endpoint. ${didYouMean(bad, names)}${menu(label, names)}`),
+  );
+}
+
+/**
+ * The name resolves, but to the wrong half of the api. `query` reads (GET), everything else
+ * writes — a spec that mixes them produces a page that fetches on a POST route and 405s.
+ */
+export function wrongMethod(
+  path: string,
+  bad: string,
+  actual: string,
+  slot: 'query' | 'mutation',
+  label: string,
+  names: readonly string[],
+): ViewError {
+  const wanted = slot === 'query' ? 'a GET endpoint' : 'a POST/PUT/PATCH/DELETE endpoint';
+  // No "did you mean" here: the name resolved exactly. The model reached for the right endpoint in
+  // the wrong half of the api, and guessing at a near-miss would send it somewhere else entirely.
+  return err(
+    'wrong-method',
+    path,
+    at(path, `"${bad}" is a ${actual} endpoint, and a ${slot} needs ${wanted}. ${menu(label, names)}`),
+  );
+}
+
+/** `sections[0].item.title: "$.titel" is not a field of listRecipes's Output. …` */
+export function unknownField(path: string, bad: string, endpoint: string, fields: readonly string[]): ViewError {
+  const leaf = bad.replace(/^\$\./, '').split('.')[0];
+  return err(
+    'unknown-field',
+    path,
+    at(
+      path,
+      `"${bad}" is not a field of ${endpoint}'s Output. ${didYouMean(leaf, fields, '$.')}${menu('Fields', fields)}. ` +
+        `If the value should exist, add it to ${endpoint}'s Output and compute it there — a page cannot compute.`,
+    ),
+  );
+}
+
+/** An `input`/`prefill.input` key the endpoint's Input does not declare (silently dropped). */
+export function unknownInput(path: string, bad: string, endpoint: string, keys: readonly string[]): ViewError {
+  return err(
+    'unknown-input',
+    path,
+    at(
+      path,
+      `"${bad}" is not an input of ${endpoint}. ${didYouMean(bad, keys)}${menu('Inputs', keys)}. ` +
+        `An undeclared key is dropped before the request, so the endpoint never sees it.`,
+    ),
+  );
+}
+
+/** Characters no path may contain — arithmetic, comparison, calls, whitespace, interpolation. */
+const EXPRESSION_CHARS = /[+*/%?:()!<>=&|,'"`]|\s|-|\{\{|\$\{/;
+
+/** Which of the two `$`-shaped failures this is. Exported for the writers' own routing. */
+export function classifyBadBinding(value: string): 'expression' | 'bad-binding' {
+  return EXPRESSION_CHARS.test(value) ? 'expression' : 'bad-binding';
+}
+
+/**
+ * `"$.price * $.qty" is not a binding — the spec language has no expressions.`
+ *
+ * The advice is the load-bearing part: this model will otherwise retry the same arithmetic in a
+ * different syntax. Three real destinations, named.
+ */
+export function expressionAttempt(path: string, bad: string): ViewError {
+  return err(
+    'expression',
+    path,
+    at(
+      path,
+      `"${bad}" is not a binding — the spec language has no expressions, on purpose. ` +
+        `Bindings are paths only. Compute the value in the endpoint's Output and bind the result, ` +
+        `or use a named policy: format (currency/date/relative-time/number), toneMap (value → tone), ` +
+        `poll.while (refresh while a field is in a set).`,
+    ),
+  );
+}
+
+/**
+ * The roots a model reaches for that do not exist, mapped to the one that does.
+ *
+ * Edit distance cannot make this jump — `$params`→`$route` is five edits — and these are not
+ * random misspellings but the conventions of the frameworks this model has read far more of than
+ * it has read this schema. Naming the replacement turns a dead end into a one-token fix.
+ */
+const ROOT_ALIASES: Record<string, string> = {
+  $params: '$route',
+  $param: '$route',
+  $query: '$route',
+  $search: '$route',
+  $item: '$',
+  $row: '$',
+  $record: '$',
+  $self: '$',
+  $this: '$',
+  $prop: '$props',
+  $state: '$',
+  $ctx: '$',
+};
+
+/** `"$params.id" is not a binding root. Roots: … Did you mean "$route.id"?` */
+export function badBindingRoot(path: string, bad: string): ViewError {
+  const root = /^\$[A-Za-z_]*/.exec(bad)?.[0] ?? bad;
+  const rest = bad.slice(root.length);
+  const near = ROOT_ALIASES[root] ?? suggest(root, BINDING_ROOTS_HELP.roots);
+  const fix = near ? `Did you mean "${near}${rest}"? ` : '';
+  return err(
+    'bad-binding',
+    path,
+    at(path, `"${bad}" is not a valid binding. ${fix}${BINDING_ROOTS_HELP.sentence}`),
+  );
+}
+
+/** `sections[0].item.use: "RecipeCards" is not a view component. …` */
+export function unknownComponent(path: string, bad: string, names: readonly string[]): ViewError {
+  return err(
+    'unknown-component',
+    path,
+    at(
+      path,
+      `"${bad}" is not a view component. ${didYouMean(bad, names)}${menu('Components', names)}. ` +
+        `Write it first with writeProjectViewComponent('${bad}', { … }).`,
+    ),
+  );
+}
+
+/** A prop a component def does not declare, or a declared prop a use site omits. */
+export function badProp(
+  path: string,
+  kind: 'unknown' | 'missing',
+  bad: string,
+  component: string,
+  props: readonly string[],
+): ViewError {
+  const head =
+    kind === 'unknown'
+      ? `"${bad}" is not a prop of ${component}. ${didYouMean(bad, props)}`
+      : `${component} requires the prop "${bad}", which this reference does not pass. `;
+  return err('bad-prop', path, at(path, `${head}${menu('Props', props)}`));
+}
+
+/** `reveals` and `$data.<id>` both address a section by id on the SAME page. */
+export function unknownSection(path: string, bad: string, ids: readonly string[]): ViewError {
+  return err(
+    'unknown-section',
+    path,
+    at(
+      path,
+      `"${bad}" is not a section id on this page. ${didYouMean(bad, ids)}${menu('Section ids', ids)}. ` +
+        `Give the target section an \`id\` — it has none unless you write one.`,
+    ),
+  );
+}
+
+/** A navigation destination that is not a page. */
+export function unknownRoute(path: string, bad: string, routes: readonly string[]): ViewError {
+  return err(
+    'unknown-route',
+    path,
+    at(path, `"${bad}" is not a route in this app. ${didYouMean(bad, routes)}${menu('Routes', routes)}`),
+  );
+}
+
+/** A page nothing navigates to — it exists, and no user can reach it. */
+export function orphanRoute(route: string, file: string, navTargets: readonly string[]): ViewError {
+  return err(
+    'orphan-route',
+    '',
+    `pages/${route}: no navigation reaches this page. Add it to the shell (nav/groups/subnav), ` +
+      `or give some page a { navigate: '${route}' } action / rowAction. ` +
+      `${menu('Reachable today', navTargets)}`,
+    { file },
+  );
+}
+
+/** A component nothing uses. A warning: harmless, but it is 100% of a wasted authoring fork. */
+export function deadComponent(name: string, file: string): ViewError {
+  return warn(
+    'dead-component',
+    '',
+    `component ${name} is defined but no view references it with { use: '${name}' } — ` +
+      `either use it or drop it.`,
+    { file },
+  );
+}
+
+/**
+ * A page whose sections bind no endpoint at all. It builds, it routes, it renders chrome — and it
+ * is the "structurally-valid zeros" failure the whole gate exists for.
+ */
+export function pageHasNoData(route: string, file: string, kinds: readonly string[]): ViewError {
+  return err(
+    'no-data',
+    '',
+    `pages/${route}: no section on this page reads data (sections: ${kinds.join(', ') || 'none'}). ` +
+      `A page with no query/mutation renders chrome over nothing. Add a list, detail, stats, ` +
+      `timeline or create section bound to an endpoint.`,
+    { file },
+  );
+}
+
+/** An artifact on disk that did not parse. */
+export function malformedArtifact(file: string, message: string): ViewError {
+  return err('malformed', '', `${file}: ${message}`, { file });
+}
+
+/**
+ * The finding `renderSmokeViews` exists to produce: a binding the contract allows, that is null on
+ * every row of real data. The message points at the ENDPOINT, because that is where the fix is.
+ */
+export function alwaysNullBinding(
+  path: string,
+  binding: string,
+  endpoint: string,
+  rows: number,
+  file: string,
+): ViewError {
+  return err(
+    'null-binding',
+    path,
+    at(
+      path,
+      `"${binding}" is null on all ${rows} row(s) ${endpoint} actually returned. The field is declared ` +
+        `on ${endpoint}'s Output but never computed, so this renders as nothing. ` +
+        `Fix ${endpoint} to populate it — do not remove the binding.`,
+    ),
+    { file, endpoint },
+  );
+}
+
+/** A page that mounted and produced nothing a user would see. */
+export function emptyRender(route: string, file: string, detail: string): ViewError {
+  return err(
+    'empty-render',
+    '',
+    `pages/${route}: renders empty against live data — ${detail}. This passes every static gate ` +
+      `and ships a blank page. Check that the sections' endpoints return rows (smoke_endpoints), ` +
+      `and that the bound fields are populated.`,
+    { file },
+  );
+}
+
+/** The renderer threw. */
+export function renderThrew(route: string, file: string, message: string): ViewError {
+  return err('render-error', '', `pages/${route}: the renderer threw while mounting — ${message}`, { file });
+}
+
+// ── ajv → menu ────────────────────────────────────────────────────────────────
+
+/** ajv's `ErrorObject`, with the fields `verbose: true` adds. */
+interface VerboseError {
+  instancePath: string;
+  schemaPath: string;
+  keyword: string;
+  params: Record<string, unknown>;
+  message?: string;
+  data?: unknown;
+  parentSchema?: JsonSchema;
+}
+
+/** The property menu of the schema an error was measured against. */
+function propertiesOf(schema: JsonSchema | undefined): string[] {
+  const props = schema?.['properties'];
+  return props && typeof props === 'object' ? Object.keys(props as Record<string, unknown>) : [];
+}
+
+/**
+ * Turn one ajv failure into a menu-shaped {@link ViewError}.
+ *
+ * `discriminator: true` is what makes this tractable: with a discriminated `oneOf`, ajv reports
+ * the errors of the ONE branch whose `kind`/`el` matched, so `parentSchema` here is the *create
+ * section*'s schema — and its property list is the real menu — rather than a pile of eight
+ * branches' failures with no menu at all.
+ */
+export function shapeErrorToViewError(raw: unknown): ViewError {
+  const e = raw as VerboseError;
+  const path = prettyPath(e.instancePath);
+  const p = e.params ?? {};
+
+  switch (e.keyword) {
+    case 'additionalProperties': {
+      const bad = String(p['additionalProperty'] ?? '');
+      const allowed = propertiesOf(e.parentSchema);
+      return err(
+        'shape',
+        path,
+        at(path, `"${bad}" is not a property here. ${didYouMean(bad, allowed)}${menu('Properties', allowed)}`),
+      );
+    }
+    case 'required': {
+      const missing = String(p['missingProperty'] ?? '');
+      const allowed = propertiesOf(e.parentSchema);
+      return err(
+        'shape',
+        path,
+        at(path, `"${missing}" is required here. ${menu('Properties', allowed)}`),
+      );
+    }
+    case 'enum': {
+      const allowed = (p['allowedValues'] as unknown[] | undefined)?.map(String) ?? [];
+      const bad = typeof e.data === 'string' ? e.data : JSON.stringify(e.data);
+      return err(
+        'shape',
+        path,
+        at(path, `${bad} is not allowed here. ${didYouMean(String(e.data ?? ''), allowed)}${menu('Allowed', allowed)}`),
+      );
+    }
+    case 'discriminator': {
+      const tag = String(p['tag'] ?? 'kind');
+      const bad = String(p['tagValue'] ?? e.data ?? '');
+      return err('shape', path, at(path, `"${bad}" is not a valid ${tag}.`));
+    }
+    case 'pattern': {
+      const value = typeof e.data === 'string' ? e.data : String(e.data);
+      if (value.startsWith('$') || value.includes('{{') || value.includes('${')) {
+        return classifyBadBinding(value) === 'expression'
+          ? expressionAttempt(path, value)
+          : badBindingRoot(path, value);
+      }
+      return err('shape', path, at(path, `"${value}" does not match the expected form (${String(p['pattern'] ?? '')}).`));
+    }
+    case 'type': {
+      const want = String(p['type'] ?? '');
+      const got = Array.isArray(e.data) ? 'array' : e.data === null ? 'null' : typeof e.data;
+      return err('shape', path, at(path, `expected ${want}, got ${got} (${JSON.stringify(e.data)}).`));
+    }
+    default:
+      return err('shape', path, at(path, `${e.message ?? 'is invalid'}.`));
+  }
+}
+
+/**
+ * Keywords that describe the SHAPE OF THE SCHEMA rather than the model's mistake. ajv emits one
+ * per composition level, so a single bad string inside a union inside a conditional arrives as
+ * five errors, four of which say "must match exactly one schema in oneOf" — the exact opposite of
+ * a menu.
+ */
+const STRUCTURAL_KEYWORDS = new Set(['oneOf', 'anyOf', 'allOf', 'if', 'then', 'else', 'not']);
+
+/** How informative a keyword's message is. Higher wins when several fire at one path. */
+const KEYWORD_RANK: Record<string, number> = {
+  pattern: 5,
+  enum: 5,
+  additionalProperties: 4,
+  required: 4,
+  discriminator: 3,
+  type: 1,
+};
+
+/**
+ * Reduce ajv's error list to **one finding per instance path**, keeping the most informative.
+ *
+ * The union-typed slots make this necessary rather than cosmetic. `title: '$.price * $.qty'` fails
+ * the string branch's `pattern` AND the object branch's `type` AND the union AND the enclosing
+ * `if/then` — five errors for one mistake, only the first of which the model can act on. Dropping
+ * the structural ones and keeping the highest-ranked keyword per path leaves exactly the sentence
+ * that names the offence.
+ */
+export function shapeErrorsToViewErrors(raw: readonly unknown[]): ViewError[] {
+  const best = new Map<string, { rank: number; error: unknown }>();
+  for (const e of raw) {
+    const v = e as VerboseError;
+    if (STRUCTURAL_KEYWORDS.has(v.keyword)) continue;
+    const key = `${v.instancePath}\u0000${v.keyword === 'additionalProperties' ? String(v.params?.['additionalProperty']) : v.keyword === 'required' ? String(v.params?.['missingProperty']) : ''}`;
+    const rank = KEYWORD_RANK[v.keyword] ?? 2;
+    const prev = best.get(key);
+    if (!prev || rank > prev.rank) best.set(key, { rank, error: e });
+  }
+  // Nothing survived the filter (a pure `oneOf` failure) — fall back rather than report clean.
+  if (best.size === 0 && raw.length > 0) return [shapeErrorToViewError(raw[0])];
+  return [...best.values()].map((b) => shapeErrorToViewError(b.error));
+}
+
+export { err as viewError, warn as viewWarning };

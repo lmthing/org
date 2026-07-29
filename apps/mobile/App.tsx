@@ -169,6 +169,7 @@ function AuthGate() {
  * while the member was looking at Home.
  */
 function HomeShell() {
+  const { getAccessToken } = useAuth()
   const [tab, setTab] = React.useState<BottomNavTab>('home')
   // Mentions waiting in the team, badged on the tab. The Teams pane stays mounted while hidden, so
   // it keeps hearing the channel socket — without surfacing the count here, a member on Home had no
@@ -180,8 +181,20 @@ function HomeShell() {
 
   // Covers the tabs rather than replacing a pane: an app is a place you go INTO and come back from,
   // and the chat socket behind it should not be torn down to look at one.
+  //
+  // `AppScreen` decides for itself whether this project renders natively (a `system-viewbuilder`
+  // app) or in a WebView (a `system-appbuilder` app) — it asks the pod, which is also where the
+  // specs come from, so the question and the answer are one fetch. The token is this app's own:
+  // there is no origin here and nothing is cookie-authed.
   if (openApp) {
-    return <AppScreen projectId={openApp.id} name={openApp.name} onClose={() => setOpenApp(null)} />
+    return (
+      <AppScreen
+        projectId={openApp.id}
+        name={openApp.name}
+        onClose={() => setOpenApp(null)}
+        getToken={getAccessToken}
+      />
+    )
   }
 
   return (

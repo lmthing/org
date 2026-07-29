@@ -36,6 +36,27 @@ import {
   topLevelKeys,
 } from './lint.js';
 import { saveTypecheckError } from './save-typecheck.js';
+import {
+  SHELL_SPEC_PATH,
+  loadProjectViews,
+  viewComponentPath,
+  viewSpecPath,
+  viewWrapperPath,
+} from '../view-spec/files.js';
+import { renderViewWrapper } from '../view-spec/wrapper.js';
+import {
+  formatViewErrors,
+  loadViewContracts,
+  renderSmokeViews,
+  validateAppViews,
+  validateShellSpec,
+  validateViewComponent,
+  validateViewSpec,
+  type ApiCaller,
+  type RenderSmokeResult,
+  type ViewValidationResult,
+} from '../view-spec/validate.js';
+import { ROUTE_RE, type ShellSpec, type ViewComponentSpec, type ViewSpec } from '../view-spec/schema.js';
 
 /** Throw a {@link LintError} when a lint check returned a message, so it surfaces to the model as a
  *  retryable error (like a typecheck failure) instead of a `{ ok:false }` a node might ignore. Each
@@ -196,6 +217,35 @@ export interface ProjectAuthoringGlobals {
   /** Write `<projectRoot>/pages/<route>.tsx` (a React page) — the LIVE-project
    *  counterpart of the catalog's `writePage`. */
   writeProjectPage: (route: string, src: string, opts?: { replace?: boolean }) => { ok: boolean; error?: string };
+  /** Write `<projectRoot>/pages/<route>.view.json` (a VIEW SPEC) plus its generated
+   *  `pages/<route>.tsx` wrapper — the `system-viewbuilder` counterpart of `writeProjectPage`.
+   *
+   *  A view is data, not TSX: the spec is validated against the project's endpoint contracts at
+   *  save time (`view-spec/validate.ts#validateViewSpec`) and rendered by the shared
+   *  `ViewRenderer` on both the web bundle and the native mobile app. The wrapper is what keeps
+   *  the page build unchanged — see `view-spec/wrapper.ts`. */
+  writeProjectView: (route: string, spec: unknown) => { ok: boolean; error?: string };
+  /** Write `<projectRoot>/pages/components/<Name>.view.json` (a reusable element composition with
+   *  typed props). Validated exactly like a view; every reference to it is re-checked at the
+   *  referencing view's own save. Writing one re-emits every wrapper, because wrappers inline the
+   *  components they render with. */
+  writeProjectViewComponent: (name: string, def: unknown) => { ok: boolean; error?: string };
+  /** Write `<projectRoot>/pages/_shell.view.json` (the app's nav/brand/assistant shell).
+   *
+   *  Optional but not always derivable: the renderer derives nav from the route list only for a
+   *  small, flat app (`SHELL_DERIVE_MAX_ROUTES`), and T0 measured 0/5 catalogue apps reproducing
+   *  their real navigation from a flat list. Above that the model declares `groups`/`subnav` here
+   *  or the app ships with navigation nobody can use. */
+  writeProjectViewShell: (shell: unknown) => { ok: boolean; error?: string };
+  /** Whole-app view validation (`view-spec/validate.ts#validateAppViews`) — orphan pages, dead
+   *  components, nav targets, pages that read nothing. Host-side so a tasklist CODE node can gate
+   *  on it deterministically, exactly like {@link ProjectAuthoringGlobals.buildProjectApp}. */
+  validateAppViews: () => Promise<ViewValidationResult>;
+  /** Mount every view spec against the app's LIVE endpoint responses
+   *  (`view-spec/validate.ts#renderSmokeViews`) — the view twin of `smoke_endpoints`, and the only
+   *  gate that can see a page which is structurally perfect and empty. Absent api runtime ⇒ it
+   *  reports `unavailable: true` rather than an empty (i.e. "clean") finding list. */
+  renderSmokeViews: () => Promise<RenderSmokeResult>;
   /** Write `<projectRoot>/components/<Name>.tsx` (a shared React component a page imports).
    *  Name is PascalCase. There is no space-rooted fs writer for this — the typed writer IS
    *  the surface, so an app can gain shared components without any generic filesystem access. */
@@ -590,6 +640,189 @@ export function createProjectAuthoringGlobals(opts: {
     return out;
   }
 
+  // ── view specs (system-viewbuilder) ────────────────────────────────────────
+  //
+  // The same four-step shape as `writeProjectPage` above — validate, `throwLint`, `writeUnder`,
+  // `onAppWrite` — over a different medium. Consistency with its siblings is the point: a writer
+  // that reported failures differently would need its own retry handling in every prompt that
+  // calls it.
+
+  /** The AUTO-GENERATED marker every wrapper carries — the guard against clobbering a real page. */
+  const WRAPPER_MARKER = 'Written by `writeProjectView`';
+
+  /**
+   * (Re-)emit `pages/<route>.tsx` for every view spec on disk.
+   *
+   * Every write goes through here, not just a view write, because a wrapper inlines the spec AND
+   * the components AND the shell it renders with. Writing a component after the pages that use it
+   * would otherwise leave every one of them holding the old definition — a stale-bundle bug with
+   * no symptom at authoring time and no obvious cause at render time. Re-emitting all of them is
+   * one small file write per page; getting the dependency tracking wrong once is a ghost.
+   */
+  function emitViewWrappers(): { ok: boolean; error?: string } {
+    const loaded = loadProjectViews(projectRoot);
+    const components = Object.fromEntries(loaded.components.map((c) => [c.name, c.def]));
+    for (const { route, spec } of loaded.views) {
+      const rel = viewWrapperPath(route);
+      const abs = safeResolve(projectRoot, rel);
+      if (existsSync(abs)) {
+        let current = '';
+        try {
+          current = readFileSync(abs, 'utf8');
+        } catch {
+          /* unreadable — treat as absent and overwrite */
+        }
+        if (current && !current.includes(WRAPPER_MARKER)) {
+          return {
+            ok: false,
+            error:
+              `refusing to overwrite ${rel}: it is a hand-written React page, not a generated view ` +
+              `wrapper. A route is either a spec page or a TSX page, never both. Delete the .tsx ` +
+              `first if the spec is meant to replace it.`,
+          };
+        }
+      }
+      const out = writeUnder(rel, renderViewWrapper({ spec, components, shell: loaded.shell }));
+      if (!out.ok) return out;
+    }
+    return { ok: true };
+  }
+
+  /** The project's spec vocabulary, with `extra` treated as already-present (the artifact being
+   *  written is not on disk yet, so a self-reference would otherwise fail to resolve). */
+  function contractsFor(extra: { route?: string; component?: ViewComponentSpec }): ReturnType<typeof loadViewContracts> {
+    const contracts = loadViewContracts(projectRoot);
+    if (extra.route) contracts.routes = [...new Set([...(contracts.routes ?? []), extra.route])];
+    if (extra.component) {
+      contracts.components = [
+        ...(contracts.components ?? []).filter((c) => c.name !== extra.component!.name),
+        extra.component,
+      ];
+    }
+    return contracts;
+  }
+
+  /**
+   * Write a VIEW SPEC into the live project and generate its wrapper page.
+   *
+   * The spec's own `route` is normalized from the `route` argument, so the model writes it once.
+   * Everything else is checked before anything lands: shape (ajv), every `query`/`mutation`/
+   * `prefill.endpoint` name against the project's real endpoints (with the finite menu in the
+   * rejection), every `$.field` against the endpoint's declared Output, every `{ use: … }`
+   * reference and its props, every `reveals`/`$data.<id>` target, every `navigate` route.
+   *
+   * A failure THROWS a {@link LintError}, exactly like `writeProjectPage`'s lint: the model sees a
+   * retryable, menu-shaped error in the same turn it wrote the spec, which is the whole reason the
+   * checks live in the writer rather than in a downstream gate.
+   */
+  function writeProjectView(route: string, spec: unknown): { ok: boolean; error?: string } {
+    let rel: string;
+    let normalized: ViewSpec;
+    try {
+      rel = assertPathSegments('view route', route).replace(/\.(tsx|jsx|json)$/, '');
+      if (!ROUTE_RE.test(rel)) {
+        throw new Error(
+          `view route "${route}" is not a valid route. Routes are lowercase, slash-separated, and ` +
+            `may end a segment with a [param]: index, recipes, recipes/[id], searches/[searchId]/inbox.`,
+        );
+      }
+      if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
+        throw new Error(`writeProjectView("${route}", …) expects a spec OBJECT — got ${Array.isArray(spec) ? 'an array' : typeof spec}.`);
+      }
+      const declared = (spec as Record<string, unknown>)['route'];
+      if (typeof declared === 'string' && declared !== rel) {
+        throw new Error(
+          `writeProjectView("${route}", …): the spec declares route "${declared}". A spec is written ` +
+            `to the route you name in the first argument — drop \`route\` from the object, or call ` +
+            `writeProjectView('${declared}', …).`,
+        );
+      }
+      normalized = { ...(spec as object), route: rel } as ViewSpec;
+      const res = validateViewSpec(normalized, contractsFor({ route: rel }));
+      throwLint(res.ok ? null : formatViewErrors(res.errors));
+    } catch (e) {
+      if (e instanceof LintError) throw e;
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+
+    const out = writeUnder(viewSpecPath(rel), `${JSON.stringify(normalized, null, 2)}\n`);
+    if (!out.ok) return out;
+    const wrappers = emitViewWrappers();
+    if (!wrappers.ok) return wrappers;
+    try {
+      onAppWrite?.('page', rel);
+    } catch {
+      /* best-effort — the spec and its wrapper already landed */
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Write a VIEW COMPONENT — a named, parameterised composition of elements. Data, not React: it
+   * needs no bundling, loads natively for free, and is validated exactly like a view (props
+   * declared and typed, references acyclic, bindings well-formed).
+   */
+  function writeProjectViewComponent(name: string, def: unknown): { ok: boolean; error?: string } {
+    let normalized: ViewComponentSpec;
+    try {
+      if (!COMPONENT_NAME_RE.test(name)) {
+        throw new Error(`view component name "${name}" is not PascalCase (expected /${COMPONENT_NAME_RE.source}/)`);
+      }
+      if (!def || typeof def !== 'object' || Array.isArray(def)) {
+        throw new Error(`writeProjectViewComponent("${name}", …) expects a definition OBJECT — got ${Array.isArray(def) ? 'an array' : typeof def}.`);
+      }
+      const declared = (def as Record<string, unknown>)['name'];
+      if (typeof declared === 'string' && declared !== name) {
+        throw new Error(
+          `writeProjectViewComponent("${name}", …): the definition declares name "${declared}". ` +
+            `Use one name — drop \`name\` from the object, or call writeProjectViewComponent('${declared}', …).`,
+        );
+      }
+      normalized = { ...(def as object), name } as ViewComponentSpec;
+      const res = validateViewComponent(normalized, contractsFor({ component: normalized }));
+      throwLint(res.ok ? null : formatViewErrors(res.errors));
+    } catch (e) {
+      if (e instanceof LintError) throw e;
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+
+    const out = writeUnder(viewComponentPath(name), `${JSON.stringify(normalized, null, 2)}\n`);
+    if (!out.ok) return out;
+    const wrappers = emitViewWrappers();
+    if (!wrappers.ok) return wrappers;
+    try {
+      onAppWrite?.('component', name);
+    } catch {
+      /* best-effort — the component already landed */
+    }
+    return { ok: true };
+  }
+
+  /** Write the app SHELL — nav, groups, per-entity subnav, brand, assistant dock. */
+  function writeProjectViewShell(shell: unknown): { ok: boolean; error?: string } {
+    try {
+      if (!shell || typeof shell !== 'object' || Array.isArray(shell)) {
+        throw new Error(`writeProjectViewShell(…) expects a shell OBJECT — got ${Array.isArray(shell) ? 'an array' : typeof shell}.`);
+      }
+      const res = validateShellSpec(shell as ShellSpec, contractsFor({}));
+      throwLint(res.ok ? null : formatViewErrors(res.errors));
+    } catch (e) {
+      if (e instanceof LintError) throw e;
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+
+    const out = writeUnder(SHELL_SPEC_PATH, `${JSON.stringify(shell, null, 2)}\n`);
+    if (!out.ok) return out;
+    const wrappers = emitViewWrappers();
+    if (!wrappers.ok) return wrappers;
+    try {
+      onAppWrite?.('page', '_shell');
+    } catch {
+      /* best-effort — the shell already landed */
+    }
+    return { ok: true };
+  }
+
   /**
    * Write a typed API handler into the LIVE project (`api/<path>/<METHOD>.ts`) and tell the
    * host to drop its cached endpoint contracts. The live twin of the catalog `writeApi`;
@@ -731,6 +964,13 @@ export function createProjectAuthoringGlobals(opts: {
     writeProjectPage,
     writeProjectComponent,
     writeProjectApi,
+    writeProjectView,
+    writeProjectViewComponent,
+    writeProjectViewShell,
+    // Host-side gates, reachable from a tasklist CODE node (like `buildProjectApp`). `16-verify`
+    // merges these two structured lists with `buildApp`'s; `17-fix` fans out over the union.
+    validateAppViews: () => validateAppViews(opts.projectRoot),
+    renderSmokeViews: () => renderSmokeViews(opts.projectRoot, { call: callProjectApi as ApiCaller | undefined }),
     listProjectDir,
     readProjectFile,
     buildProjectApp,

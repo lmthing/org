@@ -25,10 +25,22 @@ into the JSON Schema. `schema.test.ts` asserts the two halves agree; compile-tim
 `AssertNever` guards make a drift between a tuple and its union a `pnpm typecheck` failure.
 
 ```
-schema.ts        types + JSON Schema + shape validators   ← this module (pinned contract)
+schema.ts        types + JSON Schema + shape validators   ← the pinned contract
+messages.ts      menu-shaped rejections (the model-facing text)
 validate.ts      name resolution, binding cross-checks,
-                 app-wide checks, render smoke            ← Wave 1, CLI-ENGINE
+                 app-wide checks, render smoke
+files.ts         the on-disk layout (spec / wrapper / component / shell paths)
+wrapper.ts       the generated `pages/<route>.tsx` that renders a spec
 ```
+
+`schema.ts` answers *"is this well-formed?"*; `validate.ts` answers *"is this true of THIS
+project?"* — and `messages.ts` is how either answer is phrased, because a rejection that does
+not name the finite valid set costs a fork per retry.
+
+The writers that call all of this live in [`../authoring/globals.ts`](../authoring/globals.ts)
+(`writeProjectView` · `writeProjectViewComponent` · `writeProjectViewShell`), gated on
+**`views:write`** — a separate capability from `pages:write`, which is what makes freehand TSX in
+a viewbuilder agent a typecheck error rather than a policed instruction.
 
 `schema.ts` is **shape only**. It does not know the project: whether `query: 'listRecipes'`
 is a real endpoint, whether `$.title` is a real Output field, whether `{ use: 'RecipeCard' }`

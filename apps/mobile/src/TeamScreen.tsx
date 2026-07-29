@@ -4,6 +4,8 @@ import { TeamChannelsView, createTeamClient, type Rail } from '@lmthing/ui/team'
 import { useAuth } from '@lmthing/auth'
 import { listTeams, teamAppUrl, teamTokenGetter, TEAM_BASE_URL, type TeamSummary } from './team'
 import { registerForPush } from './push'
+import { AppScreen } from './AppScreen'
+import { fetchAppTarget, type AppTarget } from './app-views'
 
 /**
  * The team surface on a phone.
@@ -27,6 +29,14 @@ export function TeamScreen({ onMentionCount }: { onMentionCount?: (count: number
   const [activeChannelId, setActiveChannelId] = React.useState<string | null>(null)
   const [rail, setRail] = React.useState<Rail>(null)
 
+  // Opening a pinned app is now a question before it is a state change: a
+  // `system-viewbuilder` app renders NATIVELY and must never reach a WebView, and the
+  // only way to know which kind it is, is to ask the pod for its specs. So the probe
+  // runs first and its answer picks the destination — the native screen, or the rail
+  // exactly as before. `probing` holds the project while that round trip is in flight.
+  const [probing, setProbing] = React.useState<string | null>(null)
+  const [nativeApp, setNativeApp] = React.useState<{ id: string; target: AppTarget } | null>(null)
+
   React.useEffect(() => {
     void (async () => {
       try {
@@ -46,17 +56,49 @@ export function TeamScreen({ onMentionCount }: { onMentionCount?: (count: number
     void registerForPush(getAccessToken)
   }, [getAccessToken])
 
+  // One getter per team, shared by the channel client and by anything else that has to
+  // reach this team's pod — the getter caches the minted token in memory, so making a
+  // second one would mint a second credential for the same team.
+  const getTeamToken = React.useMemo(
+    () => (teamId ? teamTokenGetter(teamId, getAccessToken) : null),
+    [teamId, getAccessToken],
+  )
+
   const client = React.useMemo(
     () =>
-      teamId
+      getTeamToken
         ? createTeamClient({
             // Absolute, unlike web: native has no origin to be same-origin with.
             baseUrl: TEAM_BASE_URL,
-            getToken: teamTokenGetter(teamId, getAccessToken),
+            getToken: getTeamToken,
           })
         : null,
-    [teamId, getAccessToken],
+    [getTeamToken],
   )
+
+  React.useEffect(() => {
+    if (!probing || !getTeamToken) return
+    let cancelled = false
+    const projectId = probing
+    void fetchAppTarget(TEAM_BASE_URL, getTeamToken, projectId).then((target) => {
+      if (cancelled) return
+      // Native apps take the whole screen; the WebView kind keeps the rail it has always
+      // had, byte for byte. On a phone the rail is full-width anyway, so what actually
+      // differs is the back affordance, and each screen brings its own.
+      if (target.kind === 'native') setNativeApp({ id: projectId, target })
+      else setRail({ kind: 'app', projectId })
+      setProbing(null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [probing, getTeamToken])
+
+  // Switching teams cannot leave another team's app on screen.
+  React.useEffect(() => {
+    setNativeApp(null)
+    setProbing(null)
+  }, [teamId])
 
   const team = teams?.find((t) => t.id === teamId)
 
@@ -64,6 +106,23 @@ export function TeamScreen({ onMentionCount }: { onMentionCount?: (count: number
   if (!teams) return <Centered>Loading your teams…</Centered>
   if (!teams.length) return <Centered>You are not on a team yet.</Centered>
   if (!client || !team) return <Centered>Opening the team…</Centered>
+
+  // A spec app covers the surface rather than sitting in the rail — it IS a set of screens,
+  // not a page to glance at. Closing it puts the member back exactly where they were, because
+  // the channels view underneath was never unmounted, only covered.
+  if (nativeApp && getTeamToken) {
+    return (
+      <AppScreen
+        projectId={nativeApp.id}
+        name={nativeApp.id}
+        onClose={() => setNativeApp(null)}
+        baseUrl={TEAM_BASE_URL}
+        getToken={getTeamToken}
+        appUrl={teamAppUrl}
+        target={nativeApp.target}
+      />
+    )
+  }
 
   return (
     <TeamChannelsView
@@ -78,7 +137,9 @@ export function TeamScreen({ onMentionCount }: { onMentionCount?: (count: number
         setRail(null)
       }}
       onOpenThread={(threadId) => setRail({ kind: 'thread', threadId })}
-      onOpenApp={(projectId) => setRail({ kind: 'app', projectId })}
+      // Not a state change yet — the probe decides whether this app belongs on the rail
+      // or on the native screen. See `probing` above.
+      onOpenApp={(projectId) => setProbing(projectId)}
       onCloseRail={() => setRail(null)}
       appUrl={teamAppUrl}
       // The tab is mounted-but-hidden while somebody is on Home or Chat, so it is still receiving

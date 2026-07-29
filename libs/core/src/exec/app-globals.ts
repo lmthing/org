@@ -97,6 +97,16 @@ export interface AppGlobalImpls {
    *  writes `<projectRoot>/components/<Name>.tsx` and rebuilds the served app. The typed
    *  surface for shared UI — there is no space-rooted fs writer for it anymore. */
   writeProjectComponent?: (name: string, src: string) => AuthoringResult;
+  /** LIVE-project VIEW-SPEC writers (also `pages:write`): a page as validated DATA rather than
+   *  TSX, rendered by the shared `ViewRenderer` on the web bundle and natively in the mobile app.
+   *  `writeProjectView` persists the spec and generates the wrapper page that bundles it;
+   *  `writeProjectViewComponent` writes a reusable element composition; `writeProjectViewShell`
+   *  writes the app's navigation. Provided by libs/cli
+   *  (`app/authoring/globals.ts#createProjectAuthoringGlobals`), which validates each against the
+   *  project's real endpoint contracts and rejects with a menu-shaped error. */
+  writeProjectView?: (route: string, spec: unknown) => AuthoringResult;
+  writeProjectViewComponent?: (name: string, def: unknown) => AuthoringResult;
+  writeProjectViewShell?: (shell: unknown) => AuthoringResult;
   /** LIVE-project INTROSPECTION reads (the read-side twins of the `writeProject*` writers):
    *  `listProjectDir(dir)` lists the files under `<projectRoot>/<dir>` (e.g. 'database',
    *  'hooks', 'events', 'pages', 'api') and `readProjectFile(path)` reads a project file's
@@ -213,6 +223,23 @@ export function injectAppGlobals(
   // session leaves them absent, so a stray call there fails typecheck rather than mis-targeting.
   if (app['pages:write'] && impls.writeProjectPage) injectGlobal(ctx, 'writeProjectPage', impls.writeProjectPage as (...a: unknown[]) => unknown);
   if (app['pages:write'] && impls.writeProjectComponent) injectGlobal(ctx, 'writeProjectComponent', impls.writeProjectComponent as (...a: unknown[]) => unknown);
+  // The view-spec writers are gated on `views:write` — a SEPARATE capability from `pages:write`,
+  // and deliberately not an alternative to it.
+  //
+  // This is the mechanism behind `system-viewbuilder`'s central guarantee ("its output is 100%
+  // spec, zero WebView by construction"), and it only works as a split. A capability profile names
+  // capability IDs, not individual globals, so a space cannot hold `pages:write` and decline
+  // `writeProjectPage`: the grant injects the TSX writers and emits their DTS as one unit. Gate the
+  // view writers on the same id and a spec-only space would necessarily also be able to author
+  // freehand TSX — and freehand TSX would TYPECHECK, leaving nothing but an instruction between a
+  // weak model and a WebView-bound page. That is precisely what "not granted ⇒ not injected AND
+  // absent from the DTS" exists to replace.
+  //
+  // Note the absence of `|| app['pages:write']`: an OR would hand every appbuilder-shaped agent
+  // both media and dissolve the separation from the other side.
+  if (app['views:write'] && impls.writeProjectView) injectGlobal(ctx, 'writeProjectView', impls.writeProjectView as (...a: unknown[]) => unknown);
+  if (app['views:write'] && impls.writeProjectViewComponent) injectGlobal(ctx, 'writeProjectViewComponent', impls.writeProjectViewComponent as (...a: unknown[]) => unknown);
+  if (app['views:write'] && impls.writeProjectViewShell) injectGlobal(ctx, 'writeProjectViewShell', impls.writeProjectViewShell as (...a: unknown[]) => unknown);
   if (app['api:write'] && impls.writeProjectApi) injectGlobal(ctx, 'writeProjectApi', impls.writeProjectApi as (...a: unknown[]) => unknown);
   // Live-project authoring (S11) — same `hooks:write` grant, but these write into the
   // session's OWN project (not the catalog) and republish. Present only when the host

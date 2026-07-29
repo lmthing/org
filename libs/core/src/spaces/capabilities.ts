@@ -27,6 +27,7 @@ export type CapabilityId =
   | 'db:write'
   | 'db:schema'
   | 'pages:write'
+  | 'views:write'
   | 'api:write'
   | 'hooks:write'
   | 'api:call'
@@ -44,6 +45,7 @@ export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
   'db:write',
   'db:schema',
   'pages:write',
+  'views:write',
   'api:write',
   'hooks:write',
   'api:call',
@@ -96,6 +98,7 @@ function parseKnowledgeWriteConfig(config: unknown, ctx: ParseCapabilitiesCtx): 
 /** Authoring/store/event caps that are **bare-only** — a config payload is an error. */
 const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
   'pages:write',
+  'views:write',
   'api:write',
   'hooks:write',
   'project:manage',
@@ -132,6 +135,18 @@ export interface AppCapabilities {
   'db:write'?: { tables?: string[] };
   'db:schema'?: { tables?: string[] };
   'pages:write'?: true;
+  /**
+   * The SPEC-view writers — `writeProjectView` / `writeProjectViewComponent` /
+   * `writeProjectShell` (`system-viewbuilder`). Deliberately a SEPARATE id from
+   * `pages:write` rather than a share of it: the whole guarantee of that builder is that its
+   * UI is 100% spec and therefore renders natively with no WebView, and the mechanism for
+   * that guarantee is capability absence — an agent holding `views:write` and NOT
+   * `pages:write` has no `writeProjectPage`/`writeProjectComponent` injected and none in its
+   * DTS, so freehand TSX is a typecheck error rather than a rule it is asked to respect.
+   * Folding the spec writers into `pages:write` would hand every one of those agents the TSX
+   * writers back and dissolve the guarantee.
+   */
+  'views:write'?: true;
   'api:write'?: true;
   'hooks:write'?: true;
   'api:call'?: { allow: string[] };

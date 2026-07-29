@@ -34,6 +34,7 @@ export const SYSTEM_SPACE_NAMES = [
   'system-research',
   'system-browser',
   'system-appbuilder',
+  'system-viewbuilder',
   'system-vision',
   'system-files',
   'system-store',

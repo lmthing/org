@@ -71,7 +71,7 @@ function typecheckPrelude(task: TaskNode, tl: TasklistDir, allFns: Record<string
 }
 
 describe('shipped system spaces load + validate', () => {
-  for (const name of ['system-architect', 'system-research', 'system-appbuilder', 'user-thing', 'user-memory']) {
+  for (const name of ['system-architect', 'system-research', 'system-appbuilder', 'system-viewbuilder', 'user-thing', 'user-memory']) {
     it(`${name}: agents have charters and all tasklists are valid DAGs`, async () => {
       const space = await loadSpace(resolve(SYS, name), { requireAgents: false });
       // Every agent ships a non-trivial charter (fork-safe identity).
@@ -356,7 +356,7 @@ describe('shipped system spaces load + validate', () => {
    */
   it('every capabilities-narrowed tasklist node that reads the db (db.query/db.tables) declares db:read', async () => {
     const offenders: string[] = [];
-    for (const spaceName of ['system-architect', 'system-research', 'system-appbuilder', 'user-thing', 'user-memory']) {
+    for (const spaceName of ['system-architect', 'system-research', 'system-appbuilder', 'system-viewbuilder', 'user-thing', 'user-memory']) {
       const space = await loadSpace(resolve(SYS, spaceName), { requireAgents: false });
       for (const tlName of Object.keys(space.tasklists)) {
         const tl = await loadTasklistFromSpace(space, tlName);
