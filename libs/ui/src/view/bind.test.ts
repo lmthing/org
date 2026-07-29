@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  EMPTY_SCOPE,
   fillRoute,
   isBinding,
   itemScope,
@@ -8,6 +9,7 @@ import {
   resolveArray,
   resolveBinding,
   resolveInputs,
+  resolveOptional,
   resolveValue,
   routeParams,
 } from './bind'
@@ -147,5 +149,26 @@ describe('helpers', () => {
   it('isBinding is the `$` test the schema pattern uses', () => {
     expect(isBinding('$.x')).toBe(true)
     expect(isBinding('Total')).toBe(false)
+  })
+})
+
+describe('Wave-2: an argument may be a CONSTANT', () => {
+  it('passes a number and a boolean through with their types intact', () => {
+    // Coercing here would break every endpoint whose Input declares `type: 'number'`.
+    expect(resolveInputs({ withinDays: 7, includePast: false, meal: 'dinner' }, EMPTY_SCOPE)).toEqual({
+      ready: true,
+      values: { withinDays: 7, includePast: false, meal: 'dinner' },
+    })
+  })
+
+  it('a constant is never pending — only a binding can disable a query', () => {
+    const out = resolveInputs({ meal: 'dinner', id: '$data.notYet.id' }, EMPTY_SCOPE)
+    expect(out.ready).toBe(false)
+  })
+
+  it('resolveOptional returns a non-string argument as itself', () => {
+    expect(resolveOptional(7, EMPTY_SCOPE)).toBe(7)
+    expect(resolveOptional(false, EMPTY_SCOPE)).toBe(false)
+    expect(resolveOptional('dinner', EMPTY_SCOPE)).toBe('dinner')
   })
 })

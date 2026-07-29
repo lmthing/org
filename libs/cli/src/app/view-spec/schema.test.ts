@@ -22,6 +22,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  AGENT_NAME_RE,
   BINDING_RE,
   ELEMENT_KINDS,
   FIELD_KINDS,
@@ -30,6 +31,7 @@ import {
   PAGE_ARCHETYPES,
   SECTION_KINDS,
   SHELL_DERIVE_MAX_ROUTES,
+  SHELL_SPEC_SCHEMA,
   STATIC_ROUTE_RE,
   VALUE_RE,
   VIEW_COMPONENT_SCHEMA,
@@ -650,6 +652,152 @@ describe('the flat item — sized so an ordinary row never needs an element tree
   it('never lets an expression in through the object form', () => {
     expect(item({ meta: { value: '$.a + $.b', format: 'number' } }).ok).toBe(false);
     expect(item({ badges: '$.tags.join(", ")' }).ok).toBe(false);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('the Wave-2 amendments — the four things the T1 migration could not say', () => {
+  const wrapSection = (s: unknown) => validateViewSpecShape({ route: 'index', sections: [s] });
+  const item = (i: unknown) => wrapSection({ kind: 'list', query: 'x', item: i });
+
+  describe('1. literal arguments (BLOCKING) — an argument is a constant OR a binding', () => {
+    it('accepts a literal argument where only a path was legal before', () => {
+      // The kitchen case: a constant that used to have to live in an endpoint default.
+      expect(wrapSection({ kind: 'list', query: 'listMeals', input: { meal: 'dinner' } }).errors).toEqual([]);
+      expect(wrapSection({ kind: 'list', query: 'listMeals', input: { withinDays: 7 } }).errors).toEqual([]);
+      expect(wrapSection({ kind: 'list', query: 'listMeals', input: { includePast: false } }).errors).toEqual([]);
+    });
+
+    it('still accepts a binding argument — nothing about dependent queries changed', () => {
+      expect(wrapSection({ kind: 'list', query: 'listMeals', input: { id: '$.id' } }).errors).toEqual([]);
+      expect(
+        wrapSection({ kind: 'list', query: 'listMeals', input: { id: '$data.currentPlan.plan.id' } }).errors,
+      ).toEqual([]);
+    });
+
+    it('still rejects an expression — the widening is not a back-door', () => {
+      const res = wrapSection({ kind: 'list', query: 'x', input: { x: '$.a + $.b' } });
+      expect(res.ok).toBe(false);
+      expect(res.errors.map((e) => e.instancePath)).toContain('/sections/0/input/x');
+      for (const bad of ['$.a ?? $.b', '${x}', '{{ count }}', 'Total {{ count }}', '/trips/$result.id']) {
+        expect(wrapSection({ kind: 'list', query: 'x', input: { x: bad } }).ok, bad).toBe(false);
+      }
+    });
+
+    it('a constant is a SCALAR — an object, an array or a null is a type error', () => {
+      for (const bad of [{ nested: 1 }, [1, 2], null]) {
+        const res = wrapSection({ kind: 'list', query: 'x', input: { x: bad } });
+        expect(res.ok, JSON.stringify(bad)).toBe(false);
+        expect(res.errors.map((e) => e.keyword)).toContain('type');
+      }
+    });
+
+    it('expresses the blog case that was inexpressible: ONE endpoint, THREE constants', () => {
+      // Three buttons, one `explainArticle` mutation, a different `style` each. Before this
+      // amendment there was no way to write it at all — endpoint defaults take one value.
+      expect(
+        wrapSection({
+          kind: 'toolbar',
+          actions: [
+            { label: 'TL;DR', action: { mutate: 'explainArticle', input: { id: '$route.articleId', style: 'tldr' } } },
+            { label: 'ELI5', action: { mutate: 'explainArticle', input: { id: '$route.articleId', style: 'eli5' } } },
+            { label: 'Why me', action: { mutate: 'explainArticle', input: { id: '$route.articleId', style: 'why-me' } } },
+          ],
+        }).errors,
+      ).toEqual([]);
+    });
+
+    it('widens EVERY argument map, not just a section input', () => {
+      const sites: [string, unknown][] = [
+        ['mutate.input', { kind: 'toolbar', actions: [{ label: 'Go', action: { mutate: 'm', input: { s: 'tldr' } } }] }],
+        ['navigate.params', { kind: 'list', query: 'x', rowAction: { navigate: 'feed/[tab]', params: { tab: 'all' } } }],
+        ['download.input', { kind: 'toolbar', actions: [{ label: 'Export', action: { download: 'exportIcs', input: { scope: 'week' } } }] }],
+        ['create.input', { kind: 'create', mutation: 'addRecipe', input: { source: 'web' } }],
+        ['prefill.input', { kind: 'create', mutation: 'addRecipe', prefill: { endpoint: 'e', input: { mode: 'draft' } } }],
+        ['detail.input', { kind: 'detail', query: 'getRecipe', input: { expand: true } }],
+        ['stats.input', { kind: 'stats', query: 's', input: { window: 30 }, cards: [{ label: 'L', value: '$.v' }] }],
+        ['markdown.input', { kind: 'markdown', query: 'q', input: { section: 'intro' }, value: '$.body' }],
+        ['timeline.input', { kind: 'timeline', query: 'q', input: { day: 'today' } }],
+        ['field.input', { kind: 'list', query: 'x', item: { el: 'field', kind: 'toggle', value: '$.done', mutation: 'm', input: { list: 'shopping' } } }],
+        ['link.params', { kind: 'list', query: 'x', item: { el: 'link', text: 'Open', to: 'feed/[tab]', params: { tab: 'all' } } }],
+      ];
+      for (const [name, section] of sites) {
+        expect(wrapSection(section).errors, name).toEqual([]);
+      }
+    });
+
+    it('carries the same rule into the endpoint-side x-options annotation', () => {
+      const inputSchema = (X_OPTIONS_SCHEMA['properties'] as Record<string, JsonSchema>)['input'];
+      const values = inputSchema['additionalProperties'] as JsonSchema;
+      expect(values['type']).toEqual(['string', 'number', 'boolean']);
+    });
+  });
+
+  describe('2. chat.agent takes a real agent slug', () => {
+    it('accepts the kebab-case slugs this codebase actually uses', () => {
+      for (const agent of ['pantry-keeper', 'data-modeler', 'spec-builder', 'thing', 'sous']) {
+        expect(wrapSection({ kind: 'chat', agent }).errors, agent).toEqual([]);
+        expect(validateShellShape({ assistant: { agent } }).errors, `${agent} (shell)`).toEqual([]);
+      }
+      expect(AGENT_NAME_RE.test('pantry-keeper')).toBe(true);
+    });
+
+    it('still keeps a URL, a path or a sentence out of the field', () => {
+      for (const bad of ['https://example.com', 'agents/sous', 'pantry keeper', '-leading', '']) {
+        expect(wrapSection({ kind: 'chat', agent: bad }).ok, bad).toBe(false);
+        expect(AGENT_NAME_RE.test(bad), bad).toBe(false);
+      }
+    });
+  });
+
+  describe('3. a nav group’s highlight family may be parameterised', () => {
+    it('accepts a drill-in route as a family member — the kitchen /trip/:planId case', () => {
+      expect(
+        validateShellShape({
+          groups: [{ label: 'Shop', home: 'shop', routes: ['shopping', 'trip/[planId]'], icon: 'list' }],
+        }).errors,
+      ).toEqual([]);
+    });
+
+    it('but a DESTINATION is still static — the two roles stay split', () => {
+      expect(validateShellShape({ groups: [{ label: 'Feed', home: 'feed/[articleId]' }] }).ok).toBe(false);
+      expect(validateShellShape({ nav: [{ route: 'feed/[articleId]' }] }).ok).toBe(false);
+      const groups = (SHELL_SPEC_SCHEMA['properties'] as Record<string, JsonSchema>)['groups'] as JsonSchema;
+      const props = ((groups['items'] as JsonSchema)['properties'] as Record<string, JsonSchema>);
+      expect(props['home']).toEqual({ $ref: '#/$defs/staticRoute' });
+      expect(props['routes']).toEqual({ type: 'array', items: { $ref: '#/$defs/route' } });
+    });
+  });
+
+  describe('4. a unit on any flat value', () => {
+    it('puts "min" on a meta figure — the shipped page said "20 min", not "20"', () => {
+      expect(item({ title: '$.name', meta: { value: '$.prepMinutes', suffix: 'min' } }).errors).toEqual([]);
+    });
+
+    it('rides on EVERY text-ish key, and takes a binding as readily as a literal', () => {
+      for (const key of ['title', 'subtitle', 'caption', 'meta', 'value', 'suffix', 'note', 'markdown', 'badge', 'status', 'image']) {
+        expect(item({ [key]: { value: '$.x', suffix: 'min' } }).errors, `${key} + literal suffix`).toEqual([]);
+        expect(item({ [key]: { value: '$.x', suffix: '$.unit' } }).errors, `${key} + bound suffix`).toEqual([]);
+      }
+    });
+
+    it('adds NO `<key>Suffix` family — that is the explosion the object form prevents', () => {
+      const res = item({ meta: '$.prepMinutes', metaSuffix: 'min' });
+      expect(res.ok).toBe(false);
+      expect(res.errors.find((e) => e.keyword === 'additionalProperties')?.params).toMatchObject({
+        additionalProperty: 'metaSuffix',
+      });
+      const flat = DEFS['flatItem'];
+      for (const paired of ['metaSuffix', 'captionSuffix', 'titleSuffix', 'noteSuffix']) {
+        expect(Object.keys(flat['properties'] as object)).not.toContain(paired);
+      }
+    });
+
+    it('is a Value, so it lets no expression in either', () => {
+      expect(item({ meta: { value: '$.prepMinutes', suffix: '$.a + $.b' } }).ok).toBe(false);
+      expect(item({ meta: { value: '$.prepMinutes', suffix: '{{ unit }}' } }).ok).toBe(false);
+    });
   });
 });
 

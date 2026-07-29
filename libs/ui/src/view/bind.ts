@@ -36,7 +36,7 @@
  * the hand-coded `enabled:` flag the corpus writes everywhere.
  */
 
-import type { Binding, Value } from './types'
+import type { Arg, Binding, Value } from './types'
 
 /** One path segment: an identifier plus an optional numeric index (`items[0]`). */
 const SEGMENT_RE = /^([A-Za-z_][A-Za-z0-9_]*)((?:\[[0-9]+\])*)$/
@@ -198,8 +198,15 @@ export function resolveValue(value: Value | undefined, scope: Scope): Resolved {
   return isEmpty(out) ? ABSENT : { present: true, value: out }
 }
 
-/** {@link resolveValue}, flattened to `undefined` when absent. */
-export function resolveOptional(value: Value | undefined, scope: Scope): unknown {
+/**
+ * {@link resolveValue}, flattened to `undefined` when absent.
+ *
+ * Takes an {@link Arg} rather than a {@link Value} so every argument site can share it: a
+ * non-string is a constant and resolves to itself, which is what keeps `{ withinDays: 7 }`
+ * a number all the way to the request.
+ */
+export function resolveOptional(value: Arg | undefined, scope: Scope): unknown {
+  if (typeof value !== 'string') return value
   const r = resolveValue(value, scope)
   return r.present ? r.value : undefined
 }
@@ -219,16 +226,26 @@ export function resolveArray(binding: Binding | undefined, scope: Scope): unknow
  * the moment before the plan arrives — it must not fire at all. The renderer reads
  * `ready` and skips the fetch, which is the declarative replacement for every hand-coded
  * `enabled:` flag in the corpus.
+ *
+ * An {@link Arg} that is not a string is a CONSTANT (`{ withinDays: 7 }`,
+ * `{ includePast: false }`) — always present, never pending, and passed through as the
+ * typed value the endpoint's Input schema expects rather than as `'7'`.
  */
 export function resolveInputs(
-  input: Record<string, Binding> | undefined,
+  input: Record<string, Arg> | undefined,
   scope: Scope,
 ): { ready: boolean; values: Record<string, unknown> } {
   const values: Record<string, unknown> = {}
   if (!input) return { ready: true, values }
-  for (const [key, binding] of Object.entries(input)) {
-    const r = resolveValue(binding, scope)
-    // A literal in an input map is legal and always ready; only a BINDING can be pending.
+  for (const [key, arg] of Object.entries(input)) {
+    // A number/boolean constant keeps its type — coercing it to a string here would break
+    // every endpoint whose Input declares `type: 'number'`.
+    if (typeof arg !== 'string') {
+      values[key] = arg
+      continue
+    }
+    const r = resolveValue(arg, scope)
+    // A string literal in an input map is legal and always ready; only a BINDING can be pending.
     if (!r.present) return { ready: false, values }
     values[key] = r.value
   }

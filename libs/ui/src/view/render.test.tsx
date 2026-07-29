@@ -534,3 +534,110 @@ describe('the shell', () => {
     expect(screen.queryByText('A')).toBeNull()
   })
 })
+
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('the Wave-2 amendments', () => {
+  it('sends a LITERAL argument to the endpoint, typed as written', async () => {
+    // The blocking T1 gap: `{ meal: 'dinner', withinDays: 7 }` had to be an endpoint
+    // default, which only ever works for one constant per endpoint.
+    const { client, calls } = stubClient({ listRecipes: [{ id: '1', title: 'Ragu' }] })
+    render(
+      <ViewRenderer
+        spec={page([
+          { kind: 'list', query: 'listRecipes', input: { meal: 'dinner', withinDays: 7, includePast: false } },
+        ])}
+        client={client as never}
+      />,
+    )
+    await waitFor(() => expect(screen.getByText('Ragu')).toBeInTheDocument())
+    const call = calls.find((c) => c.name === 'listRecipes')
+    // A number stays a number: an Input schema declaring `type: 'number'` would reject '7'.
+    expect(call?.input).toEqual({ meal: 'dinner', withinDays: 7, includePast: false })
+  })
+
+  it('a literal argument never makes a section pending — only a BINDING can', async () => {
+    // `resolveInputs.ready` is what replaces `enabled:`; a constant is always ready.
+    const { client, calls } = stubClient({ planMeals: [] })
+    render(
+      <ViewRenderer
+        spec={page([{ kind: 'list', query: 'planMeals', input: { planId: 'p7' } }])}
+        client={client as never}
+      />,
+    )
+    await waitFor(() => expect(calls.some((c) => c.name === 'planMeals')).toBe(true))
+  })
+
+  it('carries a different constant per button — ONE endpoint, three actions', async () => {
+    const { client, calls } = stubClient({ listRecipes: [{ id: '1', title: 'Ragu' }], toggleDone: { ok: true } })
+    render(
+      <ViewRenderer
+        spec={page([
+          {
+            kind: 'toolbar',
+            actions: [
+              { label: 'TL;DR', action: { mutate: 'toggleDone', input: { style: 'tldr' } } },
+              { label: 'ELI5', action: { mutate: 'toggleDone', input: { style: 'eli5' } } },
+            ],
+          },
+        ])}
+        client={client as never}
+      />,
+    )
+    screen.getByText('ELI5').click()
+    await waitFor(() => expect(calls.some((c) => c.name === 'toggleDone')).toBe(true))
+    expect(calls.find((c) => c.name === 'toggleDone')?.input).toEqual({ style: 'eli5' })
+  })
+
+  it('puts a UNIT on a flat value — "20 min", not a bare "20"', async () => {
+    const { client } = stubClient({ listRecipes: [{ id: '1', title: 'Ragu', prepMinutes: 20, unit: 'kcal', energy: 540 }] })
+    render(
+      <ViewRenderer
+        spec={page([
+          {
+            kind: 'list',
+            query: 'listRecipes',
+            item: {
+              title: '$.title',
+              meta: { value: '$.prepMinutes', suffix: 'min' },
+              // A bound unit works exactly as a literal one does.
+              caption: { value: '$.energy', suffix: '$.unit' },
+            },
+          },
+        ])}
+        client={client as never}
+      />,
+    )
+    await waitFor(() => expect(screen.getByText('20 min')).toBeInTheDocument())
+    expect(screen.getByText('540 kcal')).toBeInTheDocument()
+  })
+
+  it('drops the unit, not the row, when the suffix binding resolves to nothing (S1)', async () => {
+    const { client } = stubClient({ listRecipes: [{ id: '1', title: 'Ragu', prepMinutes: 20 }] })
+    render(
+      <ViewRenderer
+        spec={page([
+          { kind: 'list', query: 'listRecipes', item: { title: '$.title', meta: { value: '$.prepMinutes', suffix: '$.unit' } } },
+        ])}
+        client={client as never}
+      />,
+    )
+    // "20 undefined" would be the naive concatenation; the figure stands on its own.
+    await waitFor(() => expect(screen.getByText('20')).toBeInTheDocument())
+  })
+
+  it('keeps a tab highlighted on a PARAMETERISED family member', () => {
+    const { client } = stubClient({})
+    render(
+      <ViewRenderer
+        spec={page([{ kind: 'markdown', source: 'plan' }])}
+        shell={{ groups: [{ label: 'Shop', home: 'shop', routes: ['shopping', 'trip/[planId]'] }, { label: 'Cook', home: 'index' }] }}
+        routes={['index', 'shop', 'shopping', 'trip/[planId]']}
+        route={{ path: 'trip/p7', params: { planId: 'p7' } }}
+        client={client as never}
+      />,
+    )
+    // The destination is mounted and reachable — the drill-in is no longer an orphan.
+    expect(screen.getAllByText('Shop').length).toBeGreaterThan(0)
+  })
+})

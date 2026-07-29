@@ -90,8 +90,7 @@ export type Tone = (typeof TONES)[number]
  * The named icon set. Finite BY DESIGN: a spec names an icon, the renderer owns the
  * drawing (SVG primitives — lucide is web-only, so a native fork cannot use it).
  *
- * 32 names. (`schema.ts`'s prose says "This list sits at 50"; the tuple it describes has
- * 32 entries, and the tuple is the contract.)
+ * 32 names — the same tuple `schema.ts` pins. The tuple is the contract; count from it.
  */
 export const ICON_NAMES = [
   'home',
@@ -158,6 +157,17 @@ export type FieldKind = (typeof FIELD_KINDS)[number]
 export type Binding = string
 /** A literal string OR a binding. */
 export type Value = string
+/**
+ * An **argument** — a constant or a binding. The value type of every argument map
+ * (`input`, `mutate.input`, `navigate.params`, `link.params`, `prefill.input`).
+ *
+ * Wave-2 amendment: these were paths only, which made `{ meal: 'dinner' }` and
+ * `{ withinDays: 7 }` illegal and left one endpoint called with three different constants
+ * inexpressible. A string argument is still a {@link Value} — a binding when it starts with
+ * a root, a literal otherwise — so the renderer's job is unchanged: walk a path, or copy a
+ * constant. See `bind.ts#resolveInputs`.
+ */
+export type Arg = Value | number | boolean
 /** An authoring route (`recipes/[id]`). */
 export type Route = string
 /** A component prop type (`Recipe`, `Recipe[]`, `string`). */
@@ -200,7 +210,7 @@ export interface Poll {
 /** Call a mutation endpoint by name. */
 export interface MutateAction {
   mutate: string
-  input?: Record<string, Binding>
+  input?: Record<string, Arg>
   /** Bulk commit: send the enclosing list's current multi-selection. */
   over?: 'selection'
   /** Which Input property receives the renderer-supplied value. */
@@ -214,11 +224,11 @@ export interface MutateAction {
 
 export interface NavigateAction {
   navigate: Route
-  params?: Record<string, Binding>
+  params?: Record<string, Arg>
 }
 export interface DownloadAction {
   download: string
-  input?: Record<string, Binding>
+  input?: Record<string, Arg>
   filename?: Value
 }
 export interface PrintAction {
@@ -397,7 +407,7 @@ export interface LinkEl {
   el: 'link'
   text: Value
   to?: Route
-  params?: Record<string, Binding>
+  params?: Record<string, Arg>
   href?: Value
   external?: boolean
   icon?: IconName
@@ -410,7 +420,7 @@ export interface FieldEl {
   mutation: string
   /** Which Input property receives the new value. Defaults to `value`'s last segment. */
   arg?: string
-  input?: Record<string, Binding>
+  input?: Record<string, Arg>
   label?: Value
   placeholder?: Value
   options?: string[] | Binding
@@ -453,8 +463,15 @@ export interface ComponentRef {
   props?: Record<string, Value>
 }
 
-/** One slot in a {@link FlatItem}: a value, or that value with its modifiers attached. */
-export type FlatValue = Value | ({ value: Value; maxLines?: number } & Formatted & Toned)
+/**
+ * One slot in a {@link FlatItem}: a value, or that value with its modifiers attached.
+ *
+ * `suffix` is a Wave-2 modifier: `meta: { value: '$.prepMinutes', suffix: 'min' }` renders
+ * "20 min" where a bare binding rendered "20". It lives here, on the ONE shared definition,
+ * rather than as a `metaSuffix`/`captionSuffix` key family — which is the whole reason the
+ * object form exists.
+ */
+export type FlatValue = Value | ({ value: Value; suffix?: Value; maxLines?: number } & Formatted & Toned)
 
 /** The flat convenience form for an item slot. CLOSED — an invented key is an error. */
 export interface FlatItem {
@@ -514,7 +531,7 @@ export interface ListSection extends SectionBase {
   kind: 'list'
   query?: string
   from?: From
-  input?: Record<string, Binding>
+  input?: Record<string, Arg>
   param?: Binding
   limit?: number
   layout?: ListLayout
@@ -534,7 +551,7 @@ export interface DetailSection extends SectionBase {
   kind: 'detail'
   query: string
   param?: Binding
-  input?: Record<string, Binding>
+  input?: Record<string, Arg>
   header?: Slot
   fields?: KeyValuePair[]
   body?: Slot
@@ -548,13 +565,13 @@ export interface CreateSection extends SectionBase {
   kind: 'create'
   mutation: string
   /** Values supplied by the page rather than the user — hidden from the form. */
-  input?: Record<string, Binding>
+  input?: Record<string, Arg>
   submitLabel?: Value
   invalidates?: string[]
   async?: { note?: Value; refetchAfter?: number }
   prefill?: {
     endpoint: string
-    input?: Record<string, Binding>
+    input?: Record<string, Arg>
     from?: Binding
     merge?: 'fill-empty'
   }
@@ -574,7 +591,7 @@ export type StatCard = {
 export interface StatsSection extends SectionBase {
   kind: 'stats'
   query: string
-  input?: Record<string, Binding>
+  input?: Record<string, Arg>
   cards: StatCard[]
   poll?: Poll
 }
@@ -584,7 +601,7 @@ export interface MarkdownSection extends SectionBase {
   source?: string
   query?: string
   param?: Binding
-  input?: Record<string, Binding>
+  input?: Record<string, Arg>
   value?: Binding
   poll?: Poll
 }
@@ -607,7 +624,7 @@ export interface TimelineSection extends SectionBase {
   kind: 'timeline'
   query?: string
   from?: From
-  input?: Record<string, Binding>
+  input?: Record<string, Arg>
   param?: Binding
   group?: Binding
   groupFormat?: Format
@@ -658,7 +675,13 @@ export interface NavEntry {
 /** Several routes behind one destination. */
 export interface NavGroup {
   label: Value
+  /** The tab's landing page. STATIC — a destination with a `[param]` opens nothing. */
   home: Route
+  /**
+   * The highlight family. A member MAY be parameterised (`trip/[planId]`): a drill-in is
+   * exactly the page its tab should stay lit for. `shell.tsx#activeDestination` matches a
+   * member by segment SHAPE, so `trip/[planId]` highlights on the live `trip/p7`.
+   */
   routes?: Route[]
   icon?: IconName
   badge?: NavBadge
@@ -686,7 +709,7 @@ export interface ShellSpec {
 /** `x-options` — a foreign-key form field's option source, read off the Input schema. */
 export interface XOptions {
   query: string
-  input?: Record<string, Binding>
+  input?: Record<string, Arg>
   label: Binding
   value: Binding
 }

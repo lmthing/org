@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { activeDestination, deriveNav, isStaticRoute, matchesPrefix, paramsFromRoute, subnavFor, topLevel } from './shell'
+import {
+  activeDestination,
+  deriveNav,
+  isStaticRoute,
+  matchesPrefix,
+  paramsFromRoute,
+  routeShapeMatches,
+  subnavFor,
+  topLevel,
+} from './shell'
 import { SHELL_DERIVE_MAX_ROUTES, type ShellSpec } from './types'
 
 describe('nav derivation', () => {
@@ -112,5 +121,31 @@ describe('route helpers', () => {
     expect(isStaticRoute('recipes/new')).toBe(true)
     expect(isStaticRoute('recipes/[id]')).toBe(false)
     expect(topLevel('searches/abc/inbox')).toBe('searches')
+  })
+})
+
+describe('Wave-2: a highlight family may be parameterised', () => {
+  // Kitchen's real `_layout.tsx` keeps one tab lit for /shop ↔ /shopping ↔ /trip/:planId.
+  const shell: ShellSpec = {
+    groups: [
+      { label: 'Shop', home: 'shop', routes: ['shopping', 'trip/[planId]'] },
+      { label: 'Cook', home: 'index' },
+    ],
+  }
+  const nav = deriveNav(shell, ['index', 'shop', 'shopping', 'trip/[planId]'])
+
+  it('highlights the tab on the live drill-in route', () => {
+    // A string compare could never match `trip/p7` against `trip/[planId]`, which is what
+    // left drill-ins belonging to no tab at all.
+    expect(activeDestination(nav.destinations, 'trip/p7')).toBe('shop')
+    expect(activeDestination(nav.destinations, 'shopping')).toBe('shop')
+    expect(activeDestination(nav.destinations, 'index')).toBe('index')
+  })
+
+  it('matches by segment SHAPE, not by prefix', () => {
+    expect(routeShapeMatches('trip/[planId]', 'trip/p7')).toBe(true)
+    expect(routeShapeMatches('trip/[planId]', 'trip')).toBe(false)
+    expect(routeShapeMatches('trip/[planId]', 'plan/p7')).toBe(false)
+    expect(routeShapeMatches('shopping', 'shopping')).toBe(true)
   })
 })

@@ -20,7 +20,7 @@
 
 import * as React from 'react'
 import * as Prim from '../../elements/primitives/index'
-import type { Binding, EmptyState, FlatItem, Slot, Value } from '../types'
+import type { Arg, Binding, EmptyState, FlatItem, Slot, Value } from '../types'
 import { resolveArray, resolveInputs, resolveOptional, resolveValue, type Scope } from '../bind'
 import { humanize, stringify } from '../format'
 import { useViewQuery, useViewRuntime, type QueryState } from '../runtime'
@@ -52,7 +52,7 @@ export interface SectionSource<T = unknown> {
 export interface SourceArgs {
   query?: string
   from?: Binding
-  input?: Record<string, Binding>
+  input?: Record<string, Arg>
   param?: Binding
   limit?: number
   poll?: { everyMs: number; while?: { field: Binding; in: (string | number | boolean)[] } }

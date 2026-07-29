@@ -49,6 +49,27 @@
  *  5. **No pagination.** The audit measured demand across 153 components and 84 pages at
  *     exactly zero. `limit` is the whole story; do not add `page`/`cursor`/`hasMore`.
  *
+ * ## Wave-2 amendments — the four things T1 could not say
+ *
+ * The T1 hand-migration of a real app is the first time the pinned vocabulary met a shipped
+ * page. Four gaps came back, one of them blocking (the ratchet promotes a blocker on FIRST
+ * occurrence — with no escape hatch, promotion is the only relief valve). Three are
+ * WIDENINGS of an existing shape rather than new tokens, which is the right ratio: every
+ * token is one a weak model must learn.
+ *
+ *  1. **{@link Arg} — literal arguments** (blocking). Argument maps were paths only, so
+ *     `{ meal: 'dinner' }` was illegal and blog's three TL;DR / ELI5 / Why-me buttons — one
+ *     endpoint, three constants — were inexpressible. A string argument is still judged by
+ *     {@link VALUE_PATTERN}, so a literal stays distinguishable from a binding and there is
+ *     no second convention.
+ *  2. **{@link AGENT_NAME_PATTERN} — real agent slugs.** `chat.agent` was an identifier, so
+ *     `pantry-keeper` was rejected — i.e. the pattern rejected the only naming style this
+ *     codebase uses, and T1 dropped a chat dock rather than misname an agent.
+ *  3. **{@link NavGroup.routes} may be parameterised.** A destination and a highlight family
+ *     are two roles; only the first must be static.
+ *  4. **`suffix` on any flat value** ({@link FlatValue}) — `"20 min"`, not `"20"`, without
+ *     a `metaSuffix`/`captionSuffix` key family.
+ *
  * ## Normative renderer semantics (T0 S1–S6 — pages break silently without these)
  *
  * The schema states these because they are the contract, not the renderer's private
@@ -437,6 +458,27 @@ export const IDENT_PATTERN = '^[A-Za-z_][A-Za-z0-9_]*$';
 export const IDENT_RE = new RegExp(IDENT_PATTERN);
 
 /**
+ * **An agent slug** — `pantry-keeper`, `data-modeler`, `spec-builder`, `thing`.
+ *
+ * WAVE-2 AMENDMENT (T1, blocking). `chat.agent` was pinned to {@link IDENT_PATTERN}, which
+ * rejects a hyphen — and **kebab-case is this codebase's own convention** for agent slugs
+ * (every agent directory under a system space's `agents/` is one: `api-author`,
+ * `data-modeler`, `spec-builder`). The pattern therefore rejected the only
+ * naming style anyone uses, and the T1 migration had to DROP a chat dock outright — there
+ * was no spec-side workaround, which is what makes it a bucket-1 blocker rather than an
+ * inconvenience.
+ *
+ * Note what this pattern is and is not. It is a **syntax** check, and syntax was never the
+ * valuable check here: the one worth running is *does this agent exist in this project's
+ * space*, phrased as a menu of the real agents. That check needs the project, so it belongs
+ * to `validate.ts` — this pattern's only remaining job is to keep a URL, a path or a
+ * sentence out of the field.
+ */
+export const AGENT_NAME_PATTERN = '^[A-Za-z0-9][A-Za-z0-9_-]*$';
+/** Compiled twin of {@link AGENT_NAME_PATTERN}. */
+export const AGENT_NAME_RE = new RegExp(AGENT_NAME_PATTERN);
+
+/**
  * A component prop's declared type: a row type from `@app/types` (`Recipe`,
  * `Recipe[]`) or a scalar (`string`, `number`, `boolean`).
  */
@@ -477,6 +519,30 @@ export type Binding = string;
 
 /** A literal string OR a binding. Validated by {@link VALUE_PATTERN}. */
 export type Value = string;
+
+/**
+ * **An ARGUMENT — a constant, or a binding.** The value type of every argument map in the
+ * language (`input`, `mutate.input`, `navigate.params`, `link.params`, `prefill.input`,
+ * `x-options.input`).
+ *
+ * WAVE-2 AMENDMENT (T1, blocking). These maps were `Record<string, Binding>` — paths only —
+ * which made `{ meal: 'dinner' }` and `{ withinDays: 7 }` illegal. Calling one endpoint
+ * with different constants is an ordinary shape, and it could not be said at all: T1's
+ * kitchen migration had to push each constant into its endpoint's Input default (which only
+ * worked because each endpoint took exactly one), and blog's three TL;DR / ELI5 / Why-me
+ * buttons — **one endpoint, three different constants** — were inexpressible in the
+ * vocabulary.
+ *
+ * Two things this deliberately is NOT:
+ *  - **not a second string convention.** A string argument is a {@link Value}: it is a
+ *    binding when it starts with a binding root and a literal otherwise, judged by the same
+ *    {@link VALUE_PATTERN} every other authored string is judged by. `'dinner'` is a
+ *    constant, `'$.id'` is a path, and `'/trips/$result.id'` is still an error.
+ *  - **not an expression back-door.** A constant is a `string`, a `number` or a `boolean`
+ *    and nothing else — no object, no array, no null. The language gains no operators, and
+ *    the renderer still only ever walks a path or copies a constant.
+ */
+export type Arg = Value | number | boolean;
 
 /** An authoring route (`recipes/[id]`). Validated by {@link ROUTE_PATTERN}. */
 export type Route = string;
@@ -544,12 +610,15 @@ export interface Poll {
  *
  * **This is the fix for audit I1** — the one finding that was outright inexpressible.
  * `input` binds the mutation's arguments from the current scope, so a row's "mark done"
- * button can carry that row's id (`input: { id: '$.id' }`). Arguments are bindings, so
- * the no-expressions rule is untouched.
+ * button can carry that row's id (`input: { id: '$.id' }`) — and since the Wave-2
+ * amendment each argument may equally be a CONSTANT ({@link Arg}), which is what lets one
+ * endpoint back three buttons: `{ style: 'tldr' }`, `{ style: 'eli5' }`,
+ * `{ style: 'why-me' }`. Arguments are paths or constants, so the no-expressions rule is
+ * untouched.
  */
 export interface MutateAction {
   mutate: string;
-  input?: Record<string, Binding>;
+  input?: Record<string, Arg>;
   /**
    * Bulk commit (audit I5): send the enclosing list's current multi-selection. The
    * renderer supplies it under the Input key named by {@link MutateAction.arg}.
@@ -577,14 +646,14 @@ export interface MutateAction {
 export type Action =
   | MutateAction
   /** Navigate to another page of the same app. */
-  | { navigate: Route; params?: Record<string, Binding> }
+  | { navigate: Route; params?: Record<string, Arg> }
   /**
    * Save an endpoint's Output to a file (T0 feature #5 — OPML export, `.ics` calendar,
    * markdown copy; 3 export user stories across 3 apps). Names an endpoint, never a URL
    * and never a Blob: the client download primitive is the renderer's, the bytes are the
    * endpoint's.
    */
-  | { download: string; input?: Record<string, Binding>; filename?: Value }
+  | { download: string; input?: Record<string, Arg>; filename?: Value }
   /** Print the current view (audit A11 — 7 print/export components across 4 apps). */
   | { print: true }
   /** Copy a bound value to the clipboard (audit A11 — 2 components). */
@@ -841,7 +910,7 @@ export interface LinkEl {
   el: 'link';
   text: Value;
   to?: Route;
-  params?: Record<string, Binding>;
+  params?: Record<string, Arg>;
   href?: Value;
   external?: boolean;
   icon?: IconName;
@@ -874,7 +943,7 @@ export interface FieldEl {
   /** Which Input property receives the new value. Defaults to `value`'s last segment. */
   arg?: string;
   /** The mutation's other arguments, bound from the row/section scope (`{ id: '$.id' }`). */
-  input?: Record<string, Binding>;
+  input?: Record<string, Arg>;
   label?: Value;
   placeholder?: Value;
   /** `select` options: a literal list, or a binding to one. Enums also come from the Input schema. */
@@ -936,10 +1005,21 @@ export interface ComponentRef {
  * (`title: '$.name'`), the modified case is one object (`meta: { value: '$.amount',
  * format: 'currency', currencyField: '$.currency' }`), and a new modifier is one property
  * on ONE definition.
+ *
+ * WAVE-2 AMENDMENT (T1): `suffix` is that promise being kept. `meta: '$.prepMinutes'`
+ * rendered a bare **"20"** where the shipped page said **"20 min"**, and the unit had
+ * nowhere to go — {@link FlatItem.suffix} attaches to `value` alone. The desk check had
+ * assumed a `metaSuffix`; adding one (and then a `captionSuffix`, and a `noteSuffix`)
+ * is precisely the key explosion the object form exists to prevent. So the modifier goes
+ * where every other shared modifier already lives: `meta: { value: '$.prepMinutes',
+ * suffix: 'min' }`, and every flat key gets units for free.
+ *
+ * It is a {@link Value}, so a bound unit works too (`suffix: '$.unit'`), and S1 applies to
+ * it independently: an unresolved suffix appends nothing rather than printing "20 null".
  */
 export type FlatValue =
   | Value
-  | ({ value: Value; maxLines?: number } & Formatted & Toned);
+  | ({ value: Value; suffix?: Value; maxLines?: number } & Formatted & Toned);
 
 /**
  * The **flat convenience form** for an item slot: no `el`, no `use`, just the things a
@@ -1057,7 +1137,7 @@ export interface ListSection extends SectionBase {
   /** Source the rows from an embedded array instead of the query's root. See {@link From}. */
   from?: From;
   /** Dependent-query arguments. An unresolved binding disables the section. */
-  input?: Record<string, Binding>;
+  input?: Record<string, Arg>;
   /**
    * Which record, when the query takes one. Defaults to the route's single `[param]`, bound
    * under its own key — so `recipes/[id]` defaults to `$route.id`. (`$route` is the root;
@@ -1107,7 +1187,7 @@ export interface DetailSection extends SectionBase {
   query: string;
   /** Which record. Defaults to the route's single `[param]` (`$params.id`). */
   param?: Binding;
-  input?: Record<string, Binding>;
+  input?: Record<string, Arg>;
   /** The top of the record — a component ref, an element tree, or the flat form. */
   header?: Slot;
   /** The keyvalue body. */
@@ -1135,7 +1215,7 @@ export interface CreateSection extends SectionBase {
   /** Mutation endpoint name (POST/PATCH/PUT/DELETE). */
   mutation: string;
   /** Values supplied by the page rather than the user (a parent id) — hidden from the form. */
-  input?: Record<string, Binding>;
+  input?: Record<string, Arg>;
   submitLabel?: Value;
   /** Endpoint names whose cached results this mutation invalidates. */
   invalidates?: string[];
@@ -1144,7 +1224,7 @@ export interface CreateSection extends SectionBase {
   /** Pre-populate from another endpoint. `merge: 'fill-empty'` is the only policy in v1. */
   prefill?: {
     endpoint: string;
-    input?: Record<string, Binding>;
+    input?: Record<string, Arg>;
     /** Path into the prefill endpoint's Output to read the field map from. */
     from?: Binding;
     merge?: 'fill-empty';
@@ -1156,7 +1236,7 @@ export interface CreateSection extends SectionBase {
 export interface StatsSection extends SectionBase {
   kind: 'stats';
   query: string;
-  input?: Record<string, Binding>;
+  input?: Record<string, Arg>;
   cards: ({
     label: Value;
     value: Value;
@@ -1175,7 +1255,7 @@ export interface MarkdownSection extends SectionBase {
   /** Literal markdown. Not a {@link Value} — markdown legitimately contains `${`. */
   source?: string;
   query?: string;
-  input?: Record<string, Binding>;
+  input?: Record<string, Arg>;
   /** Which Output field holds the markdown. */
   value?: Binding;
   /** Refresh while an agent is still writing it (audit I4 — `blog/ArticleTakes`). */
@@ -1185,7 +1265,11 @@ export interface MarkdownSection extends SectionBase {
 /** An assistant dock — wraps the existing `<Chat>`. Replaces the catalogue's 4. */
 export interface ChatSection extends SectionBase {
   kind: 'chat';
-  /** Agent name within the project's space. */
+  /**
+   * Agent slug within the project's space — `pantry-keeper`, `sous`, `data-modeler`.
+   * Validated by {@link AGENT_NAME_PATTERN} (kebab-case is the codebase's convention);
+   * whether the agent EXISTS is `validate.ts`'s check, against the real menu.
+   */
   agent: string;
   /** Space name, when the agent is not in the project's own space. */
   space?: string;
@@ -1220,7 +1304,7 @@ export interface TimelineSection extends SectionBase {
   query?: string;
   /** Usually set — the stream is nearly always an embedded array. See {@link From}. */
   from?: From;
-  input?: Record<string, Binding>;
+  input?: Record<string, Arg>;
   param?: Binding;
   /** The grouping key — a date-ish binding (`$.day`). Absent ⇒ one ungrouped stream. */
   group?: Binding;
@@ -1296,11 +1380,22 @@ export interface NavEntry {
  * 4 of 5 catalogue apps hand-group 13–21 routes into 4–6 destinations, with one route as
  * the group's landing page and the rest reachable inside it. `home` is what the tab opens;
  * `routes` is the family it stays highlighted for (kitchen aliases `/shop`↔`/shopping`↔
- * `/trip` under one tab exactly this way).
+ * `/trip/:planId` under one tab exactly this way).
+ *
+ * WAVE-2 AMENDMENT (T1): the two roles were conflated. **A destination must be static** —
+ * `home` and {@link ShellSpec.nav} keep {@link STATIC_ROUTE_PATTERN}, because a tab that
+ * opens `feed/[articleId]` opens nothing. **A highlight-family member may be
+ * parameterised**, because a drill-in is exactly the page a tab should stay lit for:
+ * kitchen's real `_layout.tsx` keeps the Shop tab highlighted on `trip/:planId`. Under the
+ * static-only pattern such a page had no group, so `validateAppViews` called it an orphan
+ * unless something happened to navigate to it — and T1 invented two toolbar buttons purely
+ * to satisfy reachability, which is the tail wagging the dog.
  */
 export interface NavGroup {
   label: Value;
+  /** The tab's landing page. STATIC — a destination with a `[param]` opens nothing. */
   home: Route;
+  /** The highlight family. Members MAY be parameterised — a drill-in belongs to its tab. */
   routes?: Route[];
   icon?: IconName;
   badge?: NavBadge;
@@ -1384,7 +1479,7 @@ export interface XOptions {
   /** The endpoint whose Output supplies the options. */
   query: string;
   /** Its arguments, bound from the form/route (`{ id: '$route.tripId' }`). */
-  input?: Record<string, Binding>;
+  input?: Record<string, Arg>;
   /** Path to each option's display label, in row scope (`$.name`). */
   label: Binding;
   /** Path to each option's submitted value, in row scope (`$.id`). */
@@ -1401,7 +1496,9 @@ export const X_OPTIONS_SCHEMA: JsonSchema = {
   required: ['query', 'label', 'value'],
   properties: {
     query: { type: 'string', pattern: IDENT_PATTERN },
-    input: { type: 'object', additionalProperties: { type: 'string', pattern: BINDING_PATTERN } },
+    // An argument map like every other (Wave-2): a constant or a binding. `label`/`value`
+    // stay strict bindings — they are paths INTO each option row, never constants.
+    input: { type: 'object', additionalProperties: { type: ['string', 'number', 'boolean'], pattern: VALUE_PATTERN } },
     label: { type: 'string', pattern: BINDING_PATTERN },
     value: { type: 'string', pattern: BINDING_PATTERN },
   },
@@ -1460,10 +1557,16 @@ const INVALIDATES: JsonSchema = { type: 'array', items: { type: 'string', patter
 const REVEALS: JsonSchema = { type: 'array', items: { type: 'string', pattern: IDENT_PATTERN } };
 /** An endpoint name. */
 const ENDPOINT: JsonSchema = { type: 'string', pattern: IDENT_PATTERN };
-/** A record of bindings — dependent-query inputs, navigate params, mutation args. */
-const BINDING_MAP: JsonSchema = {
+/**
+ * An **argument map** — dependent-query inputs, navigate params, mutation args.
+ *
+ * Its values are {@link Arg}s: a binding path OR a constant. One shape for every argument
+ * site in the language, so `{ id: '$.id', meal: 'dinner', withinDays: 7 }` is one object
+ * rather than a path map plus a defaults mechanism somewhere else.
+ */
+const ARG_MAP: JsonSchema = {
   type: 'object',
-  additionalProperties: ref('binding'),
+  additionalProperties: ref('arg'),
   propertyNames: { pattern: IDENT_PATTERN },
 };
 
@@ -1537,7 +1640,7 @@ function listLike(kind: SectionKind, props: Record<string, JsonSchema>): JsonSch
       query: ENDPOINT,
       from: B,
       param: B,
-      input: BINDING_MAP,
+      input: ARG_MAP,
       limit: { type: 'integer', minimum: 1 },
       item: NODE,
       rowAction: ACTION,
@@ -1682,7 +1785,7 @@ const ELEMENT_DEFS: JsonSchema[] = [
   ),
   element(
     'link',
-    { text: V, to: ref('route'), params: BINDING_MAP, href: V, external: { type: 'boolean' }, icon: ICON },
+    { text: V, to: ref('route'), params: ARG_MAP, href: V, external: { type: 'boolean' }, icon: ICON },
     ['text'],
   ),
   element(
@@ -1692,7 +1795,7 @@ const ELEMENT_DEFS: JsonSchema[] = [
       value: B,
       mutation: ENDPOINT,
       arg: { type: 'string', pattern: IDENT_PATTERN },
-      input: BINDING_MAP,
+      input: ARG_MAP,
       label: V,
       placeholder: V,
       options: { oneOf: [{ type: 'array', items: { type: 'string' } }, B] },
@@ -1751,7 +1854,7 @@ const SECTION_DEFS: JsonSchema[] = [
     {
       query: ENDPOINT,
       param: B,
-      input: BINDING_MAP,
+      input: ARG_MAP,
       header: NODE,
       fields: ref('fieldList'),
       body: NODE,
@@ -1769,7 +1872,7 @@ const SECTION_DEFS: JsonSchema[] = [
     'create',
     {
       mutation: ENDPOINT,
-      input: BINDING_MAP,
+      input: ARG_MAP,
       submitLabel: V,
       invalidates: INVALIDATES,
       async: {
@@ -1781,7 +1884,7 @@ const SECTION_DEFS: JsonSchema[] = [
         type: 'object',
         additionalProperties: false,
         required: ['endpoint'],
-        properties: { endpoint: ENDPOINT, input: BINDING_MAP, from: B, merge: { enum: ['fill-empty'] } },
+        properties: { endpoint: ENDPOINT, input: ARG_MAP, from: B, merge: { enum: ['fill-empty'] } },
       },
       onSuccess: ACTION,
     },
@@ -1792,7 +1895,7 @@ const SECTION_DEFS: JsonSchema[] = [
     'stats',
     {
       query: ENDPOINT,
-      input: BINDING_MAP,
+      input: ARG_MAP,
       cards: {
         type: 'array',
         items: {
@@ -1833,7 +1936,7 @@ const SECTION_DEFS: JsonSchema[] = [
     source: { type: 'string' },
     query: ENDPOINT,
     param: B,
-    input: BINDING_MAP,
+    input: ARG_MAP,
     value: B,
     poll: ref('poll'),
   }),
@@ -1841,7 +1944,9 @@ const SECTION_DEFS: JsonSchema[] = [
   section(
     'chat',
     {
-      agent: { type: 'string', pattern: IDENT_PATTERN },
+      // A SLUG, not an identifier: `pantry-keeper` is the naming style this codebase
+      // actually uses, and the old identifier pattern rejected every one of them.
+      agent: { type: 'string', pattern: AGENT_NAME_PATTERN },
       space: { type: 'string' },
       greeting: V,
       height: { enum: ['sm', 'md', 'lg', 'full'] },
@@ -1883,6 +1988,20 @@ const DEFS: Record<string, JsonSchema> = {
     pattern: VALUE_PATTERN,
     description: 'A literal string, or a binding path. Expressions and {{ }} interpolation are not supported.',
   },
+  /**
+   * An ARGUMENT: a constant or a binding. `pattern` is a string-only keyword, so it grades
+   * the string branch against {@link VALUE_PATTERN} — the same one literal/binding
+   * discrimination used everywhere else — and leaves `number`/`boolean` alone. The closed
+   * `type` list is what keeps this from becoming an expression back-door: an object or an
+   * array here is a `type` error naming the argument.
+   */
+  arg: {
+    type: ['string', 'number', 'boolean'],
+    pattern: VALUE_PATTERN,
+    description:
+      'An endpoint argument: a constant (string, number or boolean) or a binding path ' +
+      '($.field, $route.id, $data.<sectionId>.<path>). Never an expression.',
+  },
   route: { type: 'string', pattern: ROUTE_PATTERN, description: 'An authoring route: index, recipes/[id].' },
   staticRoute: {
     type: 'string',
@@ -1921,7 +2040,7 @@ const DEFS: Record<string, JsonSchema> = {
         required: ['mutate'],
         properties: {
           mutate: ENDPOINT,
-          input: BINDING_MAP,
+          input: ARG_MAP,
           over: { const: 'selection' },
           arg: { type: 'string', pattern: IDENT_PATTERN },
           confirm: { type: 'string' },
@@ -1933,13 +2052,13 @@ const DEFS: Record<string, JsonSchema> = {
         type: 'object',
         additionalProperties: false,
         required: ['navigate'],
-        properties: { navigate: ref('route'), params: BINDING_MAP },
+        properties: { navigate: ref('route'), params: ARG_MAP },
       },
       {
         type: 'object',
         additionalProperties: false,
         required: ['download'],
-        properties: { download: ENDPOINT, input: BINDING_MAP, filename: V },
+        properties: { download: ENDPOINT, input: ARG_MAP, filename: V },
       },
       { type: 'object', additionalProperties: false, required: ['print'], properties: { print: { const: true } } },
       { type: 'object', additionalProperties: false, required: ['copy'], properties: { copy: V } },
@@ -2012,7 +2131,9 @@ const DEFS: Record<string, JsonSchema> = {
         type: 'object',
         additionalProperties: false,
         required: ['value'],
-        properties: { value: V, maxLines: { type: 'integer', minimum: 1 }, ...FMT, ...TONED },
+        // `suffix` is a shared modifier like `format` — one property here, units on every
+        // flat key, and no `metaSuffix`/`captionSuffix` family.
+        properties: { value: V, suffix: V, maxLines: { type: 'integer', minimum: 1 }, ...FMT, ...TONED },
       },
     ],
   },
@@ -2138,8 +2259,11 @@ export const SHELL_SPEC_SCHEMA: JsonSchema = {
         required: ['label', 'home'],
         properties: {
           label: V,
+          // The DESTINATION is static — a tab that opens `feed/[articleId]` opens nothing.
           home: ref('staticRoute'),
-          routes: { type: 'array', items: ref('staticRoute') },
+          // The HIGHLIGHT FAMILY may be parameterised: a drill-in belongs to its tab, and
+          // under the static-only pattern it had no group and was reported as an orphan.
+          routes: { type: 'array', items: ref('route') },
           icon: ICON,
           badge: NAV_BADGE,
         },
@@ -2175,7 +2299,8 @@ export const SHELL_SPEC_SCHEMA: JsonSchema = {
       type: 'object',
       additionalProperties: false,
       required: ['agent'],
-      properties: { agent: { type: 'string', pattern: IDENT_PATTERN }, space: { type: 'string' }, greeting: V },
+      // Same slug rule as `chat.agent` — one spelling of "an agent" in the whole contract.
+      properties: { agent: { type: 'string', pattern: AGENT_NAME_PATTERN }, space: { type: 'string' }, greeting: V },
     },
   },
   $defs: DEFS,

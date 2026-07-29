@@ -180,10 +180,26 @@ function iconFor(top: string): string | undefined {
   return table[top]
 }
 
+/**
+ * Does a live route match one family member? Segment SHAPE comparison, same length.
+ *
+ * A family member may be parameterised (Wave-2): `trip/[planId]` is a drill-in that belongs
+ * to the Shop tab, and it reaches the user as `trip/p7`. A string compare would never
+ * highlight it, which is what made drill-ins look like they belong to no tab.
+ */
+export function routeShapeMatches(member: Route, route: string): boolean {
+  const m = member.split('/')
+  const r = route.split('/')
+  if (m.length !== r.length) return false
+  return m.every((seg, i) => (seg.startsWith('[') ? r[i] !== undefined && r[i] !== '' : seg === r[i]))
+}
+
 /** Which destination the current route belongs to. */
 export function activeDestination(destinations: NavDestination[], route: string): string | undefined {
   const top = topLevel(route)
-  const exact = destinations.find((d) => d.family.includes(route))
+  // The family first, by shape — an exact static member and a parameterised drill-in are
+  // the same question asked of two spellings.
+  const exact = destinations.find((d) => d.family.some((member) => routeShapeMatches(member, route)))
   if (exact) return exact.key
   const byTop = destinations.find((d) => d.family.some((r) => topLevel(r) === top))
   return byTop?.key

@@ -95,8 +95,16 @@ closed: `title · subtitle · caption · meta · value · suffix · note · mark
 image · icon · badges · keyvalue · action · actions`.
 
 Every text-ish key takes **either a string or `{ value, format?, currencyField?, tone?,
-toneMap?, maxLines? }`**. That is why there is no `metaFormat`/`captionFormat` pairing: modifiers
-live on one definition, so a future modifier is one property rather than eleven new keys.
+toneMap?, toneOf?, suffix?, maxLines? }`** — count that set from the `flatValue` `$def`, not from
+this sentence. That is why there is no `metaFormat`/`captionFormat` pairing:
+modifiers live on one definition, so a future modifier is one property rather than eleven new keys —
+`suffix` (Wave 2) is that promise being kept, and is how `meta` renders "20 min" rather than "20".
+
+**An argument is a constant or a binding.** Every argument map (`input`, `mutate.input`,
+`navigate.params`, `link.params`, `prefill.input`, `x-options.input`) takes an `Arg`: a path, or a
+`string`/`number`/`boolean` constant. A string argument is graded by `VALUE_PATTERN` like every
+other authored string, so a literal stays distinguishable from a path; a constant is a scalar, so
+nothing here is an expression back-door.
 
 ## Where to make a change
 
@@ -111,6 +119,24 @@ two edit sites:
 | a **flat-item modifier** | one property on the `flatValue` `$def` — never a new paired key |
 
 The tests fail until all sites agree, which is the point.
+
+### Wave-2 amendments (the T1 migration of a real app)
+
+The first time the pinned vocabulary met a shipped page it came back with four gaps — one
+**blocking**, which the ratchet promotes on FIRST occurrence because with no escape hatch promotion
+is the only relief valve. Three are widenings of an existing shape rather than new tokens; the
+vocabulary counts are unchanged (**8 kinds · 24 elements · 16 flat-item keys**).
+
+| # | amendment | shape |
+|---|---|---|
+| 1 | **literal arguments** (blocking) | argument maps take `Arg = Value \| number \| boolean` — `{ meal: 'dinner', withinDays: 7 }`. One endpoint with three different constants was inexpressible. |
+| 2 | **`chat.agent` takes a real slug** | `AGENT_NAME_PATTERN` (`pantry-keeper`), not `IDENT_PATTERN`. The old pattern rejected the only naming style this codebase uses. |
+| 3 | **`groups[].routes` may be parameterised** | a *destination* (`nav`, `groups[].home`) stays static; a *highlight family* member may carry a `[param]`. |
+| 4 | **`suffix` on any flat value** | `meta: { value: '$.prepMinutes', suffix: 'min' }` — one shared modifier, not a `<key>Suffix` family. |
+
+Deliberately NOT widened, so it is not relitigated: **`ComponentRef.props` stays `Value`-only**
+(strings). A component prop declared `number` receiving a literal is the same class of gap, but T1
+did not hit it — and the ratchet promotes on evidence, not on symmetry.
 
 Promotions into these vocabularies are governed by the plan's improvement-loop ratchet
 (bucket 1: promote on the *second* occurrence, or the first if it blocks), not by taste.

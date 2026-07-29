@@ -25,7 +25,7 @@
 
 import * as React from 'react'
 import * as Prim from '../../elements/primitives/index'
-import type { CreateSection } from '../types'
+import type { Arg, CreateSection } from '../types'
 import { resolveInputs, resolveOptional, type Scope } from '../bind'
 import { stringify } from '../format'
 import { useViewMutation, useViewQuery, useViewRuntime } from '../runtime'
@@ -139,6 +139,6 @@ export function CreateSectionView({ section, scope }: { section: CreateSection; 
 }
 
 /** True when any prefill input reads the form — the S2 test for "cannot run on mount". */
-function bindsForm(input: Record<string, string> | undefined): boolean {
-  return Object.values(input ?? {}).some((b) => b.startsWith('$form.'))
+function bindsForm(input: Record<string, Arg> | undefined): boolean {
+  return Object.values(input ?? {}).some((b) => typeof b === 'string' && b.startsWith('$form.'))
 }

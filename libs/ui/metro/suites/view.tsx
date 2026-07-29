@@ -396,3 +396,95 @@ test('a whole dashboard page mounts with no loose strings anywhere', async () =>
   expect(looseStrings(current()).join('|'), 'the whole page is native-safe').toBe('')
   expect(!!findByText(current(), 'Ragu'), 'and it actually drew the data').toBe(true)
 })
+
+// ── the Wave-2 amendments, on a device ───────────────────────────────────────
+
+test('a UNIT on a flat value mounts as ONE text node — "20 min", never a loose "min"', async () => {
+  // The failure this exists to catch is native-only: a suffix rendered as a sibling string
+  // instead of part of the formatted text is silently DROPPED by React Native, so the page
+  // would read "20" on a phone and "20 min" in every jsdom test.
+  const client = stub({ listRecipes: [{ id: '1', title: 'Ragu', prepMinutes: 20, unit: 'kcal', energy: 540 }] })
+  const { current } = render(
+    <ViewRenderer
+      spec={page([
+        {
+          kind: 'list',
+          query: 'listRecipes',
+          item: {
+            title: '$.title',
+            meta: { value: '$.prepMinutes', suffix: 'min' },
+            caption: { value: '$.energy', suffix: '$.unit' },
+          },
+        },
+      ])}
+      client={client}
+    />,
+  )
+  await settle()
+  expect(!!findByText(current(), '20 min'), 'the unit is part of the text node').toBe(true)
+  expect(!!findByText(current(), '540 kcal'), 'and a BOUND unit works the same way').toBe(true)
+  expect(looseStrings(current()).join('|'), 'nothing loose in a View').toBe('')
+})
+
+test('a LITERAL argument reaches the endpoint from a real touch, with its type intact', async () => {
+  const seen: { name: string; input: Record<string, unknown> }[] = []
+  const client = stub({ listRecipes: [{ id: '7', title: 'Ragu' }], toggleDone: { ok: true } }, (name, input) =>
+    seen.push({ name, input }),
+  )
+  const { current } = render(
+    <ViewRenderer
+      spec={page([
+        {
+          kind: 'list',
+          query: 'listRecipes',
+          // One endpoint, a row binding AND two constants — the shape that was illegal.
+          item: {
+            title: '$.title',
+            actions: [
+              { label: 'Snooze', action: { mutate: 'toggleDone', input: { id: '$.id', days: 7, silent: true } } },
+            ],
+          },
+        },
+      ])}
+      client={client}
+    />,
+  )
+  await settle()
+  const button = findAll(current() as never, () => true).find(
+    (n) => typeof n.props?.onResponderRelease === 'function' && !!findByText(n as never, 'Snooze'),
+  )
+  expect(!!button, 'the action button responds to touch').toBe(true)
+  press(button ?? null)
+  await settle()
+  const call = seen.find((c) => c.name === 'toggleDone')
+  expect(JSON.stringify(call?.input), 'the row id plus two typed constants').toBe(
+    JSON.stringify({ id: '7', days: 7, silent: true }),
+  )
+})
+
+test('a tab stays highlighted on a parameterised family member, and still navigates', () => {
+  const routes: string[] = []
+  const client = { ...stub({}), navigate: (r: string) => routes.push(r) } as unknown as ViewClient
+  const { tree } = render(
+    <ViewRenderer
+      spec={page([{ kind: 'markdown', source: 'plan' }])}
+      shell={{
+        brand: 'Kitchen',
+        groups: [
+          { label: 'Shop', home: 'shop', routes: ['shopping', 'trip/[planId]'], icon: 'list' },
+          { label: 'Cook', home: 'index', icon: 'home' },
+        ],
+      }}
+      routes={['index', 'shop', 'shopping', 'trip/[planId]']}
+      route={{ path: 'trip/p7', params: { planId: 'p7' } }}
+      client={client}
+    />,
+  )
+  expect(!!findByText(tree, 'Shop'), 'the group destination is mounted as text').toBe(true)
+  const tab = findAll(tree as never, () => true).find(
+    (n) => typeof n.props?.onResponderRelease === 'function' && !!findByText(n as never, 'Shop'),
+  )
+  press(tab ?? null)
+  expect(routes.join(','), 'and opens the group home').toBe('shop')
+  expect(looseStrings(tree).join('|'), 'no loose strings in the shell').toBe('')
+})

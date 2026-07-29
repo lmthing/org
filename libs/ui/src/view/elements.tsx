@@ -117,18 +117,31 @@ function ComponentUse({ node, scope }: { node: { use: string; props?: Record<str
 
 // ── the flat item ────────────────────────────────────────────────────────────
 
+/** The modifiers a {@link FlatValue}'s object form can carry. */
+type FlatMods = Formatted & Toned & { maxLines?: number; suffix?: string }
+
 /** Split a {@link FlatValue} into its value expression and its modifiers. */
-function flatParts(fv: FlatValue): { value: string; mods: Formatted & Toned & { maxLines?: number } } {
+function flatParts(fv: FlatValue): { value: string; mods: FlatMods } {
   return typeof fv === 'string' ? { value: fv, mods: {} } : { value: fv.value, mods: fv }
 }
 
-/** Resolve a flat slot to display text, honouring S1. `undefined` ⇒ omit. */
-function flatText(fv: FlatValue | undefined, scope: Scope): { text: string; mods: Formatted & Toned & { maxLines?: number } } | undefined {
+/**
+ * Resolve a flat slot to display text, honouring S1. `undefined` ⇒ omit.
+ *
+ * `suffix` is appended AFTER formatting, which is the only order that works: the unit
+ * belongs to the rendered figure ("20 min", "1,240 kcal"), not to the raw value, and
+ * `format: 'currency'` already owns the symbol side. It is itself a value, so a bound unit
+ * (`suffix: '$.unit'`) works — and S1 applies to it independently: an unresolved suffix
+ * appends nothing rather than printing "20 undefined".
+ */
+function flatText(fv: FlatValue | undefined, scope: Scope): { text: string; mods: FlatMods } | undefined {
   if (fv === undefined) return undefined
   const { value, mods } = flatParts(fv)
   const r = resolveValue(value, scope)
   if (!r.present) return undefined
-  return { text: formatBound(r.value, mods, scope), mods }
+  const text = formatBound(r.value, mods, scope)
+  const unit = mods.suffix === undefined ? undefined : resolveOptional(mods.suffix, scope)
+  return { text: unit === undefined || unit === '' ? text : `${text} ${stringify(unit)}`, mods }
 }
 
 /**
@@ -156,10 +169,7 @@ export function FlatItemView({ item, scope }: { item: FlatItem; scope: Scope }):
   const image = flatText(item.image, scope)
   const badges = item.badges ? resolveArray(item.badges, scope) : []
 
-  const line = (
-    part: { text: string; mods: Formatted & Toned & { maxLines?: number } } | undefined,
-    props: Record<string, unknown>,
-  ) => {
+  const line = (part: { text: string; mods: FlatMods } | undefined, props: Record<string, unknown>) => {
     if (!part) return null
     const tone = part.mods.tone || part.mods.toneMap ? resolveTone(part.mods, part.text, scope) : undefined
     return (
