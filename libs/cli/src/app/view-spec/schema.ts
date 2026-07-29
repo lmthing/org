@@ -251,7 +251,10 @@ export type Tone = (typeof TONES)[number];
  *
  * Sized from the audit: the 5 apps hand-wrote 1,020 LOC of inline SVG for **67** distinct
  * glyphs, and `blog/components/icons.tsx` independently invented this exact model with a
- * **24-name** union — 24–67 is the empirical band. This list sits at 50.
+ * **24-name** union — 24–67 is the empirical band. This list sits at 32: every name here is a
+ * glyph the renderer must hand-draw, so the count is a real cost, not a vocabulary preference.
+ *
+ * The tuple below is the contract — count from it, not from this sentence.
  */
 export const ICON_NAMES = [
   // navigation + control
@@ -1055,15 +1058,34 @@ export interface ListSection extends SectionBase {
   from?: From;
   /** Dependent-query arguments. An unresolved binding disables the section. */
   input?: Record<string, Binding>;
-  /** Which record, when the query takes one. Defaults to the route's single `[param]`. */
+  /**
+   * Which record, when the query takes one. Defaults to the route's single `[param]`, bound
+   * under its own key — so `recipes/[id]` defaults to `$route.id`. (`$route` is the root;
+   * `$params` was renamed and now hard-fails.)
+   */
   param?: Binding;
   limit?: number;
   layout?: ListLayout;
   /** The per-row shape. Absent ⇒ the renderer derives it from the Output schema. */
   item?: Slot;
+  /**
+   * Faceted filtering. NORMATIVE (T0 S4): a facet maps to a **query input** — the endpoint
+   * narrows the rows, so a facet is honest about `limit` instead of filtering a page that was
+   * already truncated.
+   */
   facet?: Facet[];
-  /** User-selectable orderings (audit I3). */
+  /**
+   * User-selectable orderings (audit I3). NORMATIVE: sorting is applied **client-side, over the
+   * `limit`ed page**. Nothing measured demanded server-side ordering, and pushing it down would
+   * mean an endpoint input for every sortable column.
+   */
   sort?: SortOption[];
+  /**
+   * Free-text search. NORMATIVE: sent as a **query input** when the endpoint's Input schema
+   * declares one of `search` / `q` / `query` / `term`; otherwise filtered client-side over
+   * `search.fields`. Declaring the input is what makes search reach rows beyond `limit`, so an
+   * endpoint that expects to be searched should declare it.
+   */
   search?: boolean | { fields?: Binding[]; placeholder?: string };
   /** What tapping a row does. */
   rowAction?: Action;
