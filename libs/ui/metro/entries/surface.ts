@@ -37,8 +37,14 @@ import * as Chat from '../../src/chat'
 // (avatar, list-item, button, input, textarea, separator, caption) and the inline
 // SVG icon set, all of which had to resolve for native before it could land.
 import * as Team from '../../src/team'
+// The VIEW renderer — the reason the viewbuilder exists. A view spec is data, so the mobile
+// app fetches one and renders it with this, the same module the web bundles: no WebView on
+// any page, by construction. It drags in the whole element catalogue, the schema-derived
+// form, the icon set and (through the `chat` section) `ReplChatView` — all of which had to
+// resolve for native before a spec app could claim to run there.
+import * as View from '../../src/view'
 
 // Referenced, not just imported: Metro does not tree-shake in dev, but an unused namespace import
 // is exactly the kind of thing a future bundler flag would drop, and a gate that silently stops
 // covering its subject is worse than no gate.
-export const surface = { Primitives, Platform, Dialog, Sheet, ContextMenu, Dropdown, Markdown, ChatAuth, Chat, Team }
+export const surface = { Primitives, Platform, Dialog, Sheet, ContextMenu, Dropdown, Markdown, ChatAuth, Chat, Team, View }

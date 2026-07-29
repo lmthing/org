@@ -72,6 +72,10 @@ export const EXPECTED_NATIVE_FORKS = [
   'libs/ui/src/elements/primitives/misc.native.tsx',
   'libs/ui/src/elements/primitives/svg.native.tsx',
   'libs/ui/src/elements/primitives/table.native.tsx',
+  // The view renderer's own fork. `scroll: 'x'` is native CORRECTNESS — without a real
+  // horizontal `ScrollView` a wide table or a week grid is clipped on a phone with no
+  // gesture to reach the rest — so "did Metro pick it?" is a gate, not a detail.
+  'libs/ui/src/view/hscroll.native.tsx',
   'libs/ui/src/elements/overlays/dialog/index.native.tsx',
   'libs/ui/src/elements/overlays/sheet/index.native.tsx',
   'libs/ui/src/elements/overlays/context-menu/index.native.tsx',
