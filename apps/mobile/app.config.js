@@ -56,7 +56,12 @@ const MARK_GROUND = color('background', 'dark')
 
 module.exports = {
   expo: {
-    name: 'LMThing',
+    // Lowercase, matching the Play listing and the brand everywhere else — the favicon,
+    // and `CozyThingText`, which renders the mark in lowercase and is the only place the
+    // wordmark is defined (libs/ui/src/elements/branding/cozy-text). This is the label
+    // under the launcher icon, so a capitalised one was the single surface saying
+    // something different from the rest of the product.
+    name: 'lmthing',
     // Must equal the slug of the EAS project named in `extra.eas.projectId` — EAS
     // refuses to build when the two disagree. This is the EXPO-side identifier only:
     // the Play listing is keyed on `android.package`, and expo-updates (the other
