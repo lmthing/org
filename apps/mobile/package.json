@@ -39,6 +39,7 @@
     "@babel/core": "^7.29.7",
     "@babel/plugin-transform-export-namespace-from": "^7.29.7",
     "@types/react": "^19.2.5",
+    "babel-preset-expo": "~57.0.4",
     "typescript": "^5.4.0"
   }
 }
