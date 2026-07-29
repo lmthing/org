@@ -240,6 +240,7 @@ export function AuthProvider({ appName, callbackPath = '/', children }: AuthProv
       authFetch: authFetchBound,
       unlockPin,
       getPinKey,
+      comUrl: config.comUrl,
     }}>
       {children}
     </AuthContext.Provider>

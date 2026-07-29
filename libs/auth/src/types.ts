@@ -38,4 +38,12 @@ export interface AuthContextValue {
   authFetch: (url: string, options?: RequestInit) => Promise<Response>
   unlockPin: (pin: string) => Promise<boolean>
   getPinKey: () => Promise<CryptoKey | null>
+  /**
+   * Origin of the account surface (`lmthing.com`), already resolved for this
+   * environment. Exposed because a shared surface has no other way to link to the
+   * account pages the store policies require — privacy and account deletion — and
+   * `crossAppOrigin` cannot answer for `com`: it knows only the four product
+   * surfaces, and returns `''` off the web, which on a phone is not a URL at all.
+   */
+  comUrl: string
 }

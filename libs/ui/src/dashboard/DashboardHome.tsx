@@ -154,7 +154,7 @@ export function DashboardHome({
   onOpenTeam,
   className,
 }: DashboardHomeProps) {
-  const { username, session } = useAuth()
+  const { username, session, comUrl } = useAuth()
   const { teams, invites, projects, conversations, loading, failed, reload } = useDashboardData()
 
   const name = friendlyName(username, session?.email)
@@ -320,6 +320,34 @@ export function DashboardHome({
             ))}
           </Section>
         )}
+
+        {/* 5 — Account. Last because nobody opens Home to read a privacy policy, and present
+            because both stores require it: an app that lets you CREATE an account has to offer a
+            way to delete it from inside the app, and a link out to the page that does it is what
+            they accept. It lives in this shared surface rather than in the mobile shell so the web
+            app carries the same two links, which GDPR wants anyway. */}
+        <Section label="ACCOUNT">
+          <Prim.Pressable
+            onClick={() => openUrl(`${comUrl}/delete-account`)}
+            {...CARD}
+            {...ROW_BETWEEN}
+            title="Delete your account"
+          >
+            <Prim.Text flexGrow={1} flexShrink={1} flexBasis="0%" fontSize="$sm" color="$foreground">
+              Delete account
+            </Prim.Text>
+          </Prim.Pressable>
+          <Prim.Pressable
+            onClick={() => openUrl(`${comUrl}/privacy`)}
+            {...CARD}
+            {...ROW_BETWEEN}
+            title="Read the privacy policy"
+          >
+            <Prim.Text flexGrow={1} flexShrink={1} flexBasis="0%" fontSize="$sm" color="$foreground">
+              Privacy policy
+            </Prim.Text>
+          </Prim.Pressable>
+        </Section>
       </Prim.Col>
     </Prim.Scroll>
   )
