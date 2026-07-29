@@ -36,6 +36,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import type { EndpointContract } from '../build/schema.js';
 import { braceBody } from '../authoring/lint.js';
@@ -55,12 +56,14 @@ import {
   renderThrew,
   resultOf,
   shapeErrorsToViewErrors,
+  unknownAgent,
   unknownComponent,
   unknownEndpoint,
   unknownField,
   unknownInput,
   unknownRoute,
   unknownSection,
+  unknownSpace,
   viewError,
   wrongMethod,
   type ViewError,
@@ -102,6 +105,14 @@ export interface ViewEndpoint {
   inputKeys?: string[];
   /** The full Output JSON Schema, when available — lets a `from` path resolve exactly. */
   outputSchema?: JsonSchema;
+  /**
+   * The handler's route pattern (`/plan/:id/trip`), when known.
+   *
+   * Only {@link renderSmokeViews} reads it, and it needs it for one thing: an `:id` in a path
+   * belongs to the collection ABOVE it, so the value for `/plan/:id/trip` comes from `/plan` and
+   * never from `/pantry`. Without the path there is no way to tell two `id`s apart by name alone.
+   */
+  routePath?: string;
 }
 
 /** Everything outside a single spec that the spec is allowed to name. */
@@ -111,6 +122,24 @@ export interface ViewContracts {
   components?: ViewComponentSpec[];
   /** Every authoring route the app has. Absent ⇒ `navigate`/nav targets are not resolved. */
   routes?: string[];
+  /**
+   * The agents each of the project's spaces defines — `space` → slugs, from
+   * {@link loadProjectAgents}. Absent ⇒ `chat.agent` is not resolved.
+   */
+  agents?: Record<string, string[]>;
+  /**
+   * Is {@link routes} the app's FINAL route list?
+   *
+   * `false` at SAVE time and nowhere else. A page is written one at a time, so `recipes` linking to
+   * `recipes/[id]` and `recipes/[id]` linking back to `recipes` is a pair no write order satisfies:
+   * whichever lands first names a route that does not exist yet. Hard-failing there is a writer that
+   * cannot be satisfied — the T1 migration needed a throwaway 13-write bootstrap pass to get past it.
+   * So an unknown route is a WARNING while the app is being written, and an error once it is whole
+   * ({@link validateAppViews} re-runs the identical check against every route on disk).
+   *
+   * Absent ⇒ `true`, so a caller that says nothing gets the strict check.
+   */
+  routesComplete?: boolean;
 }
 
 /** `ProjectContracts`-shaped input — what `generateProjectContracts` returns. */
@@ -120,10 +149,39 @@ interface ContractsLike {
   routes?: string[];
 }
 
-/** Object properties of a JSON Schema, seeing through `anyOf`/`oneOf`/`allOf`. */
-function schemaProps(s: unknown): Record<string, JsonSchema> {
-  if (!s || typeof s !== 'object') return {};
-  const rec = s as Record<string, unknown>;
+/**
+ * Resolve a `#/definitions/Recipe` pointer against the schema document it came from.
+ *
+ * `ts-json-schema-generator` emits a `$ref` for every NAMED type, which makes this mandatory
+ * rather than thorough: `export type Output = Recipe[]` — the commonest Output shape in the
+ * catalogue — generates `{ type: 'array', items: { $ref: '#/definitions/Recipe' }, definitions: … }`,
+ * whose root property names are `type`/`items`/`definitions`. A reader that does not follow the
+ * pointer sees ZERO bindable fields there and rejects every `$.field` on the endpoint.
+ */
+function derefSchema(node: unknown, root: unknown, seen: Set<string> = new Set()): unknown {
+  let cur = node;
+  while (cur && typeof cur === 'object') {
+    const ref = (cur as Record<string, unknown>)['$ref'];
+    if (typeof ref !== 'string' || !ref.startsWith('#')) return cur;
+    if (seen.has(ref)) return undefined; // a self-referential type — stop rather than spin
+    seen.add(ref);
+    let target: unknown = root;
+    for (const raw of ref.slice(1).split('/')) {
+      if (!raw) continue;
+      const key = raw.replace(/~1/g, '/').replace(/~0/g, '~');
+      if (!target || typeof target !== 'object') return undefined;
+      target = (target as Record<string, unknown>)[key];
+    }
+    cur = target;
+  }
+  return cur;
+}
+
+/** Object properties of a JSON Schema, seeing through `$ref` and `anyOf`/`oneOf`/`allOf`. */
+function schemaProps(s: unknown, root: unknown = s): Record<string, JsonSchema> {
+  const node = derefSchema(s, root);
+  if (!node || typeof node !== 'object') return {};
+  const rec = node as Record<string, unknown>;
   if (rec['properties'] && typeof rec['properties'] === 'object') {
     return rec['properties'] as Record<string, JsonSchema>;
   }
@@ -131,65 +189,142 @@ function schemaProps(s: unknown): Record<string, JsonSchema> {
     const branches = rec[key];
     if (!Array.isArray(branches)) continue;
     const merged: Record<string, JsonSchema> = {};
-    for (const b of branches) Object.assign(merged, schemaProps(b));
+    for (const b of branches) Object.assign(merged, schemaProps(b, root));
     if (Object.keys(merged).length) return merged;
   }
   return {};
 }
 
-/** The element schema of an array schema. */
-function itemsOf(s: unknown): JsonSchema | undefined {
-  const items = (s as Record<string, unknown> | undefined)?.['items'];
-  return items && typeof items === 'object' && !Array.isArray(items) ? (items as JsonSchema) : undefined;
+/** The element schema of an array schema, with both the array and the element de-`$ref`ed. */
+function itemsOf(s: unknown, root: unknown = s): JsonSchema | undefined {
+  const node = derefSchema(s, root) as Record<string, unknown> | undefined;
+  const items = node?.['items'];
+  if (!items || typeof items !== 'object' || Array.isArray(items)) return undefined;
+  const el = derefSchema(items, root);
+  return el && typeof el === 'object' ? (el as JsonSchema) : undefined;
 }
 
 /**
- * The field names a section bound to this Output may legally use.
+ * The field names a section bound to this Output may legally use, or `undefined` when the Output
+ * yields none.
  *
  * The union of three things, because a section binds in two scopes and the schema cannot tell us
  * which one a given `$.x` sits in without a type checker: the Output's own properties, the
  * element properties when the Output IS an array, and the element properties of each array-valued
  * property (`{ items: Recipe[] }` — the shape 5/5 catalogue apps' list endpoints return).
+ *
+ * **An empty universe is returned as `undefined`, never `[]`** — the invariant {@link ViewEndpoint}
+ * states. `EndpointContract` uses an empty-object schema both for "declares no Output" and for
+ * "we could not read one", so `[]` here cannot be distinguished from a read failure, and a gate
+ * that guesses wrong rejects a page that works.
  */
-export function outputFieldUniverse(schema: unknown): string[] {
+export function outputFieldUniverse(schema: unknown): string[] | undefined {
+  if (!schema || typeof schema !== 'object') return undefined;
   const out = new Set<string>();
-  const top = schemaProps(schema);
+  const top = schemaProps(schema, schema);
   for (const k of Object.keys(top)) out.add(k);
-  for (const k of Object.keys(schemaProps(itemsOf(schema)))) out.add(k);
+  for (const k of Object.keys(schemaProps(itemsOf(schema, schema), schema))) out.add(k);
   for (const v of Object.values(top)) {
-    for (const k of Object.keys(schemaProps(itemsOf(v)))) out.add(k);
+    for (const k of Object.keys(schemaProps(itemsOf(v, schema), schema))) out.add(k);
   }
-  return [...out].sort();
+  return out.size ? [...out].sort() : undefined;
 }
 
-/** Walk a dotted path (`citations.author`) into a schema, seeing through arrays. */
+/** Walk a dotted path (`citations.author`) into a schema, seeing through arrays and `$ref`s. */
 function schemaAtPath(schema: unknown, segments: string[]): JsonSchema | undefined {
   let cur: unknown = schema;
   for (const seg of segments) {
     const key = seg.replace(/\[\d+\]$/, '');
-    const next = schemaProps(cur)[key] ?? schemaProps(itemsOf(cur))[key];
+    const next = schemaProps(cur, schema)[key] ?? schemaProps(itemsOf(cur, schema), schema)[key];
     if (!next) return undefined;
     cur = next;
+  }
+  // Carry the ROOT's `definitions` onto the sub-schema: a `$ref` inside it still points at
+  // `#/definitions/…` of the document it was cut out of, and a naked branch cannot resolve one.
+  const defs = (schema as Record<string, unknown> | undefined)?.['definitions'];
+  if (defs && cur && typeof cur === 'object' && !('definitions' in (cur as object))) {
+    return { ...(cur as JsonSchema), definitions: defs } as JsonSchema;
   }
   return cur as JsonSchema | undefined;
 }
 
-/** Accept either `ProjectContracts` (raw JSON Schemas) or an already-reduced {@link ViewContracts}. */
+/**
+ * Has this endpoint already been through {@link toViewContracts}?
+ *
+ * The reduced form KEEPS `outputSchema` (a `from` path needs the real schema) and DROPS
+ * `inputSchema`, so "carries a schema" cannot tell the two forms apart. A second reduction that
+ * took the raw branch would recompute `inputKeys` from the `inputSchema` that is no longer there
+ * and get `[]` — the one value {@link ViewEndpoint} forbids, and the one that makes every `input`
+ * key on every section of every page report as undeclared. The reduced-only keys are the
+ * discriminant, and they are always written (as `undefined` when unknown) so `in` sees them.
+ */
+function isReducedEndpoint(ep: object): boolean {
+  return 'outputFields' in ep || 'inputKeys' in ep || !('inputSchema' in ep);
+}
+
+/**
+ * Accept either `ProjectContracts` (raw JSON Schemas) or an already-reduced {@link ViewContracts}.
+ *
+ * **Idempotent, and tested to be.** `validateAppViews` reduces once and then hands the result to
+ * `validateViewSpec`, which reduces again; a reduction that is not the identity on its own output
+ * silently changes the vocabulary between the two, which is exactly the bug this guard exists for.
+ */
 export function toViewContracts(input: ContractsLike | ViewContracts): ViewContracts {
   const endpoints = input.endpoints.map((ep): ViewEndpoint => {
-    if ('inputSchema' in ep || 'outputSchema' in ep) {
-      const full = ep as EndpointContract;
-      return {
-        name: full.name,
-        method: full.method,
-        outputSchema: full.outputSchema,
-        outputFields: outputFieldUniverse(full.outputSchema),
-        inputKeys: Object.keys(schemaProps(full.inputSchema)),
-      };
-    }
-    return ep as ViewEndpoint;
+    if (isReducedEndpoint(ep)) return ep as ViewEndpoint;
+    const full = ep as EndpointContract;
+    const inputKeys = Object.keys(schemaProps(full.inputSchema, full.inputSchema));
+    return {
+      name: full.name,
+      method: full.method,
+      routePath: full.routePath,
+      outputSchema: full.outputSchema,
+      outputFields: outputFieldUniverse(full.outputSchema),
+      inputKeys,
+    };
   });
-  return { endpoints, components: input.components, routes: input.routes };
+  return {
+    endpoints,
+    components: input.components,
+    routes: input.routes,
+    agents: (input as ViewContracts).agents,
+    routesComplete: (input as ViewContracts).routesComplete,
+  };
+}
+
+/**
+ * The agents a project's spaces define — `spaces/<space>/agents/<slug>/`.
+ *
+ * The check that actually has value on `chat.agent`. Widening the *pattern* to accept a kebab-case
+ * slug only keeps a URL or a sentence out of the field; it cannot tell a model that `optimiser` is
+ * not `optimizer`, which is the mistake that costs a chat dock. Names resolve against a real menu
+ * here for the same reason `query` and `mutation` do.
+ *
+ * Returns `undefined` — never `{}` — when the project has no `spaces/` dir, so an app whose agents
+ * live somewhere this cannot see skips the check rather than failing it.
+ */
+export function loadProjectAgents(projectRoot: string): Record<string, string[]> | undefined {
+  const spacesDir = join(projectRoot, 'spaces');
+  if (!existsSync(spacesDir)) return undefined;
+  const out: Record<string, string[]> = {};
+  let spaces: string[];
+  try {
+    spaces = readdirSync(spacesDir);
+  } catch {
+    return undefined;
+  }
+  for (const space of spaces.sort()) {
+    const agentsDir = join(spacesDir, space, 'agents');
+    try {
+      if (!statSync(join(spacesDir, space)).isDirectory()) continue;
+      out[space] = readdirSync(agentsDir)
+        .filter((a) => !a.startsWith('.') && statSync(join(agentsDir, a)).isDirectory())
+        .sort();
+    } catch {
+      out[space] = [];
+    }
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 // ── the sync, best-effort contract source the WRITERS use ─────────────────────
@@ -201,47 +336,132 @@ function exportedName(src: string): string | undefined {
   return /export\s+const\s+name\s*=\s*['"`]([^'"`]+)['"`]/.exec(src)?.[1];
 }
 
+/** One member of an interface body: its name, and the raw text of its declared type. */
+interface InterfaceMember {
+  key: string;
+  /** Everything after the `:`, up to the member's top-level terminator. */
+  type: string;
+}
+
+/** TS types whose element contributes no field names, so a named reference to one is not a gap. */
+const PRIMITIVE_TYPES = new Set([
+  'string',
+  'number',
+  'boolean',
+  'bigint',
+  'symbol',
+  'null',
+  'undefined',
+  'void',
+  'never',
+  'any',
+  'unknown',
+  'object',
+  'Date',
+]);
+
+/**
+ * Is this member's declared type an ARRAY whose element we cannot see the fields of?
+ *
+ * The one case that matters, because {@link outputFieldUniverse} unions in the element properties
+ * of every array-valued property. `days: DayTotal[]` therefore contributes `day`/`calories`/… to
+ * the async universe and NOTHING to a textual read — which is how the writer told T1 that `"$.day"
+ * is not a field… Did you mean $.days?` about a field of the very array the section was sourced
+ * from. A non-array named type (`plan: MealPlan`) is NOT a gap: the async universe does not
+ * descend into it either, so the two readers agree.
+ */
+function opaqueArrayElement(type: string, known: Map<string, string>): boolean {
+  const bare = type
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\|\s*(null|undefined)\b/g, '')
+    .trim();
+  if (bare.includes('{')) return false; // an inline element type — readable, handled below
+  const named = /(?:^|[\s|(])([A-Za-z_$][\w$]*)\s*\[\s*\]/.exec(bare)?.[1] ?? /\bArray<\s*([A-Za-z_$][\w$]*)\s*>/.exec(bare)?.[1];
+  if (!named) return false;
+  return !PRIMITIVE_TYPES.has(named) && !known.has(named);
+}
+
+/** Every `interface X { … }` / `type X = { … }` block in a source file, by name. */
+function namedTypeBodies(src: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const re = /(?:^|\n)\s*(?:export\s+)?(?:interface|type)\s+([A-Za-z_$][\w$]*)\b[^{;\n]*\{/g;
+  for (let m = re.exec(src); m; m = re.exec(src)) {
+    const body = braceBody(src, m.index + m[0].length - 1);
+    if (body !== null && !out.has(m[1]!)) out.set(m[1]!, body);
+  }
+  return out;
+}
+
 /**
  * Field names of an `export interface X { … }` / `export type X = { … }` block, one nesting level
  * deep — the textual twin of {@link outputFieldUniverse}.
  *
  * A regex where the async path has a real JSON Schema, because the writers are SYNCHRONOUS host
  * globals (mirroring `writeProjectPage`) and `generateProjectContracts` is a `ts-json-schema-
- * generator` run per handler file. It is deliberately lossy: an aliased type (`export type Output =
- * RecipeList`) yields `undefined`, and `undefined` means "skip the field check", never "reject".
+ * generator` run per handler file.
+ *
+ * **`undefined` whenever the list would be INCOMPLETE**, and never a partial one. A partial menu is
+ * worse than no menu: it rejects, and it rejects with confident advice. The original read
+ * `days: DayTotal[]` as the single field `days` and told the model `"$.day" is not a field… Did you
+ * mean $.days?` — about a field the app-wide gate accepts, on the endpoint the section is sourced
+ * from. Two escapes from that: a named element type declared IN THIS FILE is expanded (which is
+ * why the endpoint author need not inline it), and anything still unreadable returns `undefined`,
+ * which means "skip the field check" and never "reject".
  */
 function declaredFields(src: string, typeName: 'Input' | 'Output'): string[] | undefined {
+  const known = namedTypeBodies(src);
   // `[^{;\n]*` and not `[^{]*`: `export type Output = RecipeList;` has no brace of its own, and a
   // greedier scan would walk past the semicolon into the handler body and report ITS locals as
   // Output fields — a menu that is confidently wrong.
   const m = new RegExp(`export\\s+(?:interface|type)\\s+${typeName}\\b[^{;\\n]*\\{`).exec(src);
-  if (!m) return undefined;
-  const body = braceBody(src, m.index + m[0].length - 1);
-  if (body === null) return undefined;
-  const keys = interfaceKeys(body);
-  const out = new Set(keys);
-  // One level in: `items: { id: string; title: string }[]` contributes id/title.
-  for (const key of keys) {
-    const km = new RegExp(`\\b${key}\\s*\\??\\s*:\\s*[^;\\n]*?\\{`).exec(body);
-    if (!km) continue;
-    const nested = braceBody(body, km.index + km[0].length - 1);
-    if (nested) for (const k of interfaceKeys(nested)) out.add(k);
+  let body: string | null = null;
+  if (m) {
+    body = braceBody(src, m.index + m[0].length - 1);
+  } else {
+    // `export type Output = Recipe[];` / `= Recipe;` — resolvable when the type is in this file.
+    const alias = new RegExp(`export\\s+type\\s+${typeName}\\s*=\\s*([^;\\n]+)`).exec(src)?.[1]?.trim();
+    const named = alias ? (/^([A-Za-z_$][\w$]*)\s*(?:\[\s*\])?$/.exec(alias)?.[1] ?? undefined) : undefined;
+    body = named ? (known.get(named) ?? null) : null;
   }
+  if (body === null) return undefined;
+
+  const members = interfaceMembers(body);
+  const out = new Set(members.map((mem) => mem.key));
+  for (const mem of members) {
+    if (opaqueArrayElement(mem.type, known)) return undefined;
+    // One level in: `items: { id: string; title: string }[]` contributes id/title, and so does
+    // `lines: TripLine[]` when `TripLine` is declared beside the handler.
+    const brace = mem.type.indexOf('{');
+    const nested =
+      brace >= 0
+        ? braceBody(mem.type, brace)
+        : (known.get(/(?:^|[\s|(])([A-Za-z_$][\w$]*)\s*\[\s*\]/.exec(mem.type)?.[1] ?? '') ?? null);
+    if (nested) for (const k of interfaceMembers(nested).map((n) => n.key)) out.add(k);
+  }
+  // `[]` here means "read, and it declares nothing" — a real answer for an `Input {}`. Only the
+  // OUTPUT side collapses that to `undefined` (see {@link loadViewContracts}), because an Output
+  // that reads as empty is indistinguishable from one that failed to read.
   return [...out].sort();
 }
 
 /**
- * Top-level property names of a TS **interface** body.
+ * Top-level members of a TS **interface** body, name and declared type.
  *
  * `lint.ts#topLevelKeys` reads an object LITERAL, whose members are comma-separated; an interface
  * separates with `;` or a newline, so that function stops after the first member here. Same shape,
  * different separator set — and a field list that silently contains one entry would turn every
  * subsequent binding into a menu-shaped lie.
  */
-function interfaceKeys(body: string): string[] {
-  const keys: string[] = [];
+function interfaceMembers(body: string): InterfaceMember[] {
+  const members: InterfaceMember[] = [];
   let depth = 0;
   let atKey = true;
+  let open: { key: string; from: number } | undefined;
+  const close = (end: number): void => {
+    if (!open) return;
+    members.push({ key: open.key, type: body.slice(open.from, end) });
+    open = undefined;
+  };
   for (let i = 0; i < body.length; i++) {
     const c = body[i]!;
     if (c === '{' || c === '[' || c === '(') {
@@ -253,6 +473,7 @@ function interfaceKeys(body: string): string[] {
       continue;
     }
     if (depth === 0 && (c === ';' || c === ',' || c === '\n')) {
+      close(i);
       atKey = true;
       continue;
     }
@@ -261,14 +482,16 @@ function interfaceKeys(body: string): string[] {
       body.slice(i),
     );
     if (m) {
-      keys.push((m[1] ?? m[2] ?? m[3])!);
+      close(i);
+      open = { key: (m[1] ?? m[2] ?? m[3])!, from: i + m[0].length };
       i += m[0].length - 1;
       atKey = false;
     } else if (!/\s/.test(c)) {
       atKey = false;
     }
   }
-  return keys;
+  close(body.length);
+  return members;
 }
 
 /** Recursively collect `api/**\/<METHOD>.ts`. */
@@ -315,11 +538,15 @@ export function loadViewContracts(projectRoot: string): ViewContracts {
     }
     const name = exportedName(src);
     if (!name) continue;
+    const outputFields = declaredFields(src, 'Output');
     endpoints.push({
       name,
       method: relative(apiDir, file).split(sep).pop()!.replace(/\.ts$/, ''),
-      outputFields: declaredFields(src, 'Output'),
+      // An Output that reads as zero fields is either "declares nothing" or "we failed to read it",
+      // and nothing here can tell those apart — so it becomes `undefined` (skip), never `[]` (reject).
+      outputFields: outputFields?.length ? outputFields : undefined,
       inputKeys: declaredFields(src, 'Input'),
+      routePath: `/${relative(apiDir, file).split(sep).slice(0, -1).map((s) => s.replace(/^\[(.+)\]$/, ':$1')).join('/')}`,
     });
   }
 
@@ -328,6 +555,9 @@ export function loadViewContracts(projectRoot: string): ViewContracts {
     endpoints,
     components: loaded.components.map((c) => c.def),
     routes: loaded.views.map((v) => v.route),
+    agents: loadProjectAgents(projectRoot),
+    // Save time: the app is mid-write, so a route that is not on disk YET is a warning.
+    routesComplete: false,
   };
 }
 
@@ -350,6 +580,10 @@ interface WalkCtx {
   allNames: string[];
   components: Map<string, ViewComponentSpec> | undefined;
   routes: string[] | undefined;
+  /** `space` → agent slugs. `undefined` ⇒ do not resolve `chat.agent`. */
+  agents: Record<string, string[]> | undefined;
+  /** See {@link ViewContracts.routesComplete}. `false` ⇒ an unknown route is a warning. */
+  routesComplete: boolean;
   sectionIds: Set<string>;
   routeParams: Set<string>;
   /** Declared prop names — set only while walking a component definition. */
@@ -403,11 +637,29 @@ function checkInputKeys(input: unknown, ep: ViewEndpoint | undefined, path: stri
 
 function checkRoute(route: string, path: string, ctx: WalkCtx): void {
   if (!ctx.routes) return;
-  if (!ctx.routes.includes(route)) ctx.errors.push(unknownRoute(path, route, ctx.routes));
+  if (!ctx.routes.includes(route)) ctx.errors.push(unknownRoute(path, route, ctx.routes, ctx.routesComplete));
 }
 
 function checkSectionId(id: string, path: string, ctx: WalkCtx): void {
   if (!ctx.sectionIds.has(id)) ctx.errors.push(unknownSection(path, id, [...ctx.sectionIds]));
+}
+
+/**
+ * Resolve a `{ agent, space }` pair against the project's real agents.
+ *
+ * Checked ONLY when `space` is declared. A bare `agent` is the project's own top-level agent — the
+ * same one `/chat` talks to, dispatched as `agentSlug` rather than `spaceRef`
+ * (`libs/ui/src/view/sections/chat.tsx#sessionBody`) — and nothing on disk here enumerates those,
+ * so it degrades to "skipped" rather than rejecting a dock that works.
+ */
+function checkAgent(agent: string, space: string | undefined, path: string, ctx: WalkCtx): void {
+  if (!ctx.agents || !space) return;
+  const known = ctx.agents[space];
+  if (!known) {
+    ctx.errors.push(unknownSpace(childPath(path, 'space'), space, Object.keys(ctx.agents)));
+    return;
+  }
+  if (!known.includes(agent)) ctx.errors.push(unknownAgent(childPath(path, 'agent'), agent, space, known));
 }
 
 /** Every string in a spec, classified. The single place the no-expressions rule is enforced. */
@@ -593,18 +845,17 @@ function sectionScope(
     } else {
       schema = schemaAtPath(schema, from.replace(/^\$\./, '').split('.'));
     }
+    // The section's rows are an embedded array, and we could not resolve WHICH — the save-time
+    // contract reader carries no schema at all, so `ep.outputSchema` is undefined for every
+    // endpoint there. Falling back to the ROOT universe is the wrong answer twice over: it accepts
+    // root fields the rows do not have, and rejects row fields the model correctly bound. Skip.
+    if (!schema) return { ep, fields: undefined, from };
   }
 
   // `create` binds no rows: its fields come from the mutation's INPUT schema, not its Output, and
   // the section body carries only page-supplied `input` values.
-  const fields =
-    kind === 'create'
-      ? undefined
-      : schema
-        ? new Set(outputFieldUniverse(schema))
-        : ep?.outputFields
-          ? new Set(ep.outputFields)
-          : undefined;
+  const universe = schema ? outputFieldUniverse(schema) : ep?.outputFields;
+  const fields = kind === 'create' || !universe?.length ? undefined : new Set(universe);
 
   return { ep, fields, from };
 }
@@ -646,6 +897,10 @@ export function validateViewSpec(spec: unknown, contracts: ContractsLike | ViewC
     ctx.formFields = undefined;
 
     if (rec['input']) checkInputKeys(rec['input'], scope.ep, childPath(path, 'input'), ctx);
+
+    if (String(rec['kind']) === 'chat' && typeof rec['agent'] === 'string') {
+      checkAgent(rec['agent'], typeof rec['space'] === 'string' ? rec['space'] : undefined, path, ctx);
+    }
 
     if (String(rec['kind']) === 'create') {
       const prefill = rec['prefill'] as Record<string, unknown> | undefined;
@@ -731,6 +986,7 @@ export function validateShellSpec(
     for (const [j, r] of (group.routes ?? []).entries()) checkRoute(r, `groups[${i}].routes[${j}]`, ctx);
     if (group.badge) checkEndpoint(group.badge.query, `groups[${i}].badge.query`, 'query', ctx);
   }
+  if (s.assistant?.agent) checkAgent(s.assistant.agent, s.assistant.space, 'assistant', ctx);
   for (const [i, sub] of (s.subnav ?? []).entries()) {
     for (const [j, item] of (sub.items ?? []).entries()) checkRoute(item.route, `subnav[${i}].items[${j}].route`, ctx);
     for (const [j, g] of (sub.groups ?? []).entries()) {
@@ -752,6 +1008,8 @@ function makeCtx(input: ContractsLike | ViewContracts): WalkCtx {
     allNames: contracts.endpoints.map((e) => e.name).sort(),
     components: contracts.components ? new Map(contracts.components.map((c) => [c.name, c])) : undefined,
     routes: contracts.routes,
+    agents: contracts.agents,
+    routesComplete: contracts.routesComplete !== false,
     sectionIds: new Set(),
     routeParams: new Set(),
     propNames: undefined,
@@ -862,7 +1120,16 @@ export async function validateAppViews(
     supplied ?? (await import('../build/contracts.js').then((m) => m.generateProjectContracts(projectRoot)));
   const routes = loaded.views.map((v) => v.route);
   const components = loaded.components.map((c) => c.def);
-  const base: ViewContracts = { ...toViewContracts(contracts), components, routes };
+  // `routesComplete` is the whole point of running here: every page is on disk now, so a
+  // `navigate` at a route that does not exist is a hard error — the check the writer deliberately
+  // demotes to a warning because no write ORDER can satisfy a mutual link at save time.
+  const base: ViewContracts = {
+    ...toViewContracts(contracts),
+    components,
+    routes,
+    agents: loadProjectAgents(projectRoot),
+    routesComplete: true,
+  };
 
   // Per-artifact checks, re-run against the FULL app vocabulary (a save-time run only knew what
   // existed at that moment — a component written afterwards makes a then-invalid reference valid,
@@ -932,18 +1199,35 @@ export async function validateAppViews(
 // 4. renderSmokeViews — the view twin of smoke_endpoints
 // ──────────────────────────────────────────────────────────────────────────────
 
-/** What one page's smoke run found. */
+/** One section this run could not put data in front of, and why. Never counted as a pass. */
+export interface UnmeasuredSection {
+  /** Index into `spec.sections`. */
+  section: number;
+  endpoint?: string;
+  reason: string;
+}
+
+/**
+ * What one page's smoke run found.
+ *
+ * `coverage` and `empty` are **nullable on purpose**: `null` is "not measured", which is a third
+ * answer, not a rounding of the other two. The version that defaulted an unmeasured page to
+ * `coverage: 1, empty: false` reported **100% coverage and not-empty for a page whose every
+ * endpoint 4xx'd** — the headline metric reading perfect exactly where the app was most broken.
+ */
 export interface ViewSmokeReport {
   route: string;
-  /** Endpoints this page called, and what they answered. */
+  /** Endpoints this page called, and what they answered. `rows` is 0 for any non-2xx. */
   calls: { endpoint: string; status: number; rows: number; ok: boolean }[];
   /** Bound `$.field` paths that resolved non-null at least once / were checked. */
   bindingsCovered: number;
   bindingsChecked: number;
-  /** `bindingsCovered / bindingsChecked`, or `1` when nothing was bindable. */
-  coverage: number;
-  /** True when the page produced no visible value at all. */
-  empty: boolean;
+  /** `bindingsCovered / bindingsChecked`, or `null` when NOTHING was measured. */
+  coverage: number | null;
+  /** True when the page mounted over real data and produced nothing. `null` when not measured. */
+  empty: boolean | null;
+  /** Sections whose data never arrived — a non-2xx, or a dependency that could not be resolved. */
+  unmeasured: UnmeasuredSection[];
 }
 
 /** {@link renderSmokeViews}'s result — a validation result plus the per-page evidence. */
@@ -959,22 +1243,88 @@ export interface RenderSmokeResult extends ViewValidationResult {
 /** The seam the caller supplies — `ctx.callProjectApi` in a tasklist code node. */
 export type ApiCaller = (name: string, input?: unknown) => Promise<{ status: number; body: unknown }>;
 
-/** Rows an endpoint answered with, whatever envelope it used. */
-function rowsOf(body: unknown): Record<string, unknown>[] {
-  const objects = (a: unknown[]): Record<string, unknown>[] =>
-    a.filter((r) => r && typeof r === 'object') as Record<string, unknown>[];
-  if (Array.isArray(body)) return objects(body);
+/**
+ * The section kinds that draw ROWS. Everything else binds ONE record.
+ *
+ * The renderer's own split (`sections/index.tsx` dispatches `list`/`timeline` to
+ * `CollectionSection`, which reads `source.rows`; every other kind reads `source.record`), mirrored
+ * here because a smoke run that guesses differently checks the page's bindings against the wrong
+ * objects — see {@link sectionRows}.
+ */
+const ROW_KINDS = new Set(['list', 'timeline']);
+
+/**
+ * The array inside an Output — `sections/common.tsx#extractRows`, kept in step.
+ *
+ * The conventional envelope keys come FIRST and the "any array property" fallback last, which is
+ * why this is a copy and not a rewrite: the renderer decides what a list draws, and a gate that
+ * decides differently reports on rows the user never sees.
+ */
+function extractRows(body: unknown): unknown[] {
+  if (Array.isArray(body)) return body;
   if (!body || typeof body !== 'object') return [];
   const obj = body as Record<string, unknown>;
-  // An ENVELOPE's array is the rows even when it is EMPTY — which is the whole point. Treating
-  // `{ items: [] }` as one row (the envelope itself) is how a blank page reports as populated.
-  const arrays = Object.values(obj).filter(Array.isArray) as unknown[][];
-  if (arrays.length) return objects(arrays[0]);
-  return [obj];
+  for (const key of ['items', 'rows', 'results', 'data', 'records', 'list']) {
+    if (Array.isArray(obj[key])) return obj[key] as unknown[];
+  }
+  for (const value of Object.values(obj)) if (Array.isArray(value)) return value;
+  return [];
 }
 
-/** Every `$.field` binding in a section, with the instance path it sits at. */
-function boundPaths(node: unknown, path: string, out: { path: string; binding: string }[] = []): { path: string; binding: string }[] {
+/** Keep only the objects — a row of `null`s or strings carries no bindable field. */
+function objectRows(rows: readonly unknown[]): Record<string, unknown>[] {
+  return rows.filter((r) => r && typeof r === 'object' && !Array.isArray(r)) as Record<string, unknown>[];
+}
+
+/**
+ * **The objects a section's `$.field` bindings actually resolve against.**
+ *
+ * The version this replaces asked one question of the response — "what is the first array-valued
+ * property?" — and used the answer for every section. On `currentPlan` (`{ plan, tonight,
+ * mealsByDay: [...] }`) that made a `stats` section's `$.tonight.recipeTitle` resolve against a
+ * MEAL row, so fourteen correct bindings were reported as "always null, fix the endpoint" — each
+ * one naming the wrong culprit, and `17-fix` routes exactly those at the handler. The section's own
+ * source is not a guess: `from` says it outright, and the kind says whether it is rows or a record.
+ */
+function sectionRows(
+  section: Record<string, unknown>,
+  body: unknown,
+  published: Map<string, unknown>,
+): Record<string, unknown>[] {
+  const from = typeof section['from'] === 'string' ? section['from'] : undefined;
+  if (from) {
+    const source = from.startsWith('$data.')
+      ? (() => {
+          const [, id, ...rest] = from.split('.');
+          const base = published.get(id!);
+          return rest.length ? readPath(base, `$.${rest.join('.')}`) : base;
+        })()
+      : readPath(body, from);
+    return Array.isArray(source) ? objectRows(source) : objectRows(source === undefined ? [] : [source]);
+  }
+  if (ROW_KINDS.has(String(section['kind']))) return objectRows(extractRows(body));
+  // The renderer's `record`: the Output itself, or its first element when the Output IS an array.
+  const record = Array.isArray(body) ? body[0] : body;
+  return objectRows(record === undefined ? [] : [record]);
+}
+
+/**
+ * Section keys whose `$.` value addresses the **Output root or the page**, not a row.
+ *
+ * `from: '$.lines'` names the array the rows come FROM; checking it against those rows asks
+ * whether every line has a `lines` field, which no correct spec ever does — ten of the kitchen
+ * fixture's findings were exactly that, each one pointing `17-fix` at a working endpoint. `input`
+ * and `param` resolve in the page's scope (`$route`/`$data`) before any row exists.
+ */
+const NON_ROW_SECTION_KEYS = new Set(['from', 'input', 'param']);
+
+/** Every row-scoped `$.field` binding in a section, with the instance path it sits at. */
+function boundPaths(
+  node: unknown,
+  path: string,
+  out: { path: string; binding: string }[] = [],
+  skip?: ReadonlySet<string>,
+): { path: string; binding: string }[] {
   if (typeof node === 'string') {
     if (node.startsWith('$.') && isBinding(node)) out.push({ path, binding: node });
     return out;
@@ -984,7 +1334,10 @@ function boundPaths(node: unknown, path: string, out: { path: string; binding: s
     return out;
   }
   if (!node || typeof node !== 'object') return out;
-  for (const [k, v] of Object.entries(node as Record<string, unknown>)) boundPaths(v, childPath(path, k), out);
+  for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+    if (skip?.has(k)) continue;
+    boundPaths(v, childPath(path, k), out);
+  }
   return out;
 }
 
@@ -1060,12 +1413,54 @@ export async function renderSmokeViews(
   const errors: ViewError[] = [];
   const pages: ViewSmokeReport[] = [];
 
-  // Route parameters are filled from ids real rows actually carry, so a `[id]` page is smoked
-  // against a record that exists rather than the literal string "undefined" a broken caller sends.
-  const paramPool = new Map<string, unknown>();
+  /**
+   * Ids harvested from real responses, **scoped to the collection that produced them**.
+   *
+   * The pool this replaces was one flat `field → value` map with first-write-wins, so `expiring`
+   * ran first, `paramPool['id']` held an INGREDIENT id, and `recipes/[id]` was then smoked with it
+   * and 404'd — a whole page reported broken because of the order the pages happened to sort in.
+   * REST already says which collection an `:id` belongs to: the value for `/plan/:id/trip` comes
+   * from `/plan`, and can come from nowhere else.
+   */
+  const idPool = new Map<string, Map<string, unknown>>();
   const responses = new Map<string, { status: number; body: unknown }>();
 
-  async function callOnce(name: string, input: Record<string, unknown>): Promise<{ status: number; body: unknown }> {
+  /** `/plan/:id/trip` + `id` → `/plan`: the collection an `:id` in a path is an id OF. */
+  function parentPathFor(ep: ViewEndpoint | undefined, key: string): string {
+    if (!ep?.routePath) return ''; // no path known ⇒ one shared pool, the old behaviour
+    const segs = ep.routePath.split('/');
+    const at = segs.indexOf(`:${key}`);
+    return at > 0 ? segs.slice(0, at).join('/') : ep.routePath;
+  }
+
+  /** Register the ids a response carries under the path that served it. */
+  function harvest(ep: ViewEndpoint | undefined, body: unknown): void {
+    const key = ep?.routePath ?? '';
+    const pool = idPool.get(key) ?? new Map<string, unknown>();
+    idPool.set(key, pool);
+    const take = (row: unknown): void => {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) return;
+      for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
+        if (!/(^id$|Id$)/.test(k)) continue;
+        if (typeof v !== 'string' && typeof v !== 'number') continue;
+        if (!pool.has(k)) pool.set(k, v);
+      }
+    };
+    // Order is the priority: the record itself, then the entities it embeds, then its rows.
+    // `currentPlan` answers `{ plan: {id}, tonight: {id}, mealsByDay: [{id}] }` — the plan's id is
+    // the one `/plan/:id/...` wants, and the meal ids must not shadow it.
+    take(Array.isArray(body) ? undefined : body);
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      for (const v of Object.values(body as Record<string, unknown>)) take(v);
+    }
+    for (const row of extractRows(body)) take(row);
+  }
+
+  async function callOnce(
+    ep: ViewEndpoint | undefined,
+    name: string,
+    input: Record<string, unknown>,
+  ): Promise<{ status: number; body: unknown }> {
     const key = `${name}:${JSON.stringify(input)}`;
     const hit = responses.get(key);
     if (hit) return hit;
@@ -1076,17 +1471,77 @@ export async function renderSmokeViews(
       res = { status: 0, body: { error: e instanceof Error ? e.message : String(e) } };
     }
     responses.set(key, res);
-    for (const row of rowsOf(res.body)) {
-      for (const [k, v] of Object.entries(row)) {
-        if (/(^id$|Id$)/.test(k) && (typeof v === 'string' || typeof v === 'number') && !paramPool.has(k)) {
-          paramPool.set(k, v);
-        }
-      }
-    }
+    // An error body is NOT data. Harvesting `{ error: … }` is how `rowsOf` used to turn a 400 into
+    // "one row", which made `anyRows` true and the page report as populated.
+    if (res.status >= 200 && res.status < 300) harvest(ep, res.body);
     return res;
   }
 
-  // Two sweeps: list endpoints first so the id pool is populated before a detail page needs one.
+  /** A route-parameter value for input `key` of `ep`, from the collection that owns that id. */
+  function poolValue(ep: ViewEndpoint | undefined, key: string): unknown {
+    const pool = idPool.get(parentPathFor(ep, key));
+    return pool?.get(key) ?? pool?.get('id');
+  }
+
+  /**
+   * Resolve one section `input` value the way the renderer's `resolveInputs` does.
+   *
+   * Without this the runner filled route params only and sent NOTHING for a dependent query, so
+   * four kitchen endpoints answered 400 and were reported as broken endpoints — they work in a
+   * browser, where `$data.plan.plan.id` is the plan the section above already fetched. An
+   * unresolvable value returns `{ ready: false }`, which is the renderer's behaviour too: the
+   * query stays idle rather than firing without its dependency.
+   */
+  function resolveInput(
+    value: unknown,
+    ep: ViewEndpoint | undefined,
+    key: string,
+    published: Map<string, unknown>,
+  ): { ready: boolean; value?: unknown } {
+    if (typeof value !== 'string' || !value.startsWith('$')) return { ready: true, value };
+    if (value === '$client.timezone') return { ready: true, value: 'UTC' };
+    if (value.startsWith('$data.')) {
+      const [, id, ...rest] = value.split('.');
+      if (!published.has(id!)) return { ready: false };
+      const got = rest.length ? readPath(published.get(id!), `$.${rest.join('.')}`) : published.get(id!);
+      return got === undefined || got === null ? { ready: false } : { ready: true, value: got };
+    }
+    if (value.startsWith('$route.')) {
+      // There is no URL here, so a route parameter is whatever the collection this endpoint hangs
+      // off actually returned — resolved through the INPUT KEY it feeds, not the param's name.
+      const got = poolValue(ep, key);
+      return got === undefined ? { ready: false } : { ready: true, value: got };
+    }
+    return { ready: false };
+  }
+
+  /** Count one section's `$.field` bindings against the rows it will actually draw. */
+  function checkBindings(
+    report: ViewSmokeReport,
+    file: string,
+    rec: Record<string, unknown>,
+    i: number,
+    rows: Record<string, unknown>[],
+    ep: ViewEndpoint | undefined,
+    name: string | undefined,
+  ): void {
+    if (rows.length === 0) return;
+    for (const { path: bindPath, binding } of boundPaths(rec, `sections[${i}]`, [], NON_ROW_SECTION_KEYS)) {
+      report.bindingsChecked++;
+      if (rows.some((row) => !isEmptyValue(readPath(row, binding)))) {
+        report.bindingsCovered++;
+        continue;
+      }
+      // Declared but never produced: the endpoint's problem, not the page's.
+      const field = binding.slice(2).split('.')[0]!.replace(/\[\d+\]$/, '');
+      if (name && ep?.outputFields?.includes(field)) {
+        errors.push(alwaysNullBinding(bindPath, binding, name, rows.length, file));
+      }
+    }
+  }
+
+  // Two sweeps: parameterless routes first, so a collection has been fetched before a detail page
+  // needs an id out of it.
   const ordered = [...loaded.views].sort((a, b) => Number(a.route.includes('[')) - Number(b.route.includes('[')));
 
   for (const { route, spec, path } of ordered) {
@@ -1095,27 +1550,68 @@ export async function renderSmokeViews(
       calls: [],
       bindingsCovered: 0,
       bindingsChecked: 0,
-      coverage: 1,
-      empty: false,
+      coverage: null,
+      empty: null,
+      unmeasured: [],
     };
-    const params = [...route.matchAll(/\[([A-Za-z][A-Za-z0-9]*)\]/g)].map((m) => m[1]);
+    const params = [...route.matchAll(/\[([A-Za-z][A-Za-z0-9]*)\]/g)].map((m) => m[1]!);
+    /** `$data.<id>` — each section publishes its WHOLE Output, exactly as `usePublish` does. */
+    const published = new Map<string, unknown>();
+    let measuredSections = 0;
 
     for (const [i, section] of spec.sections.entries()) {
       const rec = section as unknown as Record<string, unknown>;
       const name = typeof rec['query'] === 'string' ? rec['query'] : undefined;
+      const from = typeof rec['from'] === 'string' ? rec['from'] : undefined;
+
+      // A section sourced from ANOTHER section's Output makes no request at all.
+      if (!name && from?.startsWith('$data.')) {
+        const rows = sectionRows(rec, undefined, published);
+        if (rows.length) measuredSections++;
+        checkBindings(report, path, rec, i, rows, undefined, undefined);
+        continue;
+      }
       if (!name) continue;
       const ep = byName.get(name);
+
       const input: Record<string, unknown> = {};
-      for (const p of params) {
-        const v = paramPool.get(p) ?? paramPool.get('id');
-        if (v !== undefined && (!ep?.inputKeys || ep.inputKeys.includes(p))) input[p] = v;
+      let ready = true;
+      let blocked = '';
+      for (const [k, v] of Object.entries((rec['input'] ?? {}) as Record<string, unknown>)) {
+        const got = resolveInput(v, ep, k, published);
+        if (!got.ready) {
+          ready = false;
+          blocked = `input.${k} = ${JSON.stringify(v)} could not be resolved from this page's data`;
+          break;
+        }
+        input[k] = got.value;
       }
-      const res = await callOnce(name, input);
-      const rows = rowsOf(res.body);
+      // The renderer's route-param default: the route's SOLE `[param]`, and only when the endpoint
+      // declares that key (`sections/common.tsx` — an undeclared key is a hard 400 pod-side).
+      if (ready && params.length === 1 && input[params[0]!] === undefined) {
+        const p = params[0]!;
+        if (!ep?.inputKeys || ep.inputKeys.includes(p)) {
+          const v = poolValue(ep, p);
+          if (v !== undefined) input[p] = v;
+          else if (ep?.inputKeys?.includes(p)) {
+            ready = false;
+            blocked = `no ${p} was available — nothing this run fetched from ${parentPathFor(ep, p) || 'the api'} carried one`;
+          }
+        }
+      }
+
+      if (!ready) {
+        report.unmeasured.push({ section: i, endpoint: name, reason: blocked });
+        continue;
+      }
+
+      const res = await callOnce(ep, name, input);
       const ok = res.status >= 200 && res.status < 300;
+      const rows = ok ? sectionRows(rec, res.body, published) : [];
       report.calls.push({ endpoint: name, status: res.status, rows: rows.length, ok });
 
       if (!ok) {
+        report.unmeasured.push({ section: i, endpoint: name, reason: `answered ${res.status}` });
         errors.push(
           viewError(
             'render-error',
@@ -1127,31 +1623,27 @@ export async function renderSmokeViews(
         );
         continue;
       }
-      if (rows.length === 0) continue;
-
-      for (const { path: bindPath, binding } of boundPaths(rec, `sections[${i}]`)) {
-        report.bindingsChecked++;
-        const present = rows.some((row) => !isEmptyValue(readPath(row, binding)));
-        if (present) {
-          report.bindingsCovered++;
-          continue;
-        }
-        // Declared but never produced: the endpoint's problem, not the page's.
-        if (ep?.outputFields?.includes(binding.slice(2).split('.')[0].replace(/\[\d+\]$/, ''))) {
-          errors.push(alwaysNullBinding(bindPath, binding, name, rows.length, path));
-        }
-      }
+      if (rec['id']) published.set(String(rec['id']), res.body);
+      measuredSections++;
+      checkBindings(report, path, rec, i, rows, ep, name);
     }
 
-    report.coverage = report.bindingsChecked === 0 ? 1 : report.bindingsCovered / report.bindingsChecked;
-    const anyRows = report.calls.some((c) => c.rows > 0);
-    const anyValue = report.bindingsChecked === 0 ? anyRows : report.bindingsCovered > 0;
-    report.empty = report.calls.length > 0 && !anyValue;
-    if (report.empty) {
-      const detail = anyRows
-        ? `${report.bindingsChecked} bound field(s), none of which had a value on any row`
-        : `every section's endpoint returned zero rows`;
-      errors.push(emptyRender(route, path, detail));
+    // NOT MEASURED is a third answer. A page whose sections never produced data has no coverage to
+    // report, and defaulting it to 1 made the metric read perfect exactly where the app was worst.
+    report.coverage = report.bindingsChecked === 0 ? null : report.bindingsCovered / report.bindingsChecked;
+    const anyRows = report.calls.some((c) => c.ok && c.rows > 0);
+    if (measuredSections === 0 && report.unmeasured.length > 0) {
+      report.empty = null;
+    } else if (report.calls.length === 0 && report.bindingsChecked === 0) {
+      report.empty = null; // a page of create/chat/markdown sections — nothing to measure
+    } else {
+      report.empty = report.bindingsChecked === 0 ? !anyRows : report.bindingsCovered === 0;
+      if (report.empty) {
+        const detail = anyRows
+          ? `${report.bindingsChecked} bound field(s), none of which had a value on any row`
+          : `every section's endpoint returned zero rows`;
+        errors.push(emptyRender(route, path, detail));
+      }
     }
     pages.push(report);
   }
@@ -1166,19 +1658,60 @@ export async function renderSmokeViews(
   let rendererMounted = false;
   let rendererReason: string | undefined;
   try {
-    const view = (await import(RENDERER_MODULE)) as { ViewRenderer?: unknown };
+    const view = (await import(RENDERER_MODULE)) as {
+      ViewRenderer?: unknown;
+      ViewThemeProvider?: unknown;
+      createViewClient?: (config: Record<string, unknown>) => unknown;
+    };
     if (view.ViewRenderer) {
-      const { renderToStaticMarkup } = (await import('react-dom/server')) as {
-        renderToStaticMarkup: (el: unknown) => string;
+      // Mount with the React the RENDERER was built against, not the one this package depends on.
+      // `@lmthing/cli` pins react@18 and `@lmthing/ui` peers react@>=19, so a bare
+      // `import('react-dom/server')` here loads 18's renderer and drives a 19 component tree: its
+      // hook dispatcher is null and EVERY page throws `Cannot read properties of null (reading
+      // 'useMemo')`. That is what kept the render-error tier from ever running during T1 — and it
+      // is a resolution question, not a spec defect, so it is answered by resolution. Resolving
+      // both halves from the renderer's own location keeps the two in one instance whatever the
+      // two package.jsons say; if the versions are ever unified this becomes a no-op.
+      const { createRequire } = await import('node:module');
+      const here = createRequire(import.meta.url);
+      // `require.resolve` gives the renderer's own file, whose directory is inside `@lmthing/ui`;
+      // a require rooted there sees that package's react. (`import.meta.resolve` is not used: the
+      // test/scenario runners transpile this file with esbuild, which shims it away.)
+      const fromRenderer = createRequire(here.resolve(RENDERER_MODULE));
+      const { renderToStaticMarkup } = (await import(
+        pathToFileURL(fromRenderer.resolve('react-dom/server')).href
+      )) as { renderToStaticMarkup: (el: unknown) => string };
+      const { createElement } = (await import(pathToFileURL(fromRenderer.resolve('react')).href)) as {
+        createElement: (t: unknown, p: unknown) => unknown;
       };
-      const { createElement } = (await import('react')) as { createElement: (t: unknown, p: unknown) => unknown };
       const components = Object.fromEntries(loaded.components.map((c) => [c.name, c.def]));
+      // A real client, from the renderer's own factory — `client.timezone` is read during the
+      // first render, so `undefined` throws before a single page mounts. No request is made:
+      // `renderToStaticMarkup` runs one synchronous pass and effects never fire, which is exactly
+      // the scope of this tier (does the spec MOUNT), the data half having already run above.
+      const smokeClient = view.createViewClient?.({
+        baseUrl: 'http://render-smoke.invalid',
+        endpoints: Object.fromEntries(
+          contracts.endpoints.map((e) => [e.name, { method: e.method, routePath: e.routePath ?? `/${e.name}` }]),
+        ),
+        timezone: 'UTC',
+      });
       const thrown: ViewError[] = [];
       let rendered = 0;
       for (const { route, spec, path } of loaded.views) {
         try {
+          // Wrapped in the theme provider, exactly as the generated wrapper mounts it
+          // (`authoring/globals.ts#renderViewWrapper`): every `Prim.*` primitive reads that
+          // context and throws `Missing theme.` without it, so an unwrapped mount would report
+          // all N pages broken for a reason no spec edit can fix.
+          const tree = createElement(view.ViewRenderer, {
+            spec,
+            components,
+            shell: loaded.shell ?? null,
+            client: smokeClient,
+          });
           renderToStaticMarkup(
-            createElement(view.ViewRenderer, { spec, components, shell: loaded.shell ?? null, client: undefined }),
+            view.ViewThemeProvider ? createElement(view.ViewThemeProvider, { children: tree }) : tree,
           );
           rendered++;
         } catch (e) {

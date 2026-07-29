@@ -34,7 +34,16 @@
  * the two produce visibly different text.
  */
 
-import type { JsonSchema } from './schema.js';
+import {
+  AGENT_NAME_PATTERN,
+  BINDING_PATTERN,
+  IDENT_PATTERN,
+  ROUTE_PATTERN,
+  STATIC_ROUTE_PATTERN,
+  TYPEREF_PATTERN,
+  VALUE_PATTERN,
+  type JsonSchema,
+} from './schema.js';
 
 /**
  * The eight binding roots (schema §2, T0 S3) as a MENU, because that is how a rejection has to
@@ -73,6 +82,8 @@ export type ViewErrorCode =
   | 'bad-prop'
   /** Component definitions that reference each other in a cycle. */
   | 'component-cycle'
+  /** A `chat.agent` / `assistant.agent`, or its `space`, that this project does not define. */
+  | 'unknown-agent'
   /** A `reveals` / `$data.<id>` target that is not a section id on this page. */
   | 'unknown-section'
   /** A `navigate` / nav / subnav target that is not a route the app has. */
@@ -377,6 +388,38 @@ export function badProp(
   return err('bad-prop', path, at(path, `${head}${menu('Props', props)}`));
 }
 
+/**
+ * A `chat.agent` no space in this project defines.
+ *
+ * The check `AGENT_NAME_PATTERN` cannot do. A pattern says the slug is *shaped* like an agent; only
+ * the project says whether it IS one, and a dock pointed at a name that does not resolve is a dock
+ * that renders an error on every load.
+ */
+export function unknownAgent(path: string, bad: string, space: string, agents: readonly string[]): ViewError {
+  return err(
+    'unknown-agent',
+    path,
+    at(
+      path,
+      `"${bad}" is not an agent of the "${space}" space. ${didYouMean(bad, agents)}${menu('Agents', agents)}. ` +
+        `Agents are directories under spaces/${space}/agents/.`,
+    ),
+  );
+}
+
+/** A `chat.space` that is not one of the project's spaces. */
+export function unknownSpace(path: string, bad: string, spaces: readonly string[]): ViewError {
+  return err(
+    'unknown-agent',
+    path,
+    at(
+      path,
+      `"${bad}" is not a space in this project. ${didYouMean(bad, spaces)}${menu('Spaces', spaces)}. ` +
+        `Spaces are directories under spaces/.`,
+    ),
+  );
+}
+
 /** `reveals` and `$data.<id>` both address a section by id on the SAME page. */
 export function unknownSection(path: string, bad: string, ids: readonly string[]): ViewError {
   return err(
@@ -390,8 +433,34 @@ export function unknownSection(path: string, bad: string, ids: readonly string[]
   );
 }
 
-/** A navigation destination that is not a page. */
-export function unknownRoute(path: string, bad: string, routes: readonly string[]): ViewError {
+/**
+ * A navigation destination that is not a page.
+ *
+ * **A warning while the app is still being written** (`complete: false`), and an error only once
+ * every page is on disk. `recipes` links to `recipes/[id]` and `recipes/[id]` links back: at save
+ * time whichever lands first names a route that does not exist yet, so **no write order satisfies
+ * both** and a hard failure here is a writer the model cannot satisfy — it retries until its budget
+ * dies. The check loses nothing by waiting: `validateAppViews` re-runs this exact resolution against
+ * the full route list, where an unreachable target is a genuine defect.
+ */
+export function unknownRoute(
+  path: string,
+  bad: string,
+  routes: readonly string[],
+  complete = true,
+): ViewError {
+  if (!complete) {
+    return warn(
+      'unknown-route',
+      path,
+      at(
+        path,
+        `"${bad}" is not a route in this app YET. ${menu('Routes written so far', routes)}. ` +
+          `Write pages in any order — this is only an error once the app is complete, where ` +
+          `validateAppViews re-checks it against every route on disk.`,
+      ),
+    );
+  }
   return err(
     'unknown-route',
     path,
@@ -496,6 +565,44 @@ interface VerboseError {
   parentSchema?: JsonSchema;
 }
 
+/**
+ * What a string SLOT actually accepts, in words.
+ *
+ * A regex is not a menu. `"recipes/[id]" does not match the expected form
+ * (^[a-z0-9][a-z0-9-]*(?:/[a-z0-9-]+)*$)` — a real rejection, from a nav destination that may not
+ * be parameterised — asks the model to read a character class and infer the rule, when the honest
+ * answer is one sentence. The schema has a finite, nameable set of string forms, so each one gets
+ * its sentence and its examples. The default branch still names the pattern: an unnamed form is a
+ * gap in THIS table, and reporting nothing would be worse than reporting a regex.
+ */
+function patternHelp(pattern: string, parent: JsonSchema | undefined): string {
+  switch (pattern) {
+    case ROUTE_PATTERN:
+      return (
+        'A route is lowercase, slash-separated, and may end a segment with a [param]: ' +
+        'index, recipes, recipes/[id], trips/[tripId]/expenses.'
+      );
+    case STATIC_ROUTE_PATTERN:
+      return (
+        'A nav destination is a route with NO [param] segment — navigation goes to a list page, ' +
+        'and a row action carries the id from there.'
+      );
+    case IDENT_PATTERN:
+      return 'Expected a plain name: letters, digits and _, starting with a letter or _ (no spaces, dashes, dots or slashes).';
+    case AGENT_NAME_PATTERN:
+      return 'An agent is a slug from the project\'s space — letters, digits, _ and - (pantry-keeper, sous, data-modeler).';
+    case TYPEREF_PATTERN:
+      return 'A prop type is a type NAME, optionally an array: string, number, boolean, Recipe, Recipe[].';
+    case BINDING_PATTERN:
+    case VALUE_PATTERN:
+      return BINDING_ROOTS_HELP.sentence;
+    default: {
+      const described = typeof parent?.['description'] === 'string' ? ` ${String(parent['description'])}` : '';
+      return `Expected the form /${pattern}/.${described}`;
+    }
+  }
+}
+
 /** The property menu of the schema an error was measured against. */
 function propertiesOf(schema: JsonSchema | undefined): string[] {
   const props = schema?.['properties'];
@@ -555,10 +662,14 @@ export function shapeErrorToViewError(raw: unknown): ViewError {
           ? expressionAttempt(path, value)
           : badBindingRoot(path, value);
       }
-      return err('shape', path, at(path, `"${value}" does not match the expected form (${String(p['pattern'] ?? '')}).`));
+      return err('shape', path, at(path, `"${value}" is not valid here. ${patternHelp(String(p['pattern'] ?? ''), e.parentSchema)}`));
     }
     case 'type': {
-      const want = String(p['type'] ?? '');
+      // `type` is a LIST wherever a slot takes more than one (an `arg` is string|number|boolean),
+      // and `String(['string','number','boolean'])` renders it as `string,number,boolean` — which
+      // reads as one exotic type name rather than a choice of three.
+      const types = p['type'];
+      const want = Array.isArray(types) ? types.map(String).join(', ') : String(types ?? '');
       const got = Array.isArray(e.data) ? 'array' : e.data === null ? 'null' : typeof e.data;
       return err('shape', path, at(path, `expected ${want}, got ${got} (${JSON.stringify(e.data)}).`));
     }
@@ -586,6 +697,52 @@ const KEYWORD_RANK: Record<string, number> = {
 };
 
 /**
+ * Drop the branches of a union the model was NOT writing.
+ *
+ * `Action` is `oneOf: [{required:['mutate']}, {required:['navigate']}, {required:['download']}, …]`
+ * with `additionalProperties: false` on every branch, so ONE bad key inside a `{ mutate }` action
+ * produces the real error plus one *"`mutate` is not a property here"* per sibling branch — seven
+ * lines of debris around one line of signal. The debris is not merely noisy, it is **actively
+ * wrong**: a model that reads "`mutate` is not a property here" concludes `mutate` is illegal in a
+ * `rowAction` and rewrites it as a `navigate`, silently deleting the feature. Measured in T1.
+ *
+ * The branch the model MEANT is not ambiguous — each branch is keyed by its own discriminant
+ * (`mutate` / `navigate` / `download` / `print` / `copy`) and exactly one of those keys is present
+ * in the data. Keeping only that branch's errors leaves the sentence that names the actual offence.
+ * When two branches' discriminants both match (or none does) nothing is dropped: the union really
+ * is ambiguous then, and guessing would hide the real finding.
+ */
+function pruneUnionBranches(raw: readonly unknown[]): readonly unknown[] {
+  const drops: { instancePath: string; prefix: string; keep: number }[] = [];
+  for (const e of raw as VerboseError[]) {
+    if (e.keyword !== 'oneOf' && e.keyword !== 'anyOf') continue;
+    const branches = (e.parentSchema as Record<string, unknown> | undefined)?.[e.keyword];
+    if (!Array.isArray(branches)) continue;
+    const data = e.data;
+    if (!data || typeof data !== 'object' || Array.isArray(data)) continue;
+    const present = new Set(Object.keys(data as Record<string, unknown>));
+    const matched: number[] = [];
+    branches.forEach((b, i) => {
+      const required = (b as Record<string, unknown> | null)?.['required'];
+      if (Array.isArray(required) && required.length && required.every((k) => present.has(String(k)))) {
+        matched.push(i);
+      }
+    });
+    if (matched.length === 1) drops.push({ instancePath: e.instancePath, prefix: e.schemaPath, keep: matched[0]! });
+  }
+  if (drops.length === 0) return raw;
+  return (raw as VerboseError[]).filter((e) => {
+    for (const d of drops) {
+      if (!e.instancePath.startsWith(d.instancePath)) continue;
+      if (!e.schemaPath.startsWith(`${d.prefix}/`)) continue;
+      const branch = /^\/(\d+)(?:\/|$)/.exec(e.schemaPath.slice(d.prefix.length))?.[1];
+      if (branch !== undefined && Number(branch) !== d.keep) return false;
+    }
+    return true;
+  });
+}
+
+/**
  * Reduce ajv's error list to **one finding per instance path**, keeping the most informative.
  *
  * The union-typed slots make this necessary rather than cosmetic. `title: '$.price * $.qty'` fails
@@ -593,8 +750,13 @@ const KEYWORD_RANK: Record<string, number> = {
  * `if/then` — five errors for one mistake, only the first of which the model can act on. Dropping
  * the structural ones and keeping the highest-ranked keyword per path leaves exactly the sentence
  * that names the offence.
+ *
+ * {@link pruneUnionBranches} runs FIRST, because per-path ranking cannot fix a discriminated union:
+ * every branch fails at the same path, so the surviving errors would still be one real finding and
+ * N contradictory ones.
  */
-export function shapeErrorsToViewErrors(raw: readonly unknown[]): ViewError[] {
+export function shapeErrorsToViewErrors(rawInput: readonly unknown[]): ViewError[] {
+  const raw = pruneUnionBranches(rawInput);
   const best = new Map<string, { rank: number; error: unknown }>();
   for (const e of raw) {
     const v = e as VerboseError;

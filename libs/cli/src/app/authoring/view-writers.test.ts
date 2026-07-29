@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createProjectAuthoringGlobals } from './globals.js';
 import { LintError } from './lint.js';
+import { validateAppViews } from '../view-spec/validate.js';
 
 describe('view-spec writers', () => {
   let projectRoot: string;
@@ -248,12 +249,25 @@ export default async function handler() { return { id: '1' }; }
     expect(read('pages', 'recipes.tsx')).toContain('"brand": "Kitchen"');
   });
 
-  it('rejects a shell nav target that is not a route', () => {
+  it('lets a shell nav target that is not YET a route through, and says so', async () => {
+    // WAVE-2 (T1). A hard failure here is unsatisfiable: `recipes` links to `recipes/[id]` and
+    // `recipes/[id]` links back, so whichever is written first names a route that does not exist —
+    // NO write order satisfies both, and T1 needed a throwaway 13-write bootstrap pass to get past
+    // it. Save time therefore warns; the check itself is not lost, only deferred (below).
     const pa = make();
     pa.writeProjectView('recipes', { sections: [{ kind: 'list', query: 'listRecipes' }] });
-    expect(() => pa.writeProjectViewShell({ nav: [{ route: 'recipies' }] })).toThrow(
-      /"recipies" is not a route in this app. Did you mean recipes\?/,
-    );
+    expect(pa.writeProjectViewShell({ nav: [{ route: 'recipies' }] })).toEqual({ ok: true });
+  });
+
+  it('and validateAppViews still fails it — the deferred half is the one that ships', async () => {
+    const pa = make();
+    pa.writeProjectView('recipes', { sections: [{ kind: 'list', query: 'listRecipes' }] });
+    pa.writeProjectViewShell({ nav: [{ route: 'recipies' }] });
+    const res = await validateAppViews(projectRoot, { contracts: { endpoints: [] } as never });
+    const bad = res.errors.find((e) => e.code === 'unknown-route');
+    expect(bad?.severity).toBe('error');
+    expect(bad?.message).toContain('"recipies" is not a route in this app. Did you mean recipes?');
+    expect(res.ok).toBe(false);
   });
 
   it('does not put the shell or the components dir on a route', () => {

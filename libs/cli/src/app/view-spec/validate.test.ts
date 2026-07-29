@@ -15,6 +15,7 @@ import {
   loadViewContracts,
   outputFieldUniverse,
   renderSmokeViews,
+  toViewContracts,
   validateAppViews,
   validateShellSpec,
   validateViewComponent,
@@ -598,4 +599,520 @@ describe('renderSmokeViews', () => {
     },
     120_000,
   );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Wave-2 regressions. Every one of these was a REAL finding from the T1 kitchen
+// migration, where the two whole-app gates together produced 81 false findings and
+// one inverted metric. Each `it` pins one of them by its mechanism, not by its
+// symptom, because a symptom test passes again the moment the bug moves.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('toViewContracts — idempotence (D-A)', () => {
+  /** What `generateProjectContracts` actually hands over: both schemas, always. */
+  const RAW = {
+    endpoints: [
+      {
+        name: 'dismissSuggestion',
+        method: 'POST',
+        routePath: '/suggestions/:id/dismiss',
+        description: '',
+        inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        outputSchema: { type: 'object', properties: { ok: { type: 'boolean' } } },
+        inputTsType: '{ id: string }',
+        outputTsType: '{ ok: boolean }',
+      },
+    ],
+  } as never;
+
+  it('is the IDENTITY on its own output — reducing twice equals reducing once', () => {
+    const once = toViewContracts(RAW);
+    const twice = toViewContracts(once);
+    expect(twice).toEqual(once);
+  });
+
+  it('does not lose inputKeys on the second pass — the 32-false-finding bug', () => {
+    // `validateAppViews` reduces, then hands the result to `validateViewSpec`, which reduces
+    // again. The reduced form keeps `outputSchema` and drops `inputSchema`, so a second raw-branch
+    // pass recomputed `inputKeys` from a schema that is no longer there and got `[]` — which made
+    // EVERY `input` key on every section of every page report as undeclared.
+    expect(toViewContracts(RAW).endpoints[0].inputKeys).toEqual(['id']);
+    expect(toViewContracts(toViewContracts(RAW)).endpoints[0].inputKeys).toEqual(['id']);
+  });
+
+  it('accepts a declared input key after a double reduction', () => {
+    const reduced = toViewContracts(toViewContracts(RAW));
+    const res = validateViewSpec(
+      { route: 'index', sections: [{ kind: 'create', mutation: 'dismissSuggestion', input: { id: '$.id' } }] },
+      { ...reduced, routes: ['index'] },
+    );
+    expect(res.errors.map((e) => e.message)).toEqual([]);
+  });
+});
+
+describe('outputFieldUniverse — $ref / definitions (D-B)', () => {
+  it('follows a $ref into definitions when the Output IS an array of a named type', () => {
+    // `export type Output = Recipe[]` — the commonest Output shape in the catalogue. The root
+    // property names are type/items/definitions, so a reader that stops there sees NO fields and
+    // rejects every `$.field` on the endpoint (49 of T1's 81 false findings).
+    expect(
+      outputFieldUniverse({
+        type: 'array',
+        items: { $ref: '#/definitions/Recipe' },
+        definitions: { Recipe: { type: 'object', properties: { id: {}, title: {}, tags: {} } } },
+      }),
+    ).toEqual(['id', 'tags', 'title']);
+  });
+
+  it('follows a $ref held by an array-valued PROPERTY', () => {
+    expect(
+      outputFieldUniverse({
+        type: 'object',
+        properties: { items: { type: 'array', items: { $ref: '#/definitions/Line' } }, total: {} },
+        definitions: { Line: { type: 'object', properties: { sku: {}, qty: {} } } },
+      }),
+    ).toEqual(['items', 'qty', 'sku', 'total']);
+  });
+
+  it('follows a $ref at the Output root (a named record type)', () => {
+    expect(
+      outputFieldUniverse({
+        $ref: '#/definitions/Recipe',
+        definitions: { Recipe: { type: 'object', properties: { id: {}, title: {} } } },
+      }),
+    ).toEqual(['id', 'title']);
+  });
+
+  it('returns undefined — never [] — for an Output it cannot resolve', () => {
+    // The invariant that keeps a stale contract from rejecting every working page: `[]` means
+    // "declares nothing", which makes every binding an error, and this cannot tell the two apart.
+    expect(outputFieldUniverse({ type: 'object' })).toBeUndefined();
+    expect(outputFieldUniverse({ $ref: '#/definitions/Missing', definitions: {} })).toBeUndefined();
+    expect(outputFieldUniverse(undefined)).toBeUndefined();
+  });
+
+  it('does not spin on a self-referential type', () => {
+    expect(
+      outputFieldUniverse({
+        $ref: '#/definitions/Node',
+        definitions: { Node: { type: 'object', properties: { id: {}, parent: { $ref: '#/definitions/Node' } } } },
+      }),
+    ).toEqual(['id', 'parent']);
+  });
+
+  it('accepts $.field on a $ref-ed Output end to end', async () => {
+    const root = await project({
+      'api/recipes/GET.ts': `export const name = 'listRecipes';
+export interface Recipe { id: string; title: string }
+export type Output = Recipe[];
+export default async function h() { return [] as Output; }
+`,
+      'pages/index.view.json': JSON.stringify({
+        route: 'index',
+        sections: [{ kind: 'list', query: 'listRecipes', item: { title: '$.title' } }],
+      }),
+    });
+    const res = await validateAppViews(root);
+    expect(res.errors.filter((e) => e.code === 'unknown-field')).toEqual([]);
+  }, 120_000);
+});
+
+describe('declaredFields — an INCOMPLETE menu is worse than no menu (D-3c)', () => {
+  it('expands a named element type declared beside the handler', async () => {
+    const root = await project({
+      'api/plan/GET.ts': `export const name = 'getPlan';
+export interface DayTotal { day: string; calories: number }
+export interface Output { days: DayTotal[]; adherence: number }
+export default async function h() { return {} as Output; }
+`,
+    });
+    expect(loadViewContracts(root).endpoints[0].outputFields).toEqual(['adherence', 'calories', 'day', 'days']);
+  });
+
+  it('SKIPS rather than guesses when an element type is not in the file', async () => {
+    // It cannot see through an IMPORTED `DayTotal[]`, so the honest answer is `undefined`
+    // ("do not check"), never the partial `['days']` — which is what told T1 `"$.day" is not a
+    // field… Did you mean $.days?` about a field of the very array the section was sourced from.
+    const root = await project({
+      'api/plan/GET.ts': `import type { DayTotal } from '../../types/x';
+export const name = 'getPlan';
+export interface Output { days: DayTotal[]; adherence: number }
+export default async function h() { return {} as Output; }
+`,
+    });
+    expect(loadViewContracts(root).endpoints[0].outputFields).toBeUndefined();
+  });
+
+  it('resolves an aliased Output through a type declared in the file', async () => {
+    const root = await project({
+      'api/recipes/GET.ts': `export const name = 'listRecipes';
+export interface Recipe { id: string; title: string }
+export type Output = Recipe[];
+export default async function h() { return [] as Output; }
+`,
+    });
+    expect(loadViewContracts(root).endpoints[0].outputFields).toEqual(['id', 'title']);
+  });
+
+  it('does not reject a row field of a `from`-sourced section at save time', async () => {
+    // `sectionScope` re-roots on `ep.outputSchema`, which the SYNCHRONOUS reader never populates.
+    // It used to fall back to the root universe, so a `from: '$.lines'` section's row bindings were
+    // measured against the WRONG scope — 5 of T1's 14 writer rejections, and the reason five
+    // element types were inlined in handlers for no runtime reason.
+    const root = await project({
+      'api/trip/GET.ts': `import type { TripLine } from '../../types/x';
+export const name = 'getTrip';
+export interface Output { lines: TripLine[]; estimatedCost: number }
+export default async function h() { return {} as Output; }
+`,
+    });
+    const res = validateViewSpec(
+      {
+        route: 'index',
+        sections: [{ kind: 'list', query: 'getTrip', from: '$.lines', item: { title: '$.ingredient' } }],
+      },
+      { ...loadViewContracts(root), routes: ['index'] },
+    );
+    expect(res.errors).toEqual([]);
+  });
+});
+
+describe('unknown route — a warning at save time, an error app-wide (D-3b)', () => {
+  const TWO_WAY: ViewContracts = {
+    endpoints: [{ name: 'listRecipes', method: 'GET', outputFields: ['id'] }],
+    routes: ['recipes'],
+    routesComplete: false,
+  };
+
+  it('does not fail a write that links to a page not yet on disk', () => {
+    // `recipes` ↔ `recipes/[id]` mutually block: NO write order satisfies both. T1 needed a
+    // 13-write throwaway bootstrap pass; a model would loop until its budget died.
+    const res = validateViewSpec(
+      {
+        route: 'recipes',
+        sections: [{ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipes/[id]' } }],
+      },
+      TWO_WAY,
+    );
+    expect(res.ok).toBe(true);
+    expect(res.warningCount).toBe(1);
+    expect(res.errors[0].severity).toBe('warning');
+    expect(res.errors[0].message).toContain('is not a route in this app YET');
+  });
+
+  it('is still a hard error once the route list is complete', () => {
+    const res = validateViewSpec(
+      {
+        route: 'recipes',
+        sections: [{ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipes/[id]' } }],
+      },
+      { ...TWO_WAY, routesComplete: true },
+    );
+    expect(res.ok).toBe(false);
+    expect(res.errors[0].code).toBe('unknown-route');
+  });
+
+  it('validateAppViews keeps it an error — the check is not lost, only deferred', async () => {
+    const root = await project({
+      'pages/index.view.json': JSON.stringify({
+        route: 'index',
+        sections: [{ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'nowhere' } }],
+      }),
+    });
+    const res = await validateAppViews(root, { contracts: { endpoints: [] } as never });
+    const bad = res.errors.find((e) => e.code === 'unknown-route');
+    expect(bad?.severity).toBe('error');
+  });
+});
+
+describe('renderSmokeViews — the section\'s own source, not a heuristic (S1)', () => {
+  const CONTRACTS = {
+    endpoints: [
+      {
+        name: 'currentPlan',
+        method: 'GET',
+        routePath: '/plan',
+        outputFields: ['plan', 'tonight', 'weekStart', 'mealsByDay'],
+        inputKeys: [],
+      },
+    ],
+  } as never;
+
+  /** The kitchen's real shape: a RECORD with a top-level array beside the fields that matter. */
+  const BODY = {
+    plan: { id: 'p1' },
+    tonight: { recipeTitle: 'Soup', day: '2026-07-29' },
+    weekStart: '2026-07-27',
+    mealsByDay: [{ id: 'm1', title: 'Soup' }],
+  };
+
+  it('binds a stats section against the RECORD, not the first array property', async () => {
+    // `rowsOf` took `mealsByDay` as "the rows", so 14 correct `$.tonight.*` bindings were reported
+    // as always-null — each naming the wrong culprit, and `17-fix` routes those at the handler.
+    const root = await project({
+      'pages/index.view.json': JSON.stringify({
+        route: 'index',
+        sections: [
+          {
+            kind: 'stats',
+            query: 'currentPlan',
+            cards: [
+              { label: 'Week', value: '$.weekStart' },
+              { label: 'Tonight', value: '$.tonight.recipeTitle' },
+            ],
+          },
+        ],
+      }),
+    });
+    const res = await renderSmokeViews(root, { contracts: CONTRACTS, call: async () => ({ status: 200, body: BODY }) });
+    expect(res.errors.filter((e) => e.code === 'null-binding')).toEqual([]);
+    expect(res.pages[0]).toMatchObject({ bindingsChecked: 2, bindingsCovered: 2, coverage: 1 });
+  });
+
+  it('binds a `from` section against the array it names, and never checks `from` itself', async () => {
+    const root = await project({
+      'pages/index.view.json': JSON.stringify({
+        route: 'index',
+        sections: [{ kind: 'list', query: 'currentPlan', from: '$.mealsByDay', item: { title: '$.title' } }],
+      }),
+    });
+    const res = await renderSmokeViews(root, { contracts: CONTRACTS, call: async () => ({ status: 200, body: BODY }) });
+    // `$.mealsByDay` is the SOURCE path; measuring it against its own rows asks whether every meal
+    // has a `mealsByDay` field, which no correct spec ever does.
+    expect(res.errors).toEqual([]);
+    expect(res.pages[0]).toMatchObject({ bindingsChecked: 1, bindingsCovered: 1 });
+  });
+});
+
+describe('renderSmokeViews — dependent queries and scoped ids (S2, S3)', () => {
+  const CONTRACTS = {
+    endpoints: [
+      { name: 'currentPlan', method: 'GET', routePath: '/plan', outputFields: ['plan'], inputKeys: [] },
+      {
+        name: 'shoppingList',
+        method: 'GET',
+        routePath: '/plan/:id/shopping',
+        outputFields: ['items', 'ingredient'],
+        inputKeys: ['id'],
+      },
+      { name: 'listPantry', method: 'GET', routePath: '/pantry', outputFields: ['id', 'name'], inputKeys: [] },
+      { name: 'getRecipe', method: 'GET', routePath: '/recipes/:id', outputFields: ['id', 'title'], inputKeys: ['id'] },
+      { name: 'listRecipes', method: 'GET', routePath: '/recipes', outputFields: ['id', 'title'], inputKeys: [] },
+    ],
+  } as never;
+
+  it('resolves `$data.<section>.path` the way the renderer does (S2)', async () => {
+    const root = await project({
+      'pages/shopping.view.json': JSON.stringify({
+        route: 'shopping',
+        sections: [
+          { kind: 'stats', id: 'plan', query: 'currentPlan', cards: [{ label: 'Plan', value: '$.plan.id' }] },
+          {
+            kind: 'list',
+            query: 'shoppingList',
+            input: { id: '$data.plan.plan.id' },
+            from: '$.items',
+            item: { title: '$.ingredient' },
+          },
+        ],
+      }),
+    });
+    const seen: { name: string; input: unknown }[] = [];
+    const res = await renderSmokeViews(root, {
+      contracts: CONTRACTS,
+      call: async (name, input) => {
+        seen.push({ name, input });
+        return name === 'currentPlan'
+          ? { status: 200, body: { plan: { id: 'p1' } } }
+          : { status: 200, body: { items: [{ ingredient: 'Basil' }] } };
+      },
+    });
+    // The runner used to send route params ONLY, so a dependent query got `{}` and answered 400 —
+    // four kitchen endpoints were reported broken that work in a browser.
+    expect(seen.find((c) => c.name === 'shoppingList')?.input).toEqual({ id: 'p1' });
+    expect(res.errors).toEqual([]);
+  });
+
+  it('scopes the id pool per collection, so a pantry id is never used as a recipe id (S3)', async () => {
+    const root = await project({
+      // `pantry` sorts before `recipes`, which is exactly how the flat first-write-wins pool got
+      // an INGREDIENT id into `paramPool['id']` and then 404'd every `recipes/[id]` section.
+      'pages/pantry.view.json': JSON.stringify({
+        route: 'pantry',
+        sections: [{ kind: 'list', query: 'listPantry', item: { title: '$.name' } }],
+      }),
+      'pages/recipes.view.json': JSON.stringify({
+        route: 'recipes',
+        sections: [{ kind: 'list', query: 'listRecipes', item: { title: '$.title' } }],
+      }),
+      'pages/recipes/[id].view.json': JSON.stringify({
+        route: 'recipes/[id]',
+        sections: [{ kind: 'detail', query: 'getRecipe', header: { title: '$.title' } }],
+      }),
+    });
+    const seen: { name: string; input: unknown }[] = [];
+    const res = await renderSmokeViews(root, {
+      contracts: CONTRACTS,
+      call: async (name, input) => {
+        seen.push({ name, input });
+        if (name === 'listPantry') return { status: 200, body: [{ id: 'ingredient-1', name: 'Basil' }] };
+        if (name === 'listRecipes') return { status: 200, body: [{ id: 'recipe-1', title: 'Soup' }] };
+        return (input as { id?: string })?.id === 'recipe-1'
+          ? { status: 200, body: { id: 'recipe-1', title: 'Soup' } }
+          : { status: 404, body: { error: 'not found' } };
+      },
+    });
+    expect(seen.find((c) => c.name === 'getRecipe')?.input).toEqual({ id: 'recipe-1' });
+    expect(res.errors).toEqual([]);
+  });
+});
+
+describe('renderSmokeViews — an error body is not data (S4)', () => {
+  const CONTRACTS = {
+    endpoints: [
+      { name: 'getRecipe', method: 'GET', routePath: '/recipes/:id', outputFields: ['id', 'title'], inputKeys: [] },
+    ],
+  } as never;
+
+  const brokenPage = () =>
+    project({
+      'pages/index.view.json': JSON.stringify({
+        route: 'index',
+        sections: [{ kind: 'detail', query: 'getRecipe', header: { title: '$.title' } }],
+      }),
+    });
+
+  it('never counts a non-2xx body as a row', async () => {
+    const res = await renderSmokeViews(await brokenPage(), {
+      contracts: CONTRACTS,
+      call: async () => ({ status: 404, body: { error: 'not found' } }),
+    });
+    // `rowsOf({error:{…}})` yielded ONE row, which made `anyRows` true and the page "not empty".
+    expect(res.pages[0].calls).toEqual([{ endpoint: 'getRecipe', status: 404, rows: 0, ok: false }]);
+  });
+
+  it('reports a page whose every endpoint 4xxs as NOT MEASURED, never as 100%', async () => {
+    // The single worst defect in the set: with `bindingsChecked === 0` coverage defaulted to `1`
+    // and `empty` to `false`, so the headline metric read PERFECT exactly where the app was most
+    // broken. `recipes/[id]` and `trip/[planId]` both reported 100% while every call 404/400'd.
+    const res = await renderSmokeViews(await brokenPage(), {
+      contracts: CONTRACTS,
+      call: async () => ({ status: 404, body: { error: 'not found' } }),
+    });
+    expect(res.pages[0].coverage).toBeNull();
+    expect(res.pages[0].empty).toBeNull();
+    expect(res.pages[0].unmeasured).toEqual([{ section: 0, endpoint: 'getRecipe', reason: 'answered 404' }]);
+    expect(res.ok).toBe(false); // and it is still a FAILURE, from the render-error finding
+  });
+
+  it('keeps 0% distinct from not-measured', async () => {
+    const res = await renderSmokeViews(await brokenPage(), {
+      contracts: CONTRACTS,
+      call: async () => ({ status: 200, body: { id: 'r1', title: null } }),
+    });
+    expect(res.pages[0].coverage).toBe(0);
+    expect(res.pages[0].empty).toBe(true);
+  });
+});
+
+describe('chat.agent — the check a pattern cannot do', () => {
+  /** `spaces/<space>/agents/<slug>/` is what the pod resolves a `spaceRef` against. */
+  const withAgents = () =>
+    project({
+      'spaces/chef/agents/concierge/instruct.md': '# concierge',
+      'spaces/chef/agents/pantry-keeper/instruct.md': '# pantry-keeper',
+      'spaces/sourcing/agents/optimizer/instruct.md': '# optimizer',
+      'api/recipes/GET.ts': HANDLER('listRecipes', ' id: string; '),
+    });
+
+  it('accepts a kebab-case slug that really exists', async () => {
+    const root = await withAgents();
+    const res = validateViewSpec(
+      { route: 'index', sections: [{ kind: 'chat', agent: 'pantry-keeper', space: 'chef' }] },
+      { ...loadViewContracts(root), routes: ['index'] },
+    );
+    expect(res.errors.filter((e) => e.code === 'unknown-agent')).toEqual([]);
+  });
+
+  it('names the real agents when the slug does not resolve', async () => {
+    const root = await withAgents();
+    const res = validateViewSpec(
+      { route: 'index', sections: [{ kind: 'chat', agent: 'optimiser', space: 'sourcing' }] },
+      { ...loadViewContracts(root), routes: ['index'] },
+    );
+    const e = res.errors.find((x) => x.code === 'unknown-agent');
+    expect(e?.message).toBe(
+      'sections[0].agent: "optimiser" is not an agent of the "sourcing" space. Did you mean optimizer? ' +
+        'Agents: optimizer. Agents are directories under spaces/sourcing/agents/.',
+    );
+  });
+
+  it('names the real spaces when the space does not resolve', async () => {
+    const root = await withAgents();
+    const res = validateViewSpec(
+      { route: 'index', sections: [{ kind: 'chat', agent: 'optimizer', space: 'sourceing' }] },
+      { ...loadViewContracts(root), routes: ['index'] },
+    );
+    expect(res.errors.find((x) => x.code === 'unknown-agent')?.message).toBe(
+      'sections[0].space: "sourceing" is not a space in this project. Did you mean sourcing? ' +
+        'Spaces: chef, sourcing. Spaces are directories under spaces/.',
+    );
+  });
+
+  it('SKIPS a bare slug — that is the project\'s own top-level agent, not a space one', async () => {
+    // `sessionBody` dispatches an unqualified name as `agentSlug`, not `spaceRef`, and nothing on
+    // disk here enumerates those. Rejecting one would break a dock that works.
+    const root = await withAgents();
+    const res = validateViewSpec(
+      { route: 'index', sections: [{ kind: 'chat', agent: 'anything-at-all' }] },
+      { ...loadViewContracts(root), routes: ['index'] },
+    );
+    expect(res.errors).toEqual([]);
+  });
+
+  it('skips the check entirely when the project has no spaces/ dir', async () => {
+    const root = await project({ 'api/recipes/GET.ts': HANDLER('listRecipes', ' id: string; ') });
+    const res = validateViewSpec(
+      { route: 'index', sections: [{ kind: 'chat', agent: 'nobody', space: 'nowhere' }] },
+      { ...loadViewContracts(root), routes: ['index'] },
+    );
+    expect(res.errors).toEqual([]);
+  });
+
+  it('checks the shell assistant the same way', async () => {
+    const root = await withAgents();
+    const res = validateShellSpec(
+      { nav: [{ route: 'index' }], assistant: { agent: 'concierge', space: 'sourcing' } },
+      { ...loadViewContracts(root), routes: ['index'] },
+    );
+    expect(res.errors.find((e) => e.code === 'unknown-agent')?.path).toBe('assistant.agent');
+  });
+});
+
+describe('renderSmokeViews — the render-error tier actually runs', () => {
+  it('mounts the REAL ViewRenderer, rather than reporting the tier skipped', async () => {
+    // T1 measured `rendererMounted: false` on every run: `@lmthing/cli` pins react@18 and
+    // `@lmthing/ui` peers react@>=19, so a bare `import('react-dom/server')` drove a 19 component
+    // tree with 18's renderer and every page threw `Cannot read properties of null (reading
+    // 'useMemo')`. Resolving react + react-dom from the RENDERER's own location keeps both halves
+    // in one instance. Two more mount requirements the wrapper already satisfies came out behind
+    // it — the theme provider and a real client — so this asserts the whole tier, not one fix.
+    const root = await project({
+      'pages/index.view.json': JSON.stringify({
+        route: 'index',
+        sections: [{ kind: 'list', query: 'listRecipes', item: { title: '$.title' } }],
+      }),
+    });
+    const res = await renderSmokeViews(root, {
+      contracts: {
+        endpoints: [
+          { name: 'listRecipes', method: 'GET', routePath: '/recipes', outputFields: ['title'], inputKeys: [] },
+        ],
+      } as never,
+      call: async () => ({ status: 200, body: [{ title: 'Soup' }] }),
+    });
+    expect(res.rendererMounted).toBe(true);
+    expect(res.errors.filter((e) => e.code === 'render-error')).toEqual([]);
+    expect(res.reason).toBeUndefined();
+  });
 });
