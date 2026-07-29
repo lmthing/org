@@ -26,9 +26,13 @@ Keep `item.sections` in order, and keep each section's `id` and `kind`. Per sect
 - `empty: { title, message? }` overrides the default empty state. Loading/error states are automatic.
 - Live data: `poll: { everyMs: 3000, while: { field: '$.status', in: ['pending'] } }`.
 
-**Values are PATHS, never expressions.** Roots: `$` `$.field` `$props.x` `$route.<param>`
-`$data.<sectionId>.<path>` `$result.<field>` `$form.<field>` `$client.timezone`. No `?:`, no `+`, no
-`${…}`, no `{{…}}`. A null binding renders NOTHING, so no guard is needed or possible.
+**Values are PATHS, never expressions.** The eight roots, and nothing else: `$` `$.field` `$props.x`
+`$route.<param>` `$data.<sectionId>.<path>` `$result.<field>` `$form.<field>` `$client.timezone`.
+The framework spellings do NOT work here — write `$route.id` not `$params.id`, and `$.name` not
+`$item.name`/`$row.name` (`$prop.` → `$props.`). No `?:`, no `+`, no `${…}`, no `{{…}}`: the spec
+language has no expressions, **on purpose**. A value that needs computing is computed in the
+ENDPOINT'S OUTPUT and bound by name, or expressed as a named policy — `format`, `toneMap`,
+`poll.while`. A null binding renders NOTHING, so no guard is needed or possible.
 
 **Navigation uses the AUTHORING route plus params** —
 `{ navigate: 'trips/[tripId]/expenses', params: { tripId: '$.id' } }`. Never `/trips/:tripId/...`,

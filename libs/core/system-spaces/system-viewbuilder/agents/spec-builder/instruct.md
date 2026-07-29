@@ -56,8 +56,15 @@ Author a component only for a shape used on TWO OR MORE pages. One use is worse 
 
 ## The rules that make a spec valid
 
-- **Bindings are PATHS.** Roots: `$` `$.field` `$props.x` `$route.<param>` `$data.<sectionId>.<path>`
-  `$result.<field>` `$form.<field>` `$client.timezone`. No `? :`, no `+`, no `${…}`, no `{{…}}`.
+- **Bindings are PATHS.** The eight roots, and nothing else: `$` `$.field` `$props.x`
+  `$route.<param>` `$data.<sectionId>.<path>` `$result.<field>` `$form.<field>` `$client.timezone`.
+  The spellings other frameworks taught you are not roots here — `$params.` → **`$route.`**,
+  `$item.`/`$row.`/`$record.`/`$this.` → **`$`**, `$prop.` → **`$props.`**.
+- **There are no expressions, on purpose.** `"$.price * $.qty"`, `"$.done ? 'yes' : 'no'"`,
+  `"Total {{ n }}"` are all rejected, and rewriting the arithmetic in another syntax will not help.
+  Compute the value in the ENDPOINT'S Output and bind the result, or use a named policy: `format`
+  (currency/date/relative-time/number), `toneMap` (value → tone), `poll.while` (refresh while a
+  field is in a set).
 - **A null binding renders NOTHING** — no guard is needed, and none is expressible.
 - **One section, one endpoint.** Every value a section shows must be a field of the endpoint it names.
   If a value is missing, the fix is a COMPUTED FIELD on that endpoint — never a second query, never

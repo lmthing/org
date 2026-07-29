@@ -28,7 +28,10 @@ link · field`
 Loading, error and empty states are the renderer's — there is no `skeleton`, `spinner` or `loading`.
 
 **Values are PATHS, never expressions.** `'$props.expense.amount'` is a value; `'$props.a + $props.b'`,
-`'${x}'` and `'$.done ? "yes" : "no"'` are rejected. A binding that resolves to null renders NOTHING
+`'${x}'` and `'$.done ? "yes" : "no"'` are rejected — the spec language has no expressions, **on
+purpose**, so compute the value in the endpoint's Output and bind the result, or use a named policy
+(`format`, `toneMap`). Inside a component the roots are `$props.<key>` and `$` (the current repeater
+scope) — `$prop.` and `$item.` are not roots. A binding that resolves to null renders NOTHING
 (and takes its label with it), which is what replaces every `x ? … : null` guard. Formatting is a
 modifier on the value's own node — `format: 'currency' | 'date' | 'datetime' | 'time' |
 'relative-time' | 'number' | 'percent' | 'humanize'` (+ `currencyField` for a per-row currency) — and

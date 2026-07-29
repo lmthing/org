@@ -79,6 +79,14 @@ interface Ctx {
   /**
    * App-wide view validation — `libs/cli/src/app/view-spec/validate.ts#validateAppViews`, bound to
    * this project's root by the code-node ctx factory (exactly as `buildProjectApp` is).
+   *
+   * ZERO-ARG on purpose: a code node is transpiled standalone and evaluated in a worker, so it
+   * cannot import `validate.ts` and cannot construct the `ContractsLike` the underlying function
+   * optionally takes. Both underlying functions accept `{ contracts }` to skip a second full
+   * `ts-json-schema-generator` pass over every handler; threading one call's contracts into the
+   * next is therefore the HOST's job, at the single place that owns both bindings
+   * (`libs/cli/src/app/authoring/globals.ts` — the `validateAppViews`/`renderSmokeViews` entries of
+   * `createProjectAuthoringGlobals`). Nothing about it is expressible from here.
    */
   validateAppViews?: () => Await<ViewValidationResult>;
   /**

@@ -15,7 +15,15 @@ because the app-wide checks ask "is every route reachable from the nav?" — a s
 would be a shell nothing checked.
 
 In scope: `plan_app` (`title`, `pages`) and `implement_views` (the per-page `{ route, ok, error }[]` —
-the routes that ACTUALLY landed). Call `writeProjectViewShell(shell)` with ONE object literal.
+the routes that ACTUALLY landed). The writer is
+
+```
+writeProjectViewShell(shell: unknown): { ok: boolean; error?: string }
+```
+
+— ONE argument, a plain object literal (never a JSON string), landing at `pages/_shell.view.json`.
+It is synchronous and returns `{ ok, error? }`: branch on `w.ok`, read `w.error`; never treat it as
+an array and never `await` it.
 
 Rules the writer enforces:
 - **A nav entry's `route` must be a real, landed, STATIC route.** A parameterised route
