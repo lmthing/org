@@ -1,0 +1,15 @@
+tenancy_ref,unit_ref,building,tenant_name,tenant_phone,tenant_email,start_date,end_date,rent_pcm,payment_frequency,deposit,deposit_scheme,deposit_ref,gas_cert_expiry,status
+TEN-2023-004,RAV-1A,Ravensworth House,Aisha Tunkara,07700 900412,a.tunkara@example.co.uk,2023-09-01,2026-08-31,825.00,monthly,950.00,DPS,DPS-71120-A,2027-02-14,active
+TEN-2024-011,RAV-1B,Ravensworth House,,,,2024-04-01,2026-04-10,850.00,monthly,980.00,DPS,DPS-74408-B,2026-11-02,ended
+TEN-2024-019,RAV-2A,Ravensworth House,Callum Whitfield,07700 900558,c.whitfield@example.co.uk,2024-10-01,2026-09-30,795.00,monthly,915.00,DPS,DPS-79931-A,2027-01-08,active
+TEN-2025-002,RAV-2B,Ravensworth House,Mihaela Popescu,07700 900177,m.popescu@example.co.uk,2025-02-01,2027-01-31,810.00,monthly,935.00,DPS,DPS-81205-D,2026-12-19,active
+TEN-2024-022,RAV-2C,Ravensworth House,Daniel Osei,07700 900733,d.osei@example.co.uk,2024-08-11,2026-08-10,1150.00,monthly,1326.00,DPS,DPS-78864-F,2027-03-21,ending
+TEN-2025-008,RAV-3A,Ravensworth House,Fatima Bello,07700 900294,f.bello@example.co.uk,2025-05-01,2027-04-30,900.00,monthly,1038.00,DPS,DPS-83377-C,2026-10-05,active
+TEN-2023-015,ELM-1,Elm Court,Grzegorz Malinowski,07700 900620,g.malinowski@example.co.uk,2023-11-01,2026-10-31,680.00,monthly,784.00,DPS,DPS-72550-E,2026-09-30,active
+TEN-2025-011,ELM-2,Elm Court,Sinead Doherty,07700 900845,s.doherty@example.co.uk,2025-06-15,2027-06-14,695.00,monthly,801.00,DPS,DPS-84119-B,2027-04-17,active
+TEN-2024-006,ELM-3,Elm Court,Tomasz Nowak,07700 900381,t.nowak@example.co.uk,2024-03-01,2027-02-28,700.00,monthly,807.00,DPS,DPS-76002-A,2026-08-26,active
+TEN-2025-014,ELM-4,Elm Court,Yusuf Kaya,07700 900509,y.kaya@example.co.uk,2025-08-01,2027-07-31,670.00,monthly,773.00,DPS,DPS-85440-G,2026-08-12,active
+TEN-2024-028,ELM-5,Elm Court,Chen Wei,07700 900266,c.wei@example.co.uk,2024-12-01,2026-11-30,705.00,monthly,813.00,DPS,DPS-80017-C,2027-05-09,active
+TEN-2025-005,HAWTH-1A,Hawthorn Rise,Ruairi Mac Aoidh,07700 900918,r.macaoidh@example.co.uk,2025-03-01,2027-02-28,760.00,monthly,877.00,DPS,DPS-82644-A,2026-12-01,active
+TEN-2024-031,HAWTH-2B,Hawthorn Rise,Lorena Ferreira,07700 900137,l.ferreira@example.co.uk,2024-11-15,2026-11-14,745.00,monthly,859.00,DPS,DPS-79088-H,2027-01-23,active
+TEN-2025-017,HAWTH-3B,Hawthorn Rise,Bogdan Iliescu,07700 900462,b.iliescu@example.co.uk,2025-07-01,2027-06-30,650.00,weekly,750.00,DPS,DPS-88214-C,2026-09-14,active

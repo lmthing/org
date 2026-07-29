@@ -1,0 +1,90 @@
+txn_ref,date,unit_ref,type,amount,method,note
+LDG-4400,2026-05-01,RAV-1A,charge,825.00,,Rent due
+LDG-4401,2026-05-01,RAV-2A,charge,795.00,,Rent due
+LDG-4402,2026-05-01,RAV-2B,charge,810.00,,Rent due
+LDG-4403,2026-05-01,RAV-2C,charge,1150.00,,Rent due
+LDG-4404,2026-05-01,RAV-3A,charge,900.00,,Rent due
+LDG-4405,2026-05-01,ELM-1,charge,680.00,,Rent due
+LDG-4406,2026-05-01,ELM-2,charge,695.00,,Rent due
+LDG-4407,2026-05-01,ELM-3,charge,700.00,,Rent due
+LDG-4408,2026-05-01,ELM-4,charge,670.00,,Rent due
+LDG-4409,2026-05-01,ELM-5,charge,705.00,,Rent due
+LDG-4410,2026-05-01,HAWTH-1A,charge,760.00,,Rent due
+LDG-4411,2026-05-01,HAWTH-2B,charge,745.00,,Rent due
+LDG-4412,2026-05-01,HAWTH-3B,charge,650.00,,Rent due
+LDG-4413,2026-05-01,RAV-1A,payment,825.00,standing order,
+LDG-4414,2026-05-01,RAV-2B,payment,810.00,standing order,
+LDG-4415,2026-05-01,RAV-3A,payment,900.00,standing order,
+LDG-4416,2026-05-01,ELM-3,payment,700.00,standing order,
+LDG-4417,2026-05-01,ELM-5,payment,705.00,standing order,
+LDG-4418,2026-05-01,HAWTH-1A,payment,760.00,standing order,
+LDG-4419,2026-05-02,RAV-2A,payment,795.00,bank transfer,
+LDG-4420,2026-05-02,ELM-4,payment,670.00,bank transfer,
+LDG-4421,2026-05-03,RAV-2C,payment,1150.00,bank transfer,
+LDG-4422,2026-05-04,ELM-2,payment,695.00,bank transfer,
+LDG-4423,2026-05-05,ELM-1,payment,680.00,bank transfer,
+LDG-4424,2026-05-06,HAWTH-2B,payment,745.00,bank transfer,paid late again
+LDG-4425,2026-05-04,HAWTH-3B,payment,150.00,bank transfer,weekly
+LDG-4426,2026-05-11,HAWTH-3B,payment,150.00,bank transfer,weekly
+LDG-4427,2026-05-18,HAWTH-3B,payment,150.00,bank transfer,weekly
+LDG-4428,2026-05-26,HAWTH-3B,payment,150.00,bank transfer,weekly
+LDG-4429,2026-06-01,RAV-1A,charge,825.00,,Rent due
+LDG-4430,2026-06-01,RAV-2A,charge,795.00,,Rent due
+LDG-4431,2026-06-01,RAV-2B,charge,810.00,,Rent due
+LDG-4432,2026-06-01,RAV-2C,charge,1150.00,,Rent due
+LDG-4433,2026-06-01,RAV-3A,charge,900.00,,Rent due
+LDG-4434,2026-06-01,ELM-1,charge,680.00,,Rent due
+LDG-4435,2026-06-01,ELM-2,charge,695.00,,Rent due
+LDG-4436,2026-06-01,ELM-3,charge,700.00,,Rent due
+LDG-4437,2026-06-01,ELM-4,charge,670.00,,Rent due
+LDG-4438,2026-06-01,ELM-5,charge,705.00,,Rent due
+LDG-4439,2026-06-01,HAWTH-1A,charge,760.00,,Rent due
+LDG-4440,2026-06-01,HAWTH-2B,charge,745.00,,Rent due
+LDG-4441,2026-06-01,HAWTH-3B,charge,650.00,,Rent due
+LDG-4442,2026-06-01,RAV-1A,payment,825.00,standing order,
+LDG-4443,2026-06-01,RAV-2B,payment,810.00,standing order,
+LDG-4444,2026-06-01,RAV-3A,payment,900.00,standing order,
+LDG-4445,2026-06-01,ELM-3,payment,700.00,standing order,
+LDG-4446,2026-06-01,ELM-5,payment,705.00,standing order,
+LDG-4447,2026-06-01,HAWTH-1A,payment,760.00,standing order,
+LDG-4448,2026-06-02,RAV-2A,payment,795.00,bank transfer,
+LDG-4449,2026-06-02,ELM-4,payment,670.00,bank transfer,
+LDG-4450,2026-06-03,RAV-2C,payment,1150.00,bank transfer,
+LDG-4451,2026-06-04,ELM-1,payment,680.00,bank transfer,
+LDG-4452,2026-06-09,ELM-2,payment,350.00,bank transfer,part payment - said she would make up the rest
+LDG-4453,2026-06-11,HAWTH-2B,payment,745.00,bank transfer,
+LDG-4454,2026-06-14,ELM-4,charge,85.00,,Recharge - lock replacement after lost keys
+LDG-4455,2026-06-20,ELM-4,payment,85.00,bank transfer,lock recharge settled
+LDG-4456,2026-06-01,HAWTH-3B,payment,150.00,bank transfer,weekly
+LDG-4457,2026-06-08,HAWTH-3B,payment,150.00,bank transfer,weekly
+LDG-4458,2026-06-15,HAWTH-3B,payment,150.00,bank transfer,weekly
+LDG-4459,2026-06-22,HAWTH-3B,payment,150.00,bank transfer,weekly
+LDG-4460,2026-07-01,RAV-1A,charge,825.00,,Rent due
+LDG-4461,2026-07-01,RAV-2A,charge,795.00,,Rent due
+LDG-4462,2026-07-01,RAV-2B,charge,810.00,,Rent due
+LDG-4463,2026-07-01,RAV-2C,charge,1150.00,,Rent due
+LDG-4464,2026-07-01,RAV-3A,charge,900.00,,Rent due
+LDG-4465,2026-07-01,ELM-1,charge,680.00,,Rent due
+LDG-4466,2026-07-01,ELM-2,charge,695.00,,Rent due
+LDG-4467,2026-07-01,ELM-3,charge,700.00,,Rent due
+LDG-4468,2026-07-01,ELM-4,charge,670.00,,Rent due
+LDG-4469,2026-07-01,ELM-5,charge,705.00,,Rent due
+LDG-4470,2026-07-01,HAWTH-1A,charge,760.00,,Rent due
+LDG-4471,2026-07-01,HAWTH-2B,charge,745.00,,Rent due
+LDG-4472,2026-07-01,HAWTH-3B,charge,650.00,,Rent due
+LDG-4473,2026-07-01,HAWTH-3B,payment,150.00,bank transfer,weekly
+LDG-4474,2026-07-06,HAWTH-3B,payment,150.00,bank transfer,weekly
+LDG-4475,2026-07-13,HAWTH-3B,payment,150.00,bank transfer,weekly
+LDG-4476,2026-07-01,RAV-1A,payment,825.00,standing order,
+LDG-4477,2026-07-01,RAV-2B,payment,810.00,standing order,
+LDG-4478,2026-07-01,RAV-3A,payment,900.00,standing order,
+LDG-4479,2026-07-01,ELM-3,payment,700.00,standing order,
+LDG-4480,2026-07-01,ELM-5,payment,705.00,standing order,
+LDG-4481,2026-07-01,HAWTH-1A,payment,760.00,standing order,
+LDG-4482,2026-07-03,RAV-2C,payment,1150.00,bank transfer,
+LDG-4483,2026-07-04,ELM-1,payment,680.00,bank transfer,
+LDG-4484,2026-07-08,ELM-4,payment,670.00,bank transfer,
+LDG-4485,2026-07-14,HAWTH-2B,payment,745.00,bank transfer,
+LDG-4497,31/02/2026,ELM-3,payment,-,bank transfer,migration row - do not know what this was
+LDG-4498,2026-07-01,ELM-9Z,charge,700.00,,migration row - this flat has never existed
+LDG-4499,2026-13-04,RAV-2B,payment,405.00,card,migration row - half a payment on a month that is not a month

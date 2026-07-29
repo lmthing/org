@@ -1,0 +1,11 @@
+code,description,minutes,price_eur,insurer,requires_referral,notes
+PT-MAN-40,Manual therapy - standard session,40,38.50,ALL,yes,The bread and butter code
+PT-MAN-60,Manual therapy - extended session,60,52.00,ALL,yes,Post-op first visits only
+PT-HYD-30,Hydrotherapy - pool session,30,29.00,EOPYY;Interamerican,yes,Pool is rented Thu afternoons
+PT-ACU-20,Dry needling adjunct,20,18.00,Interamerican;NN Hellas,yes,Dimitris only
+PT-ASS-45,Initial assessment,45,45.00,ALL,yes,Always the first appointment of a course
+PT-REV-20,Progress review,20,22.00,ALL,no,Session 6 of a course
+PT-GRP-60,Group rehab class,60,15.00,EOPYY,no,Max 6 patients Room 1
+PT-HEP-00,Home exercise programme issue,0,0.00,ALL,no,Not billable but must be recorded
+PT-PRV-40,Private self-pay session,40,45.00,PRIVATE,no,Paid on the day cash or card
+PT-DNA-00,Did not attend,0,20.00,PRIVATE,no,Only chargeable to private patients and only ever charged twice

@@ -1,0 +1,28 @@
+patient_ref,surname,first_name,dob,phone,email,insurer,scheme_no,referrer,first_seen,status
+PX-1140,Antoniadis,Petros,1968-11-04,6944 112 338,p.antoniadis@example.gr,EOPYY,EO-4471902,Dr Aris Kolettis,2025-09-15,active
+PX-1141,Voulgari,Sofia,1994-02-19,6971 004 512,sofia.voulgari@example.gr,Interamerican,IA-88213,Euromedica Orthopaedics,2025-09-22,discharged
+PX-1145,Kefalas,Nikolaos,1957-06-30,6932 776 010,,EOPYY,EO-3310558,Dr Aris Kolettis,2025-10-01,active
+PX-1148,Papathanasiou,Eirini,1988-12-12,6945 220 771,eirini.p@example.gr,NN Hellas,NN-70012,Kalamaria Physio,2025-10-14,active
+PX-1152,Rousso,Marianthi,1972-04-08,6976 331 245,,PRIVATE,,self,2025-11-03,active
+PX-1155,Dimitriadis,Christos,2001-08-27,6949 887 100,c.dimitriadis@example.gr,Interamerican,IA-90455,Euromedica Orthopaedics,2025-11-11,active
+PX-1158,Zafeiriou,Anna,1963-01-15,6937 445 902,,EOPYY,EO-2287740,Dr Aris Kolettis,2025-11-25,active
+PX-1160,Bakalis,Stavros,1979-07-21,6988 120 447,s.bakalis@example.gr,EOPYY,EO-5590123,Dr Aris Kolettis,2025-12-02,active
+PX-1163,Sotiriou,Marika,1990-05-06,6979 553 218,marika.sotiriou@example.gr,PRIVATE,,self,2025-12-09,active
+PX-1166,Karagiannis,Thanos,1985-03-30,6942 667 331,,Interamerican,IA-91277,Kalamaria Physio,2026-01-08,active
+PX-1169,Lekka,Despina,1949-09-02,6931 220 118,,EOPYY,EO-1109887,Dr Aris Kolettis,2026-01-15,active
+PX-1172,Michalopoulos,Fotis,1996-10-11,6977 909 004,fotis.m@example.gr,NN Hellas,NN-70338,Euromedica Orthopaedics,2026-01-27,discharged
+PX-1175,Chatzi,Ourania,1975-06-18,6946 771 552,,EOPYY,EO-6620441,Dr Aris Kolettis,2026-02-03,active
+PX-1178,Georgiou,Lampros,1961-12-29,6939 004 776,l.georgiou@example.gr,EOPYY,EO-4480931,Kalamaria Physio,2026-02-17,active
+PX-1181,Tsakiri,Vasiliki,1993-07-07,6970 118 903,,Interamerican,IA-92810,Euromedica Orthopaedics,2026-03-02,active
+PX-1184,Nikolaidis,Alexandros,1982-01-23,6948 552 007,a.nikolaidis@example.gr,PRIVATE,,self,2026-03-10,active
+PX-1187,Vardakis,Thomas,1970-08-14,6933 887 219,t.vardakis@example.gr,EOPYY,EO-7712004,Dr Aris Kolettis,2026-03-24,active
+PX-1190,Andreou,Kalliopi,,6975 331 880,,EOPYY,EO-8801225,Dr Aris Kolettis,2026-04-01,active
+PX-1193,Spanos,Grigoris,1999-11-19,6941 776 330,g.spanos@example.gr,NN Hellas,NN-71204,Euromedica Orthopaedics,2026-04-14,active
+PX-1196,Fotiadou,Zoi,1987-05-25,6936 220 991,,Interamerican,IA-93551,Kalamaria Physio,2026-04-28,active
+PX-1199,Manolis,Ilias,1954-02-11,6989 445 118,,EOPYY,EO-3390776,Dr Aris Kolettis,2026-05-06,active
+PX-1202,Stergiou,Chrysa,1991-09-14,6972 118 447,chrysa.s@example.gr,PRIVATE,,self,2026-05-19,active
+PX-1204,Pantelis,Odysseas,1966-04-02,6943 990 771,,EOPYY,EO-5512338,Dr Aris Kolettis,2026-06-01,active
+PX-1204,Pantelis,Odysseas,1966-04-02,6947 331 226,o.pantelis@example.gr,EOPYY,EO-5512338,Dr Aris Kolettis,2026-06-01,active
+PX-1207,Vlachou,Niki,1980-10-08,6978 667 902,niki.vlachou@example.gr,Interamerican,IA-94002,Euromedica Orthopaedics,2026-06-16,active
+PX-1210,Sarris,Dimosthenis,1973-03-17,6935 552 118,,EOPYY,EO-6640119,Dr Aris Kolettis,2026-07-02,active
+PX-1213,Kyriakou,Eleftheria,1997-12-05,6944 009 337,e.kyriakou@example.gr,NN Hellas,NN-71880,Kalamaria Physio,2026-07-13,active
