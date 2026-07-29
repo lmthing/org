@@ -46,6 +46,7 @@ export const INVISIBLE_AS_TEXT: readonly string[] = [
   'neutral',
   'neutral-1',
   'popover',
+  'scrim',
   'secondary',
   'sidebar',
   'sidebar-accent',
