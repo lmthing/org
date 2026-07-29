@@ -36,7 +36,12 @@ const MARK_GROUND = color('background', 'dark')
 module.exports = {
   expo: {
     name: 'LMThing',
-    slug: 'lmthing-mobile',
+    // Must equal the slug of the EAS project named in `extra.eas.projectId` — EAS
+    // refuses to build when the two disagree. This is the EXPO-side identifier only:
+    // the Play listing is keyed on `android.package`, and expo-updates (the other
+    // consumer of a slug) is disabled, so it names the project on expo.dev and
+    // nothing else.
+    slug: 'lmthing',
     version: '0.1.0',
     orientation: 'portrait',
     userInterfaceStyle: 'automatic',
