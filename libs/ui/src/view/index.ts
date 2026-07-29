@@ -27,6 +27,11 @@
 export { ViewRenderer, ViewPage, ViewNotFound } from './renderer'
 export type { ViewRendererProps, ViewRoute } from './renderer'
 
+// The theme context `Prim.*` requires. A host that already has one (the web SPA, the mobile app)
+// does NOT wrap this; the generated web wrapper — the one delivery path with no root of its own —
+// does. See `./provider`.
+export { ViewThemeProvider } from './provider'
+
 export { createViewClient, buildViewRequest, ViewHttpError, actionEndpoints } from './client'
 export type {
   ViewClient,

@@ -58,8 +58,9 @@ export function renderViewWrapper({ spec, components, shell }: WrapperInputs): s
  * It exists so the page build (\`app/build/pages.ts\`) can discover, bundle and cache a view
  * exactly as it does a hand-written page — the whole reason view specs need no pipeline changes.
  */
-import { resolveAppBase } from '@app/runtime';
-import { ViewRenderer, createViewClient } from '@lmthing/ui/view';
+import { useMemo } from 'react';
+import { resolveAppBase, useParams } from '@app/runtime';
+import { ViewRenderer, ViewThemeProvider, createViewClient } from '@lmthing/ui/view';
 
 const spec = ${inline(spec)};
 
@@ -71,13 +72,39 @@ const shell = ${inline(shell ?? null)};
 // (\`window.__APP_ENDPOINTS__\`), on the app's own base path — the same two facts \`apiCall\` uses.
 // The native target builds its client from the absolute pod URL + a token instead; the renderer
 // is identical either way.
-const client = createViewClient({
-  baseUrl: resolveAppBase((globalThis as { location?: { pathname: string } }).location?.pathname ?? '/'),
-  endpoints: (globalThis as { __APP_ENDPOINTS__?: Record<string, { method: string; routePath: string }> }).__APP_ENDPOINTS__ ?? {},
-});
-
+//
+// **Built inside the component, never at module scope.** The entry sets the manifest inside its
+// \`mountApp({ manifest })\` call, and ESM hoists every page import ABOVE that statement — so a
+// client constructed while this module evaluates captures an EMPTY manifest and every endpoint
+// resolves to \`unknown endpoint "x"\` on every page. \`apiCall\` reads the global lazily for exactly
+// this reason; the wrapper has to as well. Found by the T1 golden-app live run.
 export default function View() {
-  return <ViewRenderer spec={spec} components={components} shell={shell} client={client} />;
+  const client = useMemo(
+    () =>
+      createViewClient({
+        baseUrl: resolveAppBase((globalThis as { location?: { pathname: string } }).location?.pathname ?? '/'),
+        endpoints:
+          (globalThis as { __APP_ENDPOINTS__?: Record<string, { method: string; routePath: string }> })
+            .__APP_ENDPOINTS__ ?? {},
+      }),
+    [],
+  );
+  // \`$route.*\` resolves against THIS prop, and the host router owns the params — so a wrapper that
+  // does not pass them leaves every \`[param]\` page unable to identify its record (\`getRecipe\`
+  // answers 404 on every load, a dependent \`input: { id: '$route.planId' }\` never resolves and its
+  // section stays disabled). The route path is the spec's own; the values come from the router.
+  const params = useParams();
+  const route = useMemo(() => ({ path: spec.route, params }), [params]);
+  // \`ViewThemeProvider\` is NOT decoration either. Every \`Prim.*\` the renderer is built from calls
+  // \`useTheme()\`, which throws \`Missing theme.\` outside a provider — and a project-app page bundle
+  // has no root that supplies one (the web SPA and the mobile app each wrap their own; the
+  // renderer's jsdom suite wraps one in its test-utils). Without it EVERY spec route renders the
+  // page-level error boundary instead of the page.
+  return (
+    <ViewThemeProvider>
+      <ViewRenderer spec={spec} components={components} shell={shell} client={client} route={route} />
+    </ViewThemeProvider>
+  );
 }
 `;
 }

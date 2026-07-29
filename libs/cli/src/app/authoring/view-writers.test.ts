@@ -76,11 +76,31 @@ export default async function handler() { return { id: '1' }; }
 
     // 2. the wrapper — an ordinary `.tsx` the page build will discover, hash and bundle
     const wrapper = read('pages', 'recipes.tsx');
-    expect(wrapper).toContain("import { ViewRenderer, createViewClient } from '@lmthing/ui/view';");
+    expect(wrapper).toContain("import { ViewRenderer, ViewThemeProvider, createViewClient } from '@lmthing/ui/view';");
     expect(wrapper).toContain('export default function View()');
     expect(wrapper).toContain('<ViewRenderer spec={spec}');
     expect(wrapper).toContain('"query": "listRecipes"'); // the spec is INLINED, not fetched
     expect(wrapper).toContain('AUTO-GENERATED');
+
+    // ── the three things the T1 golden-app live run proved are LOAD-BEARING ───────────────
+    // Each was absent, each broke EVERY route of a real app, and none of them can be caught by
+    // a jsdom render test (which supplies its own provider, its own client and its own params).
+
+    // 1. the theme provider — without it every `Prim.*` throws `Missing theme.` and every page
+    //    renders the error boundary, because a project-app bundle has no root that supplies one.
+    expect(wrapper).toContain('<ViewThemeProvider>');
+
+    // 2. the client is built INSIDE the component. ESM hoists this module above the entry's
+    //    `mountApp({ manifest })`, so a module-scope `createViewClient` captures `{}` and every
+    //    endpoint resolves to `unknown endpoint "x"`.
+    const clientAt = wrapper.indexOf('createViewClient({');
+    const componentAt = wrapper.indexOf('export default function View()');
+    expect(clientAt).toBeGreaterThan(componentAt);
+
+    // 3. route params are passed through — `$route.*` resolves against this prop, so without it
+    //    every `[param]` page queries for the wrong record (or none).
+    expect(wrapper).toContain('useParams');
+    expect(wrapper).toContain('route={route}');
 
     expect(appWrites).toEqual([{ kind: 'page', route: 'recipes' }]);
   });

@@ -28,8 +28,18 @@ const MANIFEST: EndpointManifest = {
     },
   },
   toggleDone: { method: 'POST', routePath: '/recipes/:id/done' },
-  currentPlan: { method: 'GET', routePath: '/plan' },
-  planMeals: { method: 'GET', routePath: '/plan/:planId/meals' },
+  // Schemas matter here: `useSectionSource` only auto-injects the route's single `[param]`
+  // into an endpoint that DECLARES it (see the 'route params' suite).
+  currentPlan: {
+    method: 'GET',
+    routePath: '/plan',
+    inputSchema: { type: 'object', properties: { tz: { type: 'string' } }, additionalProperties: false },
+  },
+  planMeals: {
+    method: 'GET',
+    routePath: '/plan/:planId/meals',
+    inputSchema: { type: 'object', properties: { planId: { type: 'string' } }, additionalProperties: false },
+  },
 }
 
 /** A client whose every endpoint is a stub, recording what was called. */
@@ -405,6 +415,40 @@ describe('route params', () => {
       />,
     )
     await waitFor(() => expect(seen[0]).toEqual({ id: '5' }))
+  })
+
+  /**
+   * The default is a CONVENIENCE, not a broadcast. Every handler's Input schema is
+   * `additionalProperties: false` and is ajv-validated pod-side, so sending `planId` to an
+   * endpoint that does not declare it is a hard 400 — and on a `[param]` page that hits every
+   * section, not just the one that wanted the record. The T1 golden-app run measured exactly
+   * this: `plan/[planId]` and `trip/[planId]` answered `invalid input` on every load while
+   * `renderSmokeViews` (which already guards with `ep.inputKeys.includes(p)`) called them clean.
+   */
+  it('does NOT inject the route param into an endpoint whose Input schema omits it', async () => {
+    const seen: { name: string; input: Record<string, unknown> }[] = []
+    const { client } = stubClient(
+      { currentPlan: { plan: { id: 'p1' } }, planMeals: [] },
+      (name, input) => seen.push({ name, input }),
+    )
+    render(
+      <ViewRenderer
+        spec={{
+          route: 'plan/[planId]',
+          // `currentPlan`'s Input declares only `tz`; `planMeals` declares `planId`.
+          sections: [
+            { kind: 'stats', id: 'plan', query: 'currentPlan', cards: [{ label: 'Plan', value: '$.plan.id' }] },
+            { kind: 'list', id: 'meals', query: 'planMeals' },
+          ],
+        }}
+        route={{ path: 'plan/p1', params: { planId: 'p1' } }}
+        client={client as never}
+      />,
+    )
+    await waitFor(() => expect(seen.length).toBeGreaterThanOrEqual(2))
+    expect(seen.find((c) => c.name === 'currentPlan')?.input).toEqual({})
+    // The endpoint that DOES declare it still gets it — the guard narrows, it does not disable.
+    expect(seen.find((c) => c.name === 'planMeals')?.input).toEqual({ planId: 'p1' })
   })
 })
 

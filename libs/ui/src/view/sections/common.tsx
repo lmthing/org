@@ -27,6 +27,17 @@ import { useViewQuery, useViewRuntime, type QueryState } from '../runtime'
 import { EmptySlot } from '../elements'
 import { ErrorState, LoadingState, type SkeletonShape } from '../states'
 
+/**
+ * The Input property names an endpoint declares, or `undefined` when the manifest does not carry
+ * its schema. `undefined` means "do not check" — never "declares nothing" — because a manifest
+ * without schemas (an older pod, an embedded render) must not disable every route parameter.
+ */
+function inputKeysOf(entry: { inputSchema?: Record<string, unknown> } | undefined): Set<string> | undefined {
+  const props = entry?.inputSchema?.['properties']
+  if (!props || typeof props !== 'object') return undefined
+  return new Set(Object.keys(props as Record<string, unknown>))
+}
+
 /** Where a section's data comes from, once `query`/`from`/`input`/`param` are settled. */
 export interface SectionSource<T = unknown> {
   query: QueryState<T>
@@ -84,18 +95,28 @@ export function extractRows(data: unknown): unknown[] {
  *  3. neither — an idle source, which only a `markdown` section with a literal `source` has.
  */
 export function useSectionSource(args: SourceArgs): SectionSource {
-  const { routeParams } = useViewRuntime()
+  const { routeParams, client } = useViewRuntime()
   const { scope } = args
 
   // `param` defaults to the route's single `[param]`. A detail page under `recipes/[id]`
   // should not have to say `param: '$route.id'` — there is only one thing it could mean.
+  //
+  // But ONLY when the endpoint declares that key. Every handler's Input schema is
+  // `additionalProperties: false` and is ajv-validated pod-side, so injecting an undeclared
+  // `planId` into `currentPlan({ tz })` is a hard 400 — and it hits every section on the page,
+  // not just the one that wanted the record. `renderSmokeViews` already guards exactly this way
+  // (`ep.inputKeys.includes(p)`); the runtime has to agree with it. An endpoint whose schema is
+  // absent from the manifest keeps the old permissive behaviour. Found by the T1 live run.
   const routeKeys = Object.keys(routeParams)
+  const declaredInput = args.query ? inputKeysOf(client.endpoint(args.query)) : undefined
+  const soleKey = routeKeys.length === 1 ? routeKeys[0] : undefined
+  const accepts = (k: string | undefined): boolean => !k || !declaredInput || declaredInput.has(k)
   const paramValue = args.param
     ? resolveOptional(args.param, scope)
-    : routeKeys.length === 1
-      ? routeParams[routeKeys[0]]
+    : soleKey && accepts(soleKey)
+      ? routeParams[soleKey]
       : undefined
-  const paramKey = args.param ? undefined : routeKeys.length === 1 ? routeKeys[0] : undefined
+  const paramKey = args.param ? undefined : paramValue !== undefined ? soleKey : undefined
 
   const inputs = resolveInputs(args.input, scope)
   const extraKey = JSON.stringify(args.extraInput ?? {})

@@ -267,12 +267,29 @@ function routePathFor(root: string, file: string): string {
 interface ManifestEntry {
   method: string;
   routePath: string;
+  /**
+   * The endpoint's Input JSON Schema — carried for **view specs**, whose `create` sections declare
+   * no fields and derive every one of them from this.
+   *
+   * `apiCall` and the TSX hooks never look at it (a hand-written page types its own form), so this
+   * was `{ method, routePath }` only. A spec page has no second source for the schema on the web
+   * target — the mobile path gets it from `GET /api/apps/:id/views` — so without it every `create`
+   * section in every browser-served viewbuilder app renders "Nothing to fill in.", which is the
+   * whole `create` kind. Found by the T1 golden-app live run.
+   */
+  inputSchema?: Record<string, unknown>;
 }
 
 /** Project the typed `EndpointContract[]` down to the client `name → routing` manifest. */
 function endpointManifest(endpoints: EndpointContract[]): Record<string, ManifestEntry> {
   const manifest: Record<string, ManifestEntry> = {};
-  for (const ep of endpoints) manifest[ep.name] = { method: ep.method, routePath: ep.routePath };
+  for (const ep of endpoints) {
+    manifest[ep.name] = {
+      method: ep.method,
+      routePath: ep.routePath,
+      ...(ep.inputSchema ? { inputSchema: ep.inputSchema } : {}),
+    };
+  }
   return manifest;
 }
 

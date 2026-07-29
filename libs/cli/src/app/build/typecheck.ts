@@ -321,10 +321,14 @@ declare module '@lmthing/ui/view' {
     [k: string]: any;
   }) => any;
 
+  /** The theme context every \`Prim.*\` the renderer is built from requires. The generated
+   *  wrapper mounts it because a project-app page bundle has no root that supplies one. */
+  export const ViewThemeProvider: (props: { children?: any }) => any;
+
   export function createViewClient(opts: {
     baseUrl?: string;
     getToken?: () => string | undefined | Promise<string | undefined>;
-    endpoints?: Record<string, { method: string; routePath: string }>;
+    endpoints?: Record<string, { method: string; routePath: string; inputSchema?: any }>;
   }): any;
 }
 `;
