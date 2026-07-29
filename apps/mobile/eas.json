@@ -18,7 +18,10 @@
     "production": {
       "autoIncrement": true,
       "node": "24.18.0",
-      "android": { "buildType": "app-bundle" }
+      "android": { "buildType": "app-bundle" },
+      "env": {
+        "EXPO_OTA_APP_ID": "9a2ba224-69e6-4629-a894-4f42eb305a45"
+      }
     }
   },
   "submit": {
