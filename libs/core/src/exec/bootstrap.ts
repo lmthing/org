@@ -375,7 +375,10 @@ function buildAppCapabilityDts(app: AppCapabilities, appDts?: string, projectRoo
   // (pages:write/api:write/hooks:write) + createProject/selectProject (project:manage),
   // storeSearch/storeInspect + installSpace + emitEvent (plan S10). Each emitted only
   // when its grant is present.
-  for (const id of ['pages:write', 'api:write', 'hooks:write', 'knowledge:write', 'project:manage', 'store:read', 'store:install', 'events:emit'] as const) {
+  // `views:write` sits beside `pages:write` here, never inside it: the two authoring media are
+  // separated BY CAPABILITY, which is what makes `system-viewbuilder`'s zero-WebView guarantee a
+  // typecheck error rather than an instruction (see the fragment's own doc in library-dts.ts).
+  for (const id of ['pages:write', 'views:write', 'api:write', 'hooks:write', 'knowledge:write', 'project:manage', 'store:read', 'store:install', 'events:emit'] as const) {
     if (app[id]) parts.push(CAPABILITY_DTS_FRAGMENTS[id]);
   }
   return parts.filter(Boolean).join('\n');
