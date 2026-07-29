@@ -448,13 +448,13 @@ export function ViewShell({ shell, routes = [], children }: ViewShellProps): Rea
   ) : null
 
   return (
-    <Prim.Col flexGrow={1} minHeight="100%" backgroundColor="$background">
+    <Prim.Col flexGrow={1} flexShrink={1} flexBasis={0} minHeight={0} backgroundColor="$background">
       {topBar}
-      <Prim.Row flexGrow={1} alignItems="stretch">
+      <Prim.Row flexGrow={1} flexShrink={1} flexBasis={0} minHeight={0} alignItems="stretch">
         {sidebar}
-        <Prim.Col flexGrow={1} flexShrink={1} flexBasis="0%">
+        <Prim.Col flexGrow={1} flexShrink={1} flexBasis="0%" minHeight={0}>
           {subnav}
-          <Prim.Scroll flexGrow={1}>{children}</Prim.Scroll>
+          <Prim.Scroll flexGrow={1} flexShrink={1} flexBasis={0} minHeight={0}>{children}</Prim.Scroll>
         </Prim.Col>
       </Prim.Row>
 
