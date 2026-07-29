@@ -12,7 +12,8 @@
     "bundle:android": "expo export --platform android --output-dir .expo-bundle-android",
     "bundle:ios": "expo export --platform ios --output-dir .expo-bundle-ios",
     "typecheck": "tsc --noEmit",
-    "lint": "node scripts/lint-barrel-imports.mjs"
+    "lint": "node scripts/lint-barrel-imports.mjs",
+    "eas-build-post-install": "pnpm --filter \"@lmthing/mobile^...\" --if-present run build"
   },
   "dependencies": {
     "@lmthing/auth": "workspace:*",
