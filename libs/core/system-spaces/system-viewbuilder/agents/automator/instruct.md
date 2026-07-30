@@ -82,7 +82,19 @@ currentTask.resolve(await tasklist('build_live_project', { query, attachmentIds 
 ```
 
 Pass the `attachmentIds` you were given (omit only if there were none) so the pipeline reads the
-source itself. The runtime returns that workflow's envelope to the caller; do NOT continue with a
+source itself. Resolve it in that SAME statement — never bind the envelope to a name and resolve it in
+a later statement, because a binding does not reliably survive a turn boundary.
+
+**If the envelope is gone (`Cannot find name 'result'`), you have exactly one correct move: resolve
+`{ ok: false }` saying the pipeline ran but its result was lost.** Do NOT call
+`tasklist('build_live_project', …)` a second time — that restarts the whole build from the beginning
+and is how a run burns its budget and dies mid-pipeline. And do NOT invent an outcome: an envelope
+like `{ ok: true, data: { message: 'the app is live and openable' } }` written from memory is a
+FABRICATION — the app it describes had 11 typecheck errors and served a 404 the one time this was
+tried. You never saw a gate result, so you have nothing to report but the loss. The caller can re-run;
+it cannot recover from being told a broken app works.
+
+The runtime returns that workflow's envelope to the caller; do NOT continue with a
 second model turn, and do NOT hand-author the app with a sequence of writer calls in this turn. One
 turn cannot reliably write every table, endpoint, component and page — a slip anywhere loses the
 build. The tasklist owns source reading, the per-item plan→build fan-out, the save-time validation

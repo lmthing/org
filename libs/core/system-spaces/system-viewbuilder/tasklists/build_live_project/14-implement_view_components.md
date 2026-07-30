@@ -3,7 +3,7 @@ id: implement_view_components
 output:
   name: string
   ok: boolean
-dependsOn: [plan_view_components, plan_endpoints, emit_types]
+dependsOn: [plan_view_components, plan_endpoints, implement_endpoints, emit_types]
 forEach: plan_view_components.components
 role: general
 functions: []
@@ -27,6 +27,15 @@ link · field`
 
 Loading, error and empty states are the renderer's — there is no `skeleton`, `spinner` or `loading`.
 
+**Two element shapes are worth getting right first time**, because they are where a component most
+often dies:
+- `keyvalue` carries `pairs: [{ label, value }]` — `label`, never `key`, and a pair takes only
+  `label · value · format · currencyField` (no `tone` on a pair).
+- `button` carries ONE action shape, and the rejection lists all five because it cannot tell which
+  you meant: `{ mutate, input?, invalidates?, confirm?, arg?, over?, onSuccess? }` ·
+  `{ navigate, params? }` · `{ download, filename?, input? }` · `{ print }` · `{ copy }`.
+  There is no `endpoint` key — a write is `mutate`.
+
 **Values are PATHS, never expressions.** `'$props.expense.amount'` is a value; `'$props.a + $props.b'`,
 `'${x}'` and `'$.done ? "yes" : "no"'` are rejected — the spec language has no expressions, **on
 purpose**, so compute the value in the endpoint's Output and bind the result, or use a named policy
@@ -47,37 +56,46 @@ finite set of valid values (`node.children[1].el: "chip" is not an element. Elem
 Fix THAT ONE field and call `writeProjectViewComponent` again before resolving — a component that
 never lands is a `{ use: … }` a page cannot resolve, and that page then fails to save.
 
-Emit one statement:
+**Build NOTHING across statements.** Each statement you emit is typechecked and evaluated on its own,
+so a `const` declared in an earlier statement is not reliably in scope in a later one — `'props' is
+not defined` and `Cannot find name 'c'` are both that mistake, and each one costs a whole turn. In
+particular do NOT alias `item` (`const c = item`) and do NOT accumulate `props` in a loop. Read `item`
+directly and inline the props conversion, so the write is ONE statement:
 
 ```typescript
-const c = item; // { name, purpose, props }
-// props arrive as '<key>: <type>' strings — the writer wants an object.
-const props: Record<string, string> = {};
-for (const p of (Array.isArray(c.props) ? c.props : [])) {
-  const [k, t] = String(p).split(':');
-  if (k && k.trim()) props[k.trim()] = (t || 'string').trim();
-}
-const node = {
-  el: 'surface',
-  children: [
-    { el: 'row', justify: 'between', children: [
-      { el: 'text', text: '$props.expense.description', bold: true },
-      { el: 'text', text: '$props.expense.amount', format: 'currency', currencyField: '$props.expense.currency' },
-    ] },
-    { el: 'row', gap: 1, children: [
-      { el: 'badge', text: '$props.expense.category', tone: 'auto' },
-      { el: 'caption', text: '$props.expense.paid_by_name' },
-    ] },
-  ],
-};
-const w = writeProjectViewComponent(c.name, { name: c.name, description: c.purpose, props, node });
-if (w.ok) {
-  currentTask.resolve({ name: c.name, ok: true });
-} else {
-  // w.error names the exact field and the finite valid set. Correct THAT ONE field in a copy of
-  // `node` (or of `props`) and write once more — never resubmit the same object.
-  const fixedNode = node; // replace with `node` corrected for the field w.error named
-  const w2 = writeProjectViewComponent(c.name, { name: c.name, description: c.purpose, props, node: fixedNode });
-  currentTask.resolve({ name: c.name, ok: w2.ok });
-}
+const w = writeProjectViewComponent(item.name, {
+  name: item.name,
+  description: item.purpose,
+  // `item.props` arrives as '<key>: <type>' strings; the writer wants an object. Inline it.
+  props: Object.fromEntries(
+    (Array.isArray(item.props) ? item.props : []).map((p: string) => {
+      const [k, t] = String(p).split(':');
+      return [String(k).trim(), (t || 'string').trim()];
+    }),
+  ),
+  node: {
+    el: 'surface',
+    children: [
+      { el: 'row', justify: 'between', children: [
+        { el: 'text', text: '$props.expense.description', bold: true },
+        { el: 'text', text: '$props.expense.amount', format: 'currency', currencyField: '$props.expense.currency' },
+      ] },
+      { el: 'row', gap: 1, children: [
+        { el: 'badge', text: '$props.expense.category', tone: 'auto' },
+        { el: 'caption', text: '$props.expense.paid_by_name' },
+      ] },
+    ],
+  },
+});
 ```
+
+Then, in your NEXT statement, resolve on `w`:
+
+```typescript
+currentTask.resolve({ name: item.name, ok: w.ok });
+```
+
+**If `w.ok` is false, do not resolve.** `w.error` named ONE field and the finite set of valid values.
+Re-emit the whole `writeProjectViewComponent` statement with that ONE field corrected, then resolve —
+never resubmit it unchanged, and never delete the offending element to silence the error. A component
+that never lands is a `{ use: … }` a page cannot resolve, and that page then fails to save.

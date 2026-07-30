@@ -4,7 +4,7 @@ output:
   route: string
   ok: boolean
   error: string
-dependsOn: [plan_views, plan_endpoints, plan_view_components, implement_view_components, emit_types]
+dependsOn: [plan_views, plan_endpoints, plan_view_components, implement_view_components, implement_endpoints, emit_types]
 forEach: plan_views
 role: general
 functions: []
@@ -16,7 +16,13 @@ No strings of code, no TSX, no imports, no class names, no colors.
 
 Keep `item.sections` in order, and keep each section's `id` and `kind`. Per section:
 - `query` = a READ endpoint's name; `mutation` = a WRITE endpoint's name — verbatim from the plan.
-- `input: { … }` supplies that endpoint's arguments; `param` picks the record for a `[param]` route.
+  The writer resolves these against the endpoints **actually on disk**, not against the plan, and it
+  names every real one in its rejection. So a name it does not recognise means the endpoint was
+  written under a different name — take the one the error lists, never invent a spelling.
+- `input: { … }` supplies that endpoint's arguments. `param` names the record for a `[param]` route
+  and is a BINDING, not a bare param name: `param: '$route.id'`, never `param: 'id'`.
+- **Section `id`s are lowerCamelCase** (`addPlantForm`, `dueToday`) — a plain name of letters, digits
+  and `_`. A dashed id (`add-plant-form`) is rejected. `reveals` targets must match an `id` exactly.
 - **A `create` section NEVER lists fields** — they derive from the mutation's Input schema.
 - `item: { … }` is a row's flat shape. The keys are exactly: `title subtitle caption meta value suffix
   note markdown badge status image icon badges keyvalue action actions`. The first eleven take a
