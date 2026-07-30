@@ -558,6 +558,160 @@ describe('runDelegate auto-capture — two-tasklist escalation pattern (research
 });
 
 /**
+ * A relay agent may not upgrade its own pipeline's verdict.
+ *
+ * Live (13-plant-care run 4): `build_live_project`'s `18-finalize` computed `ok: false` from the
+ * host-run gates, and the automator relayed `{ok: true, degraded: true, summary: "…app built…"}`
+ * while listing two broken endpoints in the same object. The caller was told the build succeeded.
+ * The agent's instruct had already been patched TWICE in prose for exactly this — which is what
+ * makes it structural: `ok` must come from the pipeline, not from the relay.
+ *
+ * Note WHICH `ok` matters. `envelope.ok` is orchestration success and was `true` (the pipeline ran
+ * to completion and concluded the app was broken); the verdict is `envelope.data.ok`. A check
+ * reading only the outer one would not catch this at all.
+ */
+describe('runDelegate — a relay cannot report success over its own tasklist’s verdict', () => {
+  /** The live shape: the tasklist's DOMAIN verdict is false inside `data`, orchestration ok. */
+  async function relayRun(resolveStatement: string) {
+    const dir = await makeEscalationSpace();
+    const registry = new DelegateRegistry(new Map());
+    let delegateTurn = 0;
+    const streamFn = mockMatch(
+      // The goal task resolves `covered: false` — the tasklist ITSELF succeeds, so the envelope
+      // is `{ok: true, degraded: false, data: {covered: false}}`. We use `covered` as the stand-in
+      // for finalize's own `ok` by having the delegate claim success over it below.
+      [taskRule('ANSWER_TASK', () => `currentTask.resolve({ covered: false });`)],
+      () => {
+        delegateTurn++;
+        if (delegateTurn === 1) return `const r = await tasklist("answer", { query, ...context });`;
+        if (delegateTurn === 2) return resolveStatement;
+        return '';
+      },
+    );
+    return (await runDelegate({
+      packageName: dir,
+      agentName: 'specialist',
+      action: 'answer',
+      registry,
+      renderHost: silentHost,
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+    })) as Record<string, unknown> | undefined;
+  }
+
+  /** A tasklist whose goal task resolves a VERDICT (`{ok, summary}`) — `18-finalize`'s shape. */
+  async function makeVerdictSpace(): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), 'lmthing-delegate-verdict-'));
+    escalationTmpDirs.push(dir);
+    const agentFile = join(dir, 'agents', 'automator', 'instruct.md');
+    await mkdir(dirname(agentFile), { recursive: true });
+    await writeFile(
+      agentFile,
+      `---\ntitle: Automator\nactions:\n  - id: build\n    label: Build\n    description: Build the app\n    tasklist: build\n---\n\nYou relay the pipeline's result.\n`,
+      'utf8',
+    );
+    const task = join(dir, 'tasklists', 'build', '01-finalize.md');
+    await mkdir(dirname(task), { recursive: true });
+    await writeFile(
+      task,
+      `---\nid: finalize\ngoal: true\noutput:\n  ok: boolean\n  summary: string\n---\n\nFINALIZE_TASK: report the build verdict.`,
+      'utf8',
+    );
+    return dir;
+  }
+
+  it('downgrades a claimed ok:true when the tasklist’s data.ok was false — keeping the agent’s own account', async () => {
+    // THE live case. `finalize` computes ok:false from the gates; the envelope's OWN ok is true
+    // (the pipeline ran to completion), so only `data.ok` carries the verdict.
+    const dir = await makeVerdictSpace();
+    const registry = new DelegateRegistry(new Map());
+    let delegateTurn = 0;
+    const streamFn = mockMatch(
+      [taskRule('FINALIZE_TASK', () => `currentTask.resolve({ ok: false, summary: 'two endpoints broken' });`)],
+      () => {
+        delegateTurn++;
+        if (delegateTurn === 1) return `const r = await tasklist("build", { query, ...context });`;
+        // The automator's actual move: assert success, admit degradation, list the errors.
+        if (delegateTurn === 2)
+          return `currentTask.resolve({ ok: true, degraded: true, summary: 'app built', errors: ['plants-detail returns nulls'] });`;
+        return '';
+      },
+    );
+
+    const result = (await runDelegate({
+      packageName: dir,
+      agentName: 'automator',
+      action: 'build',
+      registry,
+      renderHost: silentHost,
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+    })) as Record<string, unknown> | undefined;
+
+    expect(result?.['ok']).toBe(false); // the pipeline's verdict wins
+    expect(result?.['okOverriddenBy']).toBe('tasklist');
+    // The agent's own account survives — usually the most readable description of what broke.
+    expect(result?.['summary']).toBe('app built');
+    expect(result?.['errors']).toEqual(['plants-detail returns nulls']);
+  });
+
+  it('does NOT fire when the tasklist simply returned something unwelcome', async () => {
+    // Narrowness: `answer`'s goal output has no `ok` at all, and the envelope's ok is true. A
+    // delegate that reads `covered: false` and legitimately concludes success must be left alone.
+    const result = await relayRun(`currentTask.resolve({ ok: true, note: 'not covered, answered anyway' });`);
+    expect(result).toEqual({ ok: true, note: 'not covered, answered anyway' });
+  });
+
+  it('downgrades when the ENVELOPE ok is false (the goal task never resolved — salvage)', async () => {
+    // The goal task emits no resolve at all, so the orchestrator salvages and the envelope carries
+    // `ok: false`. A relay claiming success over that is the case the caller cannot detect.
+    const dir = await makeEscalationSpace();
+    const registry = new DelegateRegistry(new Map());
+    let delegateTurn = 0;
+    const streamFn = mockMatch(
+      [taskRule('ANSWER_TASK', () => `const nothing = 1;`)], // never resolves → salvaged
+      () => {
+        delegateTurn++;
+        if (delegateTurn === 1) return `const r = await tasklist("answer", { query, ...context });`;
+        if (delegateTurn === 2) return `currentTask.resolve({ ok: true, summary: 'all good' });`;
+        return '';
+      },
+    );
+
+    const result = (await runDelegate({
+      packageName: dir,
+      agentName: 'specialist',
+      action: 'answer',
+      registry,
+      renderHost: silentHost,
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+    })) as Record<string, unknown> | undefined;
+
+    expect(result?.['ok']).toBe(false);
+    expect(result?.['okOverriddenBy']).toBe('tasklist');
+    expect(result?.['summary']).toBe('all good'); // the agent's own account is KEPT
+  });
+
+  it('leaves a pessimistic relay alone — ok:false over a passing tasklist stands', async () => {
+    // One-directional on purpose: the agent may have seen something the gates do not cover.
+    const result = await relayRun(`currentTask.resolve({ ok: false, why: 'looks wrong to me' });`);
+    expect(result).toEqual({ ok: false, why: 'looks wrong to me' });
+  });
+
+  it('leaves a verbatim relay alone — no override fields bolted onto the envelope itself', async () => {
+    const result = await relayRun(`currentTask.resolve(r);`);
+    expect(result?.['okOverriddenBy']).toBeUndefined();
+  });
+});
+
+/**
  * A DELEGATED agent runs its own action tasklists through the delegate's yield router, which
  * builds its own context — so `codeNodeCtxFactory` has to be threaded in explicitly. It was not,
  * and the consequences were worse than a clean failure.

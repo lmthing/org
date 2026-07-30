@@ -102,6 +102,71 @@ export interface RunDelegateOpts {
   codeNodeCtxFactory?: import('../tasklist/orchestrator.js').CodeNodeCtxFactory;
 }
 
+/** A plain object (not null, not an array) — the only shape carrying an `ok` worth reading. */
+function plainObject(v: unknown): v is Record<string, unknown> {
+  return Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+}
+
+/** Truthy-`ok` object test, tolerant of the many shapes a resolve can take. */
+function claimsOk(v: unknown): v is Record<string, unknown> {
+  return plainObject(v) && v['ok'] === true;
+}
+
+/**
+ * Did the tasklist say this run FAILED? Two independent `ok`s have to be read, and confusing them
+ * is why the first cut of this check would not have caught the bug that motivated it:
+ *
+ *  - **`envelope.ok`** is ORCHESTRATION success — "the goal task resolved a schema-valid value
+ *    (no salvage)" ({@link TaskEnvelope}). A pipeline that ran to completion and concluded the app
+ *    is broken has `envelope.ok === true`.
+ *  - **`envelope.data.ok`** is the pipeline's own DOMAIN verdict — `build_live_project`'s
+ *    `18-finalize` computes it from the host-run gates (`verify.ok && built && viewsValidated &&
+ *    renderSmoked && …`). This is the one that was `false` in the live run.
+ *
+ * Either being `false` means the run did not succeed.
+ */
+function tasklistSaysFailed(envelope: unknown): boolean {
+  if (!plainObject(envelope)) return false;
+  if (envelope['ok'] === false) return true;
+  const data = envelope['data'];
+  return plainObject(data) && data['ok'] === false;
+}
+
+/**
+ * **A relay may not upgrade its own pipeline's verdict.**
+ *
+ * A delegated agent whose whole job is to run an action tasklist and hand back the envelope can
+ * instead resolve a value of its own making — `currentTaskResolve` overwrites `capturedResult`, so
+ * the claim wins and nothing compares it to what the pipeline actually computed. Measured live
+ * (13-plant-care run 4): `build_live_project`'s own `finalize` resolved `ok: false`; the automator
+ * relayed `{ok: true, degraded: true, summary: "…app built…"}` while listing two broken endpoints
+ * in the same object. The caller was told the build succeeded. Prose in the agent's instruct had
+ * already been patched TWICE for this exact failure, which is what makes it structural rather than
+ * a prompting problem: `ok` has to come from the pipeline, not from the relay.
+ *
+ * So when the action tasklist reported `ok: false` and the agent's own resolve claims `ok: true`,
+ * the `ok` is put back to `false` and the disagreement recorded in `okOverriddenBy`. Everything
+ * else the agent said is KEPT — its summary and error list are usually the most readable account
+ * of what went wrong, and discarding them would trade one dishonesty for a different one.
+ *
+ * Deliberately one-directional: an agent resolving `ok: false` over a passing tasklist stands
+ * unchanged. It may have seen something the gates do not cover, and pessimism is not the failure
+ * mode being defended against.
+ */
+function reconcileOk(resolved: unknown, envelope: unknown): unknown {
+  if (!claimsOk(resolved)) return resolved;
+  if (resolved === envelope) return resolved; // relayed verbatim; nothing to reconcile
+  if (!tasklistSaysFailed(envelope)) return resolved;
+  return {
+    ...resolved,
+    ok: false,
+    okOverriddenBy: 'tasklist',
+    okOverrideReason:
+      'the action tasklist resolved ok:false; a delegated agent cannot report success over its ' +
+      "own pipeline's verdict. The fields below are the agent's own account and are kept as-is.",
+  };
+}
+
 export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
   const target = `${opts.packageName}/${opts.agentName}`;
 
@@ -194,6 +259,12 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
   // was given, or ANY of the agent's action tasklists when delegated model-driven.
   let capturedResult: unknown = undefined;
   let resultCaptured = false;
+  /**
+   * The LAST envelope a capturable tasklist produced, kept SEPARATELY from `capturedResult`
+   * because an explicit `currentTask.resolve()` overwrites the latter — which is how a relay
+   * agent's own claim silently replaced its pipeline's verdict. See {@link reconcileOk}.
+   */
+  let capturedEnvelope: unknown = undefined;
   const capturableTasklists = actionDef?.tasklist
     ? new Set<string>([actionDef.tasklist])
     : new Set<string>(agent.actions.map((a) => a.tasklist).filter(Boolean));
@@ -440,15 +511,18 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
                 // either a stuck-loop re-run or the model deliberately re-invoking it.
                 // This IS terminal: capture the LATEST result and stop.
                 capturedResult = result;
+                capturedEnvelope = result;
                 resultCaptured = true;
                 return;
               }
               seenCapturableTasklists.add(name);
+              capturedEnvelope = result;
               // First resolution: stash as the fallback, but do NOT stop the loop —
               // give the model a chance to act on it (e.g. escalate to a second
               // tasklist) before an explicit currentTask.resolve() or a re-emission
               // makes the result terminal.
               capturedResult = result;
+              capturedEnvelope = result;
             },
             runDelegate: (packageName, agentName, action, delegateOpts2) => {
               // Yield-time canDelegateTo gate (unified semantics): this agent's
@@ -526,7 +600,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
     // capturedResult : undefined` ternary; the difference only matters when the model
     // exhausts the resolve-nudge retries above WITHOUT resolving but DID leave a first-pass
     // fallback in `capturedResult` — return that instead of discarding it.
-    return capturedResult;
+    return reconcileOk(capturedResult, capturedEnvelope);
   } finally {
     vm.dispose();
   }
