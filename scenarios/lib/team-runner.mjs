@@ -1,0 +1,915 @@
+/**
+ * team-runner.mjs — the reentrant TEAM scenario engine.
+ *
+ * The sibling of `runner.mjs`, for a scenario whose subject is a TEAM rather than one person. It
+ * plays a `scenario.yaml` that declares a `team:`, a `cast:` and `channels:` against a per-run
+ * `lmthing serve` booted in TEAM MODE, and writes the same evidence files (`step-NN.json`,
+ * `step-NN.full.json`, `trace.md`, `summary.json`) — with the fields a team judge cannot do without:
+ * **who** spoke, in **which channel**, in **which thread**, with **which role**.
+ *
+ * `runner.mjs` is untouched by all of this, and the eight personal scenarios play byte-identically.
+ *
+ * ── What is structurally different from a personal run ──────────────────────────────────────────
+ *
+ * 1. **There is no session to create.** A personal step drives `POST /api/sessions` and reads the
+ *    execution trace back over `GET /api/sessions/:id/events`. A channel turn is started BY THE POD
+ *    when a message mentions `@thing`, on a session keyed by (channel, thread) that is never
+ *    registered in the manager (`runHeadlessThreaded`) — so there is no trace endpoint to poll. The
+ *    turn is awaited over the channel socket instead (`ThreadSession`), and the "what did it
+ *    actually DO" evidence comes from two other places: the pod-global **session ledger**
+ *    (`GET /api/session-ledger` — the delegates each session made, with tokens) keyed by the reply's
+ *    `sessionId`, and the **state snapshot** after the step.
+ *
+ * 2. **The project is discovered, not created.** `routes/team-channels.ts` runs a channel turn with
+ *    no `projectId`, so it starts in the default `user` project and THING creates its own project if
+ *    it decides to build one — exactly the `bootstrap: thing` shape. So the runner pre-creates
+ *    nothing and rebinds `activeProject` to the first non-`system`/`user` project that appears.
+ *
+ * 3. **A refusal is a result.** A viewer's write is refused by `team-guard` with a 403 before any
+ *    handler runs. That is the step PASSING, so the runner records `{status, body}` as evidence and
+ *    does not throw. (Note that POSTING A MESSAGE is viewer-allowed by design — a viewer may talk.
+ *    The refusal those steps are about is THING's own answer, which is the judge's to score.)
+ *
+ * ── Step verbs ──────────────────────────────────────────────────────────────────────────────────
+ *
+ *   as: <cast key>          who is speaking (required on a conversational step)
+ *   in: <channel id>        which channel
+ *   dm: <cast key>          speak in the DM between `as:` and this member
+ *   say: <text>             the message, verbatim
+ *   reply_to: <step number> continue the thread that step opened
+ *   answer_ask: true        this message answers a question THING parked in that thread
+ *   if_asked: {sub: answer} steer the persona's answer to an expected question
+ *   expect_denied: true     the pod must REFUSE this write; the step passes on the refusal
+ *   concurrent: [ {as, in|dm, say, reply_to?}, … ]   several members speaking in the same instant
+ *   open_app · in_app_chat · restart_pod · run_emitter · expect      as in the personal runner
+ */
+import { writeFileSync, readFileSync, mkdirSync, rmSync, readdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { TeamPod } from '../harness/lib/team-pod.mjs';
+import { ThreadSession } from '../harness/lib/team-thread.mjs';
+import { ThingSession } from '../harness/lib/thing.mjs';
+import {
+  startRun,
+  stopRun,
+  restartRun,
+  snapshotProject,
+  snapshotDir,
+  bumpCompletedSteps,
+  nextRunId,
+  reapOrphanRuns,
+  readRunJson,
+} from '../harness/lib/local.mjs';
+import { snapshot, compactStep, traceLines, compact } from './evidence.mjs';
+import { FatalError } from './errors.mjs';
+
+export { FatalError } from './errors.mjs';
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function readdirSyncSafe(dir) {
+  try {
+    return readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+
+// ── the plan ────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The lines `--plan` prints for a TEAM scenario: the header, the cast with roles, the channels, then
+ * one line per step showing WHO speaks WHERE and into which thread. A team scenario's plan has to
+ * answer "who is in this, and who talks to whom" — the personal `planLines` cannot, and its fixture
+ * audit is meaningless here (a channel has no attachment path today).
+ */
+export function teamPlanLines({ scenario, steps }) {
+  const out = [];
+  out.push(`team scenario ${scenario.id} — "${scenario.title}"`);
+  out.push(`team: ${scenario.team?.name ?? '(unnamed)'} (${scenario.team?.id ?? '?'})  ·  nominal project: ${scenario.project}`);
+  out.push(`persona: ${String(scenario.persona).slice(0, 90)}…`);
+  const cast = scenario.cast ?? [];
+  out.push(`cast (${cast.length}): ${cast.map((c) => `${c.key}<${c.role}>`).join(', ')}`);
+  out.push(`channels (${(scenario.channels ?? []).length}): ${(scenario.channels ?? []).map((c) => `#${c.id}${c.category ? ` [${c.category}]` : ''}`).join(', ')}`);
+  out.push(`invariants: ${scenario.invariants?.length ?? 0}  ·  knows: ${scenario.knows?.length ?? 0}  ·  steps: ${steps.length}\n`);
+
+  const roleOf = new Map(cast.map((c) => [c.key, c.role]));
+  steps.forEach((s, i) => {
+    const verbs = Object.keys(s).filter((k) => k !== 'expect');
+    const num = String(i + 1).padStart(2);
+    if (s.concurrent) {
+      out.push(`  ${num}. [concurrent × ${s.concurrent.length}]  ← the same instant, different threads`);
+      for (const sub of s.concurrent) {
+        out.push(`       · ${sub.as}<${roleOf.get(sub.as) ?? '?'}> in ${where(sub)}: ${line(sub.say)}`);
+      }
+    } else {
+      const who = s.as ? `${s.as}<${roleOf.get(s.as) ?? '?'}>` : '—';
+      const msg = line(s.say ?? s.in_app_chat ?? '');
+      out.push(`  ${num}. [${verbs.join(', ')}]  ${who}${s.as ? ` in ${where(s)}` : ''}${msg ? `: ${msg}` : ''}`);
+    }
+    if (s.reply_to) out.push(`       ↳ replies in the thread step ${s.reply_to} opened`);
+    if (s.answer_ask) out.push('       ↳ answers a question THING parked in that thread');
+    if (s.expect_denied) out.push('       ↳ EXPECTS A REFUSAL (the step passes when the pod says no)');
+    if (s.restart_pod) out.push('       ↳ restarts the pod first');
+    if (s.run_emitter) out.push(`       run_emitter: ${typeof s.run_emitter === 'string' ? s.run_emitter : s.run_emitter.slug ?? `${s.run_emitter.scope}:${s.run_emitter.name}`}`);
+    if (s.open_app) out.push('       open_app: build + check + fetch the served page');
+    if (s.if_asked) out.push(`       if_asked: ${Object.keys(s.if_asked).length}`);
+    out.push(`       expect: ${s.expect?.length ?? 0}`);
+  });
+
+  // Every `reply_to` must name a step that actually opens a thread — a typo here is a run that
+  // silently opens a NEW thread and quietly stops testing the thing the scenario is about.
+  const problems = validateTeamScenario({ scenario, steps });
+  if (problems.length) {
+    out.push('');
+    for (const p of problems) out.push(`⚠️  ${p}`);
+  } else {
+    out.push('\n✅ every `as:` is in the cast, every `in:` is a declared channel, every `reply_to` names a thread-opening step');
+  }
+  return out;
+}
+
+const line = (s) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, 64);
+const where = (s) => (s.dm ? `DM with ${s.dm}` : `#${s.in}`);
+
+/** Static faults a `--plan` should catch before an hour of real LLM time is spent. */
+export function validateTeamScenario({ scenario, steps }) {
+  const problems = [];
+  const castKeys = new Set((scenario.cast ?? []).map((c) => c.key));
+  const channelIds = new Set((scenario.channels ?? []).map((c) => c.id));
+  if (!scenario.team?.id) problems.push('no `team:` block — a team scenario needs `team: {id, name}`');
+  if (!castKeys.size) problems.push('no `cast:` — a team scenario needs members');
+  // A step "has a thread" once it has spoken — whether it opened one or replied into one, a later
+  // step may name it. What must never resolve is a `reply_to` naming a step that never speaks (or
+  // that has not run yet), because that silently opens a NEW thread and stops testing continuity.
+  const speaks = steps.map((s) => (s.concurrent ? s.concurrent.some((x) => x.say != null) : s.say != null));
+  steps.forEach((s, i) => {
+    const num = i + 1;
+    const subs = s.concurrent ?? [s];
+    for (const sub of subs) {
+      const isMessage = sub.say != null;
+      if (sub.as && !castKeys.has(sub.as)) problems.push(`step ${num}: \`as: ${sub.as}\` is not in the cast`);
+      if (sub.dm && !castKeys.has(sub.dm)) problems.push(`step ${num}: \`dm: ${sub.dm}\` is not in the cast`);
+      if (sub.in && !channelIds.has(sub.in)) problems.push(`step ${num}: \`in: ${sub.in}\` is not a declared channel`);
+      if (isMessage && !sub.as) problems.push(`step ${num}: a message needs \`as:\``);
+      if (isMessage && !sub.in && !sub.dm) problems.push(`step ${num}: a message needs \`in:\` or \`dm:\``);
+      const target = sub.reply_to ?? s.reply_to;
+      if (target != null) {
+        if (!Number.isInteger(target) || target < 1 || target >= num) {
+          problems.push(`step ${num}: \`reply_to: ${target}\` must name an EARLIER step`);
+        } else if (!speaks[target - 1]) {
+          problems.push(`step ${num}: \`reply_to: ${target}\` — step ${target} says nothing, so it has no thread`);
+        }
+      }
+    }
+    if (s.answer_ask && s.reply_to == null) problems.push(`step ${num}: \`answer_ask\` needs \`reply_to:\` — a question is parked in a specific thread`);
+  });
+  return problems;
+}
+
+// ── evidence: the team fields the judge cannot read a step without ──────────────────────────────
+
+/**
+ * One channel turn as evidence. Deliberately NOT `evidence.mjs#summarizeTurn`: a channel turn has no
+ * trace (see the module docblock), and it has four facts a personal turn does not — who, their role,
+ * the channel and the thread. `delegates`/`tokens` are filled in from the session ledger by
+ * {@link attributeLedger} once the step is over.
+ */
+export function summarizeTeamTurn(turn, { who, role, channel, threadId, sent, dm = false }) {
+  return {
+    sent,
+    who,
+    role,
+    channel,
+    dm,
+    threadId: threadId ?? turn?.threadId ?? null,
+    sessionId: turn?.sessionId ?? null,
+    status: turn?.status ?? 'not-run',
+    ok: turn?.ok ?? false,
+    lastText: turn?.text ?? '',
+    blocks: turn?.blocks ? turn.blocks.map((b) => b?.type ?? typeof b) : null,
+    blockCount: turn?.blocks?.length ?? 0,
+    asks: (turn?.asks ?? []).map((a) => ({ text: String(a.message?.text ?? '').slice(0, 400), answeredWith: a.answeredWith })),
+    answeredAsks: turn?.answered ?? 0,
+    consumedPendingAsk: turn?.consumedPendingAsk ?? false,
+    activity: turn?.activity ?? [],
+    apps: turn?.apps ?? [],
+    replyCount: turn?.replies?.length ?? 0,
+    durationMs: turn?.durationMs ?? 0,
+    // Filled after the turn: from the session ledger when the pod recorded one, and from the
+    // session's persisted statements when it did not (see `threadSessionFacts`).
+    delegates: [],
+    tokens: { in: 0, out: 0 },
+    costUsd: 0,
+    ledgerTracked: false,
+  };
+}
+
+/**
+ * Attach what the pod's own ledger says each turn's session did.
+ *
+ * This is the only route to "which specialist did it route to" for a channel turn: the session is
+ * headless-threaded, so there is no `/events` stream, but `SessionManager` still tracks it in the
+ * pod-global ledger with its delegates and token totals. Matching is by `sessionId`, which the reply
+ * message carries — so a turn is attributed to its OWN work and not to a sibling's.
+ */
+export function attributeLedger(turns, ledgerSessions) {
+  const bySession = new Map((ledgerSessions ?? []).map((s) => [s.sessionId, s]));
+  for (const t of turns) {
+    const rec = t.sessionId ? bySession.get(t.sessionId) : null;
+    if (!rec) continue;
+    t.ledgerTracked = true;
+    t.delegates = (rec.delegates ?? []).map((d) => d.target);
+    t.delegateDetail = (rec.delegates ?? []).map((d) => ({ target: d.target, status: d.status, depth: d.depth, ms: d.durationMs }));
+    t.tokens = { in: rec.totalInputTokens ?? 0, out: rec.totalOutputTokens ?? 0 };
+    t.costUsd = rec.totalCostUsd ?? 0;
+    t.ledgerStatus = rec.status;
+  }
+  return turns;
+}
+
+/**
+ * What a channel turn's session actually DID, recovered from the session snapshot on disk.
+ *
+ * ⚠️ This exists because of a hole in the product, not by preference. `runHeadlessThreaded`
+ * (`libs/cli/src/server/session-manager.ts:2068`) subscribes the session's tracer for displays and
+ * activity (`:2140-2150`) but — unlike `runHeadless`, which does it at `:1900` — never calls
+ * `this.sessionLedger.trackTracer(...)`. So a TEAM CHANNEL TURN IS INVISIBLE TO THE POD'S OWN
+ * SESSION LEDGER: no tokens, no cost, and no record of which specialist it delegated to. There is
+ * also no `/events` endpoint for it (the session is never registered in the manager). That leaves
+ * `GET /api/session-ledger` — the personal runner's source for `delegates` — empty for every turn a
+ * team scenario plays.
+ *
+ * The session's persisted history is the remaining ground truth: `runHeadlessThreaded` writes
+ * `<root>/<project>/sessions/<sessionId>/snapshot.json` with the full history, and in this runtime
+ * the model ANSWERS BY WRITING TYPESCRIPT — so the statements it wrote are a faithful record of the
+ * calls it made. Reading them back is how a step can evidence "it routed the build to
+ * system-viewbuilder" at all.
+ *
+ * This is EVIDENCE, never an answer: the code is recorded for the judge to read, and is never
+ * presented as what THING said (that is `lastText`, which comes from what it displayed).
+ */
+export function threadSessionFacts(dataDir, projectId, sessionId) {
+  if (!sessionId) return null;
+  const file = join(dataDir, '.lmthing', projectId, 'sessions', sessionId, 'snapshot.json');
+  let snap;
+  try {
+    snap = JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+  const history = Array.isArray(snap.history) ? snap.history : [];
+  const written = history
+    .filter((h) => h && h.role === 'assistant' && typeof h.content === 'string')
+    .map((h) => h.content);
+  const code = written.join('\n');
+  const delegates = new Set();
+  // `delegate('space/agent', …)` and `delegate({ space: 'x', agent: 'y' })` are both in use.
+  for (const m of code.matchAll(/delegate\s*\(\s*['"]([^'"]+)['"]/g)) delegates.add(m[1]);
+  for (const m of code.matchAll(/delegate\s*\(\s*\{[^}]*?space\s*:\s*['"]([^'"]+)['"](?:[^}]*?agent\s*:\s*['"]([^'"]+)['"])?/gs)) {
+    delegates.add([m[1], m[2]].filter(Boolean).join('/'));
+  }
+  const GLOBALS = [
+    'writeProjectTable', 'writeProjectPage', 'writeProjectApi', 'writeProjectHook', 'writeProjectView',
+    'writeTableSchema', 'writeApi', 'writePage', 'writeHook', 'writeSpaceFile', 'writeProjectFile',
+    'createProject', 'selectProject', 'installSpace', 'emitEvent', 'callConnection', 'tasklist',
+    'fork', 'ask', 'display', 'remember', 'recall', 'webSearch', 'webFetch',
+  ];
+  const globals = GLOBALS.filter((g) => new RegExp(`\\b${g}\\s*\\(`).test(code));
+  const db = [...new Set([...code.matchAll(/\bdb\.(\w+)/g)].map((m) => `db.${m[1]}`))];
+  return {
+    sessionId,
+    statements: written.length,
+    delegates: [...delegates],
+    // Every system space the code so much as names — a coarser signal than `delegates`, and the one
+    // that still fires when the routing happened inside a tasklist rather than a direct call.
+    spacesMentioned: [...new Set([...code.matchAll(/\bsystem-[a-z-]+/g)].map((m) => m[0]))],
+    globals,
+    db,
+    codeChars: code.length,
+    // The drill-down copy. Only ever read by a human or the judge, never shown as an answer.
+    code: code.length > 20000 ? code.slice(0, 20000) + '\n… «truncated»' : code,
+  };
+}
+
+/** `compactStep` + the team fields. The personal `compactStep` is called unchanged, then the turn
+ *  rows are re-projected with who/role/channel/thread so the judge can attribute every line. */
+export function compactTeamStep(rec) {
+  const base = compactStep(rec);
+  base.turns = (rec.turns ?? []).map((t) => ({
+    sent: typeof t.sent === 'string' && t.sent.length > 400 ? t.sent.slice(0, 400) + '…' : t.sent,
+    who: t.who,
+    role: t.role,
+    channel: t.channel,
+    dm: t.dm,
+    threadId: t.threadId,
+    sessionId: t.sessionId,
+    status: t.status,
+    lastText: typeof t.lastText === 'string' && t.lastText.length > 1200 ? t.lastText.slice(0, 1200) + '…' : t.lastText,
+    blocks: t.blocks,
+    delegates: t.delegates,
+    wrote: t.wrote
+      ? { statements: t.wrote.statements, delegates: t.wrote.delegates, spacesMentioned: t.wrote.spacesMentioned, globals: t.wrote.globals, db: t.wrote.db }
+      : null,
+    ledgerTracked: t.ledgerTracked,
+    asks: t.asks,
+    answeredAsks: t.answeredAsks,
+    consumedPendingAsk: t.consumedPendingAsk,
+    apps: t.apps,
+    tokens: t.tokens,
+    durationMs: t.durationMs,
+  }));
+  if (rec.team) base.team = rec.team;
+  if (rec.denied) base.denied = rec.denied;
+  if (rec.concurrent) base.concurrent = rec.concurrent;
+  if (rec.channels) base.channels = rec.channels;
+  if (rec.activeProject) base.activeProject = rec.activeProject;
+  if (rec.crossChannelPosts) base.crossChannelPosts = rec.crossChannelPosts;
+  return base;
+}
+
+/** The human-readable trace for a team step: the personal lines, plus who/where on every turn. */
+export function teamTraceLines(rec) {
+  const L = [`\n## Step ${rec.step} — ${rec.verbs.join(', ')}${rec.concurrent ? ' (CONCURRENT)' : ''}`];
+  for (const t of rec.turns ?? []) {
+    L.push(`\n**${t.who}** <${t.role}> in ${t.dm ? `DM ${t.channel}` : `#${t.channel}`} · thread ${String(t.threadId).slice(0, 8)} · ${t.status}`);
+    L.push(`- sent: ${String(t.sent).replace(/\n/g, ' ').slice(0, 200)}`);
+    if (t.delegates?.length) L.push(`- delegates: ${t.delegates.join(', ')}`);
+    if (t.wrote) {
+      L.push(`- wrote ${t.wrote.statements} statement(s): ${t.wrote.globals.join(', ') || '(no known global)'}${t.wrote.db.length ? ` · ${t.wrote.db.join(', ')}` : ''}`);
+      if (t.wrote.delegates.length) L.push(`  - delegated to: ${t.wrote.delegates.join(', ')}`);
+      if (t.wrote.spacesMentioned.length) L.push(`  - spaces named in its code: ${t.wrote.spacesMentioned.join(', ')}`);
+    }
+    if (t.asks?.length) L.push(`- THING asked: ${t.asks.map((a) => `"${a.text.slice(0, 80)}" → ${a.answeredWith ? `"${a.answeredWith}"` : 'UNANSWERED (parked)'}`).join(' · ')}`);
+    if (t.consumedPendingAsk) L.push('- this message ANSWERED the thread\'s parked question');
+    if (t.apps?.length) L.push(`- apps announced: ${t.apps.map((a) => a.projectId ?? a).join(', ')}`);
+    if (t.lastText) L.push(`- reply: ${String(t.lastText).replace(/\n/g, ' ').slice(0, 240)}`);
+    L.push(`- tokens: ${t.tokens?.in ?? 0} in / ${t.tokens?.out ?? 0} out · ${(t.durationMs / 1000).toFixed(1)}s`);
+  }
+  if (rec.denied) L.push(`- ⛔ REFUSED by the pod: ${rec.denied.status} ${JSON.stringify(rec.denied.body).slice(0, 160)}`);
+  if (rec.crossChannelPosts?.length) {
+    L.push(`- THING posted into channels nobody asked it from: ${rec.crossChannelPosts.map((p) => `#${p.channelId} ("${String(p.text).slice(0, 60)}")`).join(', ')}`);
+  }
+  if (rec.channels) L.push(`- channels now: ${rec.channels.map((c) => `#${c.id}`).join(', ')}`);
+  // Everything below is identical to the personal trace — reuse it rather than re-say it.
+  const shared = traceLines({ ...rec, turns: [], verbs: rec.verbs, step: rec.step });
+  L.push(...shared.slice(1));
+  return L;
+}
+
+// ── the engine ──────────────────────────────────────────────────────────────────────────────────
+
+export class TeamScenarioRunner {
+  constructor({
+    scenario,
+    steps,
+    scenarioDir,
+    projectId,
+    runId,
+    resumeFrom = null,
+    outDir,
+    through,
+    keepServer = false,
+    purge = false,
+    verbose = false,
+    reporter = {},
+  }) {
+    this.scenario = scenario;
+    this.steps = steps ?? [];
+    this.scenarioDir = scenarioDir;
+    this.projectId = projectId ?? scenario.project ?? scenario.id;
+    this.runId = runId;
+    this.resumeFrom = resumeFrom;
+    this.outDir = outDir;
+    this.through = through ?? this.steps.length;
+    this.keepServer = keepServer;
+    this.purge = purge;
+    this.verbose = verbose;
+    this.reporter = reporter ?? {};
+    this.traceMd = [];
+    /** step number → the ThreadSession(s) it opened, so `reply_to` continues the right conversation. */
+    this.threads = new Map();
+    /** every channel THING posted into that nobody addressed it from, per step. */
+    this.knownChannelIds = new Set();
+  }
+
+  log(...a) {
+    if (this.verbose) console.log('[run-team]', ...a);
+  }
+
+  /** The cast, as the TeamPod wants it: the yaml's `key` is the harness-local name. */
+  castMembers() {
+    return (this.scenario.cast ?? []).map((c) => ({
+      name: c.key,
+      userId: `u-${c.key}`,
+      email: c.email ?? `${c.key}@team.test`,
+      role: c.role ?? 'editor',
+      handle: c.key,
+      displayName: c.name ?? c.key,
+    }));
+  }
+
+  /**
+   * Create the declared categories and channels, and put every member in the directory.
+   *
+   * Done as the first EDITOR in the cast: creating a channel is configuring the team, which
+   * team-guard refuses a viewer — so a scenario whose first member is a viewer would otherwise fail
+   * to set itself up for a reason that is not the scenario's subject.
+   */
+  async provision(pod) {
+    const editor = pod.members().find((m) => m.role === 'editor') ?? pod.members()[0];
+    if (!editor) throw new FatalError('the scenario declares no cast');
+    await pod.introduceAll();
+
+    const categories = new Map();
+    for (const c of this.scenario.channels ?? []) {
+      if (!c.category || categories.has(c.category)) continue;
+      const { category } = await pod.createCategory(editor, c.category);
+      categories.set(c.category, category.id);
+    }
+    const made = [];
+    for (const c of this.scenario.channels ?? []) {
+      const { channel } = await pod.createChannel(editor, c.id, {
+        ...(c.category ? { categoryId: categories.get(c.category) } : {}),
+      });
+      made.push(channel);
+      this.knownChannelIds.add(channel.id);
+    }
+    return { editor, channels: made, categories: [...categories.keys()] };
+  }
+
+  /** The channel a (sub)step speaks in — a declared channel, or the DM between two members. */
+  async channelFor(pod, sub) {
+    if (sub.dm) {
+      const { channel } = await pod.createDm(sub.as, sub.dm);
+      this.knownChannelIds.add(channel.id);
+      return { channelId: channel.id, dm: true };
+    }
+    return { channelId: sub.in, dm: false };
+  }
+
+  /**
+   * The thread a (sub)step speaks into.
+   *
+   * `reply_to: N` continues the thread step N opened. When step N was CONCURRENT it opened several,
+   * so the match narrows by speaker first (Sam replies to the thread Sam opened), then by channel —
+   * which is what "reply to step 4" means when step 4 was two people talking at once.
+   */
+  threadFor(sub, { channelId, dm }, pod, opts = {}) {
+    const target = sub.reply_to;
+    if (target != null) {
+      const candidates = this.threads.get(target) ?? [];
+      const found =
+        candidates.find((t) => t.openedBy === sub.as) ??
+        candidates.find((t) => t.thread.channelId === channelId) ??
+        candidates[0];
+      if (!found) {
+        throw new FatalError(`reply_to: ${target} — no thread was opened by step ${target} (it may have been refused, or never ran)`);
+      }
+      return found;
+    }
+    const thread = new ThreadSession(pod, {
+      channelId,
+      // The socket must be opened by somebody who may SEE the channel: a DM fans its events only to
+      // its participants, so an outsider's socket receives nothing at all and the turn never lands.
+      observeAs: sub.as,
+      verbose: opts.verbose ?? false,
+    });
+    return { thread, openedBy: sub.as, dm };
+  }
+
+  /** Register a thread under the step that opened it, so a later `reply_to` finds it. */
+  remember(num, entry) {
+    const list = this.threads.get(num) ?? [];
+    list.push(entry);
+    this.threads.set(num, list);
+  }
+
+  /**
+   * The `onAsk` for one step: answer a question THING parks in the thread from the step's
+   * `if_asked` map, matching on a substring of the question exactly as `StepAsks` does for a chat
+   * ask. An unmatched question is deliberately LEFT PARKED rather than answered with something
+   * invented — the park is then recorded as evidence, which is the honest outcome.
+   */
+  askHandler(step) {
+    const ifAsked = step.if_asked ?? {};
+    const keys = Object.keys(ifAsked);
+    return (message) => {
+      const text = String(message?.text ?? '').toLowerCase();
+      const matched = keys.find((k) => text.includes(k.toLowerCase().slice(0, 24))) ?? (keys.length === 1 ? keys[0] : undefined);
+      if (!matched) {
+        this.log(`if_asked: nothing matches "${text.slice(0, 80)}" — leaving the question parked`);
+        return undefined;
+      }
+      return ifAsked[matched];
+    };
+  }
+
+  /**
+   * Everything a message needs BEFORE it can be sent: the channel (opening the DM if that is what
+   * it is), the thread it belongs to, and a live socket watching that channel.
+   *
+   * Separate from sending because of `concurrent:` — the setup is I/O too (a socket upgrade), and
+   * doing it inline would mean the second speaker's message left after the first speaker's turn had
+   * already begun, which is not a race.
+   */
+  async prepare(pod, sub, step, num) {
+    const member = pod.member(sub.as);
+    let where = await this.channelFor(pod, sub);
+    const entry = this.threadFor(sub, where, pod, { verbose: this.verbose });
+    // A thread lives in ONE channel. If a `reply_to` step also names a different `in:`, the thread
+    // wins — posting the reply into the named channel instead would silently open a new
+    // conversation there and stop testing continuity, which is the whole point of `reply_to`.
+    if (sub.reply_to != null && entry.thread.channelId !== where.channelId) {
+      where = { channelId: entry.thread.channelId, dm: entry.dm ?? false };
+    }
+    await entry.thread.open();
+    this.remember(num, entry);
+    return {
+      entry,
+      member,
+      where,
+      opts: { onAsk: this.askHandler(step) },
+      isReply: sub.reply_to != null,
+      meta: { who: sub.as, role: member.role, channel: where.channelId, dm: where.dm, sent: sub.say },
+    };
+  }
+
+  /**
+   * Put one message on the wire. Returns the promise of the POST — the caller decides when to await
+   * it, which is what lets `concurrent:` dispatch every message before waiting for any.
+   *
+   * The post is RAW: a refused write is a result the scenario asserts on (a viewer configuring the
+   * team), not an exception that ends the run.
+   */
+  dispatch(pod, sub, prepared) {
+    const { entry, isReply } = prepared;
+    return pod.request(
+      sub.as,
+      'POST',
+      `/api/team/channels/${prepared.where.channelId}/messages`,
+      { text: sub.say, ...(isReply ? { threadId: entry.thread.threadId } : {}) },
+      { raw: true },
+    );
+  }
+
+  /** Fold a dispatched post into the record; returns what `awaitTurn` needs, or null if refused. */
+  settleDispatch(raw, sub, prepared, rec) {
+    const { entry, member, where, meta, isReply } = prepared;
+    if (raw.status !== 201) {
+      rec.denied = { who: sub.as, role: member.role, channel: where.channelId, status: raw.status, body: compact(raw.body) };
+      rec.notes.push(`the pod REFUSED ${sub.as}<${member.role}> with ${raw.status} — recorded as evidence, not thrown`);
+      rec.turns.push({ ...summarizeTeamTurn(null, meta), status: `refused-${raw.status}` });
+      return null;
+    }
+    const sent = raw.body.message;
+    if (!isReply) entry.thread.threadId = sent.threadId ?? sent.id;
+    const consumed = entry.thread.parked;
+    entry.thread.parked = false;
+    return { sent, consumed };
+  }
+
+  /** Play one conversational step end to end. Returns the turn, or null when the pod refused. */
+  async playMessage(pod, sub, step, rec, num) {
+    const prepared = await this.prepare(pod, sub, step, num);
+    const settled = this.settleDispatch(await this.dispatch(pod, sub, prepared), sub, prepared, rec);
+    if (!settled) return null;
+    const turn = await prepared.entry.thread.awaitTurn(sub.as, settled.sent, prepared.opts);
+    turn.consumedPendingAsk = settled.consumed;
+    rec.turns.push(summarizeTeamTurn(turn, { ...prepared.meta, threadId: turn.threadId }));
+    return turn;
+  }
+
+  /** Play the scenario; returns { runId, ranSteps, ofSteps, outDir, results, summary }. */
+  async run() {
+    const { scenario, steps, scenarioDir, through } = this;
+    reapOrphanRuns(scenarioDir);
+
+    const problems = validateTeamScenario({ scenario, steps });
+    if (problems.length) throw new FatalError(`scenario ${scenario.id} is not playable:\n  - ${problems.join('\n  - ')}`);
+
+    let seedFrom = null;
+    let startIndex = 0;
+    let activeProject = 'user';
+    if (this.resumeFrom) {
+      const src = readRunJson(scenarioDir, this.resumeFrom.runId);
+      activeProject = src.projectId ?? 'user';
+      const fromStep = this.resumeFrom.from ?? src.completedSteps ?? 0;
+      if (fromStep >= 1) {
+        seedFrom = snapshotDir(scenarioDir, this.resumeFrom.runId, fromStep);
+        if (!existsSync(seedFrom)) throw new FatalError(`no snapshot at ${seedFrom} — run ${this.resumeFrom.runId} did not complete step ${fromStep}`);
+        startIndex = fromStep;
+      }
+    }
+
+    const runId = this.runId ?? nextRunId(scenarioDir);
+    // The one server-side difference a team scenario needs. The `.team/` directory (channels,
+    // members, the thread→session map) lives inside `.lmthing`, so it rides along in every snapshot
+    // and a `--resume` restores the conversation as well as the project.
+    const run = await startRun({
+      scenarioDir,
+      runId,
+      projectId: activeProject,
+      scenarioId: scenario.id,
+      seedFrom,
+      teamMode: true,
+      teamId: scenario.team.id,
+    });
+    this.reporter.onRunStart?.({ runId, runDir: run.dir, port: run.port, base: run.base, seedFrom, teamId: scenario.team.id });
+
+    const outDir = this.outDir ?? run.dir;
+    mkdirSync(outDir, { recursive: true });
+    const pidFile = join(outDir, 'runner.pid');
+    writeFileSync(pidFile, String(process.pid));
+    this.reporter.onPid?.({ pid: process.pid, pidFile });
+
+    const killServer = () => { try { stopRun(run); } catch { /* already gone */ } };
+    const onExit = () => { if (!this.keepServer) killServer(); try { rmSync(pidFile, { force: true }); } catch { /* ignore */ } };
+    const onSignal = (code) => () => { killServer(); process.exit(code); };
+    const sigHandlers = { SIGINT: onSignal(130), SIGTERM: onSignal(143), SIGHUP: onSignal(129), SIGQUIT: onSignal(131) };
+    process.on('exit', onExit);
+    for (const [sig, h] of Object.entries(sigHandlers)) process.on(sig, h);
+
+    for (const f of readdirSyncSafe(outDir)) {
+      if (/^step-\d+(\.full)?\.json$/.test(f) || f === 'summary.json' || f === 'trace.md') {
+        try { rmSync(join(outDir, f), { force: true }); } catch { /* ignore */ }
+      }
+    }
+
+    const results = [];
+    const pod = new TeamPod({ base: run.base, teamId: scenario.team.id, members: this.castMembers(), verbose: false });
+    let readPod; // a member-identified Pod for every non-channel read (a team pod 401s a nameless GET)
+    try {
+      const setup = await this.provision(pod);
+      readPod = pod.podAs(setup.editor);
+      this.log(`team ${scenario.team.id} · cast ${pod.members().map((m) => `${m.name}<${m.role}>`).join(', ')} · channels ${setup.channels.map((c) => c.id).join(', ')}`);
+      this.reporter.onProvisioned?.({ cast: pod.members(), channels: setup.channels });
+
+      for (let n = startIndex; n < Math.min(through, steps.length); n++) {
+        const step = steps[n];
+        const num = n + 1;
+        const rec = {
+          step: num,
+          verbs: Object.keys(step).filter((k) => k !== 'expect'),
+          expect: step.expect ?? [],
+          team: scenario.team.id,
+          turns: [],
+          asks: [],
+          notes: [],
+        };
+        this.log(`── step ${num}: ${rec.verbs.join(', ')}`);
+        this.reporter.onStepStart?.({ step: num, verbs: rec.verbs, of: Math.min(through, steps.length) });
+
+        const t0 = Date.now();
+        const ledgerBefore = await this.ledgerIds(readPod);
+        const channelsBefore = await this.channelSnapshot(pod, setup.editor);
+        try {
+          activeProject = await this.runTeamStep({ step, num, pod, readPod, run, rec, activeProject, setup });
+        } catch (e) {
+          rec.error = String(e?.stack ?? e?.message ?? e);
+          rec.notes.push(`STEP THREW: ${rec.error.split('\n')[0]}`);
+        }
+
+        // ── evidence ────────────────────────────────────────────────────────────────────────────
+        const ledger = await this.ledger(readPod);
+        attributeLedger(rec.turns, ledger);
+        rec.newSessions = ledger.filter((s) => !ledgerBefore.has(s.sessionId)).length;
+        // A channel turn is not in the ledger (see `threadSessionFacts`), so recover what it did
+        // from the statements it wrote. Threaded sessions persist under the DEFAULT project, which
+        // is where `routes/team-channels.ts` runs them — not under the project THING then created.
+        for (const t of rec.turns) {
+          if (t.inApp) continue;
+          t.wrote = threadSessionFacts(run.dataDir, 'user', t.sessionId) ?? threadSessionFacts(run.dataDir, activeProject, t.sessionId);
+        }
+        if (rec.turns.some((t) => !t.inApp && t.sessionId && !t.ledgerTracked)) {
+          rec.notes.push(
+            'channel turns are absent from GET /api/session-ledger (runHeadlessThreaded does not trackTracer — session-manager.ts:2068) — delegates/globals below are recovered from the session snapshot, and tokens are unavailable',
+          );
+        }
+        rec.channels = await this.channelSnapshot(pod, setup.editor);
+        // A channel that gained THING messages this step but was not addressed in it is THING acting
+        // across channels — 20-studio step 5's whole subject, and invisible in a per-thread view.
+        rec.crossChannelPosts = await this.crossChannelPosts(pod, setup.editor, channelsBefore, rec);
+        rec.activeProject = activeProject;
+        rec.state = await snapshot(readPod, activeProject, { projectRoot: join(run.dataDir, '.lmthing', activeProject) });
+        rec.snapshot = snapshotProject(run, num);
+        rec.durationMs = Date.now() - t0;
+        bumpCompletedSteps(run, num, { stepCount: steps.length, projectId: activeProject });
+        this.reporter.onSnapshot?.({ step: num, dir: rec.snapshot });
+
+        results.push(rec);
+        const stem = join(outDir, `step-${String(num).padStart(2, '0')}`);
+        writeFileSync(`${stem}.full.json`, JSON.stringify(rec, null, 2));
+        writeFileSync(`${stem}.json`, JSON.stringify(compactTeamStep(rec), null, 2));
+        this.traceMd.push(...teamTraceLines(rec));
+        this.reporter.onStepDone?.({ step: num, rec });
+      }
+    } finally {
+      for (const list of this.threads.values()) for (const e of list) { try { e.thread.close(); } catch { /* ignore */ } }
+      try { pod.closeSockets(); } catch { /* ignore */ }
+      if (!this.keepServer) killServer();
+      try { rmSync(pidFile, { force: true }); } catch { /* ignore */ }
+      process.removeListener('exit', onExit);
+      for (const [sig, h] of Object.entries(sigHandlers)) process.removeListener(sig, h);
+    }
+
+    const summary = {
+      scenario: scenario.id,
+      team: scenario.team.id,
+      run: runId,
+      project: activeProject,
+      cast: pod.members().map((m) => ({ key: m.name, role: m.role })),
+      ranSteps: results.length,
+      ofSteps: steps.length,
+      startedAtStep: startIndex + 1,
+      turns: results.reduce((a, r) => a + r.turns.length, 0),
+      // Only the turns the pod actually accounted for. A channel turn is not one of them — see
+      // `threadSessionFacts` — so this deliberately reports COVERAGE alongside the total rather
+      // than a confident "0 in / 0 out" for work that demonstrably burned tokens.
+      tokens: results.reduce(
+        (a, r) => ({
+          in: a.in + r.turns.reduce((x, t) => x + (t.tokens?.in ?? 0), 0),
+          out: a.out + r.turns.reduce((x, t) => x + (t.tokens?.out ?? 0), 0),
+        }),
+        { in: 0, out: 0 },
+      ),
+      tokenAccounting: {
+        turnsWithLedgerRecord: results.reduce((a, r) => a + r.turns.filter((t) => t.ledgerTracked).length, 0),
+        turnsWithout: results.reduce((a, r) => a + r.turns.filter((t) => !t.ledgerTracked).length, 0),
+        why: 'runHeadlessThreaded (libs/cli/src/server/session-manager.ts:2068) never calls sessionLedger.trackTracer, unlike runHeadless at :1900 — so team channel turns carry no token/cost/delegate record',
+      },
+      outDir,
+      runDir: run.dir,
+      finishedAt: new Date().toISOString(),
+    };
+    writeFileSync(join(outDir, 'summary.json'), JSON.stringify(summary, null, 2));
+    const tracePath = join(outDir, 'trace.md');
+    writeFileSync(tracePath, this.traceMd.join('\n'));
+    if (this.purge) { try { rmSync(run.dir, { recursive: true, force: true }); } catch { /* ignore */ } }
+    this.reporter.onDone?.({ runId, ranSteps: results.length, ofSteps: steps.length, outDir, runDir: run.dir, tracePath, summary });
+    return { runId, ranSteps: results.length, ofSteps: steps.length, outDir, results, summary };
+  }
+
+  // ── per-step verb dispatch ────────────────────────────────────────────────────────────────────
+  async runTeamStep({ step, num, pod, readPod, run, rec, activeProject, setup }) {
+    if (step.restart_pod) {
+      rec.notes.push('restarting the team pod…');
+      await restartRun(run);
+      // Every watching socket died with the process; a thread that is replied to after this must
+      // reconnect or its turn is awaited on a socket nobody is writing to.
+      for (const list of this.threads.values()) for (const e of list) { try { e.thread.close(); } catch { /* ignore */ } }
+      rec.notes.push('server back up; channel sockets will reconnect on demand');
+    }
+
+    if (step.concurrent) {
+      rec.concurrent = step.concurrent.length;
+      const subs = step.concurrent.map((s) => ({ ...s, reply_to: s.reply_to ?? step.reply_to }));
+      // THE point of the verb, in three phases. Setting up a message is itself I/O (a DM to create,
+      // a socket to upgrade), so ALL of it happens first; then every POST is put on the wire with no
+      // await between them; only then does anything wait. Played in sequence this is a different
+      // test entirely — the second speaker would arrive after the first speaker's turn had finished.
+      const prepared = [];
+      for (const sub of subs) prepared.push(await this.prepare(pod, sub, { ...step, if_asked: sub.if_asked ?? step.if_asked }, num));
+      const posts = subs.map((sub, i) => this.dispatch(pod, sub, prepared[i]));
+      rec.notes.push(`dispatched ${posts.length} messages in the same instant (${subs.map((s) => `${s.as}→${s.dm ? `DM ${s.dm}` : `#${s.in}`}`).join(', ')})`);
+      const raws = await Promise.all(posts);
+      const settled = raws.map((raw, i) => this.settleDispatch(raw, subs[i], prepared[i], rec));
+      const turns = await Promise.all(
+        settled.map(async (s, i) => {
+          if (!s) return null; // refused — already recorded
+          const turn = await prepared[i].entry.thread.awaitTurn(subs[i].as, s.sent, prepared[i].opts);
+          turn.consumedPendingAsk = s.consumed;
+          return { turn, meta: prepared[i].meta };
+        }),
+      );
+      for (const t of turns) {
+        if (!t) continue;
+        rec.turns.push(summarizeTeamTurn(t.turn, { ...t.meta, threadId: t.turn.threadId }));
+      }
+    } else if (step.say != null && step.as) {
+      await this.playMessage(pod, step, step, rec, num);
+      if (step.answer_ask) {
+        const last = rec.turns[rec.turns.length - 1];
+        rec.answeredParkedAsk = last?.consumedPendingAsk ?? false;
+        if (!rec.answeredParkedAsk) {
+          rec.notes.push('answer_ask: the thread was NOT parked on a question — this message started a new turn instead of answering one');
+        }
+      }
+    }
+
+    // THING starts every channel turn in `user` and creates its own project if it builds one (the
+    // `bootstrap: thing` shape). Rebind BEFORE the app verbs below, so `open_app` and the in-app
+    // chat in the SAME step target the project the conversation just produced.
+    if (activeProject === 'user') {
+      const projs = (await readPod.listProjects().catch(() => ({ projects: [] }))).projects ?? [];
+      const found = projs.map((p) => p.id ?? p).find((id) => id !== 'system' && id !== 'user');
+      if (found) {
+        rec.notes.push(`THING created project "${found}" — rebinding the evidence snapshot into it`);
+        rec.createdProject = found;
+        activeProject = found;
+      }
+    }
+
+    if (step.in_app_chat != null) {
+      // The in-app chat is a REAL session in the project (`POST /api/sessions`), reached as a member
+      // — team-guard allows it to everyone, including a viewer, but not to a nameless caller.
+      const who = step.as ?? setup.editor.name;
+      const chatPod = pod.podAs(who);
+      const session = new ThingSession(chatPod, { projectId: activeProject, verbose: this.verbose });
+      await session.start();
+      const turn = await session.send(step.in_app_chat);
+      rec.turns.push({
+        ...summarizeTeamTurn(null, { who, role: pod.member(who).role, channel: '(in-app)', sent: `[in-app] ${step.in_app_chat}` }),
+        status: 'done',
+        ok: true,
+        sessionId: session.sessionId,
+        lastText: turn.lastText,
+        delegates: turn.delegates,
+        tokens: turn.tokens,
+        durationMs: turn.durationMs,
+        inApp: true,
+      });
+    }
+
+    if (step.open_app) {
+      const build = await readPod.appBuild(activeProject).catch((e) => ({ error: String(e?.message ?? e) }));
+      rec.appBuild = { built: build?.built ?? build?.build?.built ?? null, routes: build?.routes ?? null, error: build?.error ?? null };
+      const check = await readPod.appCheck(activeProject).catch((e) => ({ error: String(e?.message ?? e) }));
+      rec.appCheck = {
+        ok: check?.ok ?? null,
+        errorCount: Array.isArray(check?.errors) ? check.errors.length : null,
+        errors: Array.isArray(check?.errors) ? check.errors.slice(0, 10) : null,
+        error: check?.error ?? null,
+      };
+      const page = await readPod.appPage(activeProject).catch((e) => ({ error: String(e?.message ?? e) }));
+      rec.appPageStatus = page?.status ?? (page?.error ? `error: ${page.error}` : 'ok');
+      rec.notes.push('opened app (built + checked + fetched the root page)');
+    }
+
+    if (step.run_emitter) {
+      const spec = step.run_emitter;
+      const result =
+        typeof spec === 'string'
+          ? await readPod.runHook(activeProject, spec).catch((e) => ({ error: String(e?.message ?? e) }))
+          : spec.slug
+            ? await readPod.runHook(activeProject, spec.slug, spec.payload ?? {}).catch((e) => ({ error: String(e?.message ?? e) }))
+            : await readPod.runEmitter(activeProject, spec.scope, spec.name, spec.payload).catch((e) => ({ error: String(e?.message ?? e) }));
+      rec.runEmitter = { ...(typeof spec === 'string' ? { slug: spec } : spec.slug ? { slug: spec.slug } : { scope: spec.scope, name: spec.name }), result: compact(result) };
+      // A scheduled turn's whole point is that it POSTS somewhere. Give it a moment to land, then
+      // the cross-channel diff below records where.
+      await sleep(3000);
+    }
+
+    return activeProject;
+  }
+
+  // ── evidence helpers ──────────────────────────────────────────────────────────────────────────
+  async ledger(readPod) {
+    const l = await readPod.sessionLedger().catch(() => ({ sessions: [] }));
+    return l.sessions ?? [];
+  }
+
+  async ledgerIds(readPod) {
+    return new Set((await this.ledger(readPod)).map((s) => s.sessionId));
+  }
+
+  /** Every channel with its message count — the cheap before/after a cross-channel post shows up in. */
+  async channelSnapshot(pod, who) {
+    const { channels } = await pod.listChannels(who).catch(() => ({ channels: [] }));
+    const out = [];
+    for (const c of channels ?? []) {
+      const { messages } = await pod.listMessages(who, c.id, { limit: 200 }).catch(() => ({ messages: [] }));
+      out.push({ id: c.id, name: c.name, kind: c.kind ?? 'channel', count: (messages ?? []).length, lastTs: messages?.at(-1)?.ts ?? null });
+    }
+    return out;
+  }
+
+  /**
+   * THING messages that appeared in a channel this step did not speak in.
+   *
+   * "It posts into #studio, a channel it was NOT called from" (20-studio step 5) and "the brief is
+   * POSTED INTO #newsroom" (21-newsroom step 5) are both invisible to a per-thread reader: the turn
+   * that produced them answered somewhere else entirely. So diff the channel message counts across
+   * the step and record the actual messages THING left behind.
+   */
+  async crossChannelPosts(pod, who, before, rec) {
+    const spokenIn = new Set((rec.turns ?? []).map((t) => t.channel));
+    const beforeById = new Map((before ?? []).map((c) => [c.id, c.count]));
+    const after = await this.channelSnapshot(pod, who);
+    const out = [];
+    for (const c of after) {
+      const gained = c.count - (beforeById.get(c.id) ?? 0);
+      if (gained <= 0 || spokenIn.has(c.id)) continue;
+      const { messages } = await pod.listMessages(who, c.id, { limit: 50 }).catch(() => ({ messages: [] }));
+      for (const m of (messages ?? []).slice(-gained)) {
+        if (m.kind === 'user') continue;
+        out.push({ channelId: c.id, kind: m.kind, text: String(m.text ?? '').slice(0, 400), threadId: m.threadId ?? null, sessionId: m.sessionId ?? null });
+      }
+    }
+    return out;
+  }
+}
+
+/** Convenience: `new TeamScenarioRunner(cfg).run()`. */
+export function runTeamScenario(cfg) {
+  return new TeamScenarioRunner(cfg).run();
+}

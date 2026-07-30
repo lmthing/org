@@ -15,6 +15,9 @@ steps) plus a **`fixtures/`** dir of real input files. It is played by the **gen
 |---|---|---|
 | [06](./06-tanzania/scenario.yaml) | **Tanzania trip** — one attachment dump becomes spaces + a live, updatable app | file ingest (vision/audio/PDF/xlsx); per-leg spaces; live-project app (`writeProjectTable`/`Page`/`Api` + row seed); `db:write` later-update; compound + multilingual ask; query-not-remember; retraction hard-delete |
 | [07](./07-life-admin/scenario.yaml) | **Life admin** — a drawer of household paperwork becomes a vault he can check | multi-file ingest; knowledge vs DB placement; hooks/events; pod restart survival |
+| [20](./20-studio/scenario.yaml) | **TEAM · Fold Studio** — four people, one shared brain | a thread remembers across MEMBERS; the team directory; THING acting across channels; a parked question a *different* member answers; a viewer refused |
+| [21](./21-newsroom/scenario.yaml) | **TEAM · The Alcalá Post** — the room works while it is empty | a scheduled turn that posts into a channel; THING creating a channel; a private DM to the same brain; in-app chat |
+| [22](./22-crossfire/scenario.yaml) | **TEAM · Harbour Works** — three people change one app at once | `concurrent:` beats (real races, not sequences); a genuine contradiction surfaced rather than silently resolved |
 
 ## Running one
 
@@ -173,6 +176,60 @@ question as its answer. `runThingReply` broadcasts the reply message and then th
 frame with no `await` in between, so the terminal never races the content it follows.
 `ThreadSession` infers a park (a `thing` message with no terminal behind it), answers it through
 `onAsk` if you supply one, and otherwise returns `status:'parked'` rather than hanging.
+
+### Playing a team scenario
+
+A team scenario declares a `team:`, a `cast:` (with roles — a viewer is load-bearing) and
+`channels:`, and is played by its own runner. `run-scenario.mjs` and `lib/runner.mjs` are untouched
+by it, and each refuses the other's scenarios by name.
+
+```bash
+cd sdk/org
+node scenarios/run-team-scenario.mjs 20-studio --plan     # cast · channels · who speaks where · validation
+node scenarios/run-team-scenario.mjs 20-studio            # play it (fresh run under 20-studio/runs/<n>/)
+node scenarios/run-team-scenario.mjs 20-studio --through 3 --run 900 --purge     # a cheap pre-flight
+```
+
+Flags: `--plan` · `--through N` · `--run <id>` · `--out <dir>` · `--resume <runId> [--from N]` ·
+`--verbose` · `--keep-server` · `--purge`. `--resume` works because `.team/` (channels, members, the
+thread→session map) lives inside `.lmthing`, so it rides along in every per-step snapshot.
+
+Step verbs, on top of the shared ones (`open_app`, `in_app_chat`, `restart_pod`, `run_emitter`,
+`expect`):
+
+| verb | meaning |
+|---|---|
+| `as: <cast key>` | who is speaking — required on a conversational step |
+| `in: <channel id>` | which channel |
+| `dm: <cast key>` | speak in the DM between `as:` and this member |
+| `say:` | the message, verbatim |
+| `reply_to: <step number>` | continue the thread that step opened instead of opening a new one |
+| `answer_ask: true` | this message answers a question THING parked in that thread |
+| `if_asked: {substring: answer}` | steer the persona's answer to an expected question |
+| `concurrent: [{as, in\|dm, say}, …]` | several members speaking **in the same instant** |
+
+`concurrent:` is played in three phases — every message's channel, thread and socket are set up
+first, then every POST goes on the wire with no `await` between them, and only then does anything
+wait. Played in sequence it would be a different test: the second speaker would arrive after the
+first speaker's turn had already finished.
+
+`--plan` is also a **validator**: an `as:` who is not in the cast, an `in:` that is not a declared
+channel, an `answer_ask` with no `reply_to`, or a `reply_to` naming a step that never speaks are all
+refused before a pod is booted.
+
+**Evidence is attributable.** Every turn row in `step-NN.json` carries `who`, `role`, `channel`,
+`dm`, `threadId` and `sessionId`, plus `asks` (with what answered them), `consumedPendingAsk`,
+`crossChannelPosts` (THING posting where nobody addressed it — invisible in a per-thread view) and
+`denied` (a refusal recorded as the result it is, never thrown).
+
+> ⚠️ **A team channel turn is invisible to the pod's own session ledger.** `runHeadlessThreaded`
+> (`libs/cli/src/server/session-manager.ts:2068`) subscribes the tracer for displays and activity but
+> never calls `sessionLedger.trackTracer(...)` the way `runHeadless` does at `:1900`, and the session
+> is never registered in the manager so there is no `/events` stream either. So there are **no tokens,
+> no cost and no delegate record** for any team turn. Until that is fixed, `threadSessionFacts()`
+> recovers what a turn did from the statements it wrote (`<root>/user/sessions/<id>/snapshot.json`) —
+> the delegate targets, the globals, the `db.*` calls. That is evidence for the judge, never an
+> answer: what THING *said* is `lastText`, which comes from what it displayed.
 
 **A parked turn is not in-flight work.** `beginThingReply` releases the drain the moment a turn parks,
 because `settleChannelWork` — the pod's graceful-shutdown drain — would otherwise wait forever on a

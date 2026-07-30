@@ -43,11 +43,17 @@ export class Pod {
    *   "Project-app ROOT mount"). Locally there is no split host, so apps stay under `/app/<id>/`.
    * @param {() => Promise<unknown>} [o.onLocalRestart] how to bring the LOCAL server back after a
    *   `POST /api/restart` kills it (the runner passes `() => restartRun(run)`).
+   * @param {Record<string,string>} [o.extraHeaders] headers added to EVERY request. Exists for the
+   *   TEAM pod: there, identity is not a bearer token but the four headers Envoy projects from the
+   *   team JWT (`team-pod.mjs#teamHeaders`), and a request without them is 401 even for a GET — so
+   *   the evidence layer (`snapshot`, `appBuild`, `appPage`) needs a Pod that speaks AS a member.
+   *   Defaults to `{}`, in which case every request is byte-identical to before.
    */
-  constructor({ base, token, appBase, onLocalRestart }) {
+  constructor({ base, token, appBase, onLocalRestart, extraHeaders }) {
     this.base = base;
     this.token = token;
     this.onLocalRestart = onLocalRestart;
+    this.extraHeaders = extraHeaders ?? {};
     this.appBase = appBase ?? process.env.LM_APP_BASE ?? (/lmthing\.chat/.test(base) ? 'https://lmthing.app' : base);
     /** true when the app has its own host → root mount (no `/app` prefix). */
     this.appRootMounted = this.appBase !== this.base;
@@ -68,6 +74,7 @@ export class Pod {
         headers: {
           ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
           ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
+          ...this.extraHeaders,
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       });
@@ -106,6 +113,7 @@ export class Pod {
         headers: {
           ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
           ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
+          ...this.extraHeaders,
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       });
@@ -217,6 +225,7 @@ export class Pod {
         headers: {
           'content-type': 'application/json',
           ...(this.token ? { authorization: `Bearer ${this.token}` } : {}),
+          ...this.extraHeaders,
           ...headers,
         },
         body: payload,

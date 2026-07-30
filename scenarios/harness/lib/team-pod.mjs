@@ -42,7 +42,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
-import { fetchResilient } from './pod.mjs';
+import { Pod, fetchResilient } from './pod.mjs';
 
 /** Roles the pod understands (`team-guard.ts#TeamRole`). Anything else is rejected as no identity. */
 export const TEAM_ROLES = Object.freeze(['viewer', 'editor']);
@@ -280,6 +280,28 @@ export class TeamPod {
       text,
       ...(threadId ? { threadId } : {}),
     });
+
+  // ── the rest of the pod, as a member ────────────────────────────────────────────────────────
+  /**
+   * A plain {@link Pod} whose every request carries this member's identity.
+   *
+   * A team pod guards EVERY route, not just `/api/team/*`: `guardRequest` 401s a caller-less request
+   * even for a GET. So the parts of a scenario that are not channel traffic — the evidence snapshot
+   * (`listSpaces`/`appManifest`/`appData`), the app build+check, the in-app chat session, a hook or
+   * emitter run — need a Pod that speaks as somebody. Cached per member, because `Pod` is stateless
+   * apart from the base URL.
+   *
+   * Role still applies: a viewer's `podAs` is refused the writes team-guard refuses her.
+   */
+  podAs(who, opts = {}) {
+    const member = this.member(who);
+    this._pods ??= new Map();
+    const key = `${member.userId}:${JSON.stringify(opts)}`;
+    if (!this._pods.has(key)) {
+      this._pods.set(key, new Pod({ base: this.base, extraHeaders: teamHeaders(member), ...opts }));
+    }
+    return this._pods.get(key);
+  }
 
   // ── the socket ──────────────────────────────────────────────────────────────────────────────
   /** Open `/api/team/ws` as this member. Resolves once the upgrade completed. */

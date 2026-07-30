@@ -82,3 +82,18 @@ export { loadScenario, planLines } from './lib/scenario.mjs';
 export { StepAsks } from './lib/asks.mjs';
 export { compact, summarizeTurn, compactStep, traceLines, snapshot } from './lib/evidence.mjs';
 export { ScenarioRunner, runScenario, runStep, FatalError } from './lib/runner.mjs';
+
+// ── the TEAM scenario engine (several members, channels, threads, roles) ────────────────────────
+// A team scenario declares `team:`/`cast:`/`channels:` and is played by `run-team-scenario.mjs`.
+// `lib/runner.mjs` is untouched by it — the personal scenarios behave byte-identically.
+export {
+  TeamScenarioRunner,
+  runTeamScenario,
+  teamPlanLines,
+  validateTeamScenario,
+  summarizeTeamTurn,
+  attributeLedger,
+  threadSessionFacts,
+  compactTeamStep,
+  teamTraceLines,
+} from './lib/team-runner.mjs';

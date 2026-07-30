@@ -82,6 +82,15 @@ export class ThreadSession {
     this.frames = [];
     /** Every turn played through this thread. */
     this.turns = [];
+    /**
+     * True while a turn of this thread is SUSPENDED on a question nobody answered.
+     *
+     * It changes what the next message means: `answerPendingAsk` consumes it as the ANSWER and the
+     * suspended turn resumes, rather than starting a new one. A runner that does not know this
+     * reports the next step as "a turn that produced no new work", when in fact it resolved the
+     * previous one — so the flag is carried onto the turn as `consumedPendingAsk`.
+     */
+    this.parked = false;
   }
 
   log(...a) {
@@ -102,6 +111,17 @@ export class ThreadSession {
   }
 
   /**
+   * Re-establish the watching socket after the pod went away (a `restart_pod` step).
+   *
+   * The buffered frames and the per-turn cursor are kept: the thread's history on disk is
+   * unaffected by a restart, and dropping them would make the next turn re-read old frames.
+   */
+  async reconnect() {
+    this.close();
+    return this.open();
+  }
+
+  /**
    * Open a NEW thread: a channel-level post (no `threadId`), which becomes its own thread root
    * (`threadRootOf`). Address THING with `@thing …` — a channel-level post needs the mention.
    */
@@ -112,6 +132,29 @@ export class ThreadSession {
     return this.#await(who, message, opts);
   }
 
+  /** Dispatch the post for a NEW thread without waiting — the two halves of `ask()`, for a
+   *  concurrent beat that must get every message on the wire before it waits for any of them. */
+  async dispatchAsk(who, text) {
+    const { message } = await this.pod.postMessage(who, this.channelId, text);
+    this.threadId = message.threadId ?? message.id;
+    return message;
+  }
+
+  /** The waiting half. Pair with {@link dispatchAsk}/{@link dispatchSay}. */
+  awaitTurn(who, sent, opts = {}) {
+    return this.#await(who, sent, opts);
+  }
+
+  /** Dispatch an in-thread reply without waiting (see {@link dispatchAsk}). */
+  async dispatchSay(who, text) {
+    if (!this.threadId) throw new Error('dispatchSay() needs an open thread');
+    const consumed = this.parked;
+    const { message } = await this.pod.postMessage(who, this.channelId, text, { threadId: this.threadId });
+    this.parked = false;
+    message.consumedPendingAsk = consumed;
+    return message;
+  }
+
   /**
    * Reply INSIDE the open thread. No `@thing` needed: every reply in a thread THING is already in
    * addresses it (`addressesThing` — the thread session's existence is the test), which is what
@@ -119,8 +162,15 @@ export class ThreadSession {
    */
   async say(who, text, opts = {}) {
     if (!this.threadId) throw new Error('say() needs an open thread — call ask() first (or pass threadId)');
+    // A thread parked on a question takes this message as the ANSWER (`answerPendingAsk`), which
+    // resumes the suspended turn instead of starting a new one. Record that, so a step that looks
+    // like it "produced nothing new" is read correctly.
+    const consumed = this.parked;
     const { message } = await this.pod.postMessage(who, this.channelId, text, { threadId: this.threadId });
-    return this.#await(who, message, opts);
+    this.parked = false;
+    const turn = await this.#await(who, message, opts);
+    turn.consumedPendingAsk = consumed;
+    return turn;
   }
 
   /** Post into the thread WITHOUT waiting for THING (a member talking to another member). */
@@ -306,6 +356,8 @@ export class ThreadSession {
       events: seen,
     };
     if (turn.sessionId) this.sessionId = turn.sessionId;
+    // A turn that ended parked leaves the thread holding a suspended turn — see `this.parked`.
+    this.parked = status === 'parked' && asks.some((a) => !a.answeredWith);
     this.turns.push(turn);
     this.log(`turn ${status} in ${(turn.durationMs / 1000).toFixed(1)}s — ${turn.text.slice(0, 120)}`);
     return turn;
