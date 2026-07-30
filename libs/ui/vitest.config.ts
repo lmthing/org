@@ -35,6 +35,11 @@ export default defineConfig({
       // `Stack`, `JSON.stringify` for anything else) with three suites sitting next to it that
       // ran nowhere. They need only jsdom + react-dom, both already here.
       'src/chat/components/*.test.tsx',
+      // The chat SHELL's own components (`chat/app/*`). Same story one directory over: the
+      // `.tsx` suites here ran nowhere, which is how the shell's no-session pane could ship a
+      // dead end — a phone-sized screen holding one sentence about a sidebar that was not on
+      // it, with nothing to press. These need only jsdom + react-dom + the Tamagui provider.
+      'src/chat/app/*.test.tsx',
       // Pure codemod-mapping tests (node-safe, no DOM) — the objective correctness gate for the
       // P3 classnames-to-props codemod. See docs/tamagui-idiomatic-migration.md §5.
       'scripts/**/*.test.mjs',

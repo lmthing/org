@@ -1,16 +1,13 @@
 import * as Prim from '../../elements/primitives/index';
 import React from 'react';
 import { cn } from '../lib/cn';
-import { useStore, connectLive } from '../store/store';
+import { useStore } from '../store/store';
 import type { Project, ModelPricing } from '../store/store';
-import { wsTokenSuffix } from './auth';
 import { apiGet, apiPost, apiDelete } from './api';
-import { setLiveSend } from './live-send';
-import { wsUrl } from '../../platform/api-base';
+import { closeActiveSession, resumeSession as resumeLiveSession, startSession } from './session-control';
 import { AppSidebar } from '../../elements/nav/app-sidebar';
 import { SurfaceSwitcher, type Surface } from '../../elements/nav/surface-switcher';
 import { crossAppOrigin } from '../../lib/app-urls';
-import { getWindowSize } from '../../platform/dimensions';
 import { openUrl } from '../../platform/navigation';
 
 interface PersistedSessionMeta {
@@ -25,18 +22,6 @@ function formatCost(usd: number): string {
   if (usd < 0.000001) return '';
   if (usd < 0.01) return `$${usd.toFixed(4)}`;
   return `$${usd.toFixed(3)}`;
-}
-
-let activeConn: ReturnType<typeof connectLive> | null = null;
-
-function switchSession(sessionId: string): void {
-  if (activeConn) { activeConn.close(); activeConn = null; }
-  useStore.getState().resetSession();
-  activeConn = connectLive(wsUrl(`/api/ws?sessionId=${encodeURIComponent(sessionId)}${wsTokenSuffix()}`));
-  setLiveSend(activeConn.send);
-  useStore.getState().setActiveSessionId(sessionId);
-  // On mobile the sidebar is an overlay drawer — close it so the conversation shows.
-  if (getWindowSize().width < 768) useStore.getState().setSidebarOpen(false);
 }
 
 function relativeTime(ts: number): string {
@@ -164,16 +149,14 @@ export function Sidebar({ onProjectSettings, className, width, height, collapsib
     if (!activeProjectId) return;
     setCreatingSession(true);
     try {
-      const { sessionId } = await apiPost<{ sessionId: string }>('/api/sessions', { projectId: activeProjectId });
-      switchSession(sessionId);
+      await startSession(activeProjectId);
       loadSessions(activeProjectId);
     } finally { setCreatingSession(false); }
   };
 
   const resumeSession = async (sessionId: string) => {
     if (!activeProjectId) return;
-    const { sessionId: sid } = await apiPost<{ sessionId: string }>('/api/sessions', { projectId: activeProjectId, resumeSessionId: sessionId });
-    switchSession(sid);
+    await resumeLiveSession(activeProjectId, sessionId);
     loadSessions(activeProjectId);
   };
 
@@ -182,9 +165,7 @@ export function Sidebar({ onProjectSettings, className, width, height, collapsib
     if (activeProjectId) loadSessions(activeProjectId);
     if (activeSessionId === sessionId) {
       useStore.getState().setActiveSessionId(null);
-      // Clear the send with the socket. The old `window.__LM_SEND__` was left pointing at a closed
-      // connection here, so a composer submit after deleting the active session dropped silently.
-      if (activeConn) { activeConn.close(); activeConn = null; setLiveSend(null); }
+      closeActiveSession();
     }
   };
 

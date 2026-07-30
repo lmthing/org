@@ -49,13 +49,21 @@ const ATTACH_ACCEPT = [
 ].join(',');
 
 /**
- * Above this measured content height the composer is treated as more than one line.
+ * Upper bound on what ONE line of the composer can measure, used to seed the self-calibrating
+ * baseline in {@link Composer}.
  *
- * A hair over the 20px line box rather than exactly it: a single line measures a pixel or two
- * taller than its `lineHeight` once the font's ascender/descender are counted, and a composer that
- * re-laid itself out on the first keystroke would be worse than one that never did.
+ * This was a fixed 28px threshold — "a hair over the 20px line box" — which is only true of the
+ * web textarea. A `TextInput` reports `contentSize.height` in the platform's own terms: Android
+ * adds the input's internal padding and, depending on the font, can report a single line at more
+ * than 28 on its own. A fixed number therefore reads "already wrapped" for a box with one
+ * character in it, and the composer re-laid itself out on the FIRST keystroke of every message.
+ *
+ * Nothing here has to know the real number. The shortest height the field can ever report is one
+ * line, by definition, so the smallest measurement seen is the baseline — this constant only has
+ * to be too big for no target and small enough to be a safe starting guess before the first
+ * measurement arrives.
  */
-const ONE_LINE = 28;
+const ONE_LINE_CEILING = 40;
 
 export function Composer({ onSend, projectId, className, disabled }: ComposerProps) {
   const mode = useStore((s) => s.mode);
@@ -316,22 +324,40 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
    * ## Why this LATCHES rather than tracking the measurement
    *
    * The two states change the field's WIDTH, and the measurement depends on that width. Read
-   * naively (`contentHeight > ONE_LINE`) the composer oscillates: wrapping stacks it, stacking
-   * hands the field the full width, at which point the same text fits in one line again, which
-   * unstacks it, which narrows the field, which wraps it. That is an infinite re-render — and
-   * because each pass remounts the input, it also EATS KEYSTROKES: every character typed threw
-   * focus away.
+   * naively the composer oscillates: wrapping stacks it, stacking hands the field the full width,
+   * at which point the same text fits in one line again, which unstacks it, which narrows the
+   * field, which wraps it. That is an infinite re-render.
    *
    * So growing past a line latches it on, and only an empty box turns it off. Emptying is the one
    * transition where the answer cannot depend on the width, so it is the one that cannot lie.
+   *
+   * ## Why the baseline is measured, and measured while EMPTY
+   *
+   * "More than one line" is a comparison against the height of one line, and that number differs
+   * per target and per font — see {@link ONE_LINE_CEILING}. So it is learned rather than declared.
+   *
+   * It is learned only while the box is empty, because that is the one state where "this is one
+   * line" is true by definition. Taking the smallest height ever seen instead looks equivalent and
+   * is not: the first measurement of a freshly mounted field comes back at its `minHeight` clamp,
+   * below what an empty box actually settles at, and a baseline that low made an EMPTY composer
+   * read as wrapped — so after sending, the box kept the stacked arrangement forever, with nothing
+   * in it. An empty box cannot lie about its own height.
    */
   const [stacked, setStacked] = React.useState(false);
+  const oneLineRef = React.useRef(ONE_LINE_CEILING);
+
+  // Declared FIRST so it runs first: a measurement arriving on an empty box must update the
+  // baseline before the latch below compares against it, or the very measurement that defines one
+  // line is judged against the previous guess.
   React.useEffect(() => {
-    if (contentHeight > ONE_LINE) setStacked(true);
+    if (text) return;
+    setStacked(false);
+    if (contentHeight > 0) oneLineRef.current = contentHeight;
+  }, [text, contentHeight]);
+
+  React.useEffect(() => {
+    if (contentHeight > oneLineRef.current * 1.5) setStacked(true);
   }, [contentHeight]);
-  React.useEffect(() => {
-    if (!text) setStacked(false);
-  }, [text]);
 
   const plusButton = (
     /* A PLUS, not a paperclip. A clip means "a file is stapled to this", which undersells what the
@@ -475,26 +501,37 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           </Prim.List>
         )}
 
+        {/*
+          ONE tree for both arrangements, and the reason is not tidiness.
+
+          These used to be two branches — `<>{field}<Row>…</Row></>` against `<Row>…{field}…</Row>`
+          — which put the field under a different PARENT in each. React reconciles by position, and
+          a `key` only disambiguates siblings, so a parent change is a remount however it is
+          keyed: the native `TextInput` was destroyed and rebuilt the instant the message wrapped,
+          which DISMISSED THE KEYBOARD and threw focus away mid-sentence.
+
+          So the field never moves. It stays this Row's second child in both states; the buttons
+          beside it render as `null`, which holds their slots (static JSX children are a
+          fixed-length array — a `null` keeps its index) and so keeps the field's index stable too.
+          The stacked row below is a sibling that appears and disappears, which is safe: it owns no
+          focus.
+        */}
+        <Prim.Row alignItems="center" gap="$2">
+          {stacked ? null : plusButton}
+          {field}
+          {stacked ? null : micButton}
+          {stacked ? null : sendButton}
+        </Prim.Row>
         {stacked ? (
-          <>
-            {field}
-            <Prim.Row alignItems="center" gap="$2">
-              {plusButton}
-              {/* Pushes the mic and send to the far edge, so the two sides keep the positions they
-                  hold in the one-line arrangement instead of bunching up on the left. */}
-              <Prim.Box flexGrow={1} flexShrink={1} />
-              {micButton}
-              {sendButton}
-            </Prim.Row>
-          </>
-        ) : (
           <Prim.Row alignItems="center" gap="$2">
             {plusButton}
-            {field}
+            {/* Pushes the mic and send to the far edge, so the two sides keep the positions they
+                hold in the one-line arrangement instead of bunching up on the left. */}
+            <Prim.Box flexGrow={1} flexShrink={1} />
             {micButton}
             {sendButton}
           </Prim.Row>
-        )}
+        ) : null}
       </Prim.Box>
       <BudgetWindows />
     </Prim.Box>

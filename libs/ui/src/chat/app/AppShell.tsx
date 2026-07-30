@@ -3,6 +3,7 @@ import React from 'react';
 import { useStore } from '../store/store';
 import { ChatView } from './ChatView';
 import { Sidebar } from './Sidebar';
+import { NoSessionPane } from './NoSessionPane';
 import { DevPanel } from './DevPanel';
 import { ProjectSettings } from './ProjectSettings';
 import { Drawer } from '../components/ui/Drawer';
@@ -154,13 +155,7 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges }: AppS
 
         {/* No session selected in project mode */}
         {showSidebar && !activeSessionId ? (
-          <Prim.Row justifyContent="center" color="$muted-foreground" fontSize="$sm" alignItems="center" flexGrow={1} flexShrink={1} flexBasis="0%" lineHeight="1.25rem">
-            <Prim.Text>
-              {activeProjectId
-                ? 'Select or start a chat from the sidebar.'
-                : 'Select or create a project to get started.'}
-            </Prim.Text>
-          </Prim.Row>
+          <NoSessionPane activeProjectId={activeProjectId} sidebarIsDrawer={sidebarAsDrawer} />
         ) : (
           <ChatView
             onOpenDevPanel={() => setDevPanelOpen(!devPanelOpen)}
