@@ -10,11 +10,24 @@
  *   - `snapshot(pod, projectId)` takes projectId as a PARAM (was a module global).
  *   - `traceLines(rec)` RETURNS the lines (was `appendTrace(rec)` pushing to a module-global array);
  *     the caller does `traceMd.push(...traceLines(rec))` and joins once at the end.
+ *
+ * VIEW-SPEC FACTS (added — closes part of the "harness gap" in PROGRESS.md): `snapshot()` used to
+ * record spaces/appTables/appManifest/error and NOTHING about `pages/**\/*.view.json` — every
+ * `expect` about a `timeline` section, a `prefill` block, the generated-wrapper banner, etc. had no
+ * evidence to be scored against. `snapshot(pod, projectId, { projectRoot })` now ALSO calls
+ * `../harness/lib/view-facts.mjs#viewFacts` (a synchronous, cheap local-disk read) and, only when that
+ * comes back non-null (the project actually has view specs), the native twin
+ * `../harness/lib/view-facts.mjs#nativeViewFacts` (one `GET /api/apps/:id/views`). Both are ADDITIVE:
+ * `projectRoot` defaults to `null`, in which case neither runs and `snapshot`'s output is
+ * byte-identical to before — existing callers (and the `snapshot`-shaped assumptions baked into the
+ * `compactStep` golden fixture below) are unaffected.
  */
+import { viewFacts, compactViewFacts, nativeViewFacts } from '../harness/lib/view-facts.mjs';
 
 // ── state capture: what the judge verifies token-in-state against ──────────────────────────────
-export async function snapshot(pod, projectId) {
+export async function snapshot(pod, projectId, { projectRoot = null, sdkRoot } = {}) {
   const snap = { spaces: [], appTables: {}, appManifest: null, error: null };
+  let manifest = null;
   try {
     const sp = await pod.listSpaces(projectId).catch(() => null);
     snap.spaces = (sp?.spaces ?? sp ?? []).map((s) => s.slug ?? s.name ?? s.id ?? s);
@@ -23,6 +36,7 @@ export async function snapshot(pod, projectId) {
   }
   try {
     const man = await pod.appManifest(projectId).catch(() => null);
+    manifest = man;
     if (man) {
       snap.appManifest = { tables: man.tables ?? man.database ?? [], pages: man.pages ?? [], built: man.build?.built ?? null };
       const tableNames = (snap.appManifest.tables ?? []).map((t) => t.name ?? t.slug ?? t).filter(Boolean);
@@ -33,6 +47,21 @@ export async function snapshot(pod, projectId) {
     }
   } catch (e) {
     snap.appError = String(e?.message ?? e);
+  }
+  // ── view-spec facts, additive (see module docblock) ───────────────────────────────────────────
+  if (projectRoot) {
+    try {
+      const facts = viewFacts(projectRoot, { endpoints: manifest?.endpoints ?? null, sdkRoot });
+      if (facts) {
+        snap.viewFacts = facts;
+        // The native transport rides along ONLY when the project actually has view specs — per
+        // `nativeViewFacts`'s own docblock, it is meaningless (and just a wasted round trip) for a
+        // project with no spec-authored pages at all.
+        snap.nativeViewFacts = await nativeViewFacts(pod, projectId);
+      }
+    } catch (e) {
+      snap.viewFactsError = String(e?.message ?? e);
+    }
   }
   return snap;
 }
@@ -150,6 +179,13 @@ export function compactStep(rec) {
     error: s.error ?? null,
     appError: s.appError ?? null,
   };
+  // Judge-sized view-spec facts, appended ONLY when `snapshot` actually recorded any (additive — a
+  // step whose `rec.state` predates this field, or whose project has no view specs at all, gets
+  // `compactViewFacts(undefined, undefined)` back which is `undefined`, so no key is added and the
+  // golden fixtures below stay byte-identical).
+  const compactedViewFacts = compactViewFacts(s.viewFacts, s.nativeViewFacts);
+  if (compactedViewFacts !== undefined) state.viewFacts = compactedViewFacts;
+  if (s.viewFactsError) state.viewFactsError = s.viewFactsError;
   return {
     step: rec.step,
     verbs: rec.verbs,

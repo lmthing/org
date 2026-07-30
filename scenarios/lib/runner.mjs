@@ -440,7 +440,9 @@ export class ScenarioRunner {
         }
 
         rec.asks = this.asks.drain();
-        rec.state = await snapshot(pod, activeProjectId);
+        // `projectRoot` unlocks the view-spec facts (see evidence.mjs's docblock) — cheap and
+        // additive: a non-viewbuilder project (no `.view.json` anywhere) still costs one `readdir`.
+        rec.state = await snapshot(pod, activeProjectId, { projectRoot: join(run.dataDir, '.lmthing', activeProjectId) });
         // Snapshot the project files so a later --resume can seed from here and continue.
         rec.snapshot = snapshotProject(run, num);
         bumpCompletedSteps(run, num, { stepCount: steps.length, projectId: activeProjectId, createdProject: createdProjectId });

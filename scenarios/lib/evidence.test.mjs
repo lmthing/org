@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { describe, expect, it, afterEach } from 'vitest';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { compact, compactStep, summarizeTurn, traceLines, redactSecrets } from './evidence.mjs';
+import { compact, compactStep, summarizeTurn, traceLines, redactSecrets, snapshot } from './evidence.mjs';
 
 // The strongest guarantee: the judge parses these transforms' output, so they must be BYTE-identical
 // to what the pre-refactor inline code produced. `06/step-01.full.json` is a real recorded `rec`
@@ -120,5 +121,113 @@ describe('redactSecrets — evidence secrets hygiene', () => {
   it('is a structural no-op on secret-free data (byte round-trip)', () => {
     const clean = { a: 1, b: ['x', 'y'], c: { d: 'hello world' } };
     expect(JSON.stringify(redactSecrets(clean))).toBe(JSON.stringify(clean));
+  });
+});
+
+// ── snapshot()'s view-spec facts — additive wiring (closes part of the "harness gap") ─────────────
+const tmps = [];
+afterEach(() => {
+  for (const d of tmps.splice(0)) rmSync(d, { recursive: true, force: true });
+});
+function mkProjectRoot(files) {
+  const root = mkdtempSync(join(tmpdir(), 'lmscn-evidence-'));
+  tmps.push(root);
+  for (const [rel, content] of Object.entries(files)) {
+    const abs = join(root, rel);
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, typeof content === 'string' ? content : JSON.stringify(content));
+  }
+  return root;
+}
+function fakePod({ endpoints = [], nativeBody = { views: [], components: [], endpoints: {} } } = {}) {
+  const calls = [];
+  return {
+    calls,
+    listSpaces: async () => ({ spaces: [{ slug: 'thing' }] }),
+    appManifest: async () => ({ tables: [], pages: [], endpoints, build: { built: true } }),
+    appData: async () => ({ rows: [] }),
+    req: async (method, path) => {
+      calls.push(`${method} ${path}`);
+      return { status: 200, body: nativeBody };
+    },
+  };
+}
+
+describe('snapshot — the view-spec facts are OFF by default, additive when a projectRoot is given', () => {
+  it('with no `projectRoot` (existing callers), the output has no viewFacts/nativeViewFacts key at all', async () => {
+    const pod = fakePod();
+    const snap = await snapshot(pod, 'proj');
+    expect(snap).not.toHaveProperty('viewFacts');
+    expect(snap).not.toHaveProperty('nativeViewFacts');
+    expect(Object.keys(snap)).toEqual(['spaces', 'appTables', 'appManifest', 'error']);
+  });
+
+  it('a projectRoot with no pages/ dir at all: still no viewFacts key, and the native probe is never called', async () => {
+    const pod = fakePod();
+    const projectRoot = mkProjectRoot({}); // empty — no pages/
+    const snap = await snapshot(pod, 'proj', { projectRoot });
+    expect(snap).not.toHaveProperty('viewFacts');
+    expect(snap).not.toHaveProperty('nativeViewFacts');
+    expect(pod.calls).toEqual([]); // GET /api/apps/:id/views never fired — nothing to probe
+  });
+
+  it('a projectRoot with real view specs: viewFacts is recorded AND the native probe rides along', async () => {
+    const pod = fakePod({
+      endpoints: [{ name: 'listThings' }],
+      nativeBody: { views: [{ route: '/index' }], components: [], endpoints: { listThings: { inputSchema: {} } } },
+    });
+    const projectRoot = mkProjectRoot({
+      'pages/index.view.json': { sections: [{ kind: 'list', query: 'listThings' }] },
+    });
+    const snap = await snapshot(pod, 'proj', { projectRoot });
+    expect(snap.viewFacts).toBeTruthy();
+    expect(snap.viewFacts.specRoutes).toEqual(['index']);
+    expect(snap.viewFacts.endpointCount).toBe(1); // manifest's own endpoint list, fetched once
+    expect(pod.calls).toEqual(['GET /api/apps/proj/views']); // the native transport actually fired
+    expect(snap.nativeViewFacts.viewCount).toBe(1);
+    expect(snap.nativeViewFacts.wouldRenderNatively).toBe(true);
+  });
+});
+
+describe('compactStep — the view-spec facts stay out of the byte-golden fixture, additive elsewhere', () => {
+  it('rec06 (the pre-existing golden fixture, no viewFacts recorded) gets no state.viewFacts key', () => {
+    expect(compactStep(rec06).state).not.toHaveProperty('viewFacts');
+  });
+
+  it('a step whose rec.state carries raw viewFacts+nativeViewFacts gets a compact state.viewFacts, appended after the existing state keys', () => {
+    const rec = {
+      step: 1,
+      verbs: ['open_app'],
+      expect: [],
+      turns: [],
+      asks: [],
+      notes: [],
+      state: {
+        spaces: ['thing'],
+        appTables: {},
+        appManifest: null,
+        error: null,
+        viewFacts: {
+          specRoutes: ['index'],
+          components: [],
+          shell: { authored: false, derivable: true, topLevelStaticRoutes: 1 },
+          wrappers: [],
+          kindCounts: { list: 1 },
+          malformed: [],
+          routesWithoutSpec: [],
+          specsWithoutWrapper: [],
+          wrapperBanners: null,
+          routes: { index: { layout: null, title: null, sections: [{ kind: 'list', endpoint: 'listThings' }] } },
+          endpointCount: 1,
+        },
+        nativeViewFacts: { status: 200, viewCount: 1, wouldRenderNatively: true },
+      },
+    };
+    const compacted = compactStep(rec);
+    expect(compacted.state.viewFacts).toBeDefined();
+    expect(compacted.state.viewFacts.specRoutes).toEqual(['index']);
+    expect(compacted.state.viewFacts.native).toEqual({ status: 200, viewCount: 1, wouldRenderNatively: true });
+    // Appended AFTER the pre-existing keys — never reordered.
+    expect(Object.keys(compacted.state)).toEqual(['spaces', 'spaceCount', 'appTables', 'appManifest', 'error', 'appError', 'viewFacts']);
   });
 });
