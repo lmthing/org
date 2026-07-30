@@ -62,6 +62,76 @@ describe('control derivation', () => {
   it('an endpoint with no Input schema derives no fields rather than throwing', () => {
     expect(deriveFields(undefined)).toEqual([])
   })
+
+  /**
+   * `ts-json-schema-generator` emits a NAMED `Input` type as a root `$ref` with a `definitions` map —
+   * and a named type (`export type Input = CreatePlantInput`) is the shape the pipeline TEACHES, so
+   * this is the normal case. Reading `properties` off that root found nothing, so EVERY create form
+   * derived zero fields and rendered "Nothing to fill in." above a Save button. Measured on two
+   * model-built apps, web and native (0 `EditText` nodes).
+   */
+  describe('a root $ref — the shape a named Input actually serves', () => {
+    const refSchema: JsonSchemaNode = {
+      $ref: '#/definitions/Body',
+      definitions: {
+        Body: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            room: { type: 'string' },
+            watering_interval_days: { type: 'number' },
+            last_watered: { type: 'string' },
+          },
+          required: ['name', 'room', 'watering_interval_days'],
+        },
+      },
+    } as unknown as JsonSchemaNode
+
+    it('follows it and derives the real fields', () => {
+      const fields = deriveFields(refSchema)
+      expect(fields.map((f) => f.key)).toEqual(['name', 'room', 'watering_interval_days', 'last_watered'])
+      expect(fields.find((f) => f.key === 'watering_interval_days')?.control).toBe('number')
+      // `required` lives on the RESOLVED node, so it has to survive the hop.
+      expect(fields.find((f) => f.key === 'name')?.required).toBe(true)
+      expect(fields.find((f) => f.key === 'last_watered')?.required).toBe(false)
+    })
+
+    it('still hides the keys the page supplies', () => {
+      expect(deriveFields(refSchema, new Set(['room'])).map((f) => f.key)).not.toContain('room')
+    })
+
+    it('resolves a PROPERTY that is itself a ref, so its control is picked from the real node', () => {
+      const nested = {
+        $ref: '#/definitions/Outer',
+        definitions: {
+          Outer: { type: 'object', properties: { flag: { $ref: '#/definitions/Flag' } }, required: [] },
+          Flag: { type: 'boolean' },
+        },
+      } as unknown as JsonSchemaNode
+      expect(deriveFields(nested).find((f) => f.key === 'flag')?.control).toBe('boolean')
+    })
+
+    it('degrades to no fields — never a throw — on a ref that resolves nowhere', () => {
+      const dangling = { $ref: '#/definitions/Missing', definitions: {} } as unknown as JsonSchemaNode
+      expect(deriveFields(dangling)).toEqual([])
+    })
+
+    it('does not spin on a cyclic definition', () => {
+      const cyclic = {
+        $ref: '#/definitions/A',
+        definitions: { A: { $ref: '#/definitions/B' }, B: { $ref: '#/definitions/A' } },
+      } as unknown as JsonSchemaNode
+      expect(deriveFields(cyclic)).toEqual([])
+    })
+
+    it('supports $defs as well as definitions', () => {
+      const defs = {
+        $ref: '#/$defs/Body',
+        $defs: { Body: { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] } },
+      } as unknown as JsonSchemaNode
+      expect(deriveFields(defs).map((f) => f.key)).toEqual(['q'])
+    })
+  })
 })
 
 describe('the three cases the desk check blocked on', () => {

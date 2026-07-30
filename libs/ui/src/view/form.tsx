@@ -94,18 +94,61 @@ export function controlFor(schema: JsonSchemaNode): DerivedField['control'] {
  * `hidden` is `create.input`'s key set — a parent id bound from the route is a value the
  * page knows and the user must not be asked for.
  */
+/**
+ * Follow a `$ref` to the node it names — the difference between a form and an empty page.
+ *
+ * `ts-json-schema-generator` emits a NAMED `Input` type as a reference, not inline:
+ * `{ "$ref": "#/definitions/Body", "definitions": { "Body": { properties: … } } }`. And a named type
+ * is the shape the pipeline TEACHES (`export type Input = CreatePlantInput`), so this is the normal
+ * case, not an exotic one. Reading `properties` off that root finds `undefined`, so every derived
+ * field list came back EMPTY and every `create` page rendered **"Nothing to fill in."** above a Save
+ * button — measured on two model-built apps, on web and on the Android emulator (0 `EditText` nodes).
+ *
+ * `libs/cli/src/app/build/schema.ts#resolveRootSchema` deliberately leaves the root ref in place
+ * because **ajv resolves a local `$ref` natively** — which is true, and sufficient, for VALIDATION.
+ * Form derivation is not validation: it walks the schema itself, so it has to do the resolution ajv
+ * would have done. Hence this, rather than a change over there that would alter what the api layer
+ * validates against.
+ *
+ * Only local pointers are followed (`#/definitions/X`, `#/$defs/X`) — there is no remote fetching in
+ * a renderer — and a ref that resolves nowhere returns the node untouched, so an unresolvable schema
+ * degrades to "no fields" exactly as before rather than throwing mid-render.
+ */
+function deref(node: JsonSchemaNode | undefined, root: JsonSchemaNode | undefined, seen = new Set<string>()): JsonSchemaNode | undefined {
+  const ref = node?.['$ref']
+  if (typeof ref !== 'string' || !ref.startsWith('#/')) return node
+  if (seen.has(ref)) return node // a cyclic definition must not spin the render
+  seen.add(ref)
+  let target: unknown = root
+  for (const rawSeg of ref.slice(2).split('/')) {
+    const seg = rawSeg.replace(/~1/g, '/').replace(/~0/g, '~')
+    if (!target || typeof target !== 'object') return node
+    target = (target as Record<string, unknown>)[seg]
+  }
+  if (!target || typeof target !== 'object') return node
+  // The resolved node may itself be a reference; `seen` bounds the chain.
+  return deref(target as JsonSchemaNode, root, seen)
+}
+
 export function deriveFields(schema: JsonSchemaNode | undefined, hidden: Set<string> = new Set()): DerivedField[] {
-  const properties = schema?.properties ?? {}
-  const required = new Set(schema?.required ?? [])
+  // `schema` is the document root, so it carries the `definitions` a `$ref` points into.
+  const resolved = deref(schema, schema)
+  const properties = resolved?.properties ?? {}
+  const required = new Set(resolved?.required ?? [])
   return Object.entries(properties)
     .filter(([key]) => !hidden.has(key))
-    .map(([key, prop]) => ({
-      key,
-      schema: prop,
-      required: required.has(key),
-      label: prop.title ?? humanize(key),
-      control: controlFor(prop),
-    }))
+    .map(([key, raw]) => {
+      // A PROPERTY can be a reference too (a named nested type), and `controlFor` needs the real
+      // node to pick a control — an unresolved ref has no `type`, so everything became a text box.
+      const prop = deref(raw, schema) ?? raw
+      return {
+        key,
+        schema: prop,
+        required: required.has(key),
+        label: prop.title ?? humanize(key),
+        control: controlFor(prop),
+      }
+    })
 }
 
 /** Seed a form's values from the schema's defaults. */
