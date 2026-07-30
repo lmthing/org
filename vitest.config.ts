@@ -55,6 +55,10 @@ export default defineConfig({
       // The scenario library's pure transforms (evidence/scenario/asks) — golden-tested against
       // recorded run output so a byte-compat regression in the judge's evidence is caught here.
       'scenarios/lib/**/*.test.mjs',
+      // The ratchet-metrics dashboard (scenarios/metrics/) — pure functions over a run's on-disk
+      // artifacts (bricking/vocabulary-gap/retries-per-write/etc.). Node-safe, zero-dep, same
+      // rationale as the two entries above.
+      'scenarios/metrics/**/*.test.mjs',
     ],
     // libs/state has its OWN vitest config (jsdom + React transforms), so it is
     // excluded here and run by its own `test` script.

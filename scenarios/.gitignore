@@ -11,3 +11,7 @@
 # Autonomous scenario-campaign orchestrator: ephemeral state (edit-lock, orchestrator-state.json,
 # per-scenario <id>.handoff.md). The tracked memory is campaign/attempts/<id>.md.
 campaign/state/
+
+# dashboard.mjs's machine-readable reports — regenerated from runs/ on every invocation, never
+# committed (same reasoning as runs/ above: derived, ephemeral, and often large across --all).
+metrics/out/
