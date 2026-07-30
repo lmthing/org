@@ -85,10 +85,18 @@ function MembersPage() {
       const result = await teamApi.addMember(authFetch, teamId, trimmed, role)
       setEmail('')
       setAddOpen(false)
+      // Say what actually happened. `emailed:false` means no mail left the
+      // gateway, and claiming otherwise leaves the inviter waiting for a reply to
+      // a message nobody got — the invite is still valid, it just has to be
+      // passed on by hand.
       setNotice(
         result.status === 'added'
-          ? `${result.email} joined the team.`
-          : `${result.email} has no account yet — they'll see the invitation when they sign in at lmthing.team.`,
+          ? result.emailed
+            ? `${result.email} joined the team, and we let them know by email.`
+            : `${result.email} joined the team. We couldn't email them — tell them yourself.`
+          : result.emailed
+            ? `Invited ${result.email} — we've emailed them how to join.`
+            : `${result.email} has no account yet, and we couldn't email them. Ask them to sign in at lmthing.team with this address to claim the invite.`,
       )
     })
   }

@@ -105,8 +105,17 @@ export const teamApi = {
       body: JSON.stringify({ name }),
     }),
 
-  addMember: (f: Fetcher, teamId: string, email: string, role: TeamRole) =>
-    call<{ status: 'added' | 'invited'; email: string; role: TeamRole }>(
+  addMember: (
+    f: Fetcher,
+    teamId: string,
+    email: string,
+    role: TeamRole,
+    // `emailed` is false when the gateway has no mail transport, or the relay
+    // refused it. The invite is valid either way — it is claimed by signing in,
+    // not by clicking the mail — so the caller reports it rather than treating it
+    // as a failure.
+  ) =>
+    call<{ status: 'added' | 'invited'; email: string; role: TeamRole; emailed: boolean }>(
       f,
       `/${teamId}/members`,
       { method: 'POST', body: JSON.stringify({ email, role }) },
