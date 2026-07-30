@@ -264,6 +264,18 @@ async function unwrapApiCall(rt: ApiRuntime, name: string, input?: unknown): Pro
  * Owns a pool of independent agent sessions. Each session gets its OWN
  * WebRenderHost + TraceHub so display/ask/trace events never cross sessions.
  */
+/**
+ * How many model forks may run at once — read from the pod env the gateway sets.
+ *
+ * Falls back to 4, which is what this was hardcoded to. See
+ * `cloud/gateway/src/lib/compute.ts#memoryBudget`: the fan-out is one of three terms divided out of
+ * the pod's memory limit, because each concurrent fork holds its own off-heap QuickJS arena.
+ */
+function maxConcurrentForksFromEnv(): number {
+  const n = Number(process.env['LM_MAX_CONCURRENT_FORKS']);
+  return Number.isInteger(n) && n > 0 ? n : 4;
+}
+
 export class SessionManager {
   private sessions: Map<string, SessionEntry> = new Map();
   /** Per-session LIVE app-build-target holder, keyed by sessionId. The SAME object a
@@ -2166,7 +2178,12 @@ export class SessionManager {
     // A real ForkEngine so agent nodes run model forks (à la runHeadless). Only
     // the essential parent context is wired; the rest keep their engine defaults.
     const engine = new ForkEngine({
-      maxConcurrentForks: 4,
+      // Every concurrent fork is another off-heap QuickJS arena, so this is a MEMORY setting as
+      // much as a concurrency one. The gateway sizes it against the pod's limit alongside the V8
+      // cap and the arena size (`cloud/gateway/src/lib/compute.ts#memoryBudget`); taking the
+      // literal 4 here regardless of pod size is what let a 512MiB pod plan for 256MiB of
+      // sandboxes it could not afford.
+      maxConcurrentForks: maxConcurrentForksFromEnv(),
       parentHistory: [],
       parentSpaceDir: spaceDir,
       parentAgentSlug,

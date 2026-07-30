@@ -64,8 +64,27 @@ function getWASMModule(): Promise<QuickJSAsyncWASMModule> {
     : newQuickJSAsyncWASMModule();
 }
 
+/**
+ * Default arena for a QuickJS runtime, in bytes.
+ *
+ * This was a hardcoded 64MiB, and it is OFF-HEAP — a WASM `ArrayBuffer`, invisible to V8 and so
+ * invisible to `--max-old-space-size`. The pod's V8 cap was sized as a flat fraction of the
+ * container limit with no term for these, so a free pod could be handed 307MiB of heap AND permit
+ * four 64MiB arenas inside a 512MiB cgroup. It was OOMKilled mid-turn, taking the session and the
+ * user's already-spent tokens with it.
+ *
+ * The gateway now divides the limit ONCE and passes its answer down
+ * (`cloud/gateway/src/lib/compute.ts#memoryBudget`). Reading it here is what makes that division
+ * true rather than aspirational — otherwise the host is sized against a number the sandbox ignores.
+ * The 64MiB literal survives only as the fallback for a pod nobody sized: a local `lmthing` run.
+ */
+export function defaultMemoryLimitBytes(): number {
+  const mb = Number(process.env['LM_VM_MEMORY_MB']);
+  return Number.isFinite(mb) && mb > 0 ? mb * 1024 * 1024 : 64 * 1024 * 1024;
+}
+
 export async function createVM(opts: VMOpts = {}): Promise<VM> {
-  const memLimit = opts.memoryLimitBytes ?? 64 * 1024 * 1024;
+  const memLimit = opts.memoryLimitBytes ?? defaultMemoryLimitBytes();
   const maxMs = opts.maxStatementMs ?? 5000;
 
   const wasmModule = await getWASMModule();
