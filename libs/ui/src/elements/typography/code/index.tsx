@@ -24,7 +24,7 @@ function Code({ block, children, ...props }: CodeProps) {
         borderRadius="$radius-md"
         overflowX="auto"
         color="$foreground"
-        lineHeight={1.625}
+        lineHeight={24}
       >
         <Prim.Text as="code" {...props}>{children}</Prim.Text>
       </Prim.Text>

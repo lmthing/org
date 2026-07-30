@@ -18,7 +18,7 @@ function Label({ compact, required, onMouseDown, children, ...props }: LabelProp
       as="label"
       fontSize={compact ? '$xs' : '$sm'}
       fontWeight="$medium"
-      lineHeight={1}
+      lineHeight={compact ? 12 : 14}
       color="$foreground"
       onMouseDown={(e: React.MouseEvent<HTMLElement>) => {
         onMouseDown?.(e as unknown as React.MouseEvent<HTMLLabelElement>)

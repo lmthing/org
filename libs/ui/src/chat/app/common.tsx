@@ -94,7 +94,7 @@ export function CodeBlock({ code }: { code: string }): React.ReactElement {
     <Prim.Pre
       fontFamily="$mono"
       fontSize="11px"
-      lineHeight={1.625}
+      lineHeight={18}
       whiteSpace="pre-wrap"
       wordWrap="break-word"
       backgroundColor="var(--lm-bg)"

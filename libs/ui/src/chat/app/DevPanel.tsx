@@ -57,7 +57,7 @@ export function DevPanel({ onClose, className, height }: DevPanelProps) {
         <Prim.Text color="var(--lm-text)" fontSize="$xs" fontWeight="$semibold" flexGrow={1} flexShrink={1} flexBasis="0%">DevTools</Prim.Text>
         <Prim.Pressable
           onClick={onClose}
-          color="var(--lm-muted)" fontSize="$base" lineHeight={1} hoverStyle={{ color: "var(--lm-text)" }}
+          color="var(--lm-muted)" fontSize="$base" lineHeight={16} hoverStyle={{ color: "var(--lm-text)" }}
           aria-label="Close DevPanel"
         >
           <Prim.Text>×</Prim.Text>

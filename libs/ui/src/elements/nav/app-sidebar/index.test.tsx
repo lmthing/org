@@ -66,7 +66,8 @@ describe('AppSidebar — the translated `.app-sidebar*` rules', () => {
 
   it('the brand mark is the heading face, and the rail variant only tightens leading', () => {
     expect(S.BRAND).toEqual({ fontFamily: '$heading', fontWeight: '$bold', fontSize: '$base' })
-    expect(S.RAIL_BRAND).toEqual({ ...S.BRAND, lineHeight: 1 })
+    // 16px = the `$base` font size, i.e. no extra leading. A bare `1` would mean 1 PIXEL here.
+    expect(S.RAIL_BRAND).toEqual({ ...S.BRAND, lineHeight: 16 })
   })
 
   // ── renders ─────────────────────────────────────────────────────────────────────────────────

@@ -57,7 +57,9 @@ const ICON_BTN = {
 const RAIL = { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingVertical: '$3', gap: '$2' } as const
 const RAIL_BTN = { ...ICON_BTN, width: '$8', height: '$8' } as const
 const BRAND = { fontFamily: '$heading', fontWeight: '$bold', fontSize: '$base' } as const
-const RAIL_BRAND = { ...BRAND, lineHeight: 1 } as const
+// 16 = the `$base` font size, i.e. "no extra leading". NOT `1`: Tamagui appends `px`, so a ratio
+// becomes a 1px line box. See lineHeight.test.tsx.
+const RAIL_BRAND = { ...BRAND, lineHeight: 16 } as const
 
 const HEADER = {
   display: 'flex',

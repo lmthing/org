@@ -226,8 +226,12 @@ export function Message({ block }: MessageProps) {
                 ))}
               </Prim.Col>
             )}
+            {/* lineHeight is a NUMBER OF PIXELS, never a ratio: Tamagui appends `px` to whatever
+                number it is given, so the `leading-relaxed` idiom (`lineHeight={1.625}`) compiled to
+                `line-height: 1.625px` and every wrapped line of a message was painted on top of the
+                one before it. 24 ≈ 1.7 × the 14px `$sm` text. See lineHeight.test.tsx. */}
             {block.content && (
-              <Prim.Box backgroundColor="$muted" color="$foreground" borderRadius="$radius-xl" borderTopRightRadius="$radius-sm" paddingHorizontal="$4" paddingVertical="$2.5" fontSize="$sm" lineHeight={1.625} whiteSpace="pre-wrap">
+              <Prim.Box backgroundColor="$muted" color="$foreground" borderRadius="$radius-xl" borderTopRightRadius="$radius-sm" paddingHorizontal="$4" paddingVertical="$2.5" fontSize="$sm" lineHeight={24} whiteSpace="pre-wrap">
                 <Prim.Text>{block.content}</Prim.Text>
               </Prim.Box>
             )}
