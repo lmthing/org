@@ -82,9 +82,64 @@ export const TextField = React.forwardRef<any, TextFieldProps>((props, ref) => (
 TextField.displayName = 'TextField'
 
 export type TextAreaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement>
-export const TextArea = React.forwardRef<any, TextAreaProps>((props, ref) => (
-  <NativeTextInput ref={ref} multiline {...controlProps(props as Record<string, any>)} />
-))
+
+/**
+ * Auto-grows with its content, which `multiline` alone does NOT do.
+ *
+ * A web `<textarea>` is resized by its caller measuring `scrollHeight` — see `Composer`'s
+ * `adjustHeight`, which deliberately bails when there is no `.style` to write to, on the belief
+ * that "native gets its auto-grow from `multiline`". It does not. An RN `TextInput` keeps whatever
+ * height the layout gives it and SCROLLS its content, so a message longer than one line put its
+ * own beginning out of reach, with the top line sliced in half by the box edge.
+ *
+ * The height therefore has to come from `onContentSizeChange`, which is the only thing that knows
+ * how tall the wrapped text actually is. It stays inside this primitive rather than in the surface
+ * because the surface is shared: `Composer` cannot ask "am I on a phone?" without becoming two
+ * components. A caller's `maxHeight` still caps the result — Yoga clamps the height we set — so
+ * "grows up to a point" needs no cooperation here.
+ */
+export const TextArea = React.forwardRef<any, TextAreaProps>((props, ref) => {
+  const [contentHeight, setContentHeight] = React.useState<number | undefined>(undefined)
+  // Destructured OUT: it is ours, not a TextInput prop, and an RN host silently swallows unknown
+  // props — forwarding it would be invisible rather than an error.
+  const { value, onContentHeight, ...rest } = props as {
+    value?: string
+    onContentHeight?: (height: number) => void
+  }
+
+  // Back to one line when the caller clears the box (sending). Without this the composer keeps the
+  // height of the message that was just sent, with nothing in it.
+  React.useEffect(() => {
+    if (!value) {
+      setContentHeight(undefined)
+      onContentHeight?.(0)
+    }
+  }, [value, onContentHeight])
+
+  return (
+    <NativeTextInput
+      ref={ref}
+      multiline
+      // Android vertically centres a single line in a taller box by default, which makes the text
+      // drift downward as the box grows. Top is what a composer wants at every height.
+      textAlignVertical="top"
+      // Android reserves room above and below the glyphs for the font's ascender/descender on top
+      // of any padding. Once a caller sets `padding: 0` to get a compact box, that reservation is
+      // the difference between the line fitting and not — the PLACEHOLDER was pushed out of the
+      // visible box entirely and the field looked empty of everything, including its own prompt.
+      includeFontPadding={false}
+      {...controlProps({ ...rest, value } as Record<string, any>)}
+      onContentSizeChange={(e: { nativeEvent: { contentSize: { height: number } } }) => {
+        const h = e.nativeEvent.contentSize.height
+        // Only on a real change: `setState` with the same number is a no-op for React, but the
+        // event fires on every keystroke and this keeps that explicit.
+        setContentHeight((prev) => (prev === h ? prev : h))
+        onContentHeight?.(h)
+      }}
+      {...(contentHeight !== undefined ? { height: contentHeight } : {})}
+    />
+  )
+})
 TextArea.displayName = 'TextArea'
 
 export type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement>

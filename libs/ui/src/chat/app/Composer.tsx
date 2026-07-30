@@ -1,5 +1,6 @@
 import * as Prim from '../../elements/primitives/index';
 import React from 'react';
+import { isWeb } from '@tamagui/core';
 import { cn } from '../lib/cn';
 import { useStore } from '../store/store';
 import type { UploadedAttachment } from '../store/model';
@@ -47,6 +48,15 @@ const ATTACH_ACCEPT = [
   '.md,.csv,.tsv,.docx,.pptx,.xlsx,.xls,.odt,.odp,.ods',
 ].join(',');
 
+/**
+ * Above this measured content height the composer is treated as more than one line.
+ *
+ * A hair over the 20px line box rather than exactly it: a single line measures a pixel or two
+ * taller than its `lineHeight` once the font's ascender/descender are counted, and a composer that
+ * re-laid itself out on the first keystroke would be worse than one that never did.
+ */
+const ONE_LINE = 28;
+
 export function Composer({ onSend, projectId, className, disabled }: ComposerProps) {
   const mode = useStore((s) => s.mode);
   const budgetBlocked = useStore((s) => s.budgetBlocked);
@@ -59,6 +69,9 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const [filteredCompletions, setFilteredCompletions] = React.useState<string[]>([]);
   const [recording, setRecording] = React.useState(false);
+  // Drives the one-line/stacked switch. Fed by `adjustHeight` on web and by `Prim.TextArea`'s
+  // `onContentHeight` on native — see `stacked` below.
+  const [contentHeight, setContentHeight] = React.useState(0);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const mediaRef = React.useRef<HTMLInputElement>(null);
   const dropdownRef = React.useRef<HTMLUListElement>(null);
@@ -95,13 +108,22 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
    * `CSSStyleDeclaration`, and on native the ref holds a React Native `TextInput` instance that has
    * no `style` object to assign to — an unguarded write is "Cannot set property 'height' of
    * undefined" on the FIRST keystroke, which took the composer down as soon as anything was typed.
-   * Native gets its auto-grow from `multiline`, so bailing out here is the whole native behaviour.
+   *
+   * Bailing is still right on native, but NOT because nothing is needed there: `multiline` alone
+   * does not auto-grow an RN `TextInput`. That target measures itself through
+   * `onContentSizeChange` inside `Prim.TextArea` (`elements/primitives/controls.native.tsx`), so
+   * the behaviour is the same on both and neither is expressed here.
    */
   const adjustHeight = () => {
     const el = textareaRef.current;
     if (!el?.style) return;
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 180) + 'px';
+    // Read BEFORE clamping: `scrollHeight` is the height the content wants, which is what decides
+    // whether this is still one line. Reading the clamped `style.height` back would cap the signal
+    // at `maxHeight` and the layout would stop switching exactly when it matters most.
+    const wanted = el.scrollHeight;
+    el.style.height = Math.min(wanted, 180) + 'px';
+    setContentHeight(wanted);
   };
 
   const handleSend = () => {
@@ -112,6 +134,9 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
     setAttachments([]);
     setAttachError(null);
     setDropdownOpen(false);
+    // Back to the one-line arrangement — without this the box keeps the stacked layout of the
+    // message that was just sent, with nothing in it.
+    setContentHeight(0);
     if (textareaRef.current?.style) textareaRef.current.style.height = 'auto';
   };
 
@@ -278,6 +303,113 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
     );
   }
 
+
+  /**
+   * One line: `[+] [text] [mic] [send]`. More than one: the text takes the FULL width and the
+   * controls move to a row underneath it, pinned to the bottom of the box.
+   *
+   * Flex wrapping cannot express this — Yoga wraps on width, and the field's width never changes,
+   * only its height — so the switch is driven by the measured content height. Both targets report
+   * it: the web textarea through `scrollHeight` in {@link adjustHeight}, the native input through
+   * `onContentSizeChange` inside `Prim.TextArea`.
+   *
+   * ## Why this LATCHES rather than tracking the measurement
+   *
+   * The two states change the field's WIDTH, and the measurement depends on that width. Read
+   * naively (`contentHeight > ONE_LINE`) the composer oscillates: wrapping stacks it, stacking
+   * hands the field the full width, at which point the same text fits in one line again, which
+   * unstacks it, which narrows the field, which wraps it. That is an infinite re-render — and
+   * because each pass remounts the input, it also EATS KEYSTROKES: every character typed threw
+   * focus away.
+   *
+   * So growing past a line latches it on, and only an empty box turns it off. Emptying is the one
+   * transition where the answer cannot depend on the width, so it is the one that cannot lie.
+   */
+  const [stacked, setStacked] = React.useState(false);
+  React.useEffect(() => {
+    if (contentHeight > ONE_LINE) setStacked(true);
+  }, [contentHeight]);
+  React.useEffect(() => {
+    if (!text) setStacked(false);
+  }, [text]);
+
+  const plusButton = (
+    /* A PLUS, not a paperclip. A clip means "a file is stapled to this", which undersells what the
+       picker takes — a photo, a voice note, a spreadsheet — and reads as the narrowest of those on
+       a surface where most attachments are not documents.
+
+       A `$7` square, the same box as send. It was a bare 16px glyph with `padding: $1` pulled back
+       out by `margin: -0.25rem`, which made the gap either side of it unlike every other gap in the
+       row and its tap target smaller than the button beside it. */
+    <Prim.Text as="label"
+      key="attach"
+      {...(attaching || isDisabled ? { opacity: 0.5, pointerEvents: 'none' as const } : {})} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} width="$7" height="$7" borderRadius="$radius-lg" display="flex" alignItems="center" justifyContent="center" color="$muted-foreground" cursor="pointer" hoverStyle={{ color: "$foreground" }}
+      title="Add an image, audio, or file to your message"
+    >
+      <Prim.Svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><Prim.Line x1="12" y1="5" x2="12" y2="19" /><Prim.Line x1="5" y1="12" x2="19" y2="12" /></Prim.Svg>
+      <Prim.TextField ref={mediaRef} type="file" accept={ATTACH_ACCEPT} multiple display="none" data-testid="attach-input" onChange={(e) => void handleMedia(e)} />
+    </Prim.Text>
+  );
+
+  const field = (
+    <Prim.TextArea
+      key="field"
+      ref={textareaRef}
+      value={text}
+      onChange={handleChange}
+      onKeyDown={handleKeyDown}
+      disabled={isDisabled}
+      rows={1}
+      placeholder={budgetBlocked ? 'Budget reached — try again after it resets' : 'Message THING…'}
+      data-testid="message-input"
+      // Native only, and passed conditionally because the web `TextArea` is a Tamagui component
+      // over a real `<textarea>` — an unknown prop would reach the DOM. Web has no need of it:
+      // `adjustHeight` already measures there.
+      {...(isWeb ? {} : { onContentHeight: setContentHeight })}
+      // `padding: 0` is what actually makes the box short. An RN `TextInput` carries its own
+      // platform padding — several dp top and bottom on Android — which stacked on the row's and
+      // made the composer half again as tall as its tallest child needs. A web textarea has none,
+      // so the same value is a no-op there rather than a second rule.
+      padding={0}
+      flexGrow={1} flexShrink={1} flexBasis="0%" backgroundColor="transparent" color="$foreground" placeholderTextColor="$muted-foreground" fontSize="$sm" resize="none" minHeight={24} maxHeight={180} lineHeight="$sm" focusStyle={{ outlineWidth: 0, outlineStyle: "none" }} disabledStyle={{ opacity: 0.5 }}
+    />
+  );
+
+  const micButton = (
+    /* Beside SEND rather than beside the plus: both are ways of committing a message — one typed,
+       one spoken — where the plus adds something to the draft you are still writing. Grouping by
+       what a control does to the draft also puts the two a thumb reaches for on the side it
+       reaches from. */
+    <Prim.Pressable
+      key="mic"
+      type="button"
+      onClick={() => void toggleRecord()}
+      disabled={(isDisabled || attaching) && !recording}
+      className={recording ? 'animate-pulse' : undefined} {...(recording ? { color: '$destructive' } : { color: '$muted-foreground', hoverStyle: { color: '$foreground' } })} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} width="$7" height="$7" borderRadius="$radius-lg" display="flex" alignItems="center" justifyContent="center" disabledStyle={{ opacity: 0.5 }}
+      title={recording ? 'Stop recording' : 'Record a voice message'}
+      aria-label={recording ? 'Stop recording' : 'Record a voice message'}
+      data-testid="mic-button"
+    >
+      {recording ? (
+        <Prim.Svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><Prim.Rect x="6" y="6" width="12" height="12" rx="2" /></Prim.Svg>
+      ) : (
+        <Prim.Svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><Prim.Path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z" /><Prim.Path d="M19 10v2a7 7 0 0 1-14 0v-2" /><Prim.Line x1="12" y1="19" x2="12" y2="23" /><Prim.Line x1="8" y1="23" x2="16" y2="23" /></Prim.Svg>
+      )}
+    </Prim.Pressable>
+  );
+
+  const sendButton = (
+    <Prim.Pressable
+      key="send"
+      onClick={handleSend}
+      disabled={isDisabled || attaching || (!text.trim() && attachments.length === 0)}
+      transition="quick" flexShrink={0} width="$7" height="$7" borderRadius="$radius-lg" backgroundColor="$primary" color="$primary-foreground" alignItems="center" justifyContent="center" disabledStyle={{ opacity: 0.4 }} hoverStyle={{ opacity: 0.9 }} display="flex"
+      aria-label="Send message"
+    >
+      <Prim.Svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><Prim.Path d="m3 3 3 9-3 9 19-9Z"/></Prim.Svg>
+    </Prim.Pressable>
+  );
+
   return (
     <Prim.Box className={className} paddingHorizontal="$4" paddingBottom="$4" paddingTop="$2">
       {/* Staged attachments */}
@@ -315,13 +447,12 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
         </Prim.Row>
       )}
 
-      {/* `alignItems: center`, not `flex-end`. Bottom-aligning the controls against the textarea
-          depends on a web textarea's line box lining up with a 28px button, which it does not do on
-          native — the paperclip, the mic, the placeholder and the send button each sat at a
-          different height. Centring is the same answer on both targets and is what the single-line
-          case (almost always) wants; `maxHeight` caps the growth so a long draft still cannot push
-          the buttons far from the text. */}
-      <Prim.Row transition="quick" animateOnly={["box-shadow"]} position="relative" gap="$2" backgroundColor="$card" borderWidth={1} borderColor="$border" borderRadius="$radius-xl" paddingHorizontal="$4" paddingVertical="$3" shadowColor="rgba(0,0,0,0.05)" shadowOffset={{ width: 0, height: 1 }} shadowRadius={2} focusWithinStyle={{ outlineWidth: 2, outlineStyle: "solid", outlineColor: "$ring" }} alignItems="center">
+      <Prim.Box
+        transition="quick" animateOnly={["box-shadow"]} position="relative" backgroundColor="$card" borderWidth={1} borderColor="$border" borderRadius="$radius-xl" paddingHorizontal="$3" paddingVertical="$2" shadowColor="rgba(0,0,0,0.05)" shadowOffset={{ width: 0, height: 1 }} shadowRadius={2} focusWithinStyle={{ outlineWidth: 2, outlineStyle: "solid", outlineColor: "$ring" }}
+        display="flex"
+        flexDirection="column"
+        gap="$2"
+      >
         {/* Dropdown */}
         {dropdownOpen && (
           <Prim.List ref={dropdownRef} position="absolute" bottom="100%" left="$4" maxHeight="$60" overflow="auto" backgroundColor="$popover" color="$popover-foreground" borderWidth={1} borderColor="$border" borderRadius="$radius-md" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 10 }} shadowRadius={15} zIndex={50} minWidth="200px" fontSize="$sm" paddingVertical="$1" marginBottom="0.5rem">
@@ -344,69 +475,27 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           </Prim.List>
         )}
 
-        {/* Add image / audio / file to the message.
-
-            A PLUS, not a paperclip. A clip means "a file is stapled to this", which undersells what
-            this actually takes — a photo, a voice note, a spreadsheet — and reads as the narrower
-            of the two on a surface where most attachments are not documents. A plus is the "add
-            something" affordance every messaging app on a phone puts in this corner.
-
-            Sized as a `$7` square, the same box as the send button. It used to be a bare 16px glyph
-            with `padding: $1` pulled back out by `margin: -0.25rem`, which made the gap either side
-            of it different from every other gap in the row, and gave it a tap target smaller than
-            the thing it sits next to. */}
-        <Prim.Text as="label"
-          {...(attaching || isDisabled ? { opacity: 0.5, pointerEvents: 'none' as const } : {})} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} width="$7" height="$7" borderRadius="$radius-lg" display="flex" alignItems="center" justifyContent="center" color="$muted-foreground" cursor="pointer" hoverStyle={{ color: "$foreground" }}
-          title="Add an image, audio, or file to your message"
-        >
-          <Prim.Svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><Prim.Line x1="12" y1="5" x2="12" y2="19" /><Prim.Line x1="5" y1="12" x2="19" y2="12" /></Prim.Svg>
-          <Prim.TextField ref={mediaRef} type="file" accept={ATTACH_ACCEPT} multiple display="none" data-testid="attach-input" onChange={(e) => void handleMedia(e)} />
-        </Prim.Text>
-
-        {/* Textarea */}
-        <Prim.TextArea
-          ref={textareaRef}
-          value={text}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          disabled={isDisabled}
-          rows={1}
-          placeholder={budgetBlocked ? 'Budget reached — try again after it resets' : 'Message THING…'}
-          data-testid="message-input"
-          flexGrow={1} flexShrink={1} flexBasis="0%" backgroundColor="transparent" color="$foreground" placeholderTextColor="$muted-foreground" fontSize="$sm" resize="none" minHeight={24} maxHeight={180} lineHeight="$sm" focusStyle={{ outlineWidth: 0, outlineStyle: "none" }} disabledStyle={{ opacity: 0.5 }}
-        />
-
-        {/* Voice: record → transcribe → stage as an attachment (talk to THING).
-            Beside SEND rather than beside the paperclip: both are ways of committing a message —
-            one typed, one spoken — where the paperclip adds something to the message you are still
-            writing. Grouping by what the control does to the draft also puts the two the thumb
-            reaches for on the side it reaches from. */}
-        <Prim.Pressable
-          type="button"
-          onClick={() => void toggleRecord()}
-          disabled={(isDisabled || attaching) && !recording}
-          className={recording ? 'animate-pulse' : undefined} {...(recording ? { color: '$destructive' } : { color: '$muted-foreground', hoverStyle: { color: '$foreground' } })} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} width="$7" height="$7" borderRadius="$radius-lg" display="flex" alignItems="center" justifyContent="center" disabledStyle={{ opacity: 0.5 }}
-          title={recording ? 'Stop recording' : 'Record a voice message'}
-          aria-label={recording ? 'Stop recording' : 'Record a voice message'}
-          data-testid="mic-button"
-        >
-          {recording ? (
-            <Prim.Svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><Prim.Rect x="6" y="6" width="12" height="12" rx="2" /></Prim.Svg>
-          ) : (
-            <Prim.Svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><Prim.Path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z" /><Prim.Path d="M19 10v2a7 7 0 0 1-14 0v-2" /><Prim.Line x1="12" y1="19" x2="12" y2="23" /><Prim.Line x1="8" y1="23" x2="16" y2="23" /></Prim.Svg>
-          )}
-        </Prim.Pressable>
-
-        {/* Send */}
-        <Prim.Pressable
-          onClick={handleSend}
-          disabled={isDisabled || attaching || (!text.trim() && attachments.length === 0)}
-          transition="quick" flexShrink={0} width="$7" height="$7" borderRadius="$radius-lg" backgroundColor="$primary" color="$primary-foreground" alignItems="center" justifyContent="center" disabledStyle={{ opacity: 0.4 }} hoverStyle={{ opacity: 0.9 }} display="flex"
-          aria-label="Send message"
-        >
-          <Prim.Svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><Prim.Path d="m3 3 3 9-3 9 19-9Z"/></Prim.Svg>
-        </Prim.Pressable>
-      </Prim.Row>
+        {stacked ? (
+          <>
+            {field}
+            <Prim.Row alignItems="center" gap="$2">
+              {plusButton}
+              {/* Pushes the mic and send to the far edge, so the two sides keep the positions they
+                  hold in the one-line arrangement instead of bunching up on the left. */}
+              <Prim.Box flexGrow={1} flexShrink={1} />
+              {micButton}
+              {sendButton}
+            </Prim.Row>
+          </>
+        ) : (
+          <Prim.Row alignItems="center" gap="$2">
+            {plusButton}
+            {field}
+            {micButton}
+            {sendButton}
+          </Prim.Row>
+        )}
+      </Prim.Box>
       <BudgetWindows />
     </Prim.Box>
   );

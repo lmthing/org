@@ -15,6 +15,9 @@
  */
 import * as React from 'react'
 import { Linking } from 'react-native'
+import { act } from 'react-test-renderer'
+import { TamaguiProvider } from '@tamagui/core'
+import { tamaguiConfig } from '../../src/theme/tamagui.config'
 import { test, expect } from '../harness'
 import {
   render,
@@ -128,6 +131,42 @@ test('Form mounts a native view (there is no <form> on native)', () => {
 test('TextField mounts a text input; TextArea is the multiline one', () => {
   expect(findTextInput(render(<TextField />).tree)).toBeTruthy()
   expect(findTextInput(render(<TextArea />).tree)?.props.multiline).toBe(true)
+})
+
+test('TextArea GROWS with its content — `multiline` alone does not', () => {
+  // The chat composer resizes a web <textarea> by measuring `scrollHeight`, and bailed on native
+  // "because multiline handles it". It does not: an RN TextInput keeps the height the layout gave
+  // it and scrolls, so a two-line message hid its own first line behind the box edge. The height
+  // has to come from onContentSizeChange, which is what this pins.
+  const { tree, current } = render(<TextArea value="two lines" maxHeight={180} />)
+  expect(flattenStyle(findTextInput(tree)?.props?.style).height).toBe(undefined)
+
+  act(() => {
+    findTextInput(tree)?.props?.onContentSizeChange?.({ nativeEvent: { contentSize: { height: 44 } } })
+  })
+  expect(flattenStyle(findTextInput(current())?.props?.style).height).toBe(44)
+})
+
+test('TextArea drops back to one line when the caller clears it', () => {
+  // Sending empties the box. Without the reset it keeps the height of the message just sent, so
+  // the composer sits three lines tall with nothing in it.
+  function Harness({ value }: { value: string }) {
+    return <TextArea value={value} />
+  }
+  const { renderer, tree, current } = render(<Harness value="a long message" />)
+  act(() => {
+    findTextInput(tree)?.props?.onContentSizeChange?.({ nativeEvent: { contentSize: { height: 60 } } })
+  })
+  expect(flattenStyle(findTextInput(current())?.props?.style).height).toBe(60)
+
+  act(() => {
+    renderer.update(
+      <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
+        <Harness value="" />
+      </TamaguiProvider>,
+    )
+  })
+  expect(flattenStyle(findTextInput(current())?.props?.style).height).toBe(undefined)
 })
 
 test('TextField forwards Tamagui style props to the native input', () => {
