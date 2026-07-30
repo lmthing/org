@@ -19,9 +19,37 @@
  */
 
 import * as React from 'react'
+import { useTheme } from '@tamagui/core'
 import * as Prim from '../elements/primitives/index'
 import { ICON_NAMES, type IconName, type Tone } from './types'
 import { toneTokens } from './format'
+
+/**
+ * Resolve a `$token` colour to a concrete value, because **only web can resolve one itself.**
+ *
+ * `Prim.Svg` is a styled Tamagui component on web, so `stroke="$foreground"` becomes a CSS var and
+ * works. On native `elements/primitives/svg.native.tsx` is a **bare re-export of
+ * `react-native-svg`** — deliberately, so inline icons need no surface edits — and RNSVG has no
+ * token layer: it parses the string as a colour, fails, and draws NOTHING. Measured on the emulator
+ * against the first model-built app: 25× `"$foreground" is not a valid color or brush` from RNSVG's
+ * `extractBrush`, and every toned icon silently missing — the `check` glyphs on each row action
+ * existed as `PathView` nodes and painted nothing. Only untoned icons survived, because
+ * `'currentColor'` happens to be valid in RNSVG too.
+ *
+ * Resolving here rather than in a `.native.tsx` fork of this file is deliberate: a fork would
+ * duplicate the 32-glyph path table, which this module exists to keep in one place. A resolved
+ * `rgb()`/hex is valid on BOTH targets, so one code path serves both.
+ *
+ * A token that is not in the theme falls back to `currentColor` — valid on both targets — never to
+ * the unresolved `$name`, which is the failure being fixed.
+ */
+function useColorValue(color: string): string {
+  const theme = useTheme()
+  if (!color.startsWith('$')) return color
+  const entry = (theme as unknown as Record<string, { get?: () => unknown } | undefined>)[color.slice(1)]
+  const value = entry && typeof entry.get === 'function' ? entry.get() : undefined
+  return typeof value === 'string' && value !== '' ? value : 'currentColor'
+}
 
 /** The three sizes a spec may name, in px. */
 export const ICON_SIZES = { sm: 14, md: 16, lg: 20 } as const
@@ -46,13 +74,14 @@ function Glyph({
   color: string
   children: React.ReactNode
 }) {
+  const stroke = useColorValue(color)
   return (
     <Prim.Svg
       width={size}
       height={size}
       viewBox="0 0 24 24"
       fill="none"
-      stroke={color}
+      stroke={stroke}
       strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -151,7 +180,9 @@ export function ViewIcon({ name, size = 'md', tone, color }: ViewIconProps): Rea
 
 /** A star, filled or hollow — the one glyph `rating` needs in two states. */
 export function StarGlyph({ filled, size = 16, color }: { filled: boolean; size?: number; color?: string }) {
-  const stroke = color ?? '$warning'
+  // Resolved for the same reason as {@link Glyph}: `$warning` reaches react-native-svg verbatim and
+  // draws nothing, so every star in a `rating` element was invisible on a phone.
+  const stroke = useColorValue(color ?? '$warning')
   return (
     <Prim.Svg
       width={size}

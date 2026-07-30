@@ -113,6 +113,23 @@ describe('route helpers', () => {
     expect(matchesPrefix('trips/[tripId]', 'homes/h1/expenses')).toBe(false)
   })
 
+  it('a parameterised subnav does NOT capture a STATIC sibling route', () => {
+    // Seen live on the emulator: `plants/new` drew the DETAIL page's subnav, because `[id]` accepts
+    // any non-empty segment and `new` is one. Its "Details" pill then navigated to the literal
+    // `plants/[id]` with no params, onto a page whose every query was unresolvable.
+    const shell: ShellSpec = {
+      subnav: [{ match: 'plants/[id]', items: [{ route: 'plants/[id]', label: 'Details' }] }],
+    }
+    const routes = ['index', 'plants', 'plants/[id]', 'plants/new']
+
+    // `new` is a declared static route, so it owns the path and the parameter yields.
+    expect(subnavFor(shell, 'plants/new', {}, routes)).toBeUndefined()
+    // A real id is not a declared route, so the subnav still applies — the feature must survive.
+    expect(subnavFor(shell, 'plants/p1', { id: 'p1' }, routes)?.items).toHaveLength(1)
+    // matchesPrefix itself is unchanged: it is a shape test and still answers `true` for both.
+    expect(matchesPrefix('plants/[id]', 'plants/new')).toBe(true)
+  })
+
   it('paramsFromRoute recovers the parameter values from the live route', () => {
     expect(paramsFromRoute('trips/[tripId]', 'trips/t7/expenses')).toEqual({ tripId: 't7' })
   })

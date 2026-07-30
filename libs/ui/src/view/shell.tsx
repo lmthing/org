@@ -217,9 +217,11 @@ export function subnavFor(
   shell: ShellSpec | undefined,
   routePath: string,
   params: Record<string, string>,
+  routes: Route[] = [],
 ): { spec: SubnavSpec; items: { label: string; route: string; icon?: string; badge?: NavBadge }[] } | undefined {
   for (const spec of shell?.subnav ?? []) {
     if (!matchesPrefix(spec.match, routePath)) continue
+    if (capturesAStaticSibling(spec.match, routePath, routes)) continue
     const entries: NavEntry[] = spec.groups?.length
       ? spec.groups.flatMap((group) => group.items)
       : (spec.items ?? [])
@@ -242,6 +244,29 @@ export function matchesPrefix(match: string, route: string): boolean {
   const r = route.split('/')
   if (r.length < m.length) return false
   return m.every((seg, i) => (seg.startsWith('[') ? r[i] !== undefined && r[i] !== '' : seg === r[i]))
+}
+
+/**
+ * **A static route always beats a parameter** — the rule {@link matchesPrefix} alone cannot apply.
+ *
+ * `matchesPrefix` compares segment SHAPES, so `plants/[id]` matches `plants/new` just as happily as
+ * `plants/p1`: `[id]` accepts any non-empty segment, and `new` is non-empty. Seen live on the
+ * emulator — the `plants/new` page drew the *detail* page's subnav, whose "Details" pill navigated
+ * to the literal path `plants/[id]` with no params, landing on a page whose every query was
+ * unresolvable. `apps/mobile/src/app-views.ts#resolveRoute` already encodes this rule for route
+ * RESOLUTION; the shell's prefix match had no equivalent.
+ *
+ * Deciding it needs the app's route list, which is why `subnavFor` takes one: if the prefix that
+ * `match` would consume is ITSELF a declared route with no parameters of its own, that route owns
+ * the path and the parameter must not capture it. `plants/new` is declared, so `plants/[id]` yields;
+ * `plants/p1` is not, so it captures as intended. With no routes supplied nothing is suppressed —
+ * the caller that knows the app passes them.
+ */
+function capturesAStaticSibling(match: string, routePath: string, routes: Route[]): boolean {
+  const m = match.split('/')
+  if (!m.some((seg) => seg.startsWith('['))) return false // nothing was captured
+  const prefix = routePath.split('/').slice(0, m.length).join('/')
+  return routes.some((r) => r === prefix && !r.includes('['))
 }
 
 /** Fill a subnav's item routes from the current route's parameter values. */
@@ -345,7 +370,12 @@ export function ViewShell({ shell, routes = [], children }: ViewShellProps): Rea
   const { client, routePath, routeParams } = useViewRuntime()
   const nav = React.useMemo(() => deriveNav(shell, routes), [shell, routes])
   const active = activeDestination(nav.destinations, routePath)
-  const sub = React.useMemo(() => subnavFor(shell, routePath, routeParams), [shell, routePath, routeParams])
+  // `routes` is threaded so a parameterised subnav cannot capture a static sibling — see
+  // `capturesAStaticSibling`. Without it, `plants/new` drew the detail page's bar.
+  const sub = React.useMemo(
+    () => subnavFor(shell, routePath, routeParams, routes),
+    [shell, routePath, routeParams, routes],
+  )
   const [assistantOpen, setAssistantOpen] = React.useState(false)
 
   const placement: ShellPlacement = shell?.placement ?? 'auto'
