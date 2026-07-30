@@ -159,6 +159,48 @@ describe('SessionManager.runHeadless (keyless, mock provider)', () => {
     expect(withGuard).toBeGreaterThan(withoutGuard);
   });
 
+  it('(h) a THREADED turn that displays nothing returns no result — never its own code', async () => {
+    // Case (d) pinned this for `runHeadless`, and the fallback was removed there
+    // because a team channel had posted the agent's own statements into a thread.
+    // It survived in `runHeadlessThreaded` — and a channel is the ONLY caller of
+    // that path, so the fix reached every caller except the one it was written
+    // for. A live run put "ERROR (attempt 3 of 3)" and a TypeScript overload
+    // diagnostic in front of four colleagues.
+    const root = await makeRoot();
+    const silent = createMockStreamFn((opts: StreamOpts) => {
+      const hasAssistant = opts.messages.some((m) => m.role === 'assistant');
+      if (hasAssistant) return '';
+      return `// checking what is already here first\nsetActivity('rebuilding');\nconst step = 1;`;
+    });
+    const manager = new SessionManager({
+      streamFn: silent,
+      lmthingRoot: root,
+      buildSession: (args: BuildSessionArgs) =>
+        new Session(
+          {
+            spaceDir: args.spaceDir,
+            agentSlug: args.agentSlug,
+            modelAlias: 'mock',
+            renderHost: args.renderHost,
+            systemSpaceDirs: [],
+            budget: args.budget,
+          },
+          { streamFn: silent },
+        ),
+    });
+
+    const res = await manager.runHeadlessThreaded({
+      sessionId: 'silent-thread',
+      agentSlug: 'thing',
+      message: 'add a column',
+    });
+    expect(res.ok).toBe(true);
+    expect(res.displays).toEqual([]);
+    expect(res.result, 'no display means no answer — not the source').toBeUndefined();
+    expect(JSON.stringify(res)).not.toContain('setActivity');
+    expect(JSON.stringify(res)).not.toContain('const step');
+  });
+
   it('(f) a THREADED run is recorded in the session ledger, like every other run', async () => {
     // `runHeadlessThreaded` subscribed to the session's tracer for displays but
     // never called `sessionLedger.trackTracer`, which `runHeadless` does. The two

@@ -2192,16 +2192,30 @@ export class SessionManager {
           createdAt,
         });
 
-        const lastDisplay = displays.length ? displays[displays.length - 1] : undefined;
-        let result: unknown = lastDisplay;
-        if (result === undefined && typeof session.getHistory === 'function') {
-          const history = session.getHistory();
-          result = history.length ? history[history.length - 1]?.content : undefined;
-        }
+        // ONLY what the agent displayed — the same rule as `runHeadless`, and for
+        // the same reason: in this runtime the model does not answer in prose, it
+        // WRITES TYPESCRIPT, so the last history entry is the turn's source code.
+        //
+        // The fallback was removed from `runHeadless` precisely because a team
+        // channel posted the agent's own statements — comments, `setActivity(...)`,
+        // a raw `delegate(...)` call — verbatim into the thread. It survived HERE,
+        // and a channel is the one caller that uses this path, so the fix reached
+        // every caller except the one it was written for. A live run put
+        // "ERROR (attempt 3 of 3)" and a TypeScript overload diagnostic in front of
+        // four colleagues.
+        //
+        // `undefined` is the honest result for "it displayed nothing"; the channel
+        // already renders that as a failure rather than as an answer.
+        const result: unknown = displays.length ? displays[displays.length - 1] : undefined;
         emitInternalSignal('session.completed', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId: opts.sessionId, ok: true, durationMs: Date.now() - threadedStartedAt });
+        // Close the ledger record, as `runHeadless` does. Without it every threaded
+        // turn stayed `running` forever, so the ledger could show what a channel
+        // spent but never that it had finished.
+        this.sessionLedger.finalize(opts.sessionId, 'done');
         return { ok: true, result, displays: [...displays], sessionId: opts.sessionId };
       } catch (err) {
         emitInternalSignal('session.completed', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId: opts.sessionId, ok: false, durationMs: Date.now() - threadedStartedAt });
+        this.sessionLedger.finalize(opts.sessionId, 'error');
         return { ok: false, error: err instanceof Error ? err.message : String(err), sessionId: opts.sessionId };
       } finally {
         try {
