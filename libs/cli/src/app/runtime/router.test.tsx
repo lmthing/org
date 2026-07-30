@@ -183,6 +183,45 @@ describe('matchRoutes /pages/ tolerance', () => {
   });
 });
 
+describe('matchRoutes — a static segment beats a parameter, whatever the order', () => {
+  /** The order the `pages/` walk actually produces: `[id]` before `new`. */
+  const routes: RouteEntry[] = [
+    { routePath: '/', Component: (() => null) as unknown as RouteEntry['Component'] },
+    { routePath: '/plants', Component: (() => null) as unknown as RouteEntry['Component'] },
+    { routePath: '/plants/:id', Component: (() => null) as unknown as RouteEntry['Component'] },
+    { routePath: '/plants/new', Component: (() => null) as unknown as RouteEntry['Component'] },
+  ];
+
+  it('does not let /plants/:id swallow /plants/new — the create page was UNREACHABLE', () => {
+    // Found by the render rig: `/plants/new` rendered the DETAIL page, byte-identical screenshot,
+    // even though `plants/new.view.json` is a correct `create` section.
+    const m = matchRoutes(routes, '/plants/new');
+    expect(m?.entry.routePath).toBe('/plants/new');
+    expect(m?.params).toEqual({});
+  });
+
+  it('still matches a real id through the parameter', () => {
+    const m = matchRoutes(routes, '/plants/p1');
+    expect(m?.entry.routePath).toBe('/plants/:id');
+    expect(m?.params).toEqual({ id: 'p1' });
+  });
+
+  it('holds when the static route is declared FIRST too — order must not matter either way', () => {
+    const flipped: RouteEntry[] = [routes[3]!, routes[2]!];
+    expect(matchRoutes(flipped, '/plants/new')?.entry.routePath).toBe('/plants/new');
+    expect(matchRoutes(flipped, '/plants/p1')?.entry.routePath).toBe('/plants/:id');
+  });
+
+  it('prefers the FEWER-parameter route when several match', () => {
+    const table: RouteEntry[] = [
+      { routePath: '/a/:x/:y', Component: (() => null) as unknown as RouteEntry['Component'] },
+      { routePath: '/a/:x/fixed', Component: (() => null) as unknown as RouteEntry['Component'] },
+    ];
+    expect(matchRoutes(table, '/a/1/fixed')?.entry.routePath).toBe('/a/:x/fixed');
+    expect(matchRoutes(table, '/a/1/2')?.entry.routePath).toBe('/a/:x/:y');
+  });
+});
+
 // ── Page error boundary ───────────────────────────────────────────────────────
 // Pages are LLM-authored and bound to a live, drifting database, so one will eventually hit a null
 // it did not expect. Live (scenario 07): the invoices page did `row.vat_rate.toFixed(2)` on a row

@@ -70,24 +70,47 @@ export function stripPagesPrefix(path: string): string {
   return stripped.length > 0 ? stripped : '/';
 }
 
-/** Match a concrete client path against a route table (`:param` → capture). */
+/**
+ * Match a concrete client path against a route table (`:param` → capture).
+ *
+ * **A STATIC SEGMENT BEATS A PARAMETER**, regardless of declaration order. This used to return the
+ * first entry that matched, and the table is built by walking `pages/`, so `/plants/:id` was
+ * registered before `/plants/new` and therefore swallowed it: visiting `/plants/new` rendered the
+ * DETAIL page. Found by the render rig (`scenarios/harness/lib/render-rig.mjs`) on the first
+ * model-built app, whose `plants/new.view.json` is a perfectly good `create` section that no URL
+ * could reach — which also explains the "Nothing to fill in." the page appeared to show: it was
+ * never the create page at all.
+ *
+ * Ranking by parameter COUNT (fewest wins) is the whole rule, and it is the same one
+ * `apps/mobile/src/app-views.ts#resolveRoute` already applies natively — which is why the phone
+ * resolved this correctly while the browser did not. Ties keep declaration order, so nothing else
+ * about the table's semantics changes.
+ */
 export function matchRoutes(routes: RouteEntry[], clientPath: string): RouteMatch | null {
   const reqSegs = splitPath(clientPath);
+  let best: { match: RouteMatch; params: number } | undefined;
   for (const entry of routes) {
     const patSegs = splitPath(entry.routePath);
     if (patSegs.length !== reqSegs.length) continue;
     const params: Record<string, string> = {};
+    let paramCount = 0;
     let ok = true;
     for (let i = 0; i < patSegs.length; i++) {
       const p = patSegs[i];
-      if (p.startsWith(':')) params[p.slice(1)] = decodeURIComponent(reqSegs[i]);
-      else if (p !== reqSegs[i]) {
+      if (p.startsWith(':')) {
+        params[p.slice(1)] = decodeURIComponent(reqSegs[i]);
+        paramCount++;
+      } else if (p !== reqSegs[i]) {
         ok = false;
         break;
       }
     }
-    if (ok) return { entry, params };
+    if (!ok) continue;
+    // A fully static match is maximally specific — nothing can beat it, so stop.
+    if (paramCount === 0) return { entry, params };
+    if (!best || paramCount < best.params) best = { match: { entry, params }, params: paramCount };
   }
+  if (best) return best.match;
   // Fallback AFTER the literal pass (so a genuine route always wins): tolerate a
   // stray `/pages/` prefix on a page-authored link — see {@link stripPagesPrefix}.
   const normalized = stripPagesPrefix(clientPath);
