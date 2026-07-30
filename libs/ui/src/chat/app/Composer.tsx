@@ -344,8 +344,12 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           </Prim.List>
         )}
 
-        {/* Attach image / audio / file to the message — the paperclip is the
-            universal "attach to my message" affordance users reach for first.
+        {/* Add image / audio / file to the message.
+
+            A PLUS, not a paperclip. A clip means "a file is stapled to this", which undersells what
+            this actually takes — a photo, a voice note, a spreadsheet — and reads as the narrower
+            of the two on a surface where most attachments are not documents. A plus is the "add
+            something" affordance every messaging app on a phone puts in this corner.
 
             Sized as a `$7` square, the same box as the send button. It used to be a bare 16px glyph
             with `padding: $1` pulled back out by `margin: -0.25rem`, which made the gap either side
@@ -353,13 +357,30 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
             the thing it sits next to. */}
         <Prim.Text as="label"
           {...(attaching || isDisabled ? { opacity: 0.5, pointerEvents: 'none' as const } : {})} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} width="$7" height="$7" borderRadius="$radius-lg" display="flex" alignItems="center" justifyContent="center" color="$muted-foreground" cursor="pointer" hoverStyle={{ color: "$foreground" }}
-          title="Attach image, audio, or file to your message"
+          title="Add an image, audio, or file to your message"
         >
-          <Prim.Svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><Prim.Path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></Prim.Svg>
+          <Prim.Svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><Prim.Line x1="12" y1="5" x2="12" y2="19" /><Prim.Line x1="5" y1="12" x2="19" y2="12" /></Prim.Svg>
           <Prim.TextField ref={mediaRef} type="file" accept={ATTACH_ACCEPT} multiple display="none" data-testid="attach-input" onChange={(e) => void handleMedia(e)} />
         </Prim.Text>
 
-        {/* Voice: record → transcribe → stage as an attachment (talk to THING) */}
+        {/* Textarea */}
+        <Prim.TextArea
+          ref={textareaRef}
+          value={text}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          disabled={isDisabled}
+          rows={1}
+          placeholder={budgetBlocked ? 'Budget reached — try again after it resets' : 'Message THING…'}
+          data-testid="message-input"
+          flexGrow={1} flexShrink={1} flexBasis="0%" backgroundColor="transparent" color="$foreground" placeholderTextColor="$muted-foreground" fontSize="$sm" resize="none" minHeight={24} maxHeight={180} lineHeight="$sm" focusStyle={{ outlineWidth: 0, outlineStyle: "none" }} disabledStyle={{ opacity: 0.5 }}
+        />
+
+        {/* Voice: record → transcribe → stage as an attachment (talk to THING).
+            Beside SEND rather than beside the paperclip: both are ways of committing a message —
+            one typed, one spoken — where the paperclip adds something to the message you are still
+            writing. Grouping by what the control does to the draft also puts the two the thumb
+            reaches for on the side it reaches from. */}
         <Prim.Pressable
           type="button"
           onClick={() => void toggleRecord()}
@@ -375,19 +396,6 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
             <Prim.Svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><Prim.Path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z" /><Prim.Path d="M19 10v2a7 7 0 0 1-14 0v-2" /><Prim.Line x1="12" y1="19" x2="12" y2="23" /><Prim.Line x1="8" y1="23" x2="16" y2="23" /></Prim.Svg>
           )}
         </Prim.Pressable>
-
-        {/* Textarea */}
-        <Prim.TextArea
-          ref={textareaRef}
-          value={text}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          disabled={isDisabled}
-          rows={1}
-          placeholder={budgetBlocked ? 'Budget reached — try again after it resets' : 'Message THING…'}
-          data-testid="message-input"
-          flexGrow={1} flexShrink={1} flexBasis="0%" backgroundColor="transparent" color="$foreground" placeholderTextColor="$muted-foreground" fontSize="$sm" resize="none" minHeight={24} maxHeight={180} lineHeight="$sm" focusStyle={{ outlineWidth: 0, outlineStyle: "none" }} disabledStyle={{ opacity: 0.5 }}
-        />
 
         {/* Send */}
         <Prim.Pressable
