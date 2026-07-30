@@ -45,8 +45,21 @@ field you renamed, dropped or typed wrong:
 
 ```typescript
 export const name = 'cost-lines';
-export type Input = CostLinesInput;     // global — carries the route [param]s (empty for a plain route)
+export type Input = CostLinesInput;     // global — the route [param]s PLUS the planned body keys
 export type Output = CostLinesOutput;   // global — no import, no path to compute
+```
+
+**`Input` is a REAL typed object on a write endpoint — read its fields directly.** `plan_endpoints`
+declares each write's body in `input`, and `emit_types` turns that into named, typed properties, so
+`input.name` and `input.waterIntervalDays` are already `string` and `number`. Do **not** re-cast it
+(`const body = input as Record<string, unknown>`) and do not hand-check each key's `typeof`: the cast
+throws away exactly the checking that keeps the form, the handler and the table in agreement, and it
+was only ever necessary back when a body had no declared type at all. An optional key (planned with a
+`?`) arrives as `string | undefined`, so a guard THERE is real work; a guard on a required one is not.
+
+```typescript
+await ctx.db.insert('plants', { id: crypto.randomUUID(), name: input.name, room: input.room });  // ✅
+const body = input as Record<string, unknown>;                                                   // ✗
 ```
 
 **The handler MUST be `handler(input: Input, ctx: ApiCtx): Promise<Output>` — NEVER `input: any`, NEVER
@@ -119,7 +132,7 @@ const param = (String(ep.route).match(/\[(\w+)\]/) || [])[1]; // e.g. 'id' for t
 const src = [
   "export const name = '" + name + "';",
   "export const description = '" + String(ep.purpose).replace(/'/g, '') + "';",
-  "export type Input = " + Pascal + "Input;",   // global — carries the route [param]s
+  "export type Input = " + Pascal + "Input;",   // global — route [param]s + the planned body keys
   "export type Output = " + Pascal + "Output;", // global — no import, no path to compute
   "export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {",
   param

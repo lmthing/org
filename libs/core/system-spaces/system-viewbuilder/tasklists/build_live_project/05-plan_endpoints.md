@@ -16,7 +16,7 @@ step — no writers. Plan the endpoints the pages need to read/write the real ro
 endpoint per view the app shows, and enough that every user story's data is reachable. Give each a
 purpose specific enough that the implement step writes the right query against the real columns.
 
-Each endpoint is `{ name, route, purpose, tables, fields }`:
+Each endpoint is `{ name, route, purpose, tables, fields, input? }`:
 - `name` — a UNIQUE lowercase-hyphen id (e.g. `cost-lines`, `contacts-list`, `itinerary-legs`). This
   EXACT string is BOTH the endpoint module's `export const name` AND what pages pass to `useApi(...)`.
   **This is the ONLY node that assigns names; every downstream node uses them verbatim and never
@@ -30,6 +30,22 @@ Each endpoint is `{ name, route, purpose, tables, fields }`:
   a host-run `reconcile_tables` re-checks the contract against what actually reached disk. Do not
   invent a table name and do not re-case one — an endpoint planned against a table that never landed
   ships a handler that builds clean and 500s at runtime.
+- **`input` — REQUIRED on every WRITE endpoint (POST/PUT/PATCH): the EXACT keys of the request BODY,**
+  each as `'key: type'`, exactly like `fields` but describing what the CALLER SENDS rather than what the
+  endpoint answers. Suffix a key with `?` to make it optional (`'lastWatered?: string'`). Omit `input`
+  entirely for a read (GET/DELETE), which carries no body — its arguments are the route's `[param]`s.
+  **Do NOT list route parameters here**; `emit_types` adds those itself.
+
+  This is not bookkeeping — **it is what puts fields in a form.** A `create` section declares no fields
+  of its own by design: the renderer derives every input from this endpoint's Input JSON Schema. So an
+  omitted or empty `input` produces a typeless `Record<string, unknown>`, a schema with no properties,
+  and a page that renders the words **"Nothing to fill in."** above a Save button — measured on the
+  first model-built app, on web and native alike. The form was not broken; nothing had described what
+  it should contain. A write endpoint with no `input` is therefore a planning error, not a shortcut.
+
+  Name the keys the way the FORM should present them and the handler should read them, and type them
+  so the compiler can check the handler: `{ name: 'create-plant', route: 'plants/POST', input: [
+  'name: string', 'room: string', 'waterIntervalDays: number', 'lastWatered?: string' ] }`.
 - `fields` — the EXACT keys of ONE item in the response (`items[0]`), each as `'key: type'`. The TYPE
   half is REQUIRED and binding: a host-run `emit_types` writes these into the project's `.d.ts` BEFORE
   any handler or page is authored, so the compiler — not a later reviewer — is what catches a field

@@ -114,6 +114,19 @@ interface ContractEndpoint {
   purpose?: string;
   tables?: string[];
   fields?: unknown[];
+  /**
+   * A WRITE endpoint's request-body keys, as `'key: type'` — the same convention as `fields`, which
+   * describes the RESPONSE. Optional: a read endpoint takes no body.
+   *
+   * Without this the pipeline could not type a body at all. `Input` was built from route parameters
+   * alone, so every POST/PATCH fell to `Record<string, unknown>`, and the consequences ran all the
+   * way to the screen: the handler had to cast and hand-validate, `generateProjectContracts` emitted
+   * an `inputSchema` with no `properties`, and `SchemaForm` — which derives its fields from exactly
+   * that schema — had nothing to draw. Every `create` page in the first model-built app rendered
+   * **"Nothing to fill in."** above a Save button, on web and on native alike. The form was not
+   * broken; nothing had ever described what it should contain.
+   */
+  input?: unknown[];
 }
 
 /** `plan_view_components.components[]` — `{ name, purpose, props }`, `props` as `'<name>: <type>'`. */
@@ -477,9 +490,34 @@ function renderEndpoints(endpoints: ContractEndpoint[]): string {
     // Every read endpoint answers `{ items: [...] }` — an aggregate is the single summary at
     // `items[0]` (`05-plan_endpoints.md`), so one shape covers both.
     lines.push(`interface ${base}Output { items: ${item.typeName}[]; }`);
+    /**
+     * `Input` = the route's parameters PLUS the declared request body.
+     *
+     * Route params are always `string` (they come out of the path). Body keys carry the type the
+     * plan gave them, and a `?` suffix on the key makes the property optional — which is what lets
+     * `SchemaForm` mark a field not-required rather than demanding every one.
+     *
+     * The `Record<string, unknown>` fallback survives ONLY for an endpoint with neither, which is a
+     * genuine no-argument read. Reaching it for a write is the bug described on
+     * {@link ContractEndpoint.input}: it produces an `inputSchema` with no `properties`, and a
+     * `create` section then renders an empty form.
+     */
+    const bodyFields = (endpoint.input ?? []).map(parseField).filter(Boolean) as ParsedField[];
+    const inputProps = [
+      ...params.map((p) => `  ${propKey(p)}: string;`),
+      ...bodyFields
+        // A route param and a body key of the same name are the same value; the path wins.
+        .filter((f) => !params.includes(f.key.replace(/\?$/, '')))
+        .map((f) => {
+          const optional = f.key.endsWith('?');
+          const key = f.key.replace(/\?$/, '');
+          const type = f.type && f.type.trim() !== '' ? f.type : 'unknown';
+          return `  ${propKey(key)}${optional ? '?' : ''}: ${type};`;
+        }),
+    ];
     lines.push(
-      params.length > 0
-        ? `interface ${base}Input {\n${params.map((p) => `  ${propKey(p)}: string;`).join('\n')}\n}`
+      inputProps.length > 0
+        ? `interface ${base}Input {\n${inputProps.join('\n')}\n}`
         : `type ${base}Input = Record<string, unknown>;`,
     );
     blocks.push(lines.join('\n'));

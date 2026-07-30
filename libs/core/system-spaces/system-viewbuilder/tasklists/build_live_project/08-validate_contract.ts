@@ -56,6 +56,8 @@ interface EndpointSpec {
   route?: string;
   tables?: string[];
   fields?: unknown[];
+  /** A write endpoint's request-body keys, as `'key: type'`. See check (1b). */
+  input?: unknown[];
 }
 interface ComponentSpec {
   name?: string;
@@ -239,6 +241,32 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
       add('plan_endpoints', r, `two endpoints share the route "${r}" — one file path can hold one handler. Give one of them a different route.`);
     }
     seenRoute.add(r);
+  }
+
+  // (1b) A WRITE endpoint with no `input` — the body nothing described.
+  //
+  // A `create` section declares no fields by design: the renderer derives every one from the
+  // endpoint's Input JSON Schema. So an absent `input` is not a missing annotation, it is a form with
+  // no fields — the page renders "Nothing to fill in." above a Save button, and `buildApp`,
+  // `validateAppViews` and `renderSmokeViews` all pass, because the spec and the data are both
+  // perfectly consistent with a body that was never specified. Caught here, at plan time, because
+  // this is the last point where adding it costs one field instead of a re-plan.
+  for (const e of endpoints) {
+    const r = String(e.route ?? '');
+    const method = r.split('/').pop()?.toUpperCase() ?? '';
+    if (method !== 'POST' && method !== 'PUT' && method !== 'PATCH') continue;
+    const body = Array.isArray(e.input) ? e.input.filter((x) => String(x ?? '').trim() !== '') : [];
+    if (body.length > 0) continue;
+    add(
+      'plan_endpoints',
+      String(e.name ?? r),
+      `"${e.name ?? r}" is a ${method} but declares no \`input\` — the request body is undescribed, so ` +
+        `its Input type degrades to \`Record<string, unknown>\` and any \`create\` section pointed at it ` +
+        `renders an EMPTY form ("Nothing to fill in."). Add \`input\` listing the body keys as ` +
+        `'key: type' (\`?\` suffix = optional), e.g. \`input: ['name: string', 'room: string', ` +
+        `'waterIntervalDays: number', 'lastWatered?: string']\`. Route \`[param]\`s do NOT go here — ` +
+        `emit_types adds those.`,
+    );
   }
 
   // (2) An endpoint declaring a table that was never planned. The db surface is dynamically typed,
