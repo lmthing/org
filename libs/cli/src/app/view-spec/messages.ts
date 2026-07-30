@@ -655,6 +655,19 @@ export function shapeErrorToViewError(raw: unknown): ViewError {
       const bad = String(p['tagValue'] ?? e.data ?? '');
       return err('shape', path, at(path, `"${bad}" is not a valid ${tag}.`));
     }
+    case 'discriminantChoice': {
+      const discriminants = (p['discriminants'] as string[] | undefined) ?? [];
+      const present = (p['present'] as string[] | undefined) ?? [];
+      const chosen = present.filter((k) => discriminants.includes(k));
+      const said =
+        chosen.length >= 2
+          ? `"${chosen.join('" and "')}" — pick exactly ONE of these, not several.`
+          : (() => {
+              const bad = present.find((k) => !discriminants.includes(k)) ?? present[0];
+              return bad ? `"${bad}" does not choose one.` : 'this does not choose one.';
+            })();
+      return err('shape', path, at(path, `${said} ${menu('Set exactly one key', discriminants)}`));
+    }
     case 'pattern': {
       const value = typeof e.data === 'string' ? e.data : String(e.data);
       if (value.startsWith('$') || value.includes('{{') || value.includes('${')) {
@@ -697,6 +710,22 @@ const KEYWORD_RANK: Record<string, number> = {
 };
 
 /**
+ * A union where every branch requires exactly one, distinct key — `Action`'s five verbs
+ * (`mutate` / `navigate` / `download` / `print` / `copy`) are the paradigm case. Returns those
+ * keys, or `undefined` when the union is not this shape (a branch has zero or >1 required keys,
+ * or two branches share one — then "none matched" is not actually informative).
+ */
+function discriminantKeysOf(branches: readonly unknown[]): string[] | undefined {
+  const keys: string[] = [];
+  for (const b of branches) {
+    const required = (b as Record<string, unknown> | null)?.['required'];
+    if (!Array.isArray(required) || required.length !== 1) return undefined;
+    keys.push(String(required[0]));
+  }
+  return new Set(keys).size === keys.length ? keys : undefined;
+}
+
+/**
  * Drop the branches of a union the model was NOT writing.
  *
  * `Action` is `oneOf: [{required:['mutate']}, {required:['navigate']}, {required:['download']}, …]`
@@ -709,11 +738,21 @@ const KEYWORD_RANK: Record<string, number> = {
  * The branch the model MEANT is not ambiguous — each branch is keyed by its own discriminant
  * (`mutate` / `navigate` / `download` / `print` / `copy`) and exactly one of those keys is present
  * in the data. Keeping only that branch's errors leaves the sentence that names the actual offence.
- * When two branches' discriminants both match (or none does) nothing is dropped: the union really
- * is ambiguous then, and guessing would hide the real finding.
+ *
+ * TWO more cases, both found live (T3, bucket 2 — the class that never converged): **zero**
+ * discriminants present (`{ endpoint: 'doThing' }`, a key naming none of the five verbs) and
+ * **two or more** present at once (`{ mutate: …, navigate: … }`). Neither is actually ambiguous —
+ * zero is the single clearest case of all, and two-at-once names its own two offending keys — but
+ * both used to fall through untouched and left five *"required"* + N *"not a property"* lines that
+ * directly contradict each other (one line says `mutate` is required, its sibling says `mutate` is
+ * not a property). When the union is a clean one-required-key-per-branch shape
+ * ({@link discriminantKeysOf}), replace the whole pile with ONE synthetic `discriminantChoice`
+ * finding naming the actual offence (the bogus key, or the too-many keys) and the real menu.
  */
 function pruneUnionBranches(raw: readonly unknown[]): readonly unknown[] {
   const drops: { instancePath: string; prefix: string; keep: number }[] = [];
+  const replaced: { instancePath: string; prefix: string }[] = [];
+  const synthesized: VerboseError[] = [];
   for (const e of raw as VerboseError[]) {
     if (e.keyword !== 'oneOf' && e.keyword !== 'anyOf') continue;
     const branches = (e.parentSchema as Record<string, unknown> | undefined)?.[e.keyword];
@@ -728,18 +767,34 @@ function pruneUnionBranches(raw: readonly unknown[]): readonly unknown[] {
         matched.push(i);
       }
     });
-    if (matched.length === 1) drops.push({ instancePath: e.instancePath, prefix: e.schemaPath, keep: matched[0]! });
+    if (matched.length === 1) {
+      drops.push({ instancePath: e.instancePath, prefix: e.schemaPath, keep: matched[0]! });
+      continue;
+    }
+    const discriminants = discriminantKeysOf(branches);
+    if (!discriminants) continue;
+    replaced.push({ instancePath: e.instancePath, prefix: e.schemaPath });
+    synthesized.push({
+      instancePath: e.instancePath,
+      schemaPath: e.schemaPath,
+      keyword: 'discriminantChoice',
+      params: { discriminants, present: [...present] },
+    });
   }
-  if (drops.length === 0) return raw;
-  return (raw as VerboseError[]).filter((e) => {
+  if (drops.length === 0 && replaced.length === 0) return raw;
+  const kept = (raw as VerboseError[]).filter((e) => {
     for (const d of drops) {
       if (!e.instancePath.startsWith(d.instancePath)) continue;
       if (!e.schemaPath.startsWith(`${d.prefix}/`)) continue;
       const branch = /^\/(\d+)(?:\/|$)/.exec(e.schemaPath.slice(d.prefix.length))?.[1];
       if (branch !== undefined && Number(branch) !== d.keep) return false;
     }
+    for (const r of replaced) {
+      if (e.instancePath === r.instancePath && e.schemaPath.startsWith(`${r.prefix}/`)) return false;
+    }
     return true;
   });
+  return [...kept, ...synthesized];
 }
 
 /**

@@ -311,6 +311,41 @@ describe('validateViewSpec — shape errors are menus too', () => {
     const res = check({ route: '/Recipes/', sections: [{ kind: 'list', query: 'listRecipes' }] });
     expect(res.ok).toBe(false);
   });
+
+  it('collapses a five-verb Action union to ONE finding, not five contradictory ones', () => {
+    // T3 live-run bucket 2: `{ endpoint: 'doThing' }` matches none of mutate/navigate/download/
+    // print/copy, so nothing was pruned and the model saw "mutate is required" right next to
+    // "mutate is not a property here" for every one of the five branches.
+    const e = only(page({ kind: 'list', query: 'listRecipes', rowActions: [{ label: 'Go', action: { endpoint: 'doThing' } }] }));
+    expect(e.message).toBe(
+      'sections[0].rowActions[0].action: "endpoint" does not choose one. ' +
+        'Set exactly one key: copy, download, mutate, navigate, print',
+    );
+  });
+
+  it('names the offending key when a matched branch has an extra property (no regression)', () => {
+    const e = only(
+      page({ kind: 'list', query: 'listRecipes', rowActions: [{ label: 'Go', action: { mutate: 'addRecipe', bogus: 1 } }] }),
+    );
+    expect(e.message).toBe(
+      'sections[0].rowActions[0].action: "bogus" is not a property here. ' +
+        'Properties: arg, confirm, input, invalidates, mutate, onSuccess, over',
+    );
+  });
+
+  it('names both verbs, not five branches, when two are set at once', () => {
+    const e = only(
+      page({
+        kind: 'list',
+        query: 'listRecipes',
+        rowActions: [{ label: 'Go', action: { mutate: 'addRecipe', navigate: 'recipes' } }],
+      }),
+    );
+    expect(e.message).toBe(
+      'sections[0].rowActions[0].action: "mutate" and "navigate" — pick exactly ONE of these, not several. ' +
+        'Set exactly one key: copy, download, mutate, navigate, print',
+    );
+  });
 });
 
 describe('validateViewComponent', () => {
