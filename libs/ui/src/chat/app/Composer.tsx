@@ -315,7 +315,13 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
         </Prim.Row>
       )}
 
-      <Prim.Row transition="quick" animateOnly={["box-shadow"]} position="relative" gap="$2" backgroundColor="$card" borderWidth={1} borderColor="$border" borderRadius="$radius-xl" paddingHorizontal="$4" paddingVertical="$3" shadowColor="rgba(0,0,0,0.05)" shadowOffset={{ width: 0, height: 1 }} shadowRadius={2} focusWithinStyle={{ outlineWidth: 2, outlineStyle: "solid", outlineColor: "$ring" }} alignItems="flex-end">
+      {/* `alignItems: center`, not `flex-end`. Bottom-aligning the controls against the textarea
+          depends on a web textarea's line box lining up with a 28px button, which it does not do on
+          native — the paperclip, the mic, the placeholder and the send button each sat at a
+          different height. Centring is the same answer on both targets and is what the single-line
+          case (almost always) wants; `maxHeight` caps the growth so a long draft still cannot push
+          the buttons far from the text. */}
+      <Prim.Row transition="quick" animateOnly={["box-shadow"]} position="relative" gap="$2" backgroundColor="$card" borderWidth={1} borderColor="$border" borderRadius="$radius-xl" paddingHorizontal="$4" paddingVertical="$3" shadowColor="rgba(0,0,0,0.05)" shadowOffset={{ width: 0, height: 1 }} shadowRadius={2} focusWithinStyle={{ outlineWidth: 2, outlineStyle: "solid", outlineColor: "$ring" }} alignItems="center">
         {/* Dropdown */}
         {dropdownOpen && (
           <Prim.List ref={dropdownRef} position="absolute" bottom="100%" left="$4" maxHeight="$60" overflow="auto" backgroundColor="$popover" color="$popover-foreground" borderWidth={1} borderColor="$border" borderRadius="$radius-md" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 10 }} shadowRadius={15} zIndex={50} minWidth="200px" fontSize="$sm" paddingVertical="$1" marginBottom="0.5rem">
@@ -339,11 +345,14 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
         )}
 
         {/* Attach image / audio / file to the message — the paperclip is the
-            universal "attach to my message" affordance users reach for first. */}
+            universal "attach to my message" affordance users reach for first.
+
+            Sized as a `$7` square, the same box as the send button. It used to be a bare 16px glyph
+            with `padding: $1` pulled back out by `margin: -0.25rem`, which made the gap either side
+            of it different from every other gap in the row, and gave it a tap target smaller than
+            the thing it sits next to. */}
         <Prim.Text as="label"
-          margin="-0.25rem"
-          marginBottom="0.125rem"
-          {...(attaching || isDisabled ? { opacity: 0.5, pointerEvents: 'none' as const } : {})} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} padding="$1" color="$muted-foreground" cursor="pointer" hoverStyle={{ color: "$foreground" }}
+          {...(attaching || isDisabled ? { opacity: 0.5, pointerEvents: 'none' as const } : {})} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} width="$7" height="$7" borderRadius="$radius-lg" display="flex" alignItems="center" justifyContent="center" color="$muted-foreground" cursor="pointer" hoverStyle={{ color: "$foreground" }}
           title="Attach image, audio, or file to your message"
         >
           <Prim.Svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><Prim.Path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></Prim.Svg>
@@ -355,8 +364,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           type="button"
           onClick={() => void toggleRecord()}
           disabled={(isDisabled || attaching) && !recording}
-          marginBottom="0.125rem"
-          className={recording ? 'animate-pulse' : undefined} {...(recording ? { color: '$destructive' } : { color: '$muted-foreground', hoverStyle: { color: '$foreground' } })} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} disabledStyle={{ opacity: 0.5 }}
+          className={recording ? 'animate-pulse' : undefined} {...(recording ? { color: '$destructive' } : { color: '$muted-foreground', hoverStyle: { color: '$foreground' } })} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} width="$7" height="$7" borderRadius="$radius-lg" display="flex" alignItems="center" justifyContent="center" disabledStyle={{ opacity: 0.5 }}
           title={recording ? 'Stop recording' : 'Record a voice message'}
           aria-label={recording ? 'Stop recording' : 'Record a voice message'}
           data-testid="mic-button"
@@ -385,7 +393,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
         <Prim.Pressable
           onClick={handleSend}
           disabled={isDisabled || attaching || (!text.trim() && attachments.length === 0)}
-          transition="quick" flexShrink={0} width="$7" height="$7" borderRadius="$radius-lg" backgroundColor="$primary" color="$primary-foreground" alignItems="center" justifyContent="center" disabledStyle={{ opacity: 0.4 }} hoverStyle={{ opacity: 0.9 }} marginBottom="0.125rem" display="flex"
+          transition="quick" flexShrink={0} width="$7" height="$7" borderRadius="$radius-lg" backgroundColor="$primary" color="$primary-foreground" alignItems="center" justifyContent="center" disabledStyle={{ opacity: 0.4 }} hoverStyle={{ opacity: 0.9 }} display="flex"
           aria-label="Send message"
         >
           <Prim.Svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><Prim.Path d="m3 3 3 9-3 9 19-9Z"/></Prim.Svg>
