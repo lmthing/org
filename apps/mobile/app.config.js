@@ -126,6 +126,16 @@ module.exports = {
 
     android: {
       package: 'org.lmthing.mobile',
+      // FCM's sender id and the package's API key, read at BUILD time and compiled in. Without it
+      // `getExpoPushTokenAsync()` has no project to register the device against, takes the `catch`
+      // in `src/push.ts#registerForPush`, and returns null — push looks "not implemented" rather
+      // than unconfigured.
+      //
+      // Committed, on the same reasoning as `certs/certificate.pem`: it is the PUBLIC half. Every
+      // value in it ships inside the APK and is readable from any installed copy, and it is not
+      // what authorises SENDING — that is the service-account key EAS holds, which is not in this
+      // repo. An EAS cloud build also needs the file present in the checkout.
+      googleServicesFile: './google-services.json',
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: MARK_GROUND,

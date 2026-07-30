@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "909062050417",
+    "project_id": "lmthing",
+    "storage_bucket": "lmthing.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:909062050417:android:637cbfa2744bfe81ef01d0",
+        "android_client_info": {
+          "package_name": "org.lmthing.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "909062050417-9ivpqe5uu4f97lbssko6d8j3tst0v2p3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5KkLPlOFW7blGtWskeCG_dME5a5oGUms"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "909062050417-9ivpqe5uu4f97lbssko6d8j3tst0v2p3.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
