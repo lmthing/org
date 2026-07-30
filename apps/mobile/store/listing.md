@@ -64,10 +64,21 @@ is a report button inside the app that files it directly with us.
 | App icon | 512×512 PNG | `store/icon-512.png` |
 | Feature graphic | 1024×500 PNG | `store/feature-graphic.png` |
 | Phone screenshots | 2–8, 9:16, ≥1080px per side for promotion eligibility | `store/phone/` |
-| 7-inch tablet | up to 8, 9:16, 320–3840 | `store/tablet-7/` |
-| 10-inch tablet | up to 8, 9:16, 1080–7680 | `store/tablet-10/` |
+| 7-inch tablet | 4, **16:9 landscape** 1920×1080 (bounds 320–3840) | `store/tablet-7/` |
+| 10-inch tablet | 4, **16:9 landscape** 2560×1440 (bounds 1080–7680) | `store/tablet-10/` |
 
 Video is optional and deliberately not supplied.
+
+The tablet sets are the **same four frames at two resolutions** — captured once at 2560×1440 from the
+real app signed into a real workspace (`lmthing.chat`, headless Chrome at 1280×720 CSS × 2), then
+downscaled for the 7-inch set, so the two sets cannot drift apart:
+
+| # | Shows |
+|---|---|
+| `01-ask-anything` | an empty conversation in a project — what the app offers before you type |
+| `02-plan-a-trip` | THING answering with a researched itinerary and a rail-pass verdict |
+| `03-compare-quotes` | THING comparing two renovation quotes and saying what to ask next |
+| `04-your-projects` | the project switcher — one workspace per thing you are doing |
 
 ## Links
 
