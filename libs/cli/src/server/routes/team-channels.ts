@@ -854,6 +854,12 @@ function renderResult(result: HeadlessRunResult): { text: string; blocks?: unkno
     else prose.push(JSON.stringify(value));
   }
 
-  const text = prose.filter((p) => p.trim()).join('\n\n').trim() || '(no answer)';
+  // A turn that displayed nothing has nothing to post. Say that, rather than
+  // reaching for the turn's own source: what the agent WRITES is TypeScript, so
+  // a "fallback to the last thing it produced" is a fallback to code, and the
+  // channel showed a reader three comment lines and a `setActivity(...)` call.
+  const text =
+    prose.filter((p) => p.trim()).join('\n\n').trim() ||
+    'THING finished without posting an answer.';
   return blocks.length ? { text, blocks } : { text };
 }

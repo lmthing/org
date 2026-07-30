@@ -81,6 +81,43 @@ describe('SessionManager.runHeadless (keyless, mock provider)', () => {
     expect(manager.getSession(res.sessionId)).toBeUndefined();
   });
 
+  it('(d) a turn that displays NOTHING returns no result — never its own code', async () => {
+    // The model does not answer in prose here, it writes TypeScript. `result`
+    // used to fall back to the last history entry, so a turn that displayed
+    // nothing "answered" with its own source — and a team channel posted the
+    // agent's comments and `setActivity(...)` call into the thread as the reply.
+    const root = await makeRoot();
+    const silent = createMockStreamFn((opts: StreamOpts) => {
+      const hasAssistant = opts.messages.some((m) => m.role === 'assistant');
+      if (hasAssistant) return '';
+      return `// checking what is already here first\nconst step = 1;`;
+    });
+    const manager = new SessionManager({
+      streamFn: silent,
+      lmthingRoot: root,
+      buildSession: (args: BuildSessionArgs) =>
+        new Session(
+          {
+            spaceDir: args.spaceDir,
+            agentSlug: args.agentSlug,
+            modelAlias: 'mock',
+            renderHost: args.renderHost,
+            systemSpaceDirs: [],
+            budget: args.budget,
+          },
+          { streamFn: silent },
+        ),
+    });
+
+    const res = await manager.runHeadless({ agentSlug: 'thing', message: 'build me something' });
+    expect(res.ok).toBe(true);
+    expect(res.displays).toEqual([]);
+    expect(res.result).toBeUndefined();
+    // The specific regression: no shape of the answer may carry the source.
+    expect(JSON.stringify(res)).not.toContain('setActivity');
+    expect(JSON.stringify(res)).not.toContain('const step');
+  });
+
   it('(b) surfaces { ok:false, error } when the run throws', async () => {
     const root = await makeRoot();
     const manager = new SessionManager({

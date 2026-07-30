@@ -1885,12 +1885,17 @@ export class SessionManager {
 
       await session.start(opts.message);
 
-      const lastDisplay = displays.length ? displays[displays.length - 1] : undefined;
-      let result: unknown = lastDisplay;
-      if (result === undefined && typeof session.getHistory === 'function') {
-        const history = session.getHistory();
-        result = history.length ? history[history.length - 1]?.content : undefined;
-      }
+      // ONLY what the agent displayed. There is deliberately no fallback to the
+      // last history entry: in this runtime the model does not answer in prose,
+      // it WRITES TYPESCRIPT, so that entry is the turn's source code. Falling
+      // back to it meant a turn that displayed nothing "answered" with the
+      // agent's own statements — comments, `setActivity(...)` and all — which is
+      // what a team channel posted verbatim into the thread.
+      //
+      // `undefined` is the honest result for "it displayed nothing", and every
+      // caller already had to handle that (a failed turn returns no result at
+      // all). A caller that wants the reasoning has the tracer.
+      const result: unknown = displays.length ? displays[displays.length - 1] : undefined;
       emitInternalSignal('session.completed', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId, ok: true, durationMs: Date.now() - headlessStartedAt });
       this.sessionLedger.finalize(sessionId, 'done');
       return { ok: true, result, displays: [...displays], sessionId };
