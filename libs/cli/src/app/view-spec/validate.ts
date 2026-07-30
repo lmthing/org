@@ -1379,6 +1379,29 @@ function isEmptyValue(v: unknown): boolean {
  * process. When it is, the spec is additionally mounted through the real renderer and a throw
  * becomes a `render-error`. `rendererMounted` says which of the two ran — never inferred from an
  * empty finding list.
+ *
+ * ## What this gate CANNOT see, and why that is not fixable here
+ *
+ * The mount is `renderToStaticMarkup` — a **string** render. There is no DOM, no CSS and no layout
+ * engine, so this gate sees only what a spec *declares* and what an endpoint *answers*. Anything
+ * that goes wrong between correct markup and visible pixels is invisible to it **by construction**:
+ *
+ *  - a container that computes to zero height, so the page is blank while every element exists;
+ *  - content clipped or positioned outside the viewport;
+ *  - a control that renders but cannot be clicked;
+ *  - a token that resolves to the background colour.
+ *
+ * This is not hypothetical. The first model-built app rendered **completely blank on every page** —
+ * the shell's root collapsed to 98px, the scroller to `clientHeight: 0` around 719px of content,
+ * and the first row's buttons to `y: -107` — and it passed `buildApp`, `validateAppViews` and THIS
+ * FUNCTION cleanly, with `emptyRender` never firing, because the markup and the data were both
+ * perfect (fixed in `libs/ui/src/view/shell.tsx`, see its root Col comment).
+ *
+ * So `emptyRender` here means "**the spec produced no content for the data**" — a section bound to
+ * an empty collection, a page whose every binding was null. It does NOT and cannot mean "the user
+ * would see something". Reading it as the latter is how a blank app ships green. The gate for the
+ * visual claim is a real browser — Workstream D's render rig — and until that exists, a green
+ * `renderSmokeViews` is evidence about structure and data only.
  */
 export async function renderSmokeViews(
   projectRoot: string,
