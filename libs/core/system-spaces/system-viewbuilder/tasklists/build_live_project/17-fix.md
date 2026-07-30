@@ -67,11 +67,17 @@ file, not the page.
 You must PRESERVE the artifact's real content — keep every section, binding and endpoint it already
 has. You are correcting the fault, not wiping the file.
 
-**`ok: true` is a VERIFIED claim, never an intention.** Resolve `ok: true` ONLY when the writer's
-result was actually consumed (`w.ok === true`) AND you re-read the artifact in this SAME fork and
-confirmed the corrected content is on disk. A resolve based on what you were ABOUT to write is
-fabricated success: the gate downstream trusts your `ok` and the artifact ships broken. Declare and
-assign the write result in ONE statement (`const w = …`), never a bare `let w;` assigned later.
+**`ok` is a REPORT, not a gate — so report it truthfully and never invent it.** Resolve `ok: true`
+only when the writer's result was actually consumed (`w.ok === true`) AND you re-read the artifact in
+this same statement and saw the corrected content on disk. Declare and assign the write result in ONE
+statement (`const w = …`), never a bare `let w;` assigned later.
+
+If you cannot establish that — most often because a binding from an earlier statement is gone —
+**resolve `ok: false`.** That is the correct answer and it costs nothing: `verify` re-runs after this
+node and re-reads every artifact off disk itself, so it will find the file either fixed or still
+broken regardless of what you claim here. Writing a bare `ok: true` you did not verify is therefore
+pure downside — it cannot make the gate pass, and it trains the habit of asserting outcomes you have
+not observed, which is the single most damaging thing an agent in this pipeline can do.
 
 **Build NOTHING across statements — this is where a fix run is most often lost.** Every statement you
 emit, including a RETRY after a rejected write or a typecheck error, is evaluated fresh: `const f = …`,
