@@ -18,7 +18,7 @@ grounded in the SOURCE, and evaluable by plain code — never a vibe.
 
 In scope: `user_stories.stories` (each with its `acceptance` prose), `read_sources.summary` (the
 source-derived build brief — the FIGURES the app must reflect), `plan_endpoints.endpoints` (each
-`{ name, route, purpose, tables, fields }` — the exact endpoint NAMES you target), and `plan_views` (an
+`{ name, route, purpose, tables, fields, input? }` — the exact endpoint NAMES you target), and `plan_views` (an
 array of page specs, each with an `endpoints` list — the endpoints a page actually RENDERS). A check
 names ONE endpoint by its exact `name` and asserts one of two things a source figure justifies:
 

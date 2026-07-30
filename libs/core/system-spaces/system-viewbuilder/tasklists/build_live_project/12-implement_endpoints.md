@@ -11,7 +11,7 @@ functions: []
 ---
 
 Write ONE typed API handler into the LIVE project's `api/`. Your endpoint is in `item` =
-{ name, route, purpose, tables, fields }: `item.name` is the stable id the plan assigned, and `item.route`
+{ name, route, purpose, tables, fields, input? }: `item.name` is the stable id the plan assigned, and `item.route`
 already encodes the method last (e.g. `cost-lines/GET`). `plan_tables.tables` (the real schemas being
 written) is in scope — read its columns so your query matches real data. **`item.fields` is the EXACT
 shape of one response item (`items[0]`) — each entry is `'key: type'`.** Your `Output` item type AND the

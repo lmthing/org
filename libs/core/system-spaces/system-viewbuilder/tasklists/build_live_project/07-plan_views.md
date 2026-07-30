@@ -15,7 +15,7 @@ functions: []
 Plan ONE page as a LIST OF SECTIONS — the page in `item` (a member of `plan_app.pages`, the BINDING
 page list; each is `{ route, purpose }`). The host runs this node once PER page, so you reason about
 only this page. In scope: `item`, `query`, `user_stories.stories`, `plan_endpoints.endpoints` (each
-`{ name, route, purpose, tables, fields }`) and `plan_view_components.components` (each
+`{ name, route, purpose, tables, fields, input? }`) and `plan_view_components.components` (each
 `{ name, purpose, props }`). This is a THINKING step — no writers, no spec syntax yet.
 
 **A page is an ordered list of sections. Pick each section's kind from this menu — there is no other

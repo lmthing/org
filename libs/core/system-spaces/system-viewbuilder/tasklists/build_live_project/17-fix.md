@@ -17,7 +17,7 @@ Fix ONE artifact the gate rejected — the one in `item` = `{ path, kind, errors
 `'view' | 'viewComponent' | 'api' | 'hook' | 'shell'`; `errors` is the exact list of
 `{ line?, phase, message }` produced for THIS artifact. The host runs this node once PER offending
 artifact, so you reason about only this one and never hold the whole app. In scope: `item`,
-`plan_endpoints` (each `{ name, route, purpose, tables, fields }`), `plan_views` (each page's planned
+`plan_endpoints` (each `{ name, route, purpose, tables, fields, input? }` — `input` is a write endpoint's request-BODY keys, and it is what a `create` section derives its form fields from), `plan_views` (each page's planned
 sections), `plan_view_components`, `plan_tables`, and `implement_view_components`.
 
 READ the artifact first — `readProjectFile(item.path).content`. Every spec artifact is JSON, so
