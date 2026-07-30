@@ -43,7 +43,7 @@
  *   concurrent: [ {as, in|dm, say, reply_to?}, … ]   several members speaking in the same instant
  *   open_app · in_app_chat · restart_pod · run_emitter · expect      as in the personal runner
  */
-import { writeFileSync, readFileSync, mkdirSync, rmSync, readdirSync, existsSync } from 'node:fs';
+import { writeFileSync, readFileSync, mkdirSync, rmSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { TeamPod } from '../harness/lib/team-pod.mjs';
 import { ThreadSession } from '../harness/lib/team-thread.mjs';
@@ -390,6 +390,8 @@ export class TeamScenarioRunner {
     this.threads = new Map();
     /** every channel THING posted into that nobody addressed it from, per step. */
     this.knownChannelIds = new Set();
+    /** Set once the run exists: the growing server log, as a liveness probe for a silent build. */
+    this.liveness = null;
   }
 
   log(...a) {
@@ -472,6 +474,10 @@ export class TeamScenarioRunner {
       // The socket must be opened by somebody who may SEE the channel: a DM fans its events only to
       // its participants, so an outsider's socket receives nothing at all and the turn never lands.
       observeAs: sub.as,
+      // A build emits no channel frames for minutes at a time, so "the socket has gone quiet" is not
+      // "the turn has hung" — the run's own server log growing is. Without this the wait gives up
+      // mid-build and reports a harness timeout as a product failure.
+      ...(opts.liveness ? { liveness: opts.liveness } : {}),
       verbose: opts.verbose ?? false,
     });
     return { thread, openedBy: sub.as, dm };
@@ -515,7 +521,7 @@ export class TeamScenarioRunner {
   async prepare(pod, sub, step, num) {
     const member = pod.member(sub.as);
     let where = await this.channelFor(pod, sub);
-    const entry = this.threadFor(sub, where, pod, { verbose: this.verbose });
+    const entry = this.threadFor(sub, where, pod, { verbose: this.verbose, liveness: this.liveness });
     // A thread lives in ONE channel. If a `reply_to` step also names a different `in:`, the thread
     // wins — posting the reply into the named channel instead would silently open a new
     // conversation there and stop testing continuity, which is the whole point of `reply_to`.
@@ -615,6 +621,9 @@ export class TeamScenarioRunner {
       teamId: scenario.team.id,
     });
     this.reporter.onRunStart?.({ runId, runDir: run.dir, port: run.port, base: run.base, seedFrom, teamId: scenario.team.id });
+
+    // "The pod is still working" for a turn that emits no channel frames — see `threadFor`.
+    this.liveness = () => { try { return statSync(run.logFile).size; } catch { return 0; } };
 
     const outDir = this.outDir ?? run.dir;
     mkdirSync(outDir, { recursive: true });

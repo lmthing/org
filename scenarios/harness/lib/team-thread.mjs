@@ -64,9 +64,10 @@ export class ThreadSession {
    * @param {(message:object)=>(string|undefined)} [opts.onAsk]  answer a question THING posts into
    *        the thread. Return a string to reply; return undefined to leave it parked.
    * @param {string} [opts.answerAs]             who posts the `onAsk` answer (default: the asker)
+   * @param {() => unknown} [opts.liveness]      "the pod is still working" probe — see `#await`
    * @param {boolean} [opts.verbose=false]
    */
-  constructor(pod, { channelId, observeAs, threadId, onAsk, answerAs, verbose = false } = {}) {
+  constructor(pod, { channelId, observeAs, threadId, onAsk, answerAs, liveness, verbose = false } = {}) {
     if (!channelId) throw new Error('ThreadSession needs a channelId');
     this.pod = pod;
     this.channelId = channelId;
@@ -75,6 +76,7 @@ export class ThreadSession {
     this.sessionId = null;
     this.onAsk = onAsk;
     this.answerAs = answerAs;
+    this.liveness = liveness;
     this.verbose = verbose;
     /** @type {TeamSocket|null} */
     this.socket = null;
@@ -202,15 +204,27 @@ export class ThreadSession {
    * @param {(message:object)=>(string|undefined)} [opts.onAsk]  overrides the session-level `onAsk`
    *        for this turn only (pass `null` to deliberately leave a question unanswered and assert
    *        the park).
+   * @param {() => unknown} [opts.liveness]  an out-of-band "the pod is still working" probe, polled
+   *        each loop; any CHANGE in the value it returns counts as activity.
+   *
+   * ⚠️ THE STALL GRACE CANNOT BE MEASURED ON CHANNEL FRAMES ALONE. A channel emits `thing_status`
+   * only on `running`, on each `setActivity()`, and at the terminal — so a turn that spends twenty
+   * minutes inside a build fork emits NOTHING the whole time. Keying "is it still alive" on frames
+   * killed 20-studio's step 1 at 15.3 minutes (`no thing_status terminal … running=true, replies=0`)
+   * while the pod was demonstrably mid-build, and reported a harness timeout as a product failure.
+   * Hence `liveness`: the team runner passes the run's growing `sessions.log`, which is real
+   * evidence the pod is still emitting, and the budgets below are sized for a build rather than for
+   * a chat reply.
    */
   async #await(who, sent, {
-    timeoutMs = 900_000,
-    hardCapMs = 2_700_000,
-    stallGraceMs = 300_000,
+    timeoutMs = 1_800_000,
+    hardCapMs = 3_600_000,
+    stallGraceMs = 900_000,
     askGraceMs = 12_000,
     parkGraceMs = 60_000,
     pollMs = 250,
     onAsk = this.onAsk,
+    liveness = this.liveness,
   } = {}) {
     const threadId = this.threadId;
     const t0 = Date.now();
@@ -226,6 +240,7 @@ export class ThreadSession {
     let running = false;
     let terminal = null;
     let lastFrameAt = Date.now();
+    let liveMark = liveness ? liveness() : null;
     let lastThingAt = null;
     let parkedSince = null;
     let answered = 0;
@@ -267,6 +282,16 @@ export class ThreadSession {
       }
 
       if (terminal) break;
+
+      // Out-of-band liveness: a build emits no channel frames for minutes at a time (see the
+      // docblock). A pod that is still writing is still working.
+      if (liveness) {
+        const mark = liveness();
+        if (mark !== liveMark) {
+          liveMark = mark;
+          lastFrameAt = Date.now();
+        }
+      }
 
       // ── a `thing` message with no terminal behind it is a QUESTION ─────────────────────────
       if (lastThingAt && Date.now() - lastThingAt >= askGraceMs) {
