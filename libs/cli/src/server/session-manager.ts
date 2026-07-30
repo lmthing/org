@@ -1958,6 +1958,10 @@ export class SessionManager {
     budget?: BuildSessionArgs['budget'];
     traceFile?: string;
     visibleToUser?: boolean;
+    /** Use THIS host instead of a fresh one, so the caller can observe `ask_start`
+     *  and resolve it out-of-band (a team channel turns an ask into a thread
+     *  message and answers it with the next reply). */
+    renderHost?: WebRenderHost;
   }): Promise<BuildSessionArgs> {
     const root = this.lmthingRoot;
     if (!root) {
@@ -1971,7 +1975,7 @@ export class SessionManager {
         agentSlug: opts.agentSlug,
         budget: opts.budget,
         traceFile: opts.traceFile,
-        renderHost: new WebRenderHost(),
+        renderHost: opts.renderHost ?? new WebRenderHost(),
         ...(opts.visibleToUser ? { visibleToUser: true } : {}),
       };
     }
@@ -2004,7 +2008,7 @@ export class SessionManager {
       agentSlug: opts.agentSlug,
       budget: opts.budget,
       traceFile: opts.traceFile,
-      renderHost: new WebRenderHost(),
+      renderHost: opts.renderHost ?? new WebRenderHost(),
       ...(opts.visibleToUser ? { visibleToUser: true } : {}),
       systemSpaceDirs,
       preloadSpaceDirs,
@@ -2073,6 +2077,12 @@ export class SessionManager {
      *  a turn that works but displays nothing is nudged instead of settling in
      *  silence; deliberately does NOT grant the consent prompter. */
     visibleToUser?: boolean;
+    /** Render host to build the session on. Supply one to observe `ask_start` and
+     *  answer it yourself; omit for a throwaway host nobody is listening to. */
+    renderHost?: WebRenderHost;
+    /** Every `setActivity()` of the turn, live. The tracer already writes these;
+     *  this is the seam that lets a caller show "currently doing" while it runs. */
+    onActivity?: (text: string) => void;
   }): Promise<HeadlessRunResult> {
     return this.runExclusive(opts.sessionId, async () => {
       let session: Session | undefined;
@@ -2105,6 +2115,7 @@ export class SessionManager {
           agentSlug: opts.agentSlug,
           budget: opts.budget,
           ...(opts.visibleToUser ? { visibleToUser: true } : {}),
+          ...(opts.renderHost ? { renderHost: opts.renderHost } : {}),
         });
         session = this.buildSessionFn(args);
 
@@ -2113,6 +2124,12 @@ export class SessionManager {
         if (typeof session.getTracer === 'function') {
           session.getTracer().subscribe((e) => {
             if (e.type === 'display') displays.push(e.descriptor);
+            // Live "currently doing", for a caller that has somewhere to show it.
+            // A long turn is otherwise a blank wait, which reads as a hang.
+            else if (e.type === 'activity' && opts.onActivity) {
+              const text = (e as { text?: unknown }).text;
+              if (typeof text === 'string' && text.trim()) opts.onActivity(text);
+            }
           });
         }
 

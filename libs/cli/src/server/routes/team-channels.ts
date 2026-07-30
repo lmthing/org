@@ -29,6 +29,7 @@ import { readBody, sendJson } from './utils.js';
 import { readCaller, type TeamCaller } from '../team-guard.js';
 import { listProjects } from '../projects.js';
 import { getOrCreateThreadSession, getThreadSession } from '../webhook-threads.js';
+import { WebRenderHost } from '../../rpc/server.js';
 import { audienceFor, broadcastChannelEvent, connectedUserIds } from '../ws/team-channels.js';
 import {
   addMentions,
@@ -552,10 +553,40 @@ export function handlePostMessage(
     // turn a delivered message into an error the composer reports.
     track(deliver(root, channel, message).catch(() => {}));
 
+    // A thread waiting on a question takes this message as the ANSWER: the turn
+    // that asked is still suspended, so starting a second one would leave the
+    // first pinned forever and run two conversations over one session.
+    if (message.threadId && answerPendingAsk(channelId, message.threadId, text)) return;
+
     if (await addressesThing(root, message)) {
-      track(runThingReply(manager, root, message, channel));
+      track(beginThingReply(manager, root, message, channel));
     }
   };
+}
+
+/**
+ * Start a THING turn, and report it as finished for DRAINING purposes the moment
+ * it either completes or parks on a question.
+ *
+ * A turn waiting for somebody to answer an `ask()` is not work in flight — it is
+ * work waiting on a human, and it may wait forever by design. Tracking it as
+ * in-flight made `settleChannelWork` never return, which is the shutdown drain:
+ * one unanswered question would have hung the pod's graceful shutdown (and every
+ * test that drains) indefinitely.
+ *
+ * The run itself continues untracked; when the answer arrives it finishes and
+ * posts, exactly as before.
+ */
+function beginThingReply(
+  manager: SessionManager,
+  root: string,
+  message: ChannelMessage,
+  channel: Channel,
+): Promise<void> {
+  let release!: () => void;
+  const untilParkedOrDone = new Promise<void>((resolve) => (release = resolve));
+  void runThingReply(manager, root, message, channel, release).finally(release);
+  return untilParkedOrDone;
 }
 
 /**
@@ -635,6 +666,8 @@ async function runThingReply(
   root: string,
   message: ChannelMessage,
   channel: Channel,
+  /** Called when this turn parks on a question — see {@link beginThingReply}. */
+  onParked: () => void = () => {},
 ): Promise<void> {
   const threadId = threadRootOf(message);
   const to = audienceFor(channel);
@@ -647,6 +680,21 @@ async function runThingReply(
   // this turn. Snapshotted before the run, not diffed against a stored list,
   // because a project can also gain an app from Studio while nobody is watching.
   const appsBefore = await projectsWithApps(root);
+
+  const key = pendingKey(message.channelId, threadId);
+  // The host is OURS, not a throwaway, so an `ask()` becomes a question in the
+  // thread instead of a promise nobody can settle.
+  const renderHost = new WebRenderHost();
+  const stopWatching = renderHost.onEvent((event) => {
+    if (event.type === 'ask_start') {
+      pendingAsks.set(key, { renderHost, askId: event.id });
+      track(postAsk(root, message, channel, threadId, event.descriptor).catch(() => {}));
+      // Parked on a human. Stop counting this run as work a drain should wait for.
+      onParked();
+    } else if (event.type === 'ask_end') {
+      pendingAsks.delete(key);
+    }
+  });
 
   try {
     const sessionId = await getOrCreateThreadSession(
@@ -665,6 +713,14 @@ async function runThingReply(
       // Deliberately NOT `interactive`: that also grants the consent prompter,
       // which needs somebody able to ANSWER, and a channel has no such client.
       visibleToUser: true,
+      renderHost,
+      // A build can run for minutes. Without this the thread shows nothing at all
+      // until it finishes, which a reader cannot tell apart from a hang.
+      onActivity: (activity) =>
+        broadcastChannelEvent(
+          { type: 'thing_status', channelId: message.channelId, threadId, status: 'running', activity },
+          to,
+        ),
     });
 
     const answer = result.ok
@@ -708,7 +764,88 @@ async function runThingReply(
       { type: 'thing_status', channelId: message.channelId, threadId, status: 'error' },
       to,
     );
+  } finally {
+    // The turn is over either way, so nothing can answer an ask on this host any
+    // more. Leaving the entry behind would swallow the NEXT message in the thread
+    // as an answer to a question nobody is waiting on.
+    stopWatching();
+    if (pendingAsks.get(key)?.renderHost === renderHost) pendingAsks.delete(key);
   }
+}
+
+// ─── THING asking the thread a question ──────────────────────────────────────
+//
+// `ask()` suspends the turn until somebody answers. In `/chat` a client renders
+// the form and posts the value back; a channel has no such client, so the
+// question becomes a message in the thread and the next reply is the answer.
+//
+// The turn is held for as long as that takes — the owner's call, over a flagged
+// objection that an unanswered ask pins a session. In practice a thread heals
+// itself: every reply in a THING thread addresses THING, so the first thing
+// anybody says resolves it. Only a thread nobody returns to stays suspended, and
+// a pod restart clears those.
+
+interface PendingAsk {
+  renderHost: WebRenderHost;
+  askId: string;
+}
+
+/** channel+thread → the ask that thread is waiting on. */
+const pendingAsks = new Map<string, PendingAsk>();
+
+function pendingKey(channelId: string, threadId: string): string {
+  return `${channelId}::${threadId}`;
+}
+
+/**
+ * Answer a thread's open question with what somebody typed, if there is one.
+ *
+ * The value is the raw text rather than a filled form: a channel reply is prose,
+ * and `ask()`'s contract is that it returns what the user supplied. An agent that
+ * asked with structured options still gets the words back, which is the same
+ * thing a person would say out loud.
+ */
+export function answerPendingAsk(channelId: string, threadId: string, text: string): boolean {
+  const key = pendingKey(channelId, threadId);
+  const pending = pendingAsks.get(key);
+  if (!pending) return false;
+  pendingAsks.delete(key);
+  pending.renderHost.submitForm(pending.askId, text);
+  return true;
+}
+
+/** Whether this thread is waiting on an answer — exported for tests. */
+export function hasPendingAsk(channelId: string, threadId: string): boolean {
+  return pendingAsks.has(pendingKey(channelId, threadId));
+}
+
+/**
+ * Put THING's question into the thread.
+ *
+ * Stored as `blocks` for the same reason a JSX answer is: the descriptor IS the
+ * question, and a channel that stored its source could only ever render source.
+ * `text` carries the flattened prose so a notification and a client that cannot
+ * draw components both have something to read.
+ */
+async function postAsk(
+  root: string,
+  message: ChannelMessage,
+  channel: Channel,
+  threadId: string,
+  descriptor: unknown,
+): Promise<void> {
+  const rendered = renderResult({ ok: true, displays: [descriptor], sessionId: '' });
+  const asked = await appendMessage(root, {
+    channelId: message.channelId,
+    kind: 'thing',
+    ...rendered,
+    threadId,
+    // The question is FOR whoever asked, and an agent turn can outlast their
+    // attention — without the badge they never learn they are being waited on.
+    ...(message.userId ? { mentions: [message.userId] } : {}),
+  });
+  broadcastChannelEvent({ type: 'message', message: asked }, audienceFor(channel));
+  track(deliver(root, channel, asked).catch(() => {}));
 }
 
 // ─── Apps beside a channel ───────────────────────────────────────────────────

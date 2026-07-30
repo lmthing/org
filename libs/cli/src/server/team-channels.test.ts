@@ -27,13 +27,30 @@ import {
   type ChannelMessage,
 } from './team-channels.js';
 import {
+  hasPendingAsk,
   handleCreateChannel,
   handleListChannels,
   handleListMessages,
   handlePostMessage,
   settleChannelWork,
 } from './routes/team-channels.js';
-import { resetChannelSockets } from './ws/team-channels.js';
+import { registerChannelSocket, resetChannelSockets } from './ws/team-channels.js';
+
+/**
+ * A socket that only records. `broadcastChannelEvent` writes to real subscribers,
+ * so watching what a member would have received is more faithful than mocking the
+ * broadcaster out — and it is the only way to see a frame that carries no message.
+ */
+function watchEvents(): any[] {
+  const seen: any[] = [];
+  const fake = {
+    readyState: 1,
+    send: (raw: string) => seen.push(JSON.parse(raw)),
+    on: () => {},
+  };
+  registerChannelSocket(fake as never, { userId: 'u1', email: 'ana@example.com' });
+  return seen;
+}
 
 let root: string;
 
@@ -502,6 +519,106 @@ describe('THING in a thread', () => {
     );
     await settle();
     expect(runs).toHaveLength(1);
+  });
+
+  it('an ask() becomes a question in the thread, and a reply ANSWERS it', async () => {
+    // Parity with /chat: there, a client renders the form and posts the value
+    // back. A channel has no such client, so the question is a message and the
+    // next reply is the answer — which is why the turn must stay suspended
+    // rather than being restarted by that reply.
+    let asked: Promise<unknown> | undefined;
+    const manager = {
+      runHeadlessThreaded: vi.fn(async (opts: any) => {
+        // The agent asks, and does not settle until somebody answers.
+        asked = opts.renderHost.ask('ask-1', { type: 'Paragraph', props: {}, children: ['Which project?'] });
+        const answer = await asked;
+        return { ok: true, displays: [`building in ${answer}`], result: `building in ${answer}`, sessionId: 's1' };
+      }),
+    } as any;
+
+    const opened = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing build me an app' }),
+      opened, { channelId: 'general' }, {} as any,
+    );
+    const rootMsg = opened.json().message as ChannelMessage;
+    // NOT `settle()` — the turn is deliberately parked on the question, so the
+    // drain would wait for a human. Wait for the question to land instead.
+    for (let i = 0; i < 200 && !hasPendingAsk('general', rootMsg.id); i++) {
+      await new Promise((r) => setTimeout(r, 5));
+    }
+
+    // The question is IN the thread, as a message, under the ask.
+    const afterAsk = (await readMessages(root, 'general')).messages;
+    expect(afterAsk.map((m) => m.kind)).toEqual(['user', 'thing']);
+    expect(afterAsk[1]!.text).toContain('Which project?');
+    expect(afterAsk[1]!.threadId).toBe(rootMsg.id);
+    expect(hasPendingAsk('general', rootMsg.id)).toBe(true);
+    // Still exactly one turn: the ask did not settle it.
+    expect(manager.runHeadlessThreaded).toHaveBeenCalledTimes(1);
+
+    // Somebody replies. That is the ANSWER, not a new question.
+    const reply = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', {
+        text: 'the coworking one',
+        threadId: rootMsg.id,
+      }),
+      reply, { channelId: 'general' }, {} as any,
+    );
+    await settle();
+
+    expect(manager.runHeadlessThreaded).toHaveBeenCalledTimes(1);
+    expect(hasPendingAsk('general', rootMsg.id)).toBe(false);
+    const final = (await readMessages(root, 'general')).messages;
+    expect(final[final.length - 1]!.text).toBe('building in the coworking one');
+  });
+
+  it('once the turn is over, the next reply starts a NEW turn', async () => {
+    // The registry has to be cleared when the run ends, or the message after an
+    // answered question would be swallowed as an answer to nothing.
+    const { manager, runs } = mkManager('42');
+    const opened = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing hi' }),
+      opened, { channelId: 'general' }, {} as any,
+    );
+    const rootMsg = opened.json().message as ChannelMessage;
+    await settle();
+    expect(hasPendingAsk('general', rootMsg.id)).toBe(false);
+
+    const reply = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: 'and again', threadId: rootMsg.id }),
+      reply, { channelId: 'general' }, {} as any,
+    );
+    await settle();
+    expect(runs).toHaveLength(2);
+  });
+
+  it('live activity reaches the thread while the turn runs', async () => {
+    // A build runs for minutes; with nothing on screen a reader cannot tell it
+    // apart from a hang.
+    const manager = {
+      runHeadlessThreaded: vi.fn(async (opts: any) => {
+        opts.onActivity?.('Checking project context');
+        opts.onActivity?.('Writing the schema');
+        return { ok: true, displays: ['done'], result: 'done', sessionId: 's1' };
+      }),
+    } as any;
+
+    const sentEvents = watchEvents();
+    const res = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing go' }),
+      res, { channelId: 'general' }, {} as any,
+    );
+    await settle();
+
+    const labels = sentEvents
+      .filter((e: any) => e.type === 'thing_status' && e.activity)
+      .map((e: any) => e.activity);
+    expect(labels).toEqual(['Checking project context', 'Writing the schema']);
   });
 
   it('answers immediately, without waiting for the agent turn', async () => {

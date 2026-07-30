@@ -49,6 +49,9 @@ export interface TeamChat {
   error: string | null
   /** Thread root ids THING is currently working in. */
   thinking: Set<string>
+  /** threadId → THING's live `setActivity()` text, while it is running. A long
+   *  turn is otherwise a blank wait a reader cannot tell apart from a hang. */
+  activity: Map<string, string>
   /** Display labels of members typing in the channel on screen. */
   typingHere: string[]
   /** channelId → what is waiting there for this member. */
@@ -81,6 +84,7 @@ export function useTeamChat(client: TeamClient, activeId: string | null): TeamCh
   const [messages, setMessages] = useState<ChannelMessage[]>([])
   const [error, setError] = useState<string | null>(null)
   const [thinking, setThinking] = useState<Set<string>>(new Set())
+  const [activity, setActivity] = useState<Map<string, string>>(new Map())
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map())
   const [unread, setUnread] = useState<Map<string, ChannelUnread>>(new Map())
 
@@ -213,6 +217,14 @@ export function useTeamChat(client: TeamClient, activeId: string | null): TeamCh
         setThinking((prev) => {
           const next = new Set(prev)
           if (parsed.status === 'running') next.add(parsed.threadId)
+          else next.delete(parsed.threadId)
+          return next
+        })
+        setActivity((prev) => {
+          const next = new Map(prev)
+          // Cleared on done/error as well as when a running frame carries no
+          // label, so a finished turn never leaves its last step on screen.
+          if (parsed.status === 'running' && parsed.activity) next.set(parsed.threadId, parsed.activity)
           else next.delete(parsed.threadId)
           return next
         })
@@ -402,6 +414,7 @@ export function useTeamChat(client: TeamClient, activeId: string | null): TeamCh
     messages: visible,
     error,
     thinking,
+    activity,
     typingHere,
     unread,
     totalMentions: [...unread.values()].reduce((sum, u) => sum + u.mentions, 0),

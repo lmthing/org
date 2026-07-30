@@ -26,7 +26,15 @@ import { readCaller } from '../team-guard.js';
 /** Server → client frames. */
 export type ChannelEvent =
   | { type: 'message'; message: ChannelMessage }
-  | { type: 'thing_status'; channelId: string; threadId: string; status: 'running' | 'done' | 'error' }
+  | {
+      type: 'thing_status';
+      channelId: string;
+      threadId: string;
+      status: 'running' | 'done' | 'error';
+      /** THING's live `setActivity()` text while `running`. A long turn is
+       *  otherwise a blank wait, which a reader cannot tell from a hang. */
+      activity?: string;
+    }
   | { type: 'typing'; channelId: string; userId: string; email?: string }
   /** A channel was created, renamed, re-filed, or had its apps changed. */
   | { type: 'channel'; channel: Channel }

@@ -315,6 +315,7 @@ export function TeamChannelsView({
           root={chat.messages.find((m) => m.id === rail.threadId)}
           replies={repliesOf(rail.threadId)}
           busy={chat.thinking.has(rail.threadId)}
+          {...(chat.activity.get(rail.threadId) ? { activity: chat.activity.get(rail.threadId)! } : {})}
           directory={chat.directory}
           meId={meId}
           ctx={ctx}
@@ -414,6 +415,7 @@ function ThreadRail({
   root,
   replies,
   busy,
+  activity,
   directory,
   meId,
   ctx,
@@ -426,6 +428,8 @@ function ThreadRail({
   root: ChannelMessage | undefined
   replies: ChannelMessage[]
   busy: boolean
+  /** THING's live "currently doing" line, shown instead of a bare name. */
+  activity?: string
   directory: Directory
   meId: string
   ctx: MessageContext
@@ -471,7 +475,7 @@ function ThreadRail({
         {groups.map((group) => (
           <MessageGroupView key={group.key} group={group} ctx={ctx} />
         ))}
-        {busy ? <TypingStrip labels={['THING']} /> : null}
+        {busy ? <TypingStrip labels={[activity ? `THING — ${activity}` : 'THING']} /> : null}
       </Prim.Scroll>
       <Composer
         // Same reason as the channel composer: the rail is full-width on a phone but the box is

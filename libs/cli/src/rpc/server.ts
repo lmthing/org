@@ -11,10 +11,26 @@ export class WebRenderHost implements RenderHost {
   private askResolvers: Map<string, (value: unknown) => void> = new Map();
   /** Open ask forms (id → descriptor) so a (re)connecting client can re-render them. */
   private openAsks: Map<string, unknown> = new Map();
+  /** Non-WebSocket listeners — see {@link onEvent}. */
+  private listeners: Set<(event: ServerEvent) => void> = new Set();
 
   addClient(ws: WebSocket): void {
     this.clients.add(ws);
     ws.on('close', () => this.clients.delete(ws));
+  }
+
+  /**
+   * Watch this host's events without being a WebSocket.
+   *
+   * `ask`/`submitForm` were always transport-agnostic — the promise suspends the
+   * turn and any caller can resolve it — but the only way to SEE an `ask_start`
+   * was to be a connected socket. A team channel has no socket of its own: it
+   * needs to turn the ask into a message in a thread and resolve it when somebody
+   * replies. Returns an unsubscribe.
+   */
+  onEvent(listener: (event: ServerEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
 
   emit(event: ServerEvent): void {
@@ -22,6 +38,15 @@ export class WebRenderHost implements RenderHost {
     for (const client of this.clients) {
       if (client.readyState === WebSocket.OPEN) {
         client.send(msg);
+      }
+    }
+    // After the sockets, and never allowed to break them: a throwing listener
+    // must not stop the frame reaching a real client.
+    for (const listener of this.listeners) {
+      try {
+        listener(event);
+      } catch {
+        /* a listener's failure is not the render host's problem */
       }
     }
   }

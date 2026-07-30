@@ -76,7 +76,7 @@ export interface Directory {
 /** Server → client socket frames. Mirrors `ws/team-channels.ts#ChannelEvent`. */
 export type ChannelEvent =
   | { type: 'message'; message: ChannelMessage }
-  | { type: 'thing_status'; channelId: string; threadId: string; status: string }
+  | { type: 'thing_status'; channelId: string; threadId: string; status: string; activity?: string }
   | { type: 'typing'; channelId: string; userId: string; email?: string }
   | { type: 'channel'; channel: Channel }
   | { type: 'categories'; categories: Category[] }
