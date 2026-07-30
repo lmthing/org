@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import type { AuthSession, AuthConfig, AuthContextValue } from './types'
+import { requestEmailCode, verifyEmailCode } from './email-login'
 import { getSession, clearSession, storeSession, redirectToLogin, handleAuthCallback, refreshSession, ensureValidToken, authFetch, isSessionExpired, onSessionChange, isPinSet, verifyPin, derivePinKey, getPodInjectedToken, isLocalRun, isWeb } from './client'
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -178,6 +179,28 @@ export function AuthProvider({ appName, callbackPath = '/', children }: AuthProv
     redirectToLogin(config)
   }, [config, isDemo])
 
+  // Passwordless email sign-in. Unlike `login` this never leaves the app on ANY target — it is two
+  // calls to the gateway — which is what lets the mobile app sign a user in natively.
+  const sendEmailCode = useCallback(
+    (email: string) => {
+      // The magic link is web-only: the gateway's redirect allowlist takes http/https and nothing
+      // else, so handing it a native deep link would fail the request outright. Off the web the
+      // mail still carries a link, it just has no app to come back to — the user types the code.
+      const redirectUri = isWeb() ? `${window.location.origin}${config.callbackPath}` : undefined
+      return requestEmailCode(config, email, redirectUri)
+    },
+    [config],
+  )
+
+  const signInWithEmailCode = useCallback(
+    async (email: string, code: string) => {
+      const next = await verifyEmailCode(config, email, code)
+      storeSession(next)
+      setSession(next)
+    },
+    [config],
+  )
+
   const logout = useCallback(() => {
     if (isDemo) return
     clearSession()
@@ -233,6 +256,8 @@ export function AuthProvider({ appName, callbackPath = '/', children }: AuthProv
       needsPin,
       pinUnlocked,
       login,
+      sendEmailCode,
+      signInWithEmailCode,
       logout,
       getAccessToken,
       getAccessTokenSync,

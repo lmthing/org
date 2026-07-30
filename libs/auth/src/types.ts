@@ -1,3 +1,5 @@
+import type { EmailCodeSent } from './email-login'
+
 export interface AuthSession {
   accessToken: string
   refreshToken?: string
@@ -24,7 +26,18 @@ export interface AuthContextValue {
   githubUsername: string | null
   needsPin: boolean
   pinUnlocked: boolean
+  /** GitHub / SSO sign-in. Leaves the app: a redirect on web, a browser session on native. */
   login: () => void
+  /**
+   * Mail a one-time code to any address. Resolves once the gateway has sent it.
+   *
+   * Pairs with {@link signInWithEmailCode} to sign in **without leaving the app** — the reason
+   * native does not need a browser sheet for this path. Throws with the gateway's own message
+   * (unsendable address, per-mailbox throttle, or a deployment with no mail transport).
+   */
+  sendEmailCode: (email: string) => Promise<EmailCodeSent>
+  /** Exchange a mailed code for a session and adopt it as the app's session. */
+  signInWithEmailCode: (email: string, code: string) => Promise<void>
   logout: () => void
   /** Returns a live access token, refreshing first if near expiry. */
   getAccessToken: () => Promise<string>
