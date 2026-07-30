@@ -108,12 +108,76 @@ thing.consentCards() // every ConsentCard raised, and how it was answered
   `lib/thing.mjs` (`ThingSession`, and the `CANCEL_ASK` sentinel for a true-cancel `cancel_ask`),
   `lib/local.mjs` (the PER-RUN server lifecycle — `startRun`/`stopRun`/`restartRun`/
   `snapshotProject`/`seedRun`/`listRuns`/`mutateTableSchema`), `lib/env.mjs` (`applyEnv`/
-  `mergeEnvContent`/`readEnvVar` for `set_env`/`blank_env`/`restore_env`), `lib/webhook-sign.mjs`
+  `mergeEnvContent`/`readEnvVar` for `set_env`/`blank_env`/`restore_env`), `lib/team-pod.mjs`
+  (`TeamPod`/`TeamSocket` — a team pod driven as a named member) + `lib/team-thread.mjs`
+  (`ThreadSession` — THING in a channel thread), `lib/webhook-sign.mjs`
   (`signHmac`, for `inbound`'s `sign:` block), `lib/gateway.mjs` (the prod-provisioning path used by
   `smoke.mjs`), `lib/report.mjs` (`Report`), `jwt.mjs`, `paths.mjs`.
 - `harness/runs.mjs` — a small CLI to `list`/`path`/`logs`/`down`/`gc` a scenario's prior runs.
 - `harness/smoke.mjs` — register → pod → env → THING session → a real LLM turn → trace assertions; run
   it to prove the harness + a target are healthy before a long run.
+- `harness/team-smoke.mjs` — the same proof for a TEAM pod (see below).
+
+## Driving a TEAM pod
+
+A team pod is a different shape: `LMTHING_TEAM_MODE=1` (which is what registers `/api/team/*` at all
+— `libs/cli/src/server/serve.ts` gates on `isTeamMode()`), several members instead of one user, and
+conversation in **channels** rather than a `/chat` session. Caller identity arrives as the four
+headers Envoy projects from the team-scoped JWT (`x-user-id`, `x-user-email`, `x-team-id`,
+`x-lmthing-role` — `team-guard.ts#readCaller`), and the pod **trusts them absolutely**, because in
+production the edge overwrites anything a client sent. So a local harness needs no proxy: it sends
+those headers itself.
+
+```bash
+cd sdk/org
+node scenarios/harness/team-smoke.mjs          # the one command; --keep leaves the server up, --verbose traces
+node scenarios/harness/team-smoke.mjs --ask    # + the park-on-a-question path (opt-in: the model must CHOOSE to ask)
+```
+
+It boots a team-mode run under `harness/.state/team-smoke/runs/<n>/`, seeds two editors and a
+viewer, has member A `@thing` a real LLM turn, has member B answer **in the same thread**, and
+asserts the viewer is genuinely refused a write — then prints a pass/fail table.
+
+```js
+import { TeamPod, ThreadSession, startRun } from '@lmthing/scenario-harness';
+
+// A team-mode run — the ONLY server-side difference a team scenario needs (`local.mjs#teamEnv`).
+const run = await startRun({ scenarioDir, runId, projectId: 'user', scenarioId, teamMode: true, teamId: 'acme' });
+
+const pod = new TeamPod({ base: run.base, teamId: 'acme', members: [
+  { name: 'ana', role: 'editor', handle: 'ana' },
+  { name: 'bo',  role: 'editor', handle: 'bo'  },
+  { name: 'vic', role: 'viewer', handle: 'vic' },   // a viewer is FIRST-CLASS: read-only is testable
+]});
+await pod.introduceAll();                                    // every member lands in the directory
+const { channel } = await pod.createChannel('ana', 'Launch'); // editor-only, by team-guard default-deny
+await pod.request('vic', 'POST', '/api/team/channels', { name: 'x' }, { raw: true });  // → {status: 403}
+
+const thread = new ThreadSession(pod, { channelId: channel.id, observeAs: 'ana' });
+await thread.open();                                          // watch /api/team/ws AS ana
+const t1 = await thread.ask('ana', '@thing our codename is Bluefin');
+const t2 = await thread.say('bo', 'what codename did Ana give you?');   // no @thing needed in-thread
+t2.sessionId === t1.sessionId;   // the THREAD owns the session — cross-member memory
+t2.blocks;                       // the STORED display descriptors (a channel reply is structure)
+```
+
+`TeamPod` covers channels, categories, DMs, messages (channel-level and threaded), the directory, the
+profile and mark-read; every method takes the acting member first, or use `pod.as('ana')` for the
+pre-bound spelling. `pod.request(who, method, path, body, {raw:true})` returns `{status, body}` — the
+shape a refusal assertion needs, since a 403 is the *result* there, not a fault.
+
+**The completion signal is `thing_status`, not "a `thing` message appeared."** THING's `ask()` also
+posts a `thing` message into the thread (`routes/team-channels.ts#postAsk`), so a driver that stopped
+at the first one would report a turn that is actually *parked on a question* as finished, with the
+question as its answer. `runThingReply` broadcasts the reply message and then the `done`/`error`
+frame with no `await` in between, so the terminal never races the content it follows.
+`ThreadSession` infers a park (a `thing` message with no terminal behind it), answers it through
+`onAsk` if you supply one, and otherwise returns `status:'parked'` rather than hanging.
+
+**A parked turn is not in-flight work.** `beginThingReply` releases the drain the moment a turn parks,
+because `settleChannelWork` — the pod's graceful-shutdown drain — would otherwise wait forever on a
+question nobody answers. The harness kills its run server with SIGKILL, so this cannot hang teardown
+here; on a pod that shuts down gracefully it would.
 
 ### Why assertions read the trace, not the prose
 

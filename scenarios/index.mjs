@@ -17,6 +17,15 @@ export { Pod, fetchResilient } from './harness/lib/pod.mjs';
 // ── an interactive THING chat session over WS + HTTP ────────────────────────────────────────────
 export { ThingSession, approveAllConsent, denyAllConsent, textOf, lastTextOf, CANCEL_ASK } from './harness/lib/thing.mjs';
 
+// ── the TEAM pod: a cast of members, and THING in a channel thread ──────────────────────────────
+// A team pod is reached by many people, so every call carries the caller's identity headers (the
+// ones Envoy projects from the team token). `TeamPod` holds the cast and makes each call AS one of
+// them — including a VIEWER, so read-only enforcement is testable. `ThreadSession` is the
+// channel-thread equivalent of `ThingSession`: the THREAD owns the THING session, so several
+// members talk to one conversation.
+export { TeamPod, TeamSocket, teamHeaders, TEAM_ROLES } from './harness/lib/team-pod.mjs';
+export { ThreadSession, openThread } from './harness/lib/team-thread.mjs';
+
 // ── inbound-webhook signing + pod-env merge (the `inbound`/`set_env`/`blank_env` step verbs) ────
 export { signHmac } from './harness/lib/webhook-sign.mjs';
 export { parseEnvContent, mergeEnvContent, applyEnv, readEnvVar } from './harness/lib/env.mjs';

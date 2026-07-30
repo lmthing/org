@@ -13,6 +13,7 @@ import {
   startRun,
   stopRun,
   mutateTableSchema,
+  teamEnv,
 } from './local.mjs';
 
 const tmps = [];
@@ -177,6 +178,24 @@ describe('mutateTableSchema', () => {
     const sc = mkTmp();
     const { run } = fakeSchemaRun(sc);
     expect(() => mutateTableSchema(run, 'proj', 'expenses', {})).toThrow(/change must be/);
+  });
+});
+
+describe('teamEnv', () => {
+  it('contributes NOTHING for a personal run — the existing scenarios must not see this option', () => {
+    expect(teamEnv({})).toEqual({});
+    expect(teamEnv({ teamMode: false, teamId: 'ignored' })).toEqual({});
+    expect(teamEnv(undefined)).toEqual({});
+  });
+
+  it('turns on team mode (which is what registers /api/team/*) and names the team', () => {
+    expect(teamEnv({ teamMode: true, teamId: 'acme' })).toEqual({
+      LMTHING_TEAM_MODE: '1',
+      LMTHING_TEAM_ID: 'acme',
+    });
+    // A team run with no id still gets one: `LMTHING_TEAM_ID` only labels notifications, but an
+    // undefined env value would be dropped by spawn() and read back as ''.
+    expect(teamEnv({ teamMode: true })).toEqual({ LMTHING_TEAM_MODE: '1', LMTHING_TEAM_ID: 'team' });
   });
 });
 

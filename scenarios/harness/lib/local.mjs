@@ -61,7 +61,8 @@ function readdirSyncSafe(dir) {
 }
 
 // ── readiness ────────────────────────────────────────────────────────────────
-/** Does the server answer at all? `GET /api/projects` needs no body/auth and is cheap. */
+/** Does the server answer at all? `GET /api/projects` needs no body/auth and is cheap. (On a TEAM
+ *  pod it answers 401 without identity headers — still an HTTP answer, so still "up".) */
 export async function serverUp(base, { timeoutMs = 1500 } = {}) {
   try {
     const res = await fetch(`${base}/api/projects`, { signal: AbortSignal.timeout(timeoutMs) });
@@ -321,6 +322,27 @@ export function mutateTableSchema(run, projectId, table, change) {
   return { table, path, change };
 }
 
+// ── team mode ───────────────────────────────────────────────────────────────────
+/**
+ * The container env a TEAM pod is given, for a run that asked for one.
+ *
+ * In production the gateway sets these as CONTAINER env vars, deliberately NOT as keys in the
+ * editable `user-env` secret, so an editor cannot turn the guard off with a replace-all
+ * `PUT /api/compute/env` (`cloud/gateway/src/lib/compute.ts`). `LMTHING_TEAM_MODE=1` is what
+ * registers the `/api/team/*` routes at all (`serve.ts` gates on `isTeamMode()`) and turns on
+ * caller identity + viewer/editor gating; `LMTHING_TEAM_ID` only lets the pod name itself in the
+ * notifications it asks the gateway for.
+ *
+ * Returns `{}` for a personal run, so the spawned server's environment is byte-identical to what it
+ * was before teams existed — the existing scenarios must not be able to tell this option exists.
+ *
+ * @param {{teamMode?: boolean, teamId?: string}} run
+ */
+export function teamEnv(run) {
+  if (!run?.teamMode) return {};
+  return { LMTHING_TEAM_MODE: '1', LMTHING_TEAM_ID: run.teamId ?? 'team' };
+}
+
 // ── run lifecycle ───────────────────────────────────────────────────────────────
 function spawnServer(run) {
   mkdirSync(run.dataDir, { recursive: true });
@@ -337,7 +359,8 @@ function spawnServer(run) {
     [...BIN_ARGS, '--cwd', run.dataDir, '--port', String(run.port), '--env-file', ENV_FILE, '--adopt-system-spaces', '--max-sessions', String(process.env.SCENARIO_MAX_SESSIONS || '24')],
     {
       cwd: SDK_ORG,
-      env: { ...process.env, LM_STORE_APPS_DIR: join(run.dataDir, 'store-apps') },
+      // `teamEnv` is `{}` unless this run asked for a team pod — see above.
+      env: { ...process.env, LM_STORE_APPS_DIR: join(run.dataDir, 'store-apps'), ...teamEnv(run) },
       detached: true,
       stdio: ['ignore', logFd, logFd],
     },
@@ -351,8 +374,14 @@ function spawnServer(run) {
  * Start a fresh per-run server and return the `run` handle. Allocates a free port, seeds the data
  * dir from a snapshot first when resuming, boots the server, and records `run.json` + a `latest`
  * pointer. Retries once on a lost port race.
+ *
+ * `teamMode` (+ optional `teamId`) boots the run as a TEAM pod instead of a personal one: it is the
+ * only difference a team scenario needs, because everything else about a team — who is calling,
+ * what their role permits — travels in request headers the harness sends itself
+ * (`team-pod.mjs#teamHeaders`). Absent, nothing changes: `teamEnv` contributes no variables and the
+ * spawned server is byte-identical to a personal run's.
  */
-export async function startRun({ scenarioDir, runId, projectId, scenarioId, seedFrom = null }) {
+export async function startRun({ scenarioDir, runId, projectId, scenarioId, seedFrom = null, teamMode = false, teamId }) {
   const dir = runDir(scenarioDir, runId);
   const dataDir = join(dir, 'data');
   mkdirSync(dataDir, { recursive: true });
@@ -367,6 +396,8 @@ export async function startRun({ scenarioDir, runId, projectId, scenarioId, seed
     port: null,
     base: null,
     serverPid: null,
+    // Carried on the handle so `restartRun` brings the SAME kind of pod back up.
+    ...(teamMode ? { teamMode: true, teamId: teamId ?? `team-${scenarioId ?? runId}` } : {}),
   };
 
   if (seedFrom) seedRun(run, seedFrom);
@@ -376,7 +407,11 @@ export async function startRun({ scenarioDir, runId, projectId, scenarioId, seed
     run.base = `http://localhost:${run.port}`;
     spawnServer(run);
     if (await waitUp(run.base)) {
-      writeRunJson(run, { seededFrom: seedFrom ?? null });
+      writeRunJson(run, {
+        seededFrom: seedFrom ?? null,
+        // Only written for a team run, so a personal run's run.json is unchanged.
+        ...(run.teamMode ? { teamMode: true, teamId: run.teamId } : {}),
+      });
       updateLatest(scenarioDir, runId);
       return run;
     }
