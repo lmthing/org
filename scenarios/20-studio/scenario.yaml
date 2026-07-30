@@ -1,0 +1,228 @@
+# 20-studio — the first TEAM scenario.
+#
+# Played by the team runner (`run-team-scenario.mjs`), not `run-scenario.mjs`: a team scenario has
+# beats a single-user runner has no concept of — WHO is speaking, WHICH channel, whether a message
+# opens a thread or continues one, and a member who may only read. The eight personal scenarios are
+# untouched by it.
+#
+# The step verbs this file uses, beyond the shared ones (`say`, `then_say`, `open_app`,
+# `restart_pod`, `if_asked`, `expect`):
+#
+#   as: <cast key>          who is speaking. Required on every conversational step.
+#   in: <channel id>        which channel. Required unless `dm:` is given.
+#   dm: <cast key>          speak in the direct message between `as:` and this member.
+#   reply_to: <step number> continue the thread that step opened, instead of opening a new one.
+#   answer_ask: "..."       this step's message is answering a question THING parked in the thread.
+#   expect_denied: true     the pod must REFUSE this write (a viewer). The step passes on refusal.
+#
+# NOTE — a team channel has NO attachment path today (`libs/cli/src/server/team-channels.ts` has no
+# attachment handling; `libs/ui/src/team/composer.tsx` has none either), while `/chat` accepts
+# vision/audio/files. So this scenario deliberately opens with a CONVERSATION rather than a file
+# dump: it tests what a channel is, and does not pretend a path exists that doesn't. The gap is
+# recorded in design/teams-ux-audit.md rather than papered over here.
+
+id: 20-studio
+title: Four people, one shared brain — the thread remembers who said what, and the app is the team's
+project: studio
+
+team:
+  id: fold-studio
+  name: Fold Studio
+
+# Roles are load-bearing: `rita` exists to prove a viewer cannot make THING write on her behalf.
+cast:
+  - { key: ana, name: Ana Duarte, email: ana@foldstudio.pt, role: editor }
+  - { key: bo, name: Bo Lindqvist, email: bo@foldstudio.pt, role: editor }
+  - { key: cai, name: Cai Zhou, email: cai@foldstudio.pt, role: editor }
+  - { key: rita, name: Rita Marques, email: rita@contas-marques.pt, role: viewer }
+
+channels:
+  - { id: general }
+  - { id: studio, category: Work }
+  - { id: press, category: Work }
+
+persona: >
+  Fold Studio is a four-person branding studio in Porto. Ana runs it and holds the client
+  relationships; Bo designs; Cai handles production and spends half his week standing in a printer's
+  basement doing press checks with no signal; Rita is the outside bookkeeper who is allowed to look
+  at everything and change nothing.
+
+  They talk to each other the way colleagues do — short, overlapping, someone answering a question
+  that was not addressed to them. They have used Slack for years, so `#channels`, threads and `@`
+  are ordinary words to them. They have never read a manual for anything and will not say a single
+  product word: no space, project, app, agent, hook, event, webhook, integration, install, database,
+  table, schema, row, API, build, deploy, function, capability, consent, delegate. They say "the
+  thing you made us", "that list", "the job board".
+
+promise: >
+  A team's conversation is one shared brain. A thread remembers what was said in it no matter WHICH
+  member says the next thing; THING can see who is on the team and act across channels; what it
+  builds belongs to the team, not to whoever asked for it; and a member who may only read cannot
+  make it write on her behalf.
+
+# Load-bearing answers the cast can give IF THING asks a legitimate clarifying question.
+knows:
+  - "there are three jobs live right now: Almeida, Trindade Bakery and the Serralves catalogue"
+  - "a press check either passes, or comes back for a reprint"
+  - "Almeida is waiting on the client to sign off the colours"
+  - "the studio bills by the job, not by the hour"
+
+invariants:
+  - IF THE APP SHOWS IT, IT'S A DB ROW — never chat prose, never a knowledge file.
+  - AGENTS QUERY, THEY DON'T REMEMBER — a question about the team's own data is answered by querying the DB (or the app's own endpoint), not from context. Two different answers to the same question is a failure.
+  - ASK ONLY WHEN THE DECISION IS GENUINELY THE USER'S.
+  - DON'T INTERROGATE INSTEAD OF ACTING.
+  - A GOOD QUESTION IS ANSWERABLE BY THE PERSONA in their own words, with zero product vocabulary.
+  - A CAPABILITY IT LACKS (pay a card, send money) → it REFUSES honestly and offers an honest alternative (record it as due). No fabricated "sent!".
+  - IT OPENS WITH REAL VALUES, not an empty shell, no console errors, no failed fetches.
+  - After a pod restart the spaces, app, DB rows and researched knowledge survive.
+  - A THREAD BELONGS TO THE TEAM, NOT TO WHOEVER OPENED IT — a reply from a different member continues the same conversation, with everything already said in it.
+  - THING NEVER ACTS WITH MORE AUTHORITY THAN THE PERSON WHO ASKED — a request from a read-only member is refused as a permission answer, never silently ignored and never quietly performed.
+  - A MESSAGE THING POSTS IS ATTRIBUTED TO THING — it never writes as a member, and never in a channel it was not asked to write in without saying so.
+
+steps:
+  # ── 1. the opener. A channel, not a file dump: this is what a team surface actually is.
+  - as: ana
+    in: studio
+    say: >
+      @thing we are drowning a bit. We have three jobs running and nobody can tell me where any of
+      them are without asking Bo. Almeida is sitting waiting on the client, Trindade Bakery is
+      supposed to go to print this week and I genuinely do not know what state the Serralves
+      catalogue is in. Can you help us get a grip on this?
+    expect:
+      - THING answers in a thread on Ana's message, not as a new channel-level post.
+      - It PROPOSES something concrete for tracking the jobs. It does not ask Ana to specify what to build.
+      - Any question it asks is answerable by a studio owner in plain words — no product vocabulary.
+      - Nothing is authored yet — the offer precedes the work.
+
+  # ── 2. the acceptance, carrying the requirement that selects the SECOND builder.
+  #     "It has to run on the phone itself" is a condition about HOW IT RUNS, which is the documented
+  #     line for routing to system-viewbuilder. "I'll use it on my phone" would NOT be, and must not be.
+  - as: ana
+    in: studio
+    reply_to: 1
+    say: >
+      Yes please. One thing though — Cai is at the printer half the week and the signal in that
+      basement is rubbish. Whatever you make has to actually run on the phone itself, not a website
+      squeezed into an app. The last thing we tried was that and it timed out every single time.
+    if_asked:
+      "which jobs": "Almeida, Trindade Bakery and the Serralves catalogue."
+      "what states": "It's either with us, with the client, at the printer, or done."
+    expect:
+      - THING routes the build to system-viewbuilder, not system-appbuilder — the request states a requirement about HOW IT MUST RUN.
+      - A live project exists with real tables and the three jobs Ana named as actual DB rows.
+      - The pages are view SPECS, and GET /api/apps/:id/views returns a non-empty `views` array.
+      - If any part of the surface could not be expressed, THING says WHICH part and why — it never silently drops it.
+      - THING tells the team what they can now open, in a sentence. It does not dump the result.
+
+  # ── 3. the load-bearing team beat: a DIFFERENT member continues the thread, with no @thing.
+  #     A thread THING is already in addresses it implicitly.
+  - as: bo
+    in: studio
+    reply_to: 1
+    say: >
+      oh good. can it also show which ones are stuck waiting on the client? that's the bit that
+      always bites us — I lose a week and only notice when Ana asks
+    expect:
+      - THING answers Bo WITHOUT a second @thing — a thread it is already in addresses it implicitly.
+      - It has the context of Ana's conversation; it does not re-ask what the jobs are or what the states mean.
+      - The waiting-on-client view lands as a real change to the app (a spec section or an endpoint), not a promise in prose.
+      - Almeida appears as waiting on the client, because that is what Ana said in step 1 — it is read from state, not re-derived from the reply text.
+
+  # ── 4. a different channel, a different thread, and a question that needs the TEAM DIRECTORY.
+  #     THING cannot answer "who should I chase" from a project DB — only from who is on the team.
+  - as: cai
+    in: press
+    say: >
+      @thing I'm at Lidergraf with the Almeida proofs and the colour is off on the cover. Who should
+      I be chasing about this — and is anyone else waiting on this job?
+    expect:
+      - THING answers with a real person from the team directory, by name, not a generic "the person responsible".
+      - It knows Ana holds the client relationship because that is what the team's own directory/roles say — a personal pod could not answer this at all.
+      - This is a SEPARATE thread from the #studio one; it does not leak Bo's step-3 conversation verbatim, but it does know the Almeida job from shared state.
+      - The colour problem lands as a real row/state change against the Almeida job, not only as a sentence.
+
+  # ── 5. THING acting ACROSS channels — the thing a personal pod structurally cannot do.
+  - as: cai
+    in: press
+    reply_to: 4
+    say: >
+      can you let the others know? I'm going to be stuck here another hour and I don't want Ana
+      finding out tomorrow
+    expect:
+      - THING posts into #studio, a channel it was NOT called from, and says in Cai's thread that it did.
+      - That post is attributed to THING and names Cai as the source — THING never writes as a member.
+      - It does not silently cross-post everywhere; one channel, chosen because that is where the job is discussed.
+
+  # ── 6. the explicit owner ask — a member asks THING to UPDATE the app that already exists.
+  - as: ana
+    in: studio
+    say: >
+      @thing can you add somewhere to log the press checks Cai does? Right now it's in his head. Each
+      one either passes or comes back for a reprint, and I want to see the reprints because they cost
+      us money.
+    expect:
+      - The EXISTING app is extended — a new table/section on the same project. A second app is a failure.
+      - It stays a view-spec app; the update does not fall back to the other builder.
+      - The reprint count is something the app can actually show, not a number THING computes in chat.
+      - The app still builds and every existing route still renders.
+
+  # ── 7. THING parks a question in the thread, and a DIFFERENT member answers it.
+  - as: bo
+    in: studio
+    reply_to: 6
+    say: >
+      while you're in there — should the reprints come out of the job's budget or do we track them
+      separately? Ana and I have never agreed on this
+    expect:
+      - THING recognises this as a decision that is genuinely the team's and ASKS the thread, rather than picking one.
+      - The question is posted INTO the thread as a message a person can simply reply to — not a form nobody in a channel can render.
+      - The turn parks. It does not answer its own question and it does not hang the channel.
+
+  - as: ana
+    in: studio
+    reply_to: 6
+    answer_ask: true
+    say: "separately. I want to see what reprints cost us on their own."
+    expect:
+      - Ana's plain reply RESOLVES the parked question — no second @thing, no form.
+      - The decision lands in state (the schema/spec reflects reprints tracked separately), not just acknowledged in prose.
+      - The thread is not left holding a lock — the next message in it is answered normally.
+
+  # ── 8. the viewer. Rita may read everything and change nothing.
+  - as: rita
+    in: studio
+    say: >
+      @thing morning — can you mark the Trindade job as invoiced? I've just sent it.
+    expect:
+      - The write does NOT happen. No row changes state.
+      - Rita gets an honest permission answer that names what she can do instead (ask an editor) — not silence, and not a fabricated "done!".
+      - The refusal comes from the ROLE, not from THING's judgement about the request.
+      - Nothing in the thread suggests to Rita that it worked.
+
+  # ── 9. a direct message to THING — a private conversation, same brain.
+  - as: cai
+    dm: bo
+    say: >
+      @thing what did we decide about reprints in the end? I wasn't following that one
+    expect:
+      - THING answers in the DM, from the decision that was actually made in #studio — one shared brain across channels.
+      - It answers from stored state, not by replaying the #studio thread's messages at Cai.
+      - Nothing from this DM leaks into a channel Bo and Cai are not both in.
+
+  # ── 10. durability, then the app itself.
+  - restart_pod: true
+    as: ana
+    in: studio
+    say: >
+      @thing where are we with everything? Just the short version.
+    expect:
+      - The channels, their history, the threads, the project, the app and every row survive the restart.
+      - The answer is a real query over the team's data — the same question does not get a different answer than step 6 implied.
+
+  - open_app: true
+    expect:
+      - The app opens with the three real jobs on screen, no console errors, no failed fetches.
+      - The reprint tracking added in step 6 is on screen with real values.
+      - Every route the shell offers actually renders.
+      - It is a spec app — GET /api/apps/:id/views returns views, which is what lets the phone render it without a WebView.
