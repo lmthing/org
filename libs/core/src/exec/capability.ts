@@ -22,6 +22,13 @@ export function intersectAppCaps(app: AppCapabilities, allowWrite: boolean): App
   // mutating store:install (writes into the project) and events:emit (triggers
   // hooks) are withheld, like every other write grant.
   if (app['store:read']) out['store:read'] = app['store:read'];
+  // team:read is the workspace's directory/channels/history — reading what the
+  // caller can already see. Its twin `team:post` is dropped here with the other
+  // write grants: an explore/plan fork must not be able to broadcast into a
+  // channel or DM somebody. This is the concrete reason the team surface is TWO
+  // capability ids rather than one — a single `team:*` would have to be kept
+  // whole (giving read-only forks the writers) or dropped whole (blinding them).
+  if (app['team:read']) out['team:read'] = app['team:read'];
   return out;
 }
 

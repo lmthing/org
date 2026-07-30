@@ -15,6 +15,7 @@ import {
   appendMessage,
   channelIdFromName,
   createChannel,
+  dmChannelId,
   ensureDefaultChannel,
   isValidChannelId,
   listChannels,
@@ -153,6 +154,26 @@ describe('channel ids', () => {
       expect(isValidChannelId(bad)).toBe(false);
     }
     expect(isValidChannelId('general')).toBe(true);
+  });
+
+  /**
+   * The DM-id separator used to be a RAW NUL byte written into this source file
+   * rather than the `\0` escape. It compiled and worked, but `file` reported the
+   * source as binary and grep silently skipped the entire module — which is how a
+   * file this central stayed invisible to every search anyone ran.
+   *
+   * Replacing it with the escape produces the identical string, so every DM
+   * channel already on disk keeps its id. These are the values the RAW-NUL version
+   * produced, computed before the change and pinned here: if the separator ever
+   * changes again, two people's existing conversation silently splits in half.
+   */
+  it('derives a stable, order-independent DM id (unchanged by the \\0 escape fix)', () => {
+    expect(dmChannelId(['a', 'b'])).toBe('dm-59b271ae1bbcb1d31d41929817f4b16f');
+    expect(dmChannelId(['u2', 'u1'])).toBe('dm-c2eb696335ff17c2691c63055d1afb18');
+    // Order and duplicates cannot change it — two people opening a DM from
+    // opposite ends must land in the same channel.
+    expect(dmChannelId(['b', 'a', 'b'])).toBe(dmChannelId(['a', 'b']));
+    expect(isValidChannelId(dmChannelId(['a', 'b']))).toBe(true);
   });
 });
 
@@ -544,12 +565,22 @@ describe('THING in a thread', () => {
     const rootMsg = opened.json().message as ChannelMessage;
     // NOT `settle()` — the turn is deliberately parked on the question, so the
     // drain would wait for a human. Wait for the question to land instead.
-    for (let i = 0; i < 200 && !hasPendingAsk('general', rootMsg.id); i++) {
+    //
+    // Wait for the MESSAGE, not for `hasPendingAsk`. The two are not the same
+    // moment: the `ask_start` handler registers the pending ask synchronously and
+    // then appends the question on an un-awaited `track(postAsk(…))`. Polling the
+    // registry therefore returns as soon as the ask exists, which can be strictly
+    // before the message this test goes on to assert has been written — a race
+    // that only opens under enough load to deschedule the append, which is why it
+    // showed up in a full parallel run and never in isolation.
+    let afterAsk: ChannelMessage[] = [];
+    for (let i = 0; i < 400; i++) {
+      afterAsk = (await readMessages(root, 'general')).messages;
+      if (afterAsk.length >= 2) break;
       await new Promise((r) => setTimeout(r, 5));
     }
 
     // The question is IN the thread, as a message, under the ask.
-    const afterAsk = (await readMessages(root, 'general')).messages;
     expect(afterAsk.map((m) => m.kind)).toEqual(['user', 'thing']);
     expect(afterAsk[1]!.text).toContain('Which project?');
     expect(afterAsk[1]!.threadId).toBe(rootMsg.id);

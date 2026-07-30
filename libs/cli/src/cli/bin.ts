@@ -613,6 +613,14 @@ async function main(): Promise<void> {
             writeProjectApi: projectAuthoring.writeProjectApi,
             listProjectDir: projectAuthoring.listProjectDir,
             readProjectFile: projectAuthoring.readProjectFile,
+            // NO `team:` resolver here, deliberately. The team globals resolve
+            // against the verified member and channel of the message that started
+            // the turn, and a `--request` one-shot has neither — it is a local
+            // operator on a terminal, not a colleague in a channel. The only path
+            // that supplies one is the channel route
+            // (`server/routes/team-channels.ts` → `runHeadlessThreaded({ team })`).
+            // On a personal pod the grants are dropped at parse time anyway, so
+            // the globals are absent from the DTS rather than merely unresolvable.
           };
         })(),
         appDts,

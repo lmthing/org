@@ -4,6 +4,7 @@ import type { DocumentResolver } from '../globals/read-document.js';
 import type { IntegrationStatusResolver } from '../globals/integration-status.js';
 import type { StoreResolver, InstallSpaceResult } from '../globals/store.js';
 import type { EmitEventResolver } from '../globals/emit-event.js';
+import type { TeamResolver } from '../globals/team.js';
 import {
   CONSENT_MARKED_YIELD_KINDS,
   enforceConsent,
@@ -123,6 +124,12 @@ export interface YieldRouterContext {
    *  declared events and dispatch to subscribing hooks (host-supplied by
    *  libs/cli on `AppGlobalImpls.emitEvent`). Absent ⇒ a clear error. */
   emitEventResolver?: EmitEventResolver;
+  /** Resolve the team-global yields (`teamContext`/`teamMembers`/`teamChannels`/
+   *  `teamHistory`/`teamPost`/`teamPinApp`) — host-supplied by libs/cli on
+   *  `AppGlobalImpls.team`, built PER TURN and closed over the verified caller +
+   *  channel that started it. Absent for any turn that is not a team-channel turn
+   *  (a personal pod, or Studio/chat on a team pod) ⇒ a clear error naming why. */
+  teamResolver?: TeamResolver;
 }
 
 export type RouteResult =
@@ -360,6 +367,49 @@ export async function routeCommonYield(
       const [name, payload, sourceScope] = req.args as [string, Record<string, unknown>, string];
       const value = await ctx.emitEventResolver(name, payload, sourceScope);
       return { handled: true, value };
+    }
+    case 'teamContext':
+    case 'teamMembers':
+    case 'teamChannels':
+    case 'teamHistory':
+    case 'teamPost':
+    case 'teamPinApp': {
+      // The team workspace globals (`team:read` / `team:post`). One arm for all
+      // seven: the resolver is bound HOST-side to this turn's verified caller and
+      // channel, so the only thing routed from the sandbox is the arguments — never
+      // an identity, a role or a team id.
+      //
+      // A missing resolver is the normal state for most turns: the grants are
+      // pod-wide (a team pod), but the CONTEXT is per-turn, so a THING session in
+      // Studio or /chat on a team pod holds the capability and has no channel to
+      // answer in. Say so, rather than failing obscurely.
+      if (!ctx.teamResolver) {
+        throw new Error(
+          `${req.kind} is not available here: this turn is not running in a team channel ` +
+            `(team globals resolve against the message that started the turn)`,
+        );
+      }
+      const team = ctx.teamResolver;
+      switch (req.kind) {
+        case 'teamContext':
+          return { handled: true, value: await team.context() };
+        case 'teamMembers':
+          return { handled: true, value: await team.members() };
+        case 'teamChannels':
+          return { handled: true, value: await team.channels() };
+        case 'teamHistory': {
+          const [channelId, opts] = req.args as [string, { limit?: number; before?: string } | undefined];
+          return { handled: true, value: await team.history(channelId, opts) };
+        }
+        case 'teamPost': {
+          const [channelId, text, opts] = req.args as [string, string, { threadId?: string } | undefined];
+          return { handled: true, value: await team.post(channelId, text, opts) };
+        }
+        default: {
+          const [channelId, projectId] = req.args as [string, string];
+          return { handled: true, value: await team.pinApp(channelId, projectId) };
+        }
+      }
     }
     case 'loadKnowledge': {
       // Fork leaves + delegates (knowledgeBaseDirs set): return the file CONTENT so

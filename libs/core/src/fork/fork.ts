@@ -547,6 +547,10 @@ export class ForkEngine {
           // no requestConsent is ever wired for a headless fork leaf.
           storeResolver: this.opts.appGlobals?.store,
           emitEventResolver: this.opts.appGlobals?.emitEvent,
+          // Same turn-bound team resolver as the parent. A read-only fork role has
+          // already lost `team:post` (intersectAppCaps), so the writers are neither
+          // injected nor declared in an explore/plan leaf.
+          teamResolver: this.opts.appGlobals?.team,
           // delegate: gated by the task's canDelegateTo policy via the unified
           // yield-time gate (exec/target-match.ts isDelegateAllowed — same gate the
           // session and delegate VMs use); routed to the engine's delegateRunner

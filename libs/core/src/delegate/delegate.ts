@@ -495,6 +495,11 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             // headless), so the router's consent gate refuses before install.
             storeResolver: opts.appGlobals?.store,
             emitEventResolver: opts.appGlobals?.emitEvent,
+            // A delegate acts for the SAME caller in the SAME channel, so it gets
+            // the parent's turn-bound team resolver unchanged — including its
+            // viewer refusal. What a delegate may CALL is still its own grants'
+            // business (a delegate without `team:post` has no writers injected).
+            teamResolver: opts.appGlobals?.team,
             // installSpace live-registers into the session-shared map (visible to
             // the parent's later delegate()) — same reference forks receive.
             dynamicSpaces: opts.dynamicSpaces,

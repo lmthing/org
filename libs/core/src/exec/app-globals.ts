@@ -4,6 +4,7 @@ import type { DbApi, QueryOpts, UpdateOpts, Row, ApiCallFn, AppBuildFn, Connecti
 import type { AppCapabilities } from '../spaces/capabilities.js';
 import type { StoreResolver } from '../globals/store.js';
 import type { EmitEventResolver } from '../globals/emit-event.js';
+import type { TeamResolver } from '../globals/team.js';
 
 /** Result shape common to the synchronous authoring globals. */
 export type AuthoringResult = { ok: boolean; error?: string };
@@ -63,6 +64,16 @@ export interface AppGlobalImpls {
    *  The host (libs/cli) validates against the caller scope's declared events and
    *  dispatches via the event pipeline; project-scoped. */
   emitEvent?: EmitEventResolver;
+  /** Team-workspace resolver (`team:read`/`team:post`) — value-yielding like `store`:
+   *  NOT injected here but threaded through the yield router
+   *  (`YieldRouterContext.teamResolver`). Unlike every other entry in this interface
+   *  it is built PER TURN, not per project: it is closed over the verified caller,
+   *  channel and thread of the message that woke the agent
+   *  (`libs/cli/src/server/team-globals.ts#createTeamResolver`), which is how an
+   *  agent turn — running headless, with no request in scope — knows who is asking
+   *  without a global mutable. Absent on a personal pod and on any team-pod turn that
+   *  did not come from a channel. */
+  team?: TeamResolver;
   /** LIVE-PROJECT lifecycle globals (`project:manage`) — `createProject` makes a NEW
    *  live pod project under `.lmthing/<id>/` (a real, servable project — NOT a
    *  `store/apps/<id>/` catalog template) and marks it the session's build TARGET;

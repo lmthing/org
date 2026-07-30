@@ -159,6 +159,77 @@ describe('SessionManager.runHeadless (keyless, mock provider)', () => {
     expect(withGuard).toBeGreaterThan(withoutGuard);
   });
 
+  it('(f) a THREADED run is recorded in the session ledger, like every other run', async () => {
+    // `runHeadlessThreaded` subscribed to the session's tracer for displays but
+    // never called `sessionLedger.trackTracer`, which `runHeadless` does. The two
+    // are different jobs: the subscription feeds this call's RETURN VALUE, the
+    // ledger is what the pod can answer `GET /api/session-ledger` with.
+    //
+    // So every threaded turn — every team-channel message and every inbound
+    // webhook — spent real tokens and left no record of having spent them. It is
+    // worst on a team pod, where the tokens are the TEAM's and a channel turn is
+    // the one kind of run no member can see the cost of anywhere else.
+    const root = await makeRoot();
+    const manager = new SessionManager({
+      streamFn: mockStreamFn,
+      lmthingRoot: root,
+      buildSession: (args: BuildSessionArgs) =>
+        new Session(
+          {
+            spaceDir: args.spaceDir,
+            agentSlug: args.agentSlug,
+            modelAlias: 'mock',
+            renderHost: args.renderHost,
+            systemSpaceDirs: [],
+            budget: args.budget,
+          },
+          { streamFn: mockStreamFn },
+        ),
+    });
+
+    const res = await manager.runHeadlessThreaded({
+      sessionId: 'thread-session-1',
+      agentSlug: 'thing',
+      message: 'hello',
+      origin: { source: 'team-channel' },
+    });
+    expect(res.ok).toBe(true);
+
+    const ledger = manager.listSessionLedger();
+    const entry = ledger.find((r) => r.sessionId === 'thread-session-1');
+    expect(entry, 'a threaded turn must appear in the ledger').toBeDefined();
+    // The caller names the turn, so a team channel is distinguishable from a
+    // webhook in the record rather than all of them reading as 'headless'.
+    expect(entry!.source).toBe('team-channel');
+  });
+
+  it('(g) a threaded run with no stated origin is still recorded', async () => {
+    // The webhook and event-dispatch callers pass no origin. Defaulting must not
+    // be the difference between being in the ledger and being invisible.
+    const root = await makeRoot();
+    const manager = new SessionManager({
+      streamFn: mockStreamFn,
+      lmthingRoot: root,
+      buildSession: (args: BuildSessionArgs) =>
+        new Session(
+          {
+            spaceDir: args.spaceDir,
+            agentSlug: args.agentSlug,
+            modelAlias: 'mock',
+            renderHost: args.renderHost,
+            systemSpaceDirs: [],
+            budget: args.budget,
+          },
+          { streamFn: mockStreamFn },
+        ),
+    });
+
+    await manager.runHeadlessThreaded({ sessionId: 'thread-session-2', agentSlug: 'thing', message: 'hi' });
+    const entry = manager.listSessionLedger().find((r) => r.sessionId === 'thread-session-2');
+    expect(entry).toBeDefined();
+    expect(entry!.source).toBe('headless-threaded');
+  });
+
   it('(b) surfaces { ok:false, error } when the run throws', async () => {
     const root = await makeRoot();
     const manager = new SessionManager({

@@ -62,6 +62,17 @@ export { createStoreSearchGlobal, createStoreInspectGlobal, createInstallSpaceGl
 export type { StoreResolver, StoreInstallOutcome, InstallSpaceResult } from './globals/store.js';
 export { createEmitEventGlobal, deriveEventScope } from './globals/emit-event.js';
 export type { EmitEventResolver, EmitEventResult } from './globals/emit-event.js';
+export type {
+  TeamResolver,
+  TeamTurnInfo,
+  TeamCallerInfo,
+  TeamMemberInfo,
+  TeamChannelInfo,
+  TeamMessageInfo,
+  TeamHistoryPage,
+  TeamPostResult,
+  TeamPinResult,
+} from './globals/team.js';
 export {
   CONSENT_MARKED_YIELD_KINDS,
   enforceConsent,

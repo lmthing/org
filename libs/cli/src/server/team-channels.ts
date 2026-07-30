@@ -102,6 +102,32 @@ export interface ChannelMessage {
   /** The member who sent it (absent for `thing`/`system`). */
   userId?: string;
   email?: string;
+  /**
+   * For a `thing` message THING wrote somewhere OTHER than as a direct reply —
+   * the member whose request produced it. Rendered as "THING · for Ana".
+   *
+   * A message from an assistant appearing in a channel nobody asked in is
+   * otherwise indistinguishable from a bug: the reader cannot tell whether the
+   * agent decided to speak on its own, and cannot tell WHO to ask about it. It is
+   * also the authority record — every such post was made under that member's
+   * permissions ({@link isVisibleTo}, and the editor gate in `team-globals.ts`),
+   * so the log should say whose.
+   *
+   * NOT set on THING's ordinary reply in the thread it was addressed in: there the
+   * asker is the message directly above, and stamping every reply would be noise.
+   */
+  onBehalfOf?: { userId: string; label: string };
+  /**
+   * For the `system` RECEIPT posted back into the thread that made THING post
+   * somewhere else — where the message went, so the conversation that caused it
+   * records what happened and can link to it.
+   *
+   * The same shape as {@link app}: a typed field on the message, so a client
+   * renders an affordance rather than parsing prose, and a reader scrolling back
+   * still sees it. A write nobody in the originating thread can see is a write
+   * nobody can audit.
+   */
+  postedTo?: { channelId: string; channelName: string; messageId: string };
   /** The id of the message that opened this thread; absent for a channel-level post. */
   threadId?: string;
   /**
@@ -289,7 +315,7 @@ export function isVisibleTo(channel: Channel, userId: string): boolean {
  * alphabet and a pair of them would blow the 64-character budget.
  */
 export function dmChannelId(userIds: readonly string[]): string {
-  const key = [...new Set(userIds)].sort().join(' ');
+  const key = [...new Set(userIds)].sort().join('\0');
   return `dm-${createHash('sha256').update(key).digest('hex').slice(0, 32)}`;
 }
 

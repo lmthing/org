@@ -68,6 +68,7 @@ import {
   setProfile,
   touchMember,
 } from '../team-members.js';
+import { createTeamResolver } from '../team-globals.js';
 
 /** The agent a channel mention reaches, matching the chat surface's default. */
 const THING_AGENT = 'thing';
@@ -559,7 +560,12 @@ export function handlePostMessage(
     if (message.threadId && answerPendingAsk(channelId, message.threadId, text)) return;
 
     if (await addressesThing(root, message)) {
-      track(beginThingReply(manager, root, message, channel));
+      // The caller travels with the turn as a VALUE. This is the only place it is
+      // trustworthy — the request is here and its identity headers came from Envoy —
+      // and the turn it starts runs headless, long after this handler returns, so
+      // there is nothing for it to read the caller back OUT of. A turn with no
+      // verified caller (only reachable off the edge) gets no team globals at all.
+      track(beginThingReply(manager, root, message, channel, caller));
     }
   };
 }
@@ -582,10 +588,11 @@ function beginThingReply(
   root: string,
   message: ChannelMessage,
   channel: Channel,
+  caller: TeamCaller | null,
 ): Promise<void> {
   let release!: () => void;
   const untilParkedOrDone = new Promise<void>((resolve) => (release = resolve));
-  void runThingReply(manager, root, message, channel, release).finally(release);
+  void runThingReply(manager, root, message, channel, caller, release).finally(release);
   return untilParkedOrDone;
 }
 
@@ -642,7 +649,13 @@ async function deliver(root: string, channel: Channel, message: ChannelMessage):
   const members = await listMembers(root);
   const sender =
     message.kind === 'thing'
-      ? 'THING'
+      ? // A post THING made because somebody asked it to says so. Waking a phone
+        // with a message from an assistant in a channel the reader never asked in
+        // is only intelligible if it names whose request produced it — and that
+        // member is also who to ask about it.
+        message.onBehalfOf
+        ? `THING (for ${message.onBehalfOf.label})`
+        : 'THING'
       : memberLabel(
           members.find((m) => m.userId === message.userId),
           message.email ?? 'Someone',
@@ -666,6 +679,10 @@ async function runThingReply(
   root: string,
   message: ChannelMessage,
   channel: Channel,
+  /** The verified member whose message started this turn — the identity every
+   *  team global answers for. `null` means no verified caller reached us, and the
+   *  turn runs with no team globals rather than with a guessed identity. */
+  caller: TeamCaller | null,
   /** Called when this turn parks on a question — see {@link beginThingReply}. */
   onParked: () => void = () => {},
 ): Promise<void> {
@@ -706,6 +723,30 @@ async function runThingReply(
       sessionId,
       agentSlug: THING_AGENT,
       message: promptFor(message),
+      // Name the turn in the pod's session ledger. A channel turn has no client
+      // asking for it, so it is the one kind of run a member cannot see the cost
+      // of anywhere else — and on a team pod the tokens are the TEAM's.
+      origin: { source: 'team-channel' },
+      // The team surface (`team:read`/`team:post`). Built here, per turn, closed
+      // over THIS caller and channel — which is what makes "who asked?" answerable
+      // inside a headless run without an ambient current-user. A post THING makes
+      // reaches the same sockets and badges a member's would, via these hooks.
+      ...(caller
+        ? {
+            team: createTeamResolver(
+              root,
+              { caller, channel, threadId },
+              {
+                onPost: (posted, into) => {
+                  broadcastChannelEvent({ type: 'message', message: posted }, audienceFor(into));
+                  track(deliver(root, into, posted).catch(() => {}));
+                },
+                onChannelChanged: (changed) =>
+                  broadcastChannelEvent({ type: 'channel', channel: changed }, audienceFor(changed)),
+              },
+            ),
+          }
+        : {}),
       // People are watching this thread. Without it the turn loop's anti-silent
       // guard stays off — the guard is meant to skip forks, hooks and code-node
       // runs that nobody reads — so a turn that did work and displayed nothing

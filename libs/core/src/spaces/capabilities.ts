@@ -37,7 +37,9 @@ export type CapabilityId =
   | 'store:read'
   | 'store:install'
   | 'events:emit'
-  | 'fs:scratch';
+  | 'fs:scratch'
+  | 'team:read'
+  | 'team:post';
 
 /** Every recognized capability id. Unknown ids fail the space load. */
 export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
@@ -56,7 +58,37 @@ export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
   'store:install',
   'events:emit',
   'fs:scratch',
+  'team:read',
+  'team:post',
 ]);
+
+/**
+ * The TEAM-ONLY capabilities. They exist as ids on every pod — a space file ships
+ * unchanged to both kinds of pod, so declaring one must never fail the load — but
+ * the GRANT is dropped by {@link parseCapabilities} unless this pod is a team pod.
+ */
+export const TEAM_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
+  'team:read',
+  'team:post',
+]);
+
+/**
+ * True when the gateway provisioned this pod for a TEAM.
+ *
+ * The mirror of `libs/cli/src/server/team-guard.ts#isTeamMode`, duplicated rather
+ * than imported because `@lmthing/core` never imports from `@lmthing/cli`. It reads
+ * the same CONTAINER env var, which the gateway sets outside the editable `user-env`
+ * secret — so an editor cannot grant their agents the team surface with a
+ * `PUT /api/compute/env`.
+ *
+ * This is a deployment property, constant for the process lifetime, which is why it
+ * is read from the environment rather than threaded: it describes the POD, not a
+ * request. Nothing about a CALLER is ever read this way — that arrives per turn on
+ * the resolver (`globals/team.ts#TeamResolver`).
+ */
+export function isTeamPod(): boolean {
+  return process.env['LMTHING_TEAM_MODE'] === '1';
+}
 
 /** The three db verbs whose (optional) config narrows scope to `{ tables: [...] }`. */
 export const DB_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
@@ -106,6 +138,8 @@ const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId
   'store:install',
   'events:emit',
   'fs:scratch',
+  'team:read',
+  'team:post',
 ]);
 
 /**
@@ -124,6 +158,15 @@ const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId
  *   - store:install  → `true` (bare; grants the consent-marked installSpace)
  *   - events:emit    → `true` (bare; grants emitEvent — publish the OWN scope's
  *                      declared events into the hook pipeline)
+ *   - team:read      → `true` (bare; TEAM PODS ONLY — grants teamContext/teamMembers/
+ *                      teamChannels/teamHistory. Dropped on a personal pod, so the
+ *                      globals are neither injected nor declared there.)
+ *   - team:post      → `true` (bare; TEAM PODS ONLY — grants teamPost/teamPinApp.
+ *                      A separate id from `team:read` because posting into a channel
+ *                      creates a permanent record and raises other people's badges,
+ *                      where reading the directory discloses only what the caller
+ *                      already sees; the split is also what lets a read-only fork role
+ *                      keep the readers and lose the writers.)
  *   - fs:scratch     → `true` (bare; grants createScratch + a sandboxed generic
  *                      fs/shell surface rooted at a throwaway .lmthing/scratch dir —
  *                      the engineer's code sandbox. The ONLY grant that earns any
@@ -157,6 +200,8 @@ export interface AppCapabilities {
   'store:install'?: true;
   'events:emit'?: true;
   'fs:scratch'?: true;
+  'team:read'?: true;
+  'team:post'?: true;
 }
 
 export interface ParseCapabilitiesCtx {
@@ -355,6 +400,20 @@ export function parseCapabilities(raw: unknown, ctx: ParseCapabilitiesCtx): AppC
       );
     }
     result['api:call'] = parseApiCallConfig(config, ctx);
+  }
+
+  // Team grants are POD-conditional, and this is the only place that can honour
+  // "not granted ⇒ not injected AND absent from the DTS" for them: both the
+  // injector and the ambient-DTS builder read this parsed model, so dropping the
+  // grant here removes the globals AND their declarations in one move.
+  //
+  // Dropped, never rejected. THING's `instruct.md` is one file shipped to both
+  // kinds of pod — throwing on a personal pod would make the system space fail to
+  // load everywhere, which is the opposite of inert. Validation still ran above
+  // (an unknown id, or a config on a bare-only team cap, throws on EVERY pod), so
+  // a malformed declaration cannot hide on a personal pod and surface in prod.
+  if (!isTeamPod()) {
+    for (const id of TEAM_CAPABILITY_IDS) delete result[id];
   }
 
   return result;

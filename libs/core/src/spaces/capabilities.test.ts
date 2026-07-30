@@ -36,6 +36,10 @@ describe('parseCapabilities', () => {
     expect(CAPABILITY_IDS.has('api:call')).toBe(true);
     expect(CAPABILITY_IDS.has('connections:use')).toBe(true);
     expect(CAPABILITY_IDS.has('hooks:write')).toBe(true);
+    // The team ids are KNOWN on every pod — a space file declaring one must load
+    // on a personal pod too (the GRANT is what gets dropped there, see team.test.ts).
+    expect(CAPABILITY_IDS.has('team:read')).toBe(true);
+    expect(CAPABILITY_IDS.has('team:post')).toBe(true);
   });
 
   it('throws on an unknown capability id', () => {

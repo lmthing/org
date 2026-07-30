@@ -3,7 +3,7 @@ import { join, basename } from 'node:path';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { Session, saveSnapshot, loadSpace, loadProjectFunctions, ForkEngine, runTasklist, Tracer, createAskConsentPrompter } from '@lmthing/core';
-import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput, ProjectFunctions, TaskEnvelope, ProjectResult, DbTableSchema } from '@lmthing/core';
+import type { StreamOpts, StreamSession, AppGlobalImpls, ConnectionResolver, ReadDocumentResult, TraceAttachment, UserInput, ProjectFunctions, TaskEnvelope, ProjectResult, DbTableSchema, TeamResolver } from '@lmthing/core';
 import { createConnectionResolver } from './connections.js';
 import { createCodeNodeCtxFactory } from './tasklist-runner.js';
 import { loadAzurePrices, computeTurnCost, type ModelPricing } from './pricing.js';
@@ -1962,6 +1962,9 @@ export class SessionManager {
      *  and resolve it out-of-band (a team channel turns an ask into a thread
      *  message and answers it with the next reply). */
     renderHost?: WebRenderHost;
+    /** Per-turn team resolver — merged onto the project's `appGlobals` below.
+     *  See {@link runHeadlessThreaded}'s `team`. */
+    team?: TeamResolver;
   }): Promise<BuildSessionArgs> {
     const root = this.lmthingRoot;
     if (!root) {
@@ -2017,7 +2020,10 @@ export class SessionManager {
       projectFunctionsBundled: projectFunctions.functionsBundled,
       projectId,
       projectRoot,
-      appGlobals,
+      // The team resolver is the one app global bound to the TURN rather than the
+      // project, so it is merged in here instead of inside getProjectAppGlobals
+      // (which is cached per project and shared by every caller).
+      appGlobals: opts.team ? { ...appGlobals, team: opts.team } : appGlobals,
       appDts: contracts?.apiCallDts,
     };
   }
@@ -2083,6 +2089,20 @@ export class SessionManager {
     /** Every `setActivity()` of the turn, live. The tracer already writes these;
      *  this is the seam that lets a caller show "currently doing" while it runs. */
     onActivity?: (text: string) => void;
+    /** The TEAM surface for this turn (`team:read`/`team:post`), built by the
+     *  channel route and closed over the verified caller + channel that started it
+     *  (`server/team-globals.ts#createTeamResolver`). PER TURN, not per project:
+     *  every other entry in `appGlobals` is bound to the project, this one is bound
+     *  to who is asking, which is why it arrives here rather than being assembled in
+     *  {@link getProjectAppGlobals}. Omitted ⇒ the agent's team globals reject with
+     *  "not running in a team channel" (and on a personal pod they do not exist at
+     *  all — the grants are dropped at parse time). */
+    team?: TeamResolver;
+    /** What started this turn, for the pod's session ledger. A threaded turn has
+     *  no client asking for it, so without this every team-channel and every
+     *  inbound-webhook turn is absent from `GET /api/session-ledger` — the team
+     *  can spend real tokens on work it can never see accounted for. */
+    origin?: { source?: string };
   }): Promise<HeadlessRunResult> {
     return this.runExclusive(opts.sessionId, async () => {
       let session: Session | undefined;
@@ -2116,6 +2136,7 @@ export class SessionManager {
           budget: opts.budget,
           ...(opts.visibleToUser ? { visibleToUser: true } : {}),
           ...(opts.renderHost ? { renderHost: opts.renderHost } : {}),
+          ...(opts.team ? { team: opts.team } : {}),
         });
         session = this.buildSessionFn(args);
 
@@ -2130,6 +2151,17 @@ export class SessionManager {
               const text = (e as { text?: unknown }).text;
               if (typeof text === 'string' && text.trim()) opts.onActivity(text);
             }
+          });
+          // Record this turn + its delegates in the pod-global ledger, exactly as
+          // `runHeadless` does. Subscribing for displays is NOT the same thing:
+          // it feeds this function's return value, while the ledger is what the
+          // pod can answer `GET /api/session-ledger` with. Without it a threaded
+          // turn — every team-channel message and every inbound webhook — spends
+          // real tokens and leaves no record of having done so.
+          this.sessionLedger.trackTracer(session.getTracer(), {
+            source: opts.origin?.source ?? 'headless-threaded',
+            sessionId: opts.sessionId,
+            ...(opts.projectId !== undefined ? { projectId: opts.projectId } : {}),
           });
         }
 

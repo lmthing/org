@@ -373,6 +373,42 @@ declare function emitEvent(name: string, payload: Record<string, unknown>): Prom
 export const KNOWLEDGE_WRITE_DTS = `/** Author a knowledge option into THIS agent's own space at knowledge/<domain>/<field>/<option>.md (option 'index' is reserved). opts.source tags provenance for later conflict resolution. */
 declare function writeKnowledge(domain: string, field: string, option: string, markdown: string, opts?: { source?: 'user' | 'researched' | 'agent' }): { ok: boolean; path: string; error?: string };`;
 
+// `team:read` earns the four READERS of the team workspace this pod belongs to. Every
+// one of them answers for the CALLER whose message started the turn — the identity is
+// closed over host-side, so there is no `userId`/`role` parameter to spoof. A DM the
+// caller is not in is not listed by `teamChannels` and is not readable by `teamHistory`
+// (it rejects exactly as an unknown id does — "you may not read this" and "there is
+// nothing here" must be indistinguishable). Emitted ONLY on a team pod: the grant itself
+// is dropped elsewhere (`spaces/capabilities.ts#isTeamPod`), so on a personal pod these
+// declarations are absent and a stray `teamMembers()` is a typecheck error, not a throw.
+export const TEAM_READ_DTS = `/** Who asked, in which channel, in which thread. The caller's own identity — you cannot act as anyone else. */
+declare function teamContext(): Promise<{ teamId: string; channelId: string; channelName: string; channelKind: 'channel' | 'dm'; threadId?: string; caller: { userId: string; email?: string; handle?: string; displayName?: string; role: 'viewer' | 'editor' } }>;
+/** The team's member directory — use \`label\` to name someone and \`userId\` to address them. */
+declare function teamMembers(): Promise<Array<{ userId: string; label: string; handle?: string; displayName?: string; email?: string; isCaller: boolean }>>;
+/** The channels the CALLER can see (a direct message they are not in is never listed). */
+declare function teamChannels(): Promise<Array<{ id: string; name: string; kind: 'channel' | 'dm'; categoryId?: string; apps?: string[] }>>;
+/** A page of a channel's history, newest last — how you answer "what did we decide about X". Rejects for a channel the caller cannot see. At most 100 messages (default 30); \`returned\`/\`channelName\` are there so you can SAY what you read. */
+declare function teamHistory(channelId: string, opts?: { limit?: number; before?: string }): Promise<{ messages: Array<{ id: string; ts: string; channelId: string; kind: 'user' | 'thing' | 'system'; text: string; author: string; userId?: string; threadId?: string }>; hasMore: boolean; channelId: string; channelName: string; returned: number; limit: number }>;`;
+
+// `team:post` earns the two WRITERS. Deliberately a separate id from `team:read`:
+// these leave records in a shared log and raise other people's badges, and they are the
+// grant a read-only fork role loses (`exec/capability.ts#intersectAppCaps`).
+//
+// Every post is a `thing` message — the agent speaks as itself and can never be
+// attributed to a member — and every one of them is refused when the caller is a
+// VIEWER, so a viewer cannot reach through the agent to do what the REST guard would
+// have refused them (`server/team-guard.ts#guardRequest`).
+//
+// There is NO `teamDM`. A `thing` message has no `userId` and `dmChannelId` hashes a
+// set of USER ids, so THING cannot be a participant in a direct message: the only
+// implementations are impersonating the asker or inventing an identity the addressing
+// scheme has no room for. Reaching one person is `teamPost` + an `@handle`, which
+// rides the existing mention/badge/push path.
+export const TEAM_POST_DTS = `/** Post into a channel the caller can see (optionally in a thread). Posts AS THING, attributed to the member who asked; \`@handle\` in the text notifies that person. Editor callers only. A post to another channel leaves a receipt in this thread. */
+declare function teamPost(channelId: string, text: string, opts?: { threadId?: string }): Promise<{ ok: boolean; channelId: string; messageId?: string; receipt?: boolean }>;
+/** Pin a project's app beside a channel so it can be opened next to the conversation. Editor callers only. */
+declare function teamPinApp(channelId: string, projectId: string): Promise<{ ok: boolean; channelId: string; apps: string[] }>;`;
+
 /**
  * Registry of the STANDALONE app-capability fragments, keyed by capability id, for
  * the integrator to gate additively per agent in `buildAmbientDts`. The `db:*` trio
@@ -391,6 +427,8 @@ export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
   'store:read': STORE_READ_DTS,
   'store:install': STORE_INSTALL_DTS,
   'events:emit': EVENTS_EMIT_DTS,
+  'team:read': TEAM_READ_DTS,
+  'team:post': TEAM_POST_DTS,
 };
 
 // Raw fs/shell primitives, appended to the full-DTS bundles below. `host-tools.ts`'s

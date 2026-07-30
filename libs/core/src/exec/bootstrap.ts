@@ -24,6 +24,14 @@ import { createSetSessionMetaGlobal } from '../globals/set-session-meta.js';
 import { createSetActivityGlobal } from '../globals/set-activity.js';
 import { createStoreSearchGlobal, createStoreInspectGlobal, createInstallSpaceGlobal } from '../globals/store.js';
 import { createEmitEventGlobal, deriveEventScope } from '../globals/emit-event.js';
+import {
+  createTeamContextGlobal,
+  createTeamMembersGlobal,
+  createTeamChannelsGlobal,
+  createTeamHistoryGlobal,
+  createTeamPostGlobal,
+  createTeamPinAppGlobal,
+} from '../globals/team.js';
 import { createConsentRequestGlobal } from '../globals/consent.js';
 import { CATALOG_NAMES } from '../ui/catalog.js';
 import {
@@ -261,6 +269,21 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   if (caps.app['events:emit']) {
     injectGlobal(ctx, 'emitEvent', createEmitEventGlobal(pushYield, deriveEventScope(opts.spaceDir, opts.projectRoot)) as AnyFn);
   }
+  // The TEAM workspace globals — only ever present on a team pod, because the
+  // grants themselves are dropped at parse time elsewhere (`isTeamPod`). Readers
+  // on `team:read`, writers on `team:post`; both resolve through the yield router's
+  // per-turn `teamResolver`, which carries the caller identity the sandbox has no
+  // way to name.
+  if (caps.app['team:read']) {
+    injectGlobal(ctx, 'teamContext', createTeamContextGlobal(pushYield) as AnyFn);
+    injectGlobal(ctx, 'teamMembers', createTeamMembersGlobal(pushYield) as AnyFn);
+    injectGlobal(ctx, 'teamChannels', createTeamChannelsGlobal(pushYield) as AnyFn);
+    injectGlobal(ctx, 'teamHistory', createTeamHistoryGlobal(pushYield) as AnyFn);
+  }
+  if (caps.app['team:post']) {
+    injectGlobal(ctx, 'teamPost', createTeamPostGlobal(pushYield) as AnyFn);
+    injectGlobal(ctx, 'teamPinApp', createTeamPinAppGlobal(pushYield) as AnyFn);
+  }
   // __requestConsent: the internal seam consent-wrapped SPACE FUNCTIONS yield
   // through (sandbox/inject-functions.ts wrapWithConsentGate). Injected into EVERY
   // context — the yield router's consent gate decides (fail-closed without a
@@ -378,7 +401,10 @@ function buildAppCapabilityDts(app: AppCapabilities, appDts?: string, projectRoo
   // `views:write` sits beside `pages:write` here, never inside it: the two authoring media are
   // separated BY CAPABILITY, which is what makes `system-viewbuilder`'s zero-WebView guarantee a
   // typecheck error rather than an instruction (see the fragment's own doc in library-dts.ts).
-  for (const id of ['pages:write', 'views:write', 'api:write', 'hooks:write', 'knowledge:write', 'project:manage', 'store:read', 'store:install', 'events:emit'] as const) {
+  // `team:read`/`team:post` ride the same list. They reach it only on a team pod —
+  // the parse step drops the grants everywhere else — which is what makes the whole
+  // team surface absent from a personal pod's DTS rather than merely inert.
+  for (const id of ['pages:write', 'views:write', 'api:write', 'hooks:write', 'knowledge:write', 'project:manage', 'store:read', 'store:install', 'events:emit', 'team:read', 'team:post'] as const) {
     if (app[id]) parts.push(CAPABILITY_DTS_FRAGMENTS[id]);
   }
   return parts.filter(Boolean).join('\n');
