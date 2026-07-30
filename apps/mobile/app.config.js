@@ -117,6 +117,22 @@ module.exports = {
     // relies on a human remembering to bump `version` in the same commit as a native
     // change; forgetting once means every installed copy launches a bundle whose native
     // modules are absent, which is a crash loop with no way out but a store release.
+    //
+    // MEASURED, because it is not obvious and it decides whether an update is ever
+    // delivered: the fingerprint hashes the RESOLVED config, so the two environment
+    // variables read above are inside it. Changing either changes the runtimeVersion.
+    //
+    //   (nothing set)                              b6f46592…
+    //   EXPO_OTA_APP_ID                            5d1b793a…   ← every OTA-capable build
+    //   EXPO_OTA_APP_ID + RELEASE_CHANNEL=staging  e455f974…
+    //
+    // Two rules follow. A profile that omits `EXPO_OTA_APP_ID` is not merely OTA-less,
+    // it is on a DIFFERENT runtimeVersion — which is why `preview` in eas.json sets it,
+    // and what makes a preview APK a valid stand-in for the store bundle when proving an
+    // update lands. And a publish must run with the same variables as the build it is
+    // aimed at: publishing with RELEASE_CHANNEL=staging produces a runtimeVersion only a
+    // `staging`-profile binary has, so aiming it at production binaries reaches nobody
+    // while reporting success.
     runtimeVersion: { policy: 'fingerprint' },
 
     ios: {

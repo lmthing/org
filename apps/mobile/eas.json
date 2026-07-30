@@ -13,7 +13,19 @@
     "preview": {
       "distribution": "internal",
       "node": "24.18.0",
-      "android": { "buildType": "apk" }
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_OTA_APP_ID": "9a2ba224-69e6-4629-a894-4f42eb305a45"
+      }
+    },
+    "staging": {
+      "distribution": "internal",
+      "node": "24.18.0",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_OTA_APP_ID": "9a2ba224-69e6-4629-a894-4f42eb305a45",
+        "RELEASE_CHANNEL": "staging"
+      }
     },
     "production": {
       "autoIncrement": true,
