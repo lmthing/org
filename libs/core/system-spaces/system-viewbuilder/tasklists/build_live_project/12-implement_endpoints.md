@@ -79,6 +79,30 @@ instead of 500ing on the first real call:
 - `ctx.db.query` / `insert` / `update` / `remove` are all keyed on the real tables, so a typo'd table
   or column is a compile error, not an empty result.
 
+**Do NOT re-type a `.find`/`.filter` callback's row parameter.** `ctx.db.query('plants')` already
+returns a typed `PlantsRow[]`, so the row parameter is ALREADY `PlantsRow` — annotating it yourself,
+especially as `(p: Record<string, unknown>) => …`, is a genuine build failure, not a style choice:
+`Record<string, unknown>` has no index signature `PlantsRow` satisfies, so `.find`/`.filter` reports
+"No overload matches this call" and the write is rejected (seen live, three times in one build, always
+the same annotation). Leave the parameter unannotated and let it infer, or type it explicitly as the
+real row (`PlantsRow`) — never `Record<string, unknown>`, `any`, or a hand-rolled shape:
+
+```typescript
+const plant = (await ctx.db.query('plants')).find((p) => p.id === input.id);   // ✅ inferred PlantsRow
+```
+
+**Every field you compute — including a flat stats number like a total or a count — goes INSIDE the
+one `items[0]` object, never beside `items` at the response root.** `return { total_count,
+overdue_count, items: [...] }` compiles under a loose type and fails once `Output` is real
+(`'total_count' does not exist in type '<Name>Output'`, seen live) because the contract's item type
+already declares those fields — they belong on the object inside the array, alongside the row's other
+fields, exactly like the aggregate example above:
+
+```typescript
+return { items: [{ total_count: plants.length, overdue_count: overdue.length, ...restOfFields }] };  // ✅
+return { total_count: plants.length, overdue_count: overdue.length, items: plants };                 // ✗
+```
+
 NEVER write `import ... from '../types/contract'` or emit any project import (`@app/runtime`,
 `../types/...`) as a statement: these are AMBIENT/app modules that do not exist in your authoring VM,
 so importing one is a guaranteed "Cannot find module" that means nothing about whether the app builds.

@@ -72,7 +72,14 @@ result was actually consumed (`w.ok === true`) AND you re-read the artifact in t
 confirmed the corrected content is on disk. A resolve based on what you were ABOUT to write is
 fabricated success: the gate downstream trusts your `ok` and the artifact ships broken. Declare and
 assign the write result in ONE statement (`const w = …`), never a bare `let w;` assigned later.
-Emit one statement:
+
+**Build NOTHING across statements — this is where a fix run is most often lost.** Every statement you
+emit, including a RETRY after a rejected write or a typecheck error, is evaluated fresh: `const f = …`,
+`const cur = …` and `const w = …` declared in one statement are NOT reliably visible in the next.
+`Cannot find name 'f'` / `'cur'` / `'w'` (and equally under any other name you pick — `artifact`,
+`writeResult`, `rawContent`, …) is exactly this mistake, seen live and repeatedly, and each occurrence
+burns a whole turn. There is no safe two-step split here — read, edit and write the artifact, then
+verify-and-resolve, ALL in ONE statement:
 
 ```typescript
 const f = item as { path: string; kind: 'view' | 'viewComponent' | 'api' | 'hook' | 'shell'; errors: Array<{ line?: number; phase: string; message: string }> };
@@ -103,7 +110,9 @@ const landed = w.ok && readProjectFile(f.path).content !== cur.content;
 currentTask.resolve({ path: f.path, ok: landed });
 ```
 
-If the writer returns `{ ok: false }`, read `w.error` (it names the instance path and the valid set),
-correct THAT and write once more before resolving — re-verifying the landing the same way. The next
-verify pass re-checks the whole app, so a fix that did not fully land — or exposed a further error —
-is caught, not shipped.
+If the writer returns `{ ok: false }`, read `w.error` (it names the instance path and the valid set) —
+but do NOT try to patch just the write call in a follow-up statement. `f`, `cur` and `w` from the
+rejected attempt are gone. Re-emit the WHOLE statement above, from `const f = item as …` down to
+`currentTask.resolve(…)`, with the ONE field `w.error` named corrected, and re-verify the landing the
+same way. The next verify pass re-checks the whole app, so a fix that did not fully land — or exposed
+a further error — is caught, not shipped.

@@ -46,7 +46,11 @@ into the nearest kind. Plan the sections you honestly can and record the rest in
 naming WHICH PART and WHY. That is a correct, useful answer; a wrong-kind approximation is the
 failure this pipeline measures.
 
-Emit one statement:
+**Build NOTHING across statements.** Each statement you emit — and each RETRY after a typecheck error
+or a `validate_contract` re-run — is evaluated fresh: a `const` declared earlier is not reliably in
+scope later (`Cannot find name 'pg'` is exactly that mistake, seen live). Do NOT alias `item`
+(`const pg = item`). Read `item.route` / `item.purpose` directly inline, so the whole plan is ONE
+statement with no local binding to lose:
 
 ## If you are being RE-RUN (`feedback` is in scope)
 
@@ -57,14 +61,14 @@ reference, `message` says what broke AND names the real options.
 
 Read every entry that names THIS node and fix precisely that — do not redesign what was not faulted,
 and do not re-emit the same reference and hope. An entry naming a different node is context. If
-`feedback` is not in scope, this is the first pass; ignore this section.
+`feedback` is not in scope, this is the first pass; ignore this section. Re-emit the WHOLE statement
+below on every re-run — never a partial patch that assumes a prior turn's binding survived.
 
 
 ```typescript
-const pg = item; // { route, purpose } — this page, from the binding plan_app.pages list
 currentTask.resolve({
-  route: pg.route,
-  purpose: pg.purpose,
+  route: item.route,
+  purpose: item.purpose,
   // Endpoint NAMES this page reads, each copied VERBATIM from plan_endpoints.endpoints[].name.
   endpoints: [ /* '<endpoint name>' */ ],
   // View component names (from plan_view_components.components) this page references.

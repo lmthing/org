@@ -85,6 +85,17 @@ Pass the `attachmentIds` you were given (omit only if there were none) so the pi
 source itself. Resolve it in that SAME statement — never bind the envelope to a name and resolve it in
 a later statement, because a binding does not reliably survive a turn boundary.
 
+**Even when the envelope shows problems, relay it — do NOT go investigate.** `finalize` (the
+pipeline's own goal task) already did the diagnosis: its envelope carries `missing`, `errors` and
+`cannotExpress`, structured for exactly this handoff. Reading a flagged endpoint's source, building a
+`display()` diagnostic, or otherwise reasoning about the failure yourself is a SECOND model turn on
+top of the one-statement resolve above — the one thing this section forbids — and it is also how the
+envelope gets bound to a name (`const result = await tasklist(…)`) and then referenced too late,
+which is exactly the lost-envelope case below. If the app isn't fully clean, the honest, correct,
+ONE-statement response is still `currentTask.resolve(await tasklist('build_live_project', { query,
+attachmentIds }))` — let the caller read `ok`/`missing`/`errors` off what the pipeline already
+computed.
+
 **If the envelope is gone (`Cannot find name 'result'`), you have exactly one correct move: resolve
 `{ ok: false }` saying the pipeline ran but its result was lost.** Do NOT call
 `tasklist('build_live_project', …)` a second time — that restarts the whole build from the beginning
