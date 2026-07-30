@@ -227,3 +227,79 @@ describe('onFail — resume an earlier step carrying the reason', () => {
     ).rejects.toThrow(/cannot resume from itself/);
   });
 });
+
+/**
+ * The gate→repair topology, which is `build_live_project`'s: the `onFail` lives on the REPAIR node
+ * and its predicate reads the GATE it depends on (`fix.onFail = {goto: verify, when:
+ * "verify.ok == false"}`). Because the repair runs after the gate, every recorded gate value
+ * predates the repair that answers it — so the last repair round used to go unjudged, and a run
+ * needing exactly `maxAttempts` rounds could never report success however clean it ended up.
+ */
+describe('onFail — a gate the repair node depends on is re-measured at the end', () => {
+  /** verify → fix(onFail → verify) → finalize. `verify` reports clean only after `fixRuns` repairs. */
+  async function gateFlow(cleanAfterFixes: number, maxAttempts: number) {
+    const dir = await makeTasklistSpace({
+      '01-verify.ts': `export const node = { output: { ok: 'boolean', offending: 'array' } };\nexport async function run() { return {}; }`,
+      '02-fix.ts': `export const node = { dependsOn: ['verify'], output: { ok: 'boolean' }, onFail: { goto: 'verify', when: "verify.ok == false", maxAttempts: ${maxAttempts} } };\nexport async function run() { return {}; }`,
+      '03-finalize.ts': `export const node = { dependsOn: ['verify', 'fix'], goal: true, output: { shipped: 'boolean', gateSaid: 'boolean' } };\nexport async function run() { return {}; }`,
+    });
+    const space = await loadSpace(dir);
+    const calls: Array<{ id: string; inputs: Record<string, unknown> }> = [];
+    let fixRuns = 0;
+    let verifyRuns = 0;
+    const factory = factoryFrom(
+      {
+        // The gate reads the world as the repairs have left it — clean once enough have run.
+        verify: () => {
+          verifyRuns += 1;
+          const clean = fixRuns >= cleanAfterFixes;
+          return { ok: clean, offending: clean ? [] : ['api/broken.ts'] };
+        },
+        fix: () => {
+          fixRuns += 1;
+          return { ok: true };
+        },
+        // The goal task judges the app by what the GATE last said — the real finalize's shape.
+        finalize: (inputs) => ({
+          shipped: (inputs['verify'] as { ok: boolean }).ok,
+          gateSaid: (inputs['verify'] as { ok: boolean }).ok,
+        }),
+      },
+      calls,
+    );
+    const result = await runTasklist({ name: 'flow', space, forkEngine: engineFor(dir), codeNodeCtxFactory: factory });
+    return { result, calls, fixRuns, verifyRuns };
+  }
+
+  it('re-measures the gate after the LAST repair, so a run that needed every attempt can still pass', async () => {
+    // 3 attempts, and the app only comes clean on the 4th repair — the exact live shape
+    // (verify ran 4×, the final fix batch cleared it, finalize read the pre-fix snapshot).
+    const { result, fixRuns, verifyRuns } = await gateFlow(4, 3);
+
+    expect(fixRuns).toBe(4); // initial + 3 budgeted repairs
+    expect(verifyRuns).toBe(5); // 4 in the loop + ONE terminal re-measure
+    expect(result.data).toMatchObject({ gateSaid: true }); // judged as the app now IS
+  });
+
+  it('does not hand out an extra repair attempt — the terminal pass re-runs the gate ONLY', async () => {
+    // The app never comes clean, so the re-measure must not become a 4th repair round.
+    const { fixRuns, verifyRuns } = await gateFlow(Number.POSITIVE_INFINITY, 3);
+
+    expect(fixRuns).toBe(4); // still initial + 3, NOT 5
+    expect(verifyRuns).toBe(5);
+  });
+
+  it('re-measures at most once, and reports the residual failure honestly', async () => {
+    const { result, verifyRuns } = await gateFlow(Number.POSITIVE_INFINITY, 1);
+
+    expect(verifyRuns).toBe(3); // initial + 1 budgeted + 1 terminal
+    expect(result.data).toMatchObject({ gateSaid: false }); // still broken, and it says so
+  });
+
+  it('leaves the self-checking topology alone — a check that re-runs itself is never stale', async () => {
+    // `check.onFail = {goto: design}` with the DEFAULT predicate reads `check` itself, which has
+    // just run, so there is nothing to re-measure and the pass must not fire.
+    const { checkRuns } = await flowThatPassesOnAttempt(Number.POSITIVE_INFINITY, 2);
+    expect(checkRuns).toBe(3); // unchanged: initial + 2 resumes, no extra run
+  });
+});

@@ -1,7 +1,7 @@
 import type { Space } from '../spaces/load.js';
 import type { ForkEngine } from '../fork/fork.js';
 import { loadTasklist } from '../spaces/tasklist-load.js';
-import { validateDag, findReadyTasks, resolveGoalTask, resumeSet } from './dag.js';
+import { validateDag, findReadyTasks, resolveGoalTask, resumeSet, ancestorsOf } from './dag.js';
 import { evaluateCondition } from './condition-dsl.js';
 import type { TaskNode } from '../spaces/tasklist-load.js';
 import type { Tracer, TraceScope } from '../sandbox/trace.js';
@@ -201,6 +201,53 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
     tracer.end(s, 'skipped');
   };
 
+  /** Node ids a condition reads — `verify.ok == false` → `verify`. The DSL is `<id>.<field> <op>
+   *  <literal>`, so the identifier before a dot is the whole grammar we need here. */
+  const conditionSources = (when: string): string[] =>
+    [...when.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*\./g)].map((m) => m[1] as string);
+
+  /** Gates already re-measured, so the terminal pass happens at most once per onFail task. */
+  const terminalRemeasured = new Set<string>();
+
+  /**
+   * The TERMINAL RE-MEASURE — the last repair round must not go unjudged.
+   *
+   * When `onFail`'s predicate reads a node OTHER than the task itself, that node is an ancestor
+   * (the task depends on the gate it is repairing), so its recorded value was computed BEFORE
+   * this repair round. `build_live_project` is exactly this shape: `fix.onFail =
+   * {goto: verify, when: 'verify.ok == false'}`, and `fix` depends on `verify`. Every round
+   * therefore judges a repair by a measurement taken before it, and when the budget runs out the
+   * pipeline hands its goal task a gate value that predates the final `fix` batch — so a run that
+   * needs exactly `maxAttempts` rounds can NEVER report success, however clean the app ends up.
+   * Measured live: `verify` ran 4×, `finalize` resolved `ok:false`, and a standalone re-run of the
+   * same gate against the finished project returned `{ok: true, errorCount: 0, checked: 4}`.
+   *
+   * So on exhaustion we re-run the GATE ONLY — not `resumeSet`, which would re-run the repair step
+   * too and hand out an unbudgeted extra attempt. The repair nodes stay `done`, the gate re-runs
+   * against the app as it now IS, and the goal task judges that. No feedback is carried: this is a
+   * measurement, not another attempt.
+   *
+   * The default topology (`when` reads the task itself, e.g. `check.onFail = {goto: design}`) is
+   * untouched — there the check re-runs itself on every resume, so its value is never stale and
+   * `sources` contains only the task, which this skips.
+   */
+  const terminalRemeasure = (task: TaskNode, when: string): void => {
+    if (terminalRemeasured.has(task.id)) return;
+    const forebears = ancestorsOf(tasks, task.id);
+    const gates = conditionSources(when).filter(
+      (id) => id !== task.id && forebears.has(id) && tasks[id] && done.has(id),
+    );
+    if (gates.length === 0) return;
+    terminalRemeasured.add(task.id);
+    for (const id of gates) {
+      done.delete(id);
+      skipped.delete(id);
+      skippedEmitted.delete(id);
+      delete allOutputs[id];
+      resumeFeedback.delete(id);
+    }
+  };
+
   /**
    * `onFail`: when this node's check fails, un-do the stretch back to `goto` so it re-runs,
    * carrying WHY it failed. Purely scheduler-level — `dependsOn` is never mutated, so the
@@ -226,7 +273,10 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
 
     const spent = onFailAttempts.get(task.id) ?? 0;
     const budget = task.onFail.maxAttempts ?? DEFAULT_ON_FAIL_ATTEMPTS;
-    if (spent >= budget) return;
+    if (spent >= budget) {
+      terminalRemeasure(task, when);
+      return;
+    }
     onFailAttempts.set(task.id, spent + 1);
 
     const carried =
