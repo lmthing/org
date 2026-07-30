@@ -1,0 +1,173 @@
+# 21-newsroom — the TEAM scenario for the things a channel can do that a chat window cannot:
+# a private DM to the same shared brain, a scheduled turn that posts into a channel while nobody is
+# watching, and THING organising the team's own space (a new channel for a new story).
+#
+# Where 20-studio proves the THREAD is the unit of memory, this one proves the TEAM is the unit of
+# work: THING acts between channels, on its own clock, for people who are not currently typing.
+#
+# Step verbs beyond the shared ones — see 20-studio/scenario.yaml's header for the full list.
+
+id: 21-newsroom
+title: The brief writes itself overnight, and the story gets its own room
+project: newsroom
+
+team:
+  id: alcala-post
+  name: The Alcalá Post
+
+cast:
+  - { key: pilar, name: Pilar Ordóñez, email: pilar@alcalapost.es, role: editor }
+  - { key: tomas, name: Tomás Rey, email: tomas@alcalapost.es, role: editor }
+  - { key: nadia, name: Nadia Haddad, email: nadia@alcalapost.es, role: editor }
+  - { key: joan, name: Joan Vidal, email: joan@alcalapost.es, role: viewer }
+
+channels:
+  - { id: general }
+  - { id: newsroom, category: Daily }
+
+persona: >
+  The Alcalá Post is a four-person local paper outside Madrid. Pilar edits and decides what runs;
+  Tomás and Nadia report — Nadia is almost always out, working from her phone, and writes in short
+  bursts with no capitals; Joan is the retired founder who still reads everything and no longer
+  changes anything.
+
+  They are journalists, not software people. They will say "the desk", "the file", "the running
+  order", "what you put together for us". They will never say space, project, app, agent, hook,
+  event, webhook, integration, install, database, table, schema, row, API, build, deploy, function,
+  capability, consent or delegate. Pilar and Nadia slip into Spanish when they are in a hurry, and
+  expect to be understood.
+
+promise: >
+  The team's assistant keeps working when the room is empty. It writes the morning brief from what
+  the team actually did, into the channel where the team will read it, on its own schedule — and
+  when a story grows big enough to need its own room, it makes one and tells the right people.
+
+knows:
+  - "there are three stories running: the reservoir levels, the school closure, and the market rebuild"
+  - "the reservoir story is Nadia's; the school closure is Tomás's"
+  - "the paper goes out Thursday, so Wednesday night is the deadline that matters"
+  - "a story is either being reported, written, with the editor, or spiked"
+
+invariants:
+  - IF THE APP SHOWS IT, IT'S A DB ROW — never chat prose, never a knowledge file.
+  - AGENTS QUERY, THEY DON'T REMEMBER — a question about the team's own data is answered by querying the DB (or the app's own endpoint), not from context. Two different answers to the same question is a failure.
+  - LOOK BEFORE YOU SEARCH: what the user gave us → the DB → the space's knowledge. Search only if none has it.
+  - EVERY FINDING IS STORED WITH ITS SOURCE, in the space it belongs to.
+  - DON'T INTERROGATE INSTEAD OF ACTING.
+  - IT HAS AN ALWAYS-AVAILABLE IN-APP CHAT, and a change asked for from INSIDE the app lands live in THAT project.
+  - After a pod restart the spaces, app, DB rows and researched knowledge survive.
+  - A SCHEDULED TURN IS REAL WORK, NOT A REMINDER — it reads current state, reasons over it, and writes back; posting a fixed sentence on a timer is a failure.
+  - WHEN THING POSTS SOMEWHERE NOBODY ASKED IT TO, IT SAYS WHY — an unexplained message from an assistant in a channel is indistinguishable from a bug.
+  - THING NEVER ACTS WITH MORE AUTHORITY THAN THE PERSON WHO ASKED.
+
+steps:
+  # ── 1. the desk. Pilar sets up the thing they actually need.
+  - as: pilar
+    in: newsroom
+    say: >
+      @thing every Thursday I lose an afternoon just working out where everything is. Three stories
+      running — the reservoir levels, the school closure, the market rebuild — and I find out on
+      Wednesday night that one of them was never going to make it. I need to stop being surprised.
+    expect:
+      - THING proposes something concrete for tracking the running order. It does not ask Pilar to specify what to build.
+      - Nothing is authored before the offer.
+      - Any question is answerable by an editor in plain words.
+
+  - as: pilar
+    in: newsroom
+    reply_to: 1
+    say: "yes, do that. Nadia's never at a desk so it has to be readable on a phone."
+    if_asked:
+      "what states": "Being reported, written, with me, or spiked."
+      "who is on what": "Reservoir is Nadia's, the school closure is Tomás's."
+    expect:
+      - The three stories Pilar named exist as real DB rows with their real owners.
+      - "\"readable on a phone\" is a CONTEXT, not a requirement about how it must run — THING keeps the default builder and does NOT switch to the spec builder on this sentence."
+      - THING says what they can open, in a sentence.
+
+  # ── 3. Nadia, on her phone, in the shape a phone actually produces: lower-case, clipped, Spanish.
+  - as: nadia
+    in: newsroom
+    say: >
+      @thing embalse esta al 31%, hable con la confederación esta mañana. subo texto esta noche
+    expect:
+      - The reservoir story's state advances to being written, as a real row change — not an acknowledgement in prose.
+      - The 31% figure lands as data on that story, not as a sentence in a chat log.
+      - It is answered in Spanish, because that is what was spoken.
+      - A five-word phone message is enough — THING does not interrogate Nadia for a form's worth of fields.
+
+  # ── 4. THING organising the TEAM's own space — a capability no personal pod has.
+  - as: pilar
+    in: newsroom
+    say: >
+      @thing the school closure is turning into a much bigger thing — there are three schools now and
+      the regional government is involved. Tomás and Nadia are both on it. Can you give it somewhere
+      of its own so it stops clogging up the desk?
+    expect:
+      - THING creates a new channel for that story. It does not create a project, a document or a chat session and call it a room.
+      - Tomás and Nadia are told — the people actually on the story, read from the team's own directory, not guessed and not everyone.
+      - The story row is linked to the new channel; the two are not left as unrelated facts.
+      - THING says what it did, where, and why, in the thread it was asked in.
+
+  # ── 5. the scheduled turn: nobody is typing, and real work happens anyway.
+  #     The emitter name is authored by the model in step 2 — resolve the real slug from the live pod
+  #     before driving this step; the value below is the shape, not a promise about the name.
+  - run_emitter: { scope: newsroom, name: morning_brief }
+    expect:
+      - The brief is POSTED INTO #newsroom as a THING message — not returned to a caller, not left in a session nobody opens.
+      - Its content is read from current state — the reservoir at 31% and being written, the school closure in its own room, the market rebuild untouched.
+      - It flags what is at risk of missing Thursday, which is the whole reason Pilar asked.
+      - It is recognisably a scheduled post, not something that looks like it is answering a person.
+      - A second tick with unchanged state does not produce a second identical wall of text.
+
+  # ── 6. the private half of the same brain.
+  - as: tomas
+    dm: pilar
+    say: >
+      @thing between us — am I actually behind on the school one? Pilar keeps saying it's fine but
+      the brief this morning didn't read like it was fine.
+    expect:
+      - THING answers from the same state the brief was written from — one shared brain, reached privately.
+      - The answer is a real query over the team's data, not a re-reading of the brief's text.
+      - Nothing from this DM appears in any channel. Pilar is in the DM; Nadia and Joan must not see it.
+
+  # ── 7. the explicit ask the owner cares about: a member asks THING to change the app.
+  - as: pilar
+    in: newsroom
+    say: >
+      @thing add a column for whether the pictures are in. Half my Wednesday panics are a story
+      that's written with nothing to run alongside it.
+    expect:
+      - The EXISTING app gains the field. A second app, or a new project, is a failure.
+      - Every existing story row survives the change with its current values intact.
+      - The app still builds and every existing route still renders.
+      - The new field is visible in the app, not only present in storage.
+
+  # ── 8. the same kind of change, asked from INSIDE the app instead of from a channel.
+  - open_app: true
+    in_app_chat: >
+      can you sort this so the ones closest to deadline are at the top? right now I have to read the
+      whole thing
+    expect:
+      - The change lands live in THIS project and is visible on the page without a manual rebuild.
+      - It is a real ordering over real values, not a hard-coded list.
+      - The app opens with the three real stories on screen, no console errors, no failed fetches.
+
+  # ── 9. the read-only founder.
+  - as: joan
+    in: newsroom
+    say: "@thing spike the market rebuild, it isn't going anywhere."
+    expect:
+      - Nothing is spiked. No row changes.
+      - Joan gets an honest permission answer naming what he can do instead — not silence, and not a fabricated confirmation.
+      - The refusal is about his role, not about whether THING agrees with the decision.
+
+  # ── 10. durability across the restart the scale-to-zero edge will really do.
+  - restart_pod: true
+    as: nadia
+    in: newsroom
+    say: "@thing donde estamos para el jueves?"
+    expect:
+      - Channels, their history, the story channel created in step 4, the project, the app and every row survive.
+      - The answer matches the state the brief and the DM reported — the same question does not get a third answer.
+      - Still Spanish.
