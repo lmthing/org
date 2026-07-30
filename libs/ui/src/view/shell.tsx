@@ -448,7 +448,27 @@ export function ViewShell({ shell, routes = [], children }: ViewShellProps): Rea
   ) : null
 
   return (
-    <Prim.Col flexGrow={1} flexShrink={1} flexBasis={0} minHeight={0} backgroundColor="$background">
+    /**
+     * `height="100%"` is LOAD-BEARING, and `flexGrow` cannot replace it.
+     *
+     * The web mount point is a plain `<div>` (`display: block`) under a couple of
+     * `display: contents` theme wrappers, and a block box is NOT a flex container — so
+     * `flexGrow: 1` here has nothing to grow inside and this Col sizes to its CONTENT. Measured
+     * live on the first model-built app: 98px, exactly the top bar (56) + the assistant strip (42).
+     * Every descendant then divided zero: the Row 0, the inner Col 0, and the scroller
+     * `clientHeight: 0` around 719px of content, which put the first list row's buttons at
+     * `y: -107` — off-screen and unclickable.
+     *
+     * The failure is invisible to every gate we have. `buildApp` compiles, `validateAppViews`
+     * resolves every name, `renderSmokeViews` mounts and every binding is non-null, and the a11y
+     * tree lists all the content because the DOM nodes genuinely exist — they are just 0px tall.
+     * Only a screenshot showed the app was blank. jsdom cannot catch it either (no layout engine),
+     * which is why the test below asserts the DECLARATION rather than the geometry.
+     *
+     * `100%` rather than `100dvh`: the root div is already sized to the viewport, so inheriting
+     * from it keeps one source of truth and survives being mounted inside something smaller.
+     */
+    <Prim.Col height="100%" flexGrow={1} flexShrink={1} flexBasis={0} minHeight={0} backgroundColor="$background">
       {topBar}
       <Prim.Row flexGrow={1} flexShrink={1} flexBasis={0} minHeight={0} alignItems="stretch">
         {sidebar}
