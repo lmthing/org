@@ -49,8 +49,10 @@ describe('icon colours resolve to real values, never to a token', () => {
   })
 
   it('leaves a real colour and `currentColor` alone', () => {
-    const { container: hex } = render(<ViewIcon name="check" color="#ff0000" />)
-    expect(paints(hex)).toContain('#ff0000')
+    // The raw hex is the POINT of this test: `useColorValue` must pass a non-token colour through
+    // untouched, so a design token here would assert nothing. ds-lint-ok
+    const { container: hex } = render(<ViewIcon name="check" color="#ff0000" />) // ds-lint-ok
+    expect(paints(hex)).toContain('#ff0000') // ds-lint-ok
     // No tone and no colour is the inherit case, which is valid on both targets as-is.
     const { container: plain } = render(<ViewIcon name="check" />)
     expect(paints(plain).filter((v) => v.startsWith('$'))).toEqual([])

@@ -14,6 +14,13 @@
  *   - Color functions built from tokens: rgb/hsl(var(--…))
  *   - Achromatic overlays/scrims/shadows: rgba(0,0,0,<a<1>) / rgba(255,255,255,<a<1>)
  *
+ * Comments are NOT scanned. A comment cannot style anything, and this linter's own subject matter
+ * means the code most likely to describe `rgb()` or a hex in prose is the code that got the colour
+ * handling RIGHT. `view/icons.tsx` is the case in point: it resolves `$token` paints to a real
+ * `rgb()` because React Native SVG cannot parse tokens, and the JSDoc explaining why tripped the
+ * gate on the word `rgb()` alone. A false positive there teaches people to reach for
+ * `ds-lint-file-ok`, which then hides the real violations in the same file.
+ *
  * Escape hatches:
  *   - `ds-lint-ok` in a comment on the offending line skips that line
  *   - `ds-lint-file-ok` anywhere in a file skips the whole file (for terminal
@@ -90,14 +97,59 @@ for (const r of roots) {
   else if (EXTS.has(extname(r))) files.push(r);
 }
 
+/**
+ * Blank out every comment, preserving the exact character positions of everything else.
+ *
+ * Positions matter: findings are reported as `file:line:col`, so comments are overwritten with
+ * spaces (newlines kept) rather than removed. Handles `//` and block comments for TS/JSX, and
+ * block comments for CSS — a bare `//` inside a CSS file is not a comment, so it is left alone.
+ *
+ * String literals are tracked so a `//` inside one (a URL, most often) is not mistaken for the
+ * start of a comment — otherwise the rest of that line would be blanked and a real violation
+ * sitting after a URL would go unreported.
+ */
+function stripComments(src, isCss) {
+  const out = src.split('');
+  let i = 0;
+  let quote = null; // ' " ` when inside a string literal
+  while (i < src.length) {
+    const c = src[i];
+    const next = src[i + 1];
+    if (quote) {
+      if (c === '\\') { i += 2; continue; }
+      if (c === quote) quote = null;
+      i++;
+      continue;
+    }
+    if (c === '"' || c === "'" || (!isCss && c === '`')) { quote = c; i++; continue; }
+    if (c === '/' && next === '*') {
+      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) {
+        if (src[i] !== '\n') out[i] = ' ';
+        i++;
+      }
+      // the closing */ itself
+      for (let k = 0; k < 2 && i < src.length; k++, i++) if (src[i] !== '\n') out[i] = ' ';
+      continue;
+    }
+    if (!isCss && c === '/' && next === '/') {
+      while (i < src.length && src[i] !== '\n') { out[i] = ' '; i++; }
+      continue;
+    }
+    i++;
+  }
+  return out.join('');
+}
+
 const findings = [];
 for (const file of files) {
   if (ALLOW_FILE(file)) continue;
   const src = readFileSync(file, 'utf8');
   if (src.includes('ds-lint-file-ok')) continue;
-  const lines = src.split('\n');
+  // `ds-lint-ok` lives in a comment, so match it against the ORIGINAL line; scan the stripped one.
+  const rawLines = src.split('\n');
+  const lines = stripComments(src, extname(file) === '.css').split('\n');
   lines.forEach((line, i) => {
-    if (line.includes('ds-lint-ok')) return;
+    if (rawLines[i].includes('ds-lint-ok')) return;
     const check = (re, kind) => {
       re.lastIndex = 0;
       let m;
