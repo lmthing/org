@@ -8,7 +8,7 @@ import { apiGet, apiPost, apiDelete } from './api';
 import { setLiveSend } from './live-send';
 import { wsUrl } from '../../platform/api-base';
 import { AppSidebar } from '../../elements/nav/app-sidebar';
-import { SidebarFooter } from '../../elements/nav/sidebar-footer';
+import { SurfaceSwitcher, type Surface } from '../../elements/nav/surface-switcher';
 import { crossAppOrigin } from '../../lib/app-urls';
 import { getWindowSize } from '../../platform/dimensions';
 import { openUrl } from '../../platform/navigation';
@@ -73,6 +73,11 @@ interface SidebarProps {
   height?: number | string;
   /** Disable the whole-sidebar collapse control (e.g. inside a mobile drawer). */
   collapsible?: boolean;
+  /** Forwarded to the footer's `SurfaceSwitcher` — see its doc comment for what presence/absence
+   *  of `onSwitchSurface` changes. */
+  onSwitchSurface?: (surface: Surface) => void;
+  /** Forwarded to the footer's `SurfaceSwitcher`. */
+  surfaceBadges?: Partial<Record<Surface, number>>;
 }
 
 /** `.bg-muted text-foreground font-medium` / the idle row's hover pair, as prop bags. */
@@ -85,7 +90,7 @@ const SESSION_IDLE = {
   },
 } as const;
 
-export function Sidebar({ onProjectSettings, className, width, height, collapsible = true }: SidebarProps) {
+export function Sidebar({ onProjectSettings, className, width, height, collapsible = true, onSwitchSurface, surfaceBadges }: SidebarProps) {
   const projects = useStore(s => s.projects);
   const activeProjectId = useStore(s => s.activeProjectId);
   const activeSessionId = useStore(s => s.activeSessionId);
@@ -247,7 +252,7 @@ export function Sidebar({ onProjectSettings, className, width, height, collapsib
     </Prim.Col>
   );
 
-  const footer = <SidebarFooter current="chat" />;
+  const footer = <SurfaceSwitcher current="chat" onSwitch={onSwitchSurface} badges={surfaceBadges} bordered />;
 
   return (
     <AppSidebar

@@ -85,7 +85,7 @@ type TabId = (typeof TABS)[number]['id']
  * entirely. There was no other route to those two tabs: team settings were unreachable on a phone.
  *
  * Above `md` the top strip is right and a floating bottom bar would just eat a row of content, so
- * the same tabs render there instead — the same rule `BottomNav` follows for the app's own tabs.
+ * the same tabs render there instead.
  */
 function TeamChrome() {
   const { teamId } = useParams({ from: '/team/$teamId' })

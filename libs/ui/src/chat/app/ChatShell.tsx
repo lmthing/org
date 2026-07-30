@@ -4,6 +4,14 @@ import { authHeaders } from './auth';
 import { apiUrl } from '../../platform/api-base';
 import { AppShell } from './AppShell';
 import { applyUrlToState, syncStateToUrl } from './url-state';
+import type { Surface } from '../../elements/nav/surface-switcher';
+
+interface ChatShellProps {
+  /** Forwarded to `AppShell` — see its doc comment. */
+  onSwitchSurface?: (surface: Surface) => void;
+  /** Forwarded to `AppShell`. */
+  surfaceBadges?: Partial<Record<Surface, number>>;
+}
 
 /**
  * The standalone agent-ui chat shell (sidebar + transcript + DevPanel), packaged
@@ -11,7 +19,7 @@ import { applyUrlToState, syncStateToUrl } from './url-state';
  * app (mirrors main.tsx boot()'s shell-mode branch: render AppShell, preload
  * projects, and wire URL ↔ state).
  */
-export function ChatShell(): React.ReactElement {
+export function ChatShell({ onSwitchSurface, surfaceBadges }: ChatShellProps = {}): React.ReactElement {
   useEffect(() => {
     let unsub: (() => void) | undefined;
     void (async () => {
@@ -40,5 +48,5 @@ export function ChatShell(): React.ReactElement {
     };
   }, []);
 
-  return <AppShell />;
+  return <AppShell onSwitchSurface={onSwitchSurface} surfaceBadges={surfaceBadges} />;
 }

@@ -212,9 +212,13 @@ export function Message({ block }: MessageProps) {
     const attachments = block.attachments ?? [];
     return (
       <Prim.Row className="lm-fade-in" {...({ group: true } as Record<string, unknown>)} justifyContent="flex-end" paddingHorizontal="$4" paddingVertical="$2">
-        <Prim.Row maxWidth="75%" gap="$1.5" alignItems="flex-start">
+        {/* `flexShrink`/`minWidth` rather than `maxWidth` alone: Yoga will not shrink a row below
+            its content unless told it may, so a long single-line message grew past the parent's
+            `paddingHorizontal` and ran under the right edge of the screen — the cap was never
+            reached because the row simply overflowed instead. */}
+        <Prim.Row maxWidth="75%" flexShrink={1} minWidth={0} gap="$1.5" alignItems="flex-start">
           <CopyButton text={block.content} />
-          <Prim.Col gap="$1.5" alignItems="flex-end">
+          <Prim.Col gap="$1.5" alignItems="flex-end" flexShrink={1} minWidth={0}>
             {attachments.length > 0 && (
               <Prim.Col gap="$1.5" alignItems="flex-end">
                 {attachments.map((a, i) => (
@@ -234,11 +238,16 @@ export function Message({ block }: MessageProps) {
   }
 
   // Display block — full-width, no bubble, render markdown or descriptor
+  //
+  // No `paddingHorizontal` here: every non-user block reaches this component nested inside
+  // `AssistantTurn`, whose own Row already pads the icon+content pair by `$4`. Padding again here
+  // double-indented the text past the icon — on a phone-width column that reads as the whole
+  // response shoved off to the right, with a lopsided gap of blank space on the far side.
   if (block.type === 'display') {
     const isString = typeof block.descriptor === 'string';
     const textForCopy = isString ? (block.descriptor as string) : preview(block.descriptor, 500);
     return (
-      <Prim.Box className="lm-fade-in" {...({ group: true } as Record<string, unknown>)} paddingHorizontal="$4" paddingVertical="$2" data-testid="block">
+      <Prim.Box className="lm-fade-in" {...({ group: true } as Record<string, unknown>)} paddingVertical="$2" data-testid="block">
         <Prim.Row gap="$1.5" alignItems="flex-start">
           <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0} fontSize="$sm" color="$foreground">
             {showAttribution && (
@@ -258,7 +267,7 @@ export function Message({ block }: MessageProps) {
   // Error callout
   if (block.type === 'error') {
     return (
-      <Prim.Box className="lm-fade-in" paddingHorizontal="$4" paddingVertical="$2" data-testid="block">
+      <Prim.Box className="lm-fade-in" paddingVertical="$2" data-testid="block">
         <Prim.Box borderColor="color-mix(in srgb, var(--destructive) 30%, transparent)" backgroundColor="color-mix(in srgb, var(--destructive) 10%, transparent)" borderWidth={1} borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$2" fontSize="$sm" color="$destructive" fontFamily="$mono">
           <Prim.Text>{block.message}</Prim.Text>
         </Prim.Box>
@@ -268,7 +277,7 @@ export function Message({ block }: MessageProps) {
 
   // Ask form
   return (
-    <Prim.Box className="lm-fade-in" paddingHorizontal="$4" paddingVertical="$2" data-testid="block">
+    <Prim.Box className="lm-fade-in" paddingVertical="$2" data-testid="block">
       {showAttribution && (
         <AttributionButton nodeId={block.nodeId} label={node.label} />
       )}

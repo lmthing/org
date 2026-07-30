@@ -12,12 +12,17 @@ import { readLinkParams } from '../../platform/deep-link';
 import { getWindowSize, subscribeWindowSize } from '../../platform/dimensions';
 import { setAppTitle } from '../../platform/navigation';
 import { onKeyDown } from '../../platform/keyboard';
+import type { Surface } from '../../elements/nav/surface-switcher';
 
 interface AppShellProps {
   singleSession?: boolean;
+  /** Forwarded to `Sidebar` → its `SurfaceSwitcher` footer — see that component's doc comment. */
+  onSwitchSurface?: (surface: Surface) => void;
+  /** Forwarded to `Sidebar` → its `SurfaceSwitcher` footer. */
+  surfaceBadges?: Partial<Record<Surface, number>>;
 }
 
-export function AppShell({ singleSession }: AppShellProps) {
+export function AppShell({ singleSession, onSwitchSurface, surfaceBadges }: AppShellProps) {
   const devPanelOpen = useStore(s => s.devPanelOpen);
   const sidebarOpen = useStore(s => s.sidebarOpen);
   const setDevPanelOpen = useStore(s => s.setDevPanelOpen);
@@ -91,6 +96,8 @@ export function AppShell({ singleSession }: AppShellProps) {
   const sidebarContent = (
     <Sidebar
       onProjectSettings={(id, name) => setProjectSettings({ id, name })}
+      onSwitchSurface={onSwitchSurface}
+      surfaceBadges={surfaceBadges}
       height="100%"
     />
   );
@@ -98,6 +105,8 @@ export function AppShell({ singleSession }: AppShellProps) {
   const drawerSidebarContent = (
     <Sidebar
       onProjectSettings={(id, name) => setProjectSettings({ id, name })}
+      onSwitchSurface={onSwitchSurface}
+      surfaceBadges={surfaceBadges}
       width="100%"
       height="100%"
       collapsible={false}

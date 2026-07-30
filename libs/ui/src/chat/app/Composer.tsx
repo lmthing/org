@@ -391,9 +391,6 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
           <Prim.Svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><Prim.Path d="m3 3 3 9-3 9 19-9Z"/></Prim.Svg>
         </Prim.Pressable>
       </Prim.Row>
-      <Prim.Text as="p" fontSize="$xs" color="$muted-foreground" textAlign="center" marginTop="0.375rem">
-        Enter to send · Shift+Enter for newline
-      </Prim.Text>
       <BudgetWindows />
     </Prim.Box>
   );

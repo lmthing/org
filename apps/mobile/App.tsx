@@ -6,9 +6,9 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { AuthProvider, hydrateAuth, useAuth, getSession, storeSession } from '@lmthing/auth'
 import { tamaguiConfig } from '@lmthing/ui/theme/tamagui.config'
 import { LoginScreen } from '@lmthing/ui/components/auth/login-screen'
-import { ChatShell } from '@lmthing/ui/chat'
+import { ChatShell, Drawer } from '@lmthing/ui/chat'
 import { DashboardHome } from '@lmthing/ui/dashboard'
-import { BottomNav, type BottomNavTab } from '@lmthing/ui/elements/nav/bottom-nav'
+import { SurfaceSwitcher, type Surface as NavTab } from '@lmthing/ui/elements/nav/surface-switcher'
 import * as Prim from '@lmthing/ui/elements/primitives'
 import { ensureComputePod, waitForPodEdge } from './src/ensure-pod'
 import { TeamScreen } from './src/TeamScreen'
@@ -153,31 +153,45 @@ function AuthGate() {
 }
 
 /**
- * The signed-in app: a Home dashboard and the chat surface, switched by the tab bar.
+ * The signed-in app: a Home dashboard, the chat surface and the team workspace.
  *
- * Both are mounted at once and one is hidden, rather than unmounted — `ChatShell` holds a live
- * WebSocket to the pod and a transcript, and tearing that down every time someone glances at Home
- * would drop a streaming turn mid-sentence. Hiding costs a little memory; unmounting costs the
- * user's conversation.
+ * All three are mounted at once and two are hidden, rather than unmounted — `ChatShell` holds a
+ * live WebSocket to the pod and a transcript, and `TeamScreen` holds one to the team's pod, so
+ * tearing either down every time someone glances at Home would drop a streaming turn mid-sentence
+ * and lose whatever arrived while they were away. Hiding costs a little memory; unmounting costs
+ * the user's conversation.
  *
- * `Teams` is a real pane now, not a hop to the browser: `@lmthing/ui/team` renders the same surface
- * the web app does, so there is nothing left to hand off to. `TeamScreen` is the host that supplies
- * the two native-specific things (an absolute pod URL, and rail/channel state where web uses a URL).
+ * ## Switching surfaces
  *
- * It is mounted like the others — hidden, never unmounted — for the same reason: it holds a live
- * socket to the team's pod, and tearing that down on every tab glance would drop whatever arrived
- * while the member was looking at Home.
+ * There is no bottom tab bar. A bar pinned across the foot of the screen is a permanent, immovable
+ * slice of a phone's shortest dimension spent on navigation that is used seconds at a time, and it
+ * sat UNDER the chat composer — the one control that is used constantly — pushing it up off the
+ * keyboard. The three surfaces now live in the SAME drawer as everything else, reached by a
+ * hamburger, which is where `@lmthing/ui`'s `SurfaceSwitcher` puts them on web too.
+ *
+ * Chat already had that drawer (`AppShell`'s mobile sidebar), so it needs nothing here beyond the
+ * `onSwitchSurface` callback that turns those pills into pane switches instead of hyperlinks.
+ * Home and Teams have no sidebar of their own, so this shell supplies the hamburger and drawer for
+ * them — one per pane, never two at once.
  */
 function HomeShell() {
   const { getAccessToken } = useAuth()
-  const [tab, setTab] = React.useState<BottomNavTab>('home')
-  // Mentions waiting in the team, badged on the tab. The Teams pane stays mounted while hidden, so
-  // it keeps hearing the channel socket — without surfacing the count here, a member on Home had no
-  // way at all to learn that somebody had named them.
+  const [tab, setTab] = React.useState<NavTab>('home')
+  // Mentions waiting in the team, badged on the switcher. The Teams pane stays mounted while
+  // hidden, so it keeps hearing the channel socket — without surfacing the count here, a member on
+  // Home had no way at all to learn that somebody had named them.
   const [teamMentions, setTeamMentions] = React.useState(0)
   // Which project's app is open, if any. State here rather than a route because native has no URL —
   // the same reason `TeamScreen` owns its rail.
   const [openApp, setOpenApp] = React.useState<{ id: string; name: string } | null>(null)
+  const [navOpen, setNavOpen] = React.useState(false)
+
+  const badges = teamMentions > 0 ? { teams: teamMentions } : undefined
+
+  const switchTo = React.useCallback((surface: NavTab) => {
+    setTab(surface)
+    setNavOpen(false)
+  }, [])
 
   // Covers the tabs rather than replacing a pane: an app is a place you go INTO and come back from,
   // and the chat socket behind it should not be torn down to look at one.
@@ -203,6 +217,31 @@ function HomeShell() {
           as the WEB default (row), which is right for the ~58 shared style objects written that way
           — but these two panes are columns, and leaving it unsaid laid the whole chat surface out
           sideways into a blank screen. An explicit direction always wins over the seam's default. */}
+      {/* The hamburger for the two panes that have no sidebar of their own to hang one off.
+          A row of its OWN rather than absolutely positioned over the pane: `DashboardHome`'s first
+          element is the greeting, at the display size, starting hard against the top edge — an
+          overlaid button landed on top of the words. A strip costs one row of height; overlapping
+          the heading costs the heading. Chat is excluded because `AppShell` already draws its own
+          at mobile width, and two would be a duplicate. */}
+      {tab !== 'chat' && (
+        <Prim.Row flexShrink={0} alignItems="center" paddingHorizontal="$2" paddingTop="$2">
+          <Prim.Pressable
+            onClick={() => setNavOpen(true)}
+            width="$8"
+            height="$8"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            borderRadius="$radius-lg"
+            color="$muted-foreground"
+            pressStyle={{ opacity: 0.6 }}
+            aria-label="Open navigation"
+          >
+            <Prim.Text fontSize="$lg">☰</Prim.Text>
+          </Prim.Pressable>
+        </Prim.Row>
+      )}
+
       <Prim.Box flex={1} flexDirection="column" display={tab === 'home' ? 'flex' : 'none'}>
         <DashboardHome
           onNewChat={() => setTab('chat')}
@@ -213,16 +252,18 @@ function HomeShell() {
         />
       </Prim.Box>
       <Prim.Box flex={1} flexDirection="column" display={tab === 'chat' ? 'flex' : 'none'}>
-        <ChatShell />
+        {/* Chat's own drawer carries the switcher in its footer — see the note above. */}
+        <ChatShell onSwitchSurface={switchTo} {...(badges ? { surfaceBadges: badges } : {})} />
       </Prim.Box>
       <Prim.Box flex={1} flexDirection="column" display={tab === 'teams' ? 'flex' : 'none'}>
         <TeamScreen onMentionCount={setTeamMentions} />
       </Prim.Box>
-      <BottomNav
-        current={tab}
-        onSelect={setTab}
-        {...(teamMentions > 0 && tab !== 'teams' ? { badges: { teams: teamMentions } } : {})}
-      />
+
+      <Drawer open={navOpen} onClose={() => setNavOpen(false)} side="left" width="16rem">
+        <Prim.Box flex={1} flexDirection="column" paddingTop="$3">
+          <SurfaceSwitcher current={tab} onSwitch={switchTo} {...(badges ? { badges } : {})} />
+        </Prim.Box>
+      </Drawer>
     </Prim.Box>
   )
 }

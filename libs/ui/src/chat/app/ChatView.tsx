@@ -292,7 +292,14 @@ export function ChatView({
         aria-live="polite"
         aria-atomic="false"
       >
-        <Prim.Col maxWidth={768} marginHorizontal="auto" paddingVertical="$6" minHeight="100%">
+        {/* `width="100%"` is load-bearing, not belt-and-braces. Yoga does not stretch a child of a
+            scroll view to the viewport the way a block element does on web, so with only a
+            `maxWidth` this column sized to its CONTENT and `marginHorizontal: auto` then centred
+            that — which on a 360dp phone left a ~40dp gutter down the left of every assistant turn
+            and a mismatched one on the right, reading as "the replies are pushed off to the side".
+            Stating the width makes `maxWidth` the cap it was meant to be on a wide window, and a
+            no-op on a narrow one. */}
+        <Prim.Col width="100%" maxWidth={768} marginHorizontal="auto" paddingVertical="$6" minHeight="100%">
           {groups.length === 0 ? (
             <EmptyState
               projectName={!singleSession && spaceLabel ? spaceLabel : undefined}

@@ -13,7 +13,7 @@ import * as Prim from '../../primitives/index'
  * thumb already is.
  *
  * Rendering is by `display`, not by mounting — the caller decides visibility with `$md` overrides on
- * the wrapper if it wants the bar only on a phone, exactly as `BottomNav` does.
+ * the wrapper if it wants the bar only on a phone.
  */
 
 export interface BottomTab<Id extends string = string> {

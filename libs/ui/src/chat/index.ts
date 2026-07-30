@@ -18,6 +18,10 @@ export { ReplChatView } from './components/ReplChatView';
 export type { ReplChatViewProps } from './components/ReplChatView';
 export { ChatShell } from './app/ChatShell';
 export { getAccessToken, authHeaders, wsTokenSuffix, withAuthToken } from './app/auth';
+// The same slide-over `AppShell` uses for its mobile sidebar. Exported so a host that has to
+// supply its own (the mobile app, for the two surfaces that have no sidebar to hang one off)
+// gets the identical overlay, dismiss handling and back-gesture wiring rather than a second one.
+export { Drawer } from './components/ui/Drawer';
 
 // Design system: Ink-compatibility layer + theming
 export * as compat from './compat/index';

@@ -1,5 +1,5 @@
 /**
- * The Home dashboard and the tab bar, MOUNTED on the React Native target.
+ * The Home dashboard and the surface switcher, MOUNTED on the React Native target.
  *
  * Home is the first screen a signed-in user sees, so the invariants that matter most are the ones a
  * device enforces and no jsdom test can: no string outside a text host (React Native drops it and
@@ -14,7 +14,7 @@ import { test, expect } from '../harness'
 import { render, findAll, findByText, flattenStyle, NATIVE_TEXT } from '../render'
 import { AuthProvider } from '@lmthing/auth'
 import { DashboardHome } from '../../src/dashboard/DashboardHome'
-import { BottomNav } from '../../src/elements/nav/bottom-nav'
+import { SurfaceSwitcher } from '../../src/elements/nav/surface-switcher'
 
 function looseStrings(tree: unknown): string[] {
   const out: string[] = []
@@ -61,20 +61,28 @@ test('Home still greets and offers a new chat when every source fails', () => {
   })
 })
 
-test('the tab bar renders every tab as real text', () => {
-  const { tree } = render(<BottomNav current="home" onSelect={() => {}} />)
+test('the surface switcher renders every surface as real text', () => {
+  const { tree } = render(<SurfaceSwitcher current="home" onSwitch={() => {}} />)
   for (const label of ['Home', 'Chat', 'Teams']) {
     expect(findByText(tree, label)?.type).toBe(NATIVE_TEXT)
   }
   expect(looseStrings(tree)).toEqual([])
 })
 
-test('the tab bar lays out as a ROW — `display: flex` alone would stack it on native', () => {
-  const { tree } = render(<BottomNav current="home" onSelect={() => {}} />)
+test('the surface switcher lays out as a ROW — `display: flex` alone would stack it on native', () => {
+  const { tree } = render(<SurfaceSwitcher current="home" onSwitch={() => {}} />)
   const label = findByText(tree, 'Home')
   const bar = findAll(tree, () => true).find((n) =>
     (n.children ?? []).some((c) => c !== null && typeof c === 'object'),
   )
   expect(label).toBeTruthy()
   expect(flattenStyle(bar?.props?.style).flexDirection).toBe('row')
+})
+
+test('WITHOUT onSwitch (web) it drops Home — there is no lmthing.home to link at', () => {
+  const { tree } = render(<SurfaceSwitcher current="chat" />)
+  expect(findByText(tree, 'Home')).toBe(null)
+  for (const label of ['Chat', 'Teams']) {
+    expect(findByText(tree, label)?.type).toBe(NATIVE_TEXT)
+  }
 })
