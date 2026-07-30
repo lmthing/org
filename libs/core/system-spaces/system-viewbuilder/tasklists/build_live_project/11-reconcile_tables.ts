@@ -109,6 +109,18 @@ interface ContractEndpoint {
   purpose?: string;
   tables?: string[];
   fields?: unknown[];
+  /**
+   * A WRITE endpoint's request-body keys, as `'key: type'` — verbatim twin of
+   * `09-emit_types.ts#ContractEndpoint.input`. It has to be carried HERE too, and forgetting it was
+   * a silent total regression: this node re-emits the WHOLE contract from disk, so a version of
+   * `renderEndpoints` that ignores `input` does not merely fail to add the body — it OVERWRITES the
+   * good `interface <Base>Input` that `emit_types` had already written with the typeless
+   * `Record<string, unknown>` fallback. Measured on `13-plant-care` run 8: `plan_endpoints` declared
+   * `input` on `create-plant` in all three planning rounds, `emit_types` resolved the correct
+   * 4-property interface, and the file on disk still ended up with
+   * `type CreatePlantInput = Record<string, unknown>;` — because this twin ran after it.
+   */
+  input?: unknown[];
 }
 
 interface ContractComponent {
@@ -406,9 +418,28 @@ function renderEndpoints(endpoints: ContractEndpoint[]): string {
     lines.push(`/** \`${endpoint.name}\`${endpoint.route ? ` — ${endpoint.route}` : ''}${purpose ? `: ${purpose}` : ''} */`);
     lines.push(item.block);
     lines.push(`interface ${base}Output { items: ${item.typeName}[]; }`);
+    /**
+     * `Input` = the route's parameters PLUS the declared request body — verbatim twin of
+     * `09-emit_types.ts#renderEndpoints`. See {@link ContractEndpoint.input} for why omitting it here
+     * is worse than omitting it there: this node re-emits the whole file, so the old params-only
+     * version silently UNDID the body that had already been emitted.
+     */
+    const bodyFields = (endpoint.input ?? []).map(parseField).filter(Boolean) as ParsedField[];
+    const inputProps = [
+      ...params.map((p) => `  ${propKey(p)}: string;`),
+      ...bodyFields
+        // A route param and a body key of the same name are the same value; the path wins.
+        .filter((f) => !params.includes(f.key.replace(/\?$/, '')))
+        .map((f) => {
+          const optional = f.key.endsWith('?');
+          const key = f.key.replace(/\?$/, '');
+          const type = f.type && f.type.trim() !== '' ? f.type : 'unknown';
+          return `  ${propKey(key)}${optional ? '?' : ''}: ${type};`;
+        }),
+    ];
     lines.push(
-      params.length > 0
-        ? `interface ${base}Input {\n${params.map((p) => `  ${propKey(p)}: string;`).join('\n')}\n}`
+      inputProps.length > 0
+        ? `interface ${base}Input {\n${inputProps.join('\n')}\n}`
         : `type ${base}Input = Record<string, unknown>;`,
     );
     blocks.push(lines.join('\n'));

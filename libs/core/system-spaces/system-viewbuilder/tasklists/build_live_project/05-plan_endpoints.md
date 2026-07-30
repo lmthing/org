@@ -30,22 +30,29 @@ Each endpoint is `{ name, route, purpose, tables, fields, input? }`:
   a host-run `reconcile_tables` re-checks the contract against what actually reached disk. Do not
   invent a table name and do not re-case one — an endpoint planned against a table that never landed
   ships a handler that builds clean and 500s at runtime.
-- **`input` — REQUIRED on every WRITE endpoint (POST/PUT/PATCH): the EXACT keys of the request BODY,**
-  each as `'key: type'`, exactly like `fields` but describing what the CALLER SENDS rather than what the
-  endpoint answers. Suffix a key with `?` to make it optional (`'lastWatered?: string'`). Omit `input`
-  entirely for a read (GET/DELETE), which carries no body — its arguments are the route's `[param]`s.
-  **Do NOT list route parameters here**; `emit_types` adds those itself.
+- **`input` — the EXACT keys of the request BODY**, each as `'key: type'`, exactly like `fields` but
+  describing what the CALLER SENDS rather than what the endpoint answers. Suffix a key with `?` to make
+  it optional (`'lastWatered?: string'`). **Do NOT list route parameters here**; `emit_types` adds those
+  itself.
 
-  This is not bookkeeping — **it is what puts fields in a form.** A `create` section declares no fields
-  of its own by design: the renderer derives every input from this endpoint's Input JSON Schema. So an
-  omitted or empty `input` produces a typeless `Record<string, unknown>`, a schema with no properties,
-  and a page that renders the words **"Nothing to fill in."** above a Save button — measured on the
-  first model-built app, on web and native alike. The form was not broken; nothing had described what
-  it should contain. A write endpoint with no `input` is therefore a planning error, not a shortcut.
+  **REQUIRED on any endpoint a `create` section submits to** — that is not bookkeeping, **it is what
+  puts fields in a form.** A `create` section declares no fields of its own by design: the renderer
+  derives every input from this endpoint's Input JSON Schema. So an omitted or empty `input` produces a
+  typeless `Record<string, unknown>`, a schema with no properties, and a page that renders the words
+  **"Nothing to fill in."** above a Save button — measured on the first model-built app, on web and
+  native alike. The form was not broken; nothing had described what it should contain. A host-run
+  `validate_contract` rejects the plan for exactly this case.
 
   Name the keys the way the FORM should present them and the handler should read them, and type them
   so the compiler can check the handler: `{ name: 'create-plant', route: 'plants/POST', input: [
   'name: string', 'room: string', 'waterIntervalDays: number', 'lastWatered?: string' ] }`.
+
+  **OMIT it for an endpoint with no body**, and most writes here have none. A read (GET/DELETE) never
+  carries one. Neither does an ACTION write — `plants/[id]/water-today/POST`,
+  `plants/[id]/toggle-resting/PATCH` — whose only argument is the route `[param]` and whose new value
+  the SERVER computes (see the toggle rule below: the page passes no value at all). Do not invent a body
+  key to fill the field in; `input: []` and a made-up `'watered_at?: string'` are both worse than
+  omitting it, because the handler then has a parameter no caller sends.
 - `fields` — the EXACT keys of ONE item in the response (`items[0]`), each as `'key: type'`. The TYPE
   half is REQUIRED and binding: a host-run `emit_types` writes these into the project's `.d.ts` BEFORE
   any handler or page is authored, so the compiler — not a later reviewer — is what catches a field

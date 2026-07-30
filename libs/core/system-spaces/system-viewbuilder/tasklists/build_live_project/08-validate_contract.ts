@@ -243,7 +243,7 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
     seenRoute.add(r);
   }
 
-  // (1b) A WRITE endpoint with no `input` — the body nothing described.
+  // (1b) A FORM'S endpoint with no `input` — the body nothing described.
   //
   // A `create` section declares no fields by design: the renderer derives every one from the
   // endpoint's Input JSON Schema. So an absent `input` is not a missing annotation, it is a form with
@@ -251,21 +251,41 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
   // `validateAppViews` and `renderSmokeViews` all pass, because the spec and the data are both
   // perfectly consistent with a body that was never specified. Caught here, at plan time, because
   // this is the last point where adding it costs one field instead of a re-plan.
+  //
+  // **Scoped to the endpoints a `create` section actually reads, which is the whole failure mode.**
+  // The first version asked every POST/PUT/PATCH for a body, and that is not a property of the method:
+  // an ACTION write — `plants/[id]/water-today/POST`, `plants/[id]/toggle-resting/PATCH` — carries no
+  // body ON PURPOSE. Its argument is the route `[param]`, and the toggle rule in `05-plan_endpoints.md`
+  // says plainly that the page passes no value because the server computes the opposite. So the rule
+  // asked for something that does not exist, and on `13-plant-care` run 8 the model refused it three
+  // times — declaring `input: ['watered_at?: string']` once, then `input: []` — which spent BOTH
+  // `onFail` attempts and 12 unrelated errors before the DAG gave up and ran on with the plan anyway.
+  // A gate no correct plan can satisfy does not improve the plan; it only costs the budget that would
+  // have fixed the real findings.
+  const formEndpoints = new Set<string>();
+  for (const p of pages) {
+    for (const s of list<SectionSpec>(p.sections)) {
+      if (String(s.kind ?? '') !== 'create') continue;
+      const name = String(s.endpoint ?? '').trim();
+      if (name) formEndpoints.add(name);
+    }
+  }
   for (const e of endpoints) {
     const r = String(e.route ?? '');
-    const method = r.split('/').pop()?.toUpperCase() ?? '';
-    if (method !== 'POST' && method !== 'PUT' && method !== 'PATCH') continue;
+    const name = String(e.name ?? r);
+    if (!formEndpoints.has(name)) continue;
     const body = Array.isArray(e.input) ? e.input.filter((x) => String(x ?? '').trim() !== '') : [];
     if (body.length > 0) continue;
     add(
       'plan_endpoints',
-      String(e.name ?? r),
-      `"${e.name ?? r}" is a ${method} but declares no \`input\` — the request body is undescribed, so ` +
-        `its Input type degrades to \`Record<string, unknown>\` and any \`create\` section pointed at it ` +
-        `renders an EMPTY form ("Nothing to fill in."). Add \`input\` listing the body keys as ` +
-        `'key: type' (\`?\` suffix = optional), e.g. \`input: ['name: string', 'room: string', ` +
-        `'waterIntervalDays: number', 'lastWatered?: string']\`. Route \`[param]\`s do NOT go here — ` +
-        `emit_types adds those.`,
+      name,
+      `"${name}" is what a \`create\` section submits, but it declares no \`input\` — the request body is ` +
+        `undescribed, so its Input type degrades to \`Record<string, unknown>\` and the page renders an ` +
+        `EMPTY form ("Nothing to fill in.") above a Save button. A \`create\` section declares no fields ` +
+        `of its own BY DESIGN; this endpoint's \`input\` is the only place they can come from. Add it, ` +
+        `listing the body keys as 'key: type' (\`?\` suffix = optional), e.g. \`input: ['name: string', ` +
+        `'room: string', 'waterIntervalDays: number', 'lastWatered?: string']\`. Route \`[param]\`s do ` +
+        `NOT go here — emit_types adds those.`,
     );
   }
 
