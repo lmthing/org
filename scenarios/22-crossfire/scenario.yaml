@@ -1,0 +1,154 @@
+# 22-crossfire — what breaks when a team is genuinely a team: several people changing ONE app at
+# once, from different channels, without reading each other's messages.
+#
+# 20-studio proves the thread remembers. 21-newsroom proves the work continues when the room is
+# empty. This one is the stress case neither covers: concurrent, uncoordinated, partly contradictory
+# change to the same live project — which is the normal condition of any real shared workspace and
+# the one a single-user product never has to survive.
+#
+# Steps marked `concurrent:` are delivered in the same instant (Promise.all), not in sequence. That
+# is the point: `runHeadlessThreaded` serializes turns on ONE session, but these are DIFFERENT
+# threads in DIFFERENT channels touching the same project files at the same time.
+#
+# Step verbs beyond the shared ones — see 20-studio/scenario.yaml's header for the full list, plus:
+#   concurrent: [ {as, in, say}, … ]   several members speaking at once, in different threads.
+
+id: 22-crossfire
+title: Three people change the same thing at the same time, and it survives
+project: crossfire
+
+team:
+  id: harbour-works
+  name: Harbour Works
+
+cast:
+  - { key: sam, name: Sam Okonkwo, email: sam@harbourworks.co.uk, role: editor }
+  - { key: rae, name: Rae Fitzgerald, email: rae@harbourworks.co.uk, role: editor }
+  - { key: ivo, name: Ivo Petrov, email: ivo@harbourworks.co.uk, role: editor }
+
+channels:
+  - { id: general }
+  - { id: yard, category: Site }
+  - { id: office, category: Site }
+
+persona: >
+  Harbour Works is a small boatyard on the Solent: Sam runs it, Rae does the office and the
+  invoicing, Ivo is the shipwright and is almost always in the shed with wet hands and a phone in a
+  plastic bag. They are three people who do not read each other's messages and never have.
+
+  They talk about boats, jobs, quotes and lift-outs. They will never say space, project, app, agent,
+  hook, event, webhook, integration, install, database, table, schema, row, API, build, deploy,
+  function, capability, consent or delegate. Ivo types one line at a time and never punctuates.
+
+promise: >
+  One shared workspace stays coherent when several people change it at once. Two changes asked for
+  in the same breath both land; two changes that genuinely contradict each other are surfaced to the
+  people involved rather than silently resolved by whoever happened to finish last.
+
+knows:
+  - "there are four boats in: Kittiwake, Marisol, Bright Penny and a Nordic folkboat with no name yet"
+  - "a job is quoted, approved, in progress, or waiting on parts"
+  - "the yard charges a lift-out fee separately from the work"
+  - "Rae is the only one who sends invoices"
+
+invariants:
+  - IF THE APP SHOWS IT, IT'S A DB ROW — never chat prose, never a knowledge file.
+  - AGENTS QUERY, THEY DON'T REMEMBER — a question about the team's own data is answered by querying the DB (or the app's own endpoint), not from context. Two different answers to the same question is a failure.
+  - A CONFLICT (two values for the same fact) resolves by precedence: user-asserted > DB > researched > guess; a true tie ASKS the user.
+  - ASK ONLY WHEN THE DECISION IS GENUINELY THE USER'S.
+  - IT OPENS WITH REAL VALUES, not an empty shell, no console errors, no failed fetches.
+  - After a pod restart the spaces, app, DB rows and researched knowledge survive.
+  - CONCURRENT CHANGES BOTH LAND — two people changing different things at the same time is not a race one of them loses, and never leaves the app unbuildable.
+  - A CONTRADICTION IS SURFACED TO THE PEOPLE IN IT, not silently decided — and the person whose change was NOT applied is told, in the place they asked.
+  - THE APP IS NEVER LEFT BROKEN BY A CHANGE — if a change cannot be applied, the previous working state stands and the failure is stated.
+
+steps:
+  # ── 1. get something real on the table for them to fight over.
+  - as: sam
+    in: yard
+    say: >
+      @thing I need to see what's actually in the yard without walking round it. Four boats in at the
+      moment, everyone's got a different idea of what's happening with each one, and I keep quoting
+      work we've already done.
+    expect:
+      - THING proposes a way to see the yard. It does not ask Sam to specify what to build.
+      - Nothing is authored before the offer.
+
+  - as: sam
+    in: yard
+    reply_to: 1
+    say: "go on then"
+    if_asked:
+      "which boats": "Kittiwake, Marisol, Bright Penny, and a folkboat that hasn't got a name yet."
+      "what states": "Quoted, approved, in progress, or waiting on parts."
+    expect:
+      - The four boats exist as real DB rows, including the unnamed folkboat — an incomplete real thing is not dropped for being awkward.
+      - THING says what they can open, in a sentence.
+
+  # ── 3. THE beat. Two people, two channels, two different changes, same instant.
+  - concurrent:
+      - as: rae
+        in: office
+        say: >
+          @thing can you put the lift-out fee on there as its own thing? I keep having to work it out
+          again at invoicing and it is never the same twice
+      - as: ivo
+        in: yard
+        say: >
+          @thing marisol is waiting on parts now the shaft is a special order 3 weeks
+    expect:
+      - BOTH changes land. Rae's lift-out fee exists as its own field, and Marisol's state is waiting on parts.
+      - Neither turn overwrites the other's work — the app is not left holding only whichever finished last.
+      - The app still builds and every existing route still renders after both.
+      - Each member is answered in their OWN channel and thread. Rae is not told about the shaft.
+
+  # ── 4. the genuine contradiction — the same fact, two values, from two people who both believe it.
+  - concurrent:
+      - as: sam
+        in: yard
+        say: "@thing bright penny is approved, I spoke to the owner this morning"
+      - as: rae
+        in: office
+        say: >
+          @thing bright penny is still only quoted — they have not paid the deposit and I am not
+          starting anything until they do
+    expect:
+      - THING does NOT silently pick one. Whoever finishes last does not decide the yard's position.
+      - The contradiction is surfaced to the people in it, in the channels they spoke in, naming what the other person said.
+      - The row is not left in a state that misrepresents either of them as agreed.
+      - It does not invent a compromise state that nobody asked for.
+
+  # ── 5. resolution, and the losing side being told.
+  - as: sam
+    in: yard
+    reply_to: 4
+    say: "rae's right, leave it. I'll chase the deposit."
+    expect:
+      - Bright Penny stays quoted. The state reflects the decision actually taken, not the first assertion made.
+      - Rae is told in #office that it was settled her way — the person whose change was held is told where they asked.
+      - No duplicate Bright Penny row exists from the two competing turns.
+
+  # ── 6. the phone-shaped update, one line, no punctuation, while the app is open elsewhere.
+  - as: ivo
+    in: yard
+    say: "@thing kittiwake done she is going back in friday"
+    expect:
+      - Kittiwake's state advances from a nine-word message with no punctuation and no field names.
+      - The Friday date lands as data, not as a sentence.
+      - THING does not ask Ivo to fill in anything it could have inferred or looked up.
+
+  # ── 7. does the app agree with the conversation?
+  - open_app: true
+    expect:
+      - All four boats are on screen with the states the conversations actually settled — Marisol waiting on parts, Bright Penny quoted, Kittiwake done.
+      - The lift-out fee Rae asked for is a visible field with real values, not just present in storage.
+      - No console errors, no failed fetches, every route renders.
+
+  # ── 8. the same question, from a third person, after a restart.
+  - restart_pod: true
+    as: ivo
+    in: yard
+    say: "@thing whats left to do this week"
+    expect:
+      - Every row, both concurrent changes, the resolution and the channels survive the restart.
+      - The answer matches what the app shows — the same question does not get a different answer through a different door.
