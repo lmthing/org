@@ -464,6 +464,25 @@ describe('THING in a thread', () => {
     expect(messages[1]!.text).toContain('budget exhausted');
   });
 
+  it('a pagination cursor that is not in the channel is reported, not silently reset', async () => {
+    // The log is append-only and read whole, so a `before` id that is not in it
+    // is not "old" — it is not this channel's. The old code discarded that fact
+    // and returned the NEWEST window while still answering hasMore:true, so a
+    // client paginating with a bad cursor was teleported to the top of the
+    // conversation and told to keep going: an infinite loop over the same page.
+    for (let i = 0; i < 3; i++) {
+      await appendMessage(root, { channelId: 'general', kind: 'user', text: `m${i}`, userId: 'u1' });
+    }
+    const good = await readMessages(root, 'general', { limit: 10 });
+    expect(good.messages).toHaveLength(3);
+    expect(good.staleCursor).toBeUndefined();
+
+    const stale = await readMessages(root, 'general', { before: 'not-a-real-id', limit: 10 });
+    expect(stale.messages).toEqual([]);
+    expect(stale.hasMore).toBe(false);
+    expect(stale.staleCursor).toBe(true);
+  });
+
   it('a CRASHED turn still reaches the person who asked', async () => {
     // The success path stamps `mentions: [asker]` and calls `deliver` (badge +
     // push). The crash path did neither, so the one outcome you most need to be

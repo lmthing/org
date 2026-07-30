@@ -475,7 +475,7 @@ export async function readMessages(
   root: string,
   channelId: string,
   opts: { limit?: number; before?: string } = {},
-): Promise<{ messages: ChannelMessage[]; hasMore: boolean }> {
+): Promise<{ messages: ChannelMessage[]; hasMore: boolean; staleCursor?: boolean }> {
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
   const path = channelLog(root, channelId);
 
@@ -515,9 +515,15 @@ export async function readMessages(
     throw err;
   }
 
-  // `before` was given but never found → treat as "from the end", which is what
-  // a client with a stale cursor most usefully gets.
-  void reachedBefore;
+  // `before` was given but never found. The log is append-only and read whole,
+  // so an id that is not in it is not "old" — it is not this channel's. Falling
+  // through to the newest window silently teleported a paginating client to the
+  // top of the conversation AND told it `hasMore: true`, so it would page
+  // forever over the same messages. Say so instead, and let the caller decide to
+  // reset rather than guessing on its behalf.
+  if (opts.before && !reachedBefore) {
+    return { messages: [], hasMore: false, staleCursor: true };
+  }
   return { messages: kept, hasMore: truncatedBefore };
 }
 
