@@ -144,6 +144,67 @@ function ghPages404Plugin() {
 }
 
 /**
+ * Fail the build if a bundle ships the Tamagui RUNTIME without the Tamagui CONFIG.
+ *
+ * **The outage this exists to prevent.** `@lmthing/ui`'s elements are Tamagui components; every one
+ * of them calls `getConfig()`, which throws `Err0` unless `createTamagui()` — in
+ * `libs/ui/src/theme/tamagui.config.ts` — has run. That call reaches the bundle only as a SIDE
+ * EFFECT of importing the config module, and `libs/ui` used to declare a blanket
+ * `sideEffects: false`. The primitives do import the config module, but only for `styled`/`View`/
+ * `Text`/`createComponent`, which it re-exports VERBATIM from `@tamagui/core` — so rolldown resolved
+ * those bindings transitively, rewrote the import to `@tamagui/core`, and dropped the config module
+ * as a side-effect-free orphan. Result: lmthing.com, .org, .social, .casa, .store, .space and .blog
+ * all shipped a bundle that error-boundaried on first paint, on every route, simultaneously.
+ *
+ * Nothing upstream could see it. Type-checking is unaffected (the imports are real). Unit tests are
+ * unaffected (vitest does not tree-shake, and every suite imports the config anyway). The build
+ * itself succeeded — 424 kB of perfectly valid JavaScript. The defect existed only in the shape of
+ * the emitted module graph, which is exactly what this plugin inspects.
+ *
+ * It asserts on MODULE IDS rather than on strings in the output: ids are stable file paths, where a
+ * minified marker string would silently stop matching the day someone edits an unrelated config
+ * value. `apps/web` and the mobile app pass trivially — their roots import the config as a value to
+ * hand to a `TamaguiProvider`, which is a use no bundler may elide.
+ */
+function tamaguiConfigGuardPlugin() {
+  const CONFIG_MODULE = path.join('libs', 'ui', 'src', 'theme', 'tamagui.config')
+  const PRIMITIVES = path.join('libs', 'ui', 'src', 'elements', 'primitives')
+
+  /** @param {string} id */
+  const norm = (id) => id.split('?')[0]
+
+  return {
+    name: 'lmthing-tamagui-config-guard',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const ids = []
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type === 'chunk') ids.push(...(chunk.moduleIds ?? []).map(norm))
+      }
+      // `moduleIds` is a rollup output-chunk field; if a future bundler drops it there is nothing to
+      // assert on, and a guard that silently passes is worse than one that says why it cannot run.
+      if (ids.length === 0) {
+        this.warn('tamagui-config-guard: no module ids exposed by this bundler — guard did not run')
+        return
+      }
+
+      const usesTamagui = ids.some((id) => id.includes(PRIMITIVES) || id.includes('@tamagui/core'))
+      if (!usesTamagui) return
+      if (ids.some((id) => id.includes(CONFIG_MODULE))) return
+
+      this.error(
+        'This bundle contains Tamagui components but NOT the Tamagui config ' +
+          '(libs/ui/src/theme/tamagui.config.ts), so createTamagui() never runs and every page ' +
+          'throws "Err0" into its error boundary at runtime.\n' +
+          'The config module is retained by its `sideEffects` entry in libs/ui/package.json — ' +
+          'check that it is still listed there. A host that mounts its own <TamaguiProvider ' +
+          'config={tamaguiConfig}> also satisfies this, since that imports the config as a value.',
+      )
+    },
+  }
+}
+
+/**
  * @param {string} dirname
  * @param {import('vite-plus').UserConfig} [overrides]
  */
@@ -167,6 +228,7 @@ export function createViteConfig(dirname, overrides, opts = {}) {
   return defineConfig(({ mode }) => ({
     plugins: [
       ghPages404Plugin(),
+      tamaguiConfigGuardPlugin(),
       sharedFaviconPlugin(faviconDir),
       tanstackRouter({
         routesDirectory: './src/routes',

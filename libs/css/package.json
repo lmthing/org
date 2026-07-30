@@ -6,6 +6,8 @@
   "exports": {
     "./theme": "./src/theme.css",
     "./theme.css": "./src/theme.css",
+    "./tailwind-theme": "./src/tailwind-theme.css",
+    "./tailwind-theme.css": "./src/tailwind-theme.css",
     "./animations": "./src/animations.css",
     "./animations.css": "./src/animations.css",
     "./preflight": "./src/preflight.css",

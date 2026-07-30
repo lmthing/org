@@ -33,7 +33,10 @@
   "files": [
     "src"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css",
+    "./src/theme/tamagui.config.ts"
+  ],
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

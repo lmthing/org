@@ -51,8 +51,30 @@ const code = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 const TREES = ['libs/css/src', 'libs/ui/src', 'apps/web/src'];
 
+/**
+ * The ONE deliberate exception, and it is load-bearing rather than residue.
+ *
+ * `tailwind-theme.css` is generated `@theme inline` — it registers the design tokens WITH Tailwind
+ * so `bg-primary` / `text-muted-foreground` / `border-border` exist. Tailwind learns colours from
+ * `@theme` and never from `:root`, so nothing else can do this job.
+ *
+ * Phase 4 removed Tailwind from the design system and from `apps/web`, which is exactly right for
+ * those trees and is what the rest of this suite protects. But the seven product SPAs
+ * (com/org/social/casa/store/space/blog) were never migrated and still carry ~330 token utilities,
+ * and they had been getting Tailwind transitively through `theme.css`. When that went, every one of
+ * them shipped with the base reset and nothing else — no layout, no colour, on every route. This
+ * file is the fix, and it is imported ONLY by those SPAs' own `index.css`; `apps/web` and the
+ * `libs/ui` stylesheets never see it, so the phase-4 guarantee still holds where it was meant to.
+ *
+ * `libs/cli/src/app/build/pages.ts` does the same thing for agent-authored project-app pages (see
+ * the bottom of this file) — same problem, same shape of answer.
+ */
+const DELIBERATE_TAILWIND = new Set(['libs/css/src/tailwind-theme.css']);
+
 describe('the design system and web surfaces are Tailwind-free', () => {
-  const files = TREES.flatMap((t) => cssFiles(join(ORG, t)));
+  const files = TREES.flatMap((t) => cssFiles(join(ORG, t))).filter(
+    (f) => !DELIBERATE_TAILWIND.has(relative(ORG, f)),
+  );
 
   it('finds the stylesheets it means to check', () => {
     // Guards against the walk silently matching nothing and the suite passing vacuously. The count
@@ -81,6 +103,19 @@ describe('the design system and web surfaces are Tailwind-free', () => {
     expect(theme).toMatch(/--color-background:\s*var\(--background\)/);
     expect(theme).toMatch(/--color-agent:\s*var\(--agent\)/);
     expect((theme.match(/--color-[a-z0-9-]+:/g) ?? []).length).toBeGreaterThan(90);
+  });
+
+  it('tailwind-theme.css registers those same colours WITH Tailwind, for the product SPAs', () => {
+    // The counterpart to the assertion above. `theme.css` states the aliases as `:root` properties,
+    // which is all `apps/web` and the Tamagui primitives need — but Tailwind emits a utility only
+    // for a colour declared in `@theme`, so `:root` alone gives `var(--color-primary)` and NO
+    // `bg-primary`. Deleting this file, or dropping `inline` from it, unstyles all seven product
+    // SPAs completely while every build stays green — which is how it happened the first time.
+    const tw = readFileSync(join(ORG, 'libs/css/src/tailwind-theme.css'), 'utf8');
+    expect(code(tw)).toContain('@theme inline');
+    expect(tw).toMatch(/--color-background:\s*var\(--background\)/);
+    expect(tw).toMatch(/--color-primary:\s*var\(--primary\)/);
+    expect((tw.match(/--color-[a-z0-9-]+:/g) ?? []).length).toBeGreaterThan(90);
   });
 
   it('theme.css pulls in preflight, INTO the base layer', () => {

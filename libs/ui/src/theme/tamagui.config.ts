@@ -45,12 +45,31 @@
  *    theme pair would resurrect that bug, and it is now one boolean away. `pnpm test:surface` captures
  *    light AND dark, so it is the gate that catches it.
  *
- * ## Import discipline
+ * ## Import discipline — and why re-exporting is NOT enough
  *
- * `@lmthing/ui` is `sideEffects: false`, so a bare `import '…/tamagui.config'` is tree-shaken away and
- * Tamagui is left unconfigured (`getConfig()` → "Err0") at render time. Every primitive MUST import its
- * `styled`/`View`/`Text`/`createComponent` FROM THIS MODULE — re-exported at the bottom — so the
- * `createTamagui()` call is retained transitively.
+ * `createTamagui()` below is what registers `globalThis.__tamaguiConfig`; without it every primitive
+ * throws `Err0` at render time. Keeping that call in the bundle takes BOTH of the following, and the
+ * second one is the part that was missing for a long time:
+ *
+ *  1. Every primitive imports its `styled`/`View`/`Text`/`createComponent` FROM THIS MODULE (they are
+ *     re-exported at the bottom), never straight from `@tamagui/core`.
+ *  2. This module is listed in `package.json` `sideEffects`.
+ *
+ * (1) alone does nothing. The re-exports at the bottom are *pure* re-exports of `@tamagui/core`, so a
+ * bundler resolves `import { styled } from '…/tamagui.config'` transitively and rewrites it to point
+ * at `@tamagui/core` directly — and under a blanket `sideEffects: false` it is then free to drop this
+ * module entirely, `createTamagui()` and all. That is exactly what happened: the package declared
+ * `sideEffects: false`, and every standalone SPA that renders a primitive without also mounting a
+ * `<TamaguiProvider config={tamaguiConfig}>` (com, org, social, casa, store, space) shipped a bundle
+ * with the Tamagui runtime but no config, and error-boundaried on first paint. The unified web app and
+ * the mobile app were immune only because their roots import `tamaguiConfig` AS A VALUE to hand to a
+ * provider, which is a use a bundler cannot elide.
+ *
+ * So the load-bearing guarantee is the `sideEffects` entry, not the re-export. The gate is
+ * `tamaguiConfigGuardPlugin` in `libs/utils/src/vite.mjs`, which every SPA build runs: it inspects
+ * the emitted module graph and FAILS the build if a bundle carries Tamagui components without this
+ * module. It has to live in the bundler — no unit test can see this, because vitest does not
+ * tree-shake and every suite here imports the config anyway.
  *
  * See docs/react-native-tamagui-migration.md §5 / §6 and docs/tamagui-idiomatic-migration.md §5.
  */
