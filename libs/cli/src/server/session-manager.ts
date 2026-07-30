@@ -171,6 +171,19 @@ export interface BuildSessionArgs {
    *  unset so consent-marked calls fail closed instead of hanging on an ask
    *  no client will ever answer. */
   interactive?: boolean;
+  /**
+   * A human will READ this turn's output, even though nobody can answer an
+   * `ask()`. True for a THING run in a team channel: several people are watching
+   * the thread, but there is no client wired to answer a prompt.
+   *
+   * Separate from {@link interactive} because those are two different
+   * capabilities that happened to share a flag. `interactive` grants the consent
+   * prompter, which needs someone to ANSWER; the anti-silent guard needs only
+   * someone to WATCH. Conflating them meant a channel turn that did work and
+   * displayed nothing settled `done` in silence — nothing nudged it, so THING
+   * "replied" with whatever the run happened to leave behind.
+   */
+  visibleToUser?: boolean;
   /** This session's id. When set on a project-rooted build, `defaultBuildSession`
    *  registers the session's live app-build-target holder in `buildTargets` under this
    *  key so {@link SessionManager.persistSession} can persist it (and a later resume
@@ -546,10 +559,13 @@ export class SessionManager {
         // runs leave it unset so consent-marked calls FAIL CLOSED instead of
         // hanging on an ask with no client attached.
         consentPrompter: args.interactive ? createAskConsentPrompter(args.renderHost) : undefined,
-        // Interactive top-level session (a real user sees display() / answers ask()) — gates
-        // the turn loop's anti-silent no-visible-output guard. Headless single-shots
-        // (runHeadless), hooks and code-node runs pass interactive:false and are unaffected.
-        interactive: args.interactive === true,
+        // Gates the turn loop's anti-silent no-visible-output guard, which asks
+        // "will a human read this?" — NOT "can a human answer an ask?". A team
+        // channel is the case that separates them: several people are watching the
+        // thread, and none of them can answer a prompt. Hooks, webhooks, code-node
+        // runs and spawns set neither and stay unguarded, which is right: nobody is
+        // reading those, and they legitimately never display.
+        interactive: args.interactive === true || args.visibleToUser === true,
         // Presence-only integration config status (S13) — reads the installed space's
         // required env-var NAMES vs `process.env`, never any secret values. Only a
         // project-rooted session (THING) gets it; absent ⇒ the yield errors clearly.
@@ -1853,6 +1869,11 @@ export class SessionManager {
     message: string;
     budget?: BuildSessionArgs['budget'];
     traceFile?: string;
+    /** A human will read this turn's output even though nobody can answer an
+     *  `ask()` — a THING run in a team channel. Turns ON the anti-silent guard so
+     *  a turn that works but displays nothing is nudged instead of settling in
+     *  silence; deliberately does NOT grant the consent prompter. */
+    visibleToUser?: boolean;
     /** Where this headless run came from — recorded as the ledger session `source`
      *  (`hook:<slug>` / `code-node`). Defaults to `headless`. */
     origin?: { source: string };
@@ -1936,6 +1957,7 @@ export class SessionManager {
     agentSlug: string;
     budget?: BuildSessionArgs['budget'];
     traceFile?: string;
+    visibleToUser?: boolean;
   }): Promise<BuildSessionArgs> {
     const root = this.lmthingRoot;
     if (!root) {
@@ -1950,6 +1972,7 @@ export class SessionManager {
         budget: opts.budget,
         traceFile: opts.traceFile,
         renderHost: new WebRenderHost(),
+        ...(opts.visibleToUser ? { visibleToUser: true } : {}),
       };
     }
 
@@ -1982,6 +2005,7 @@ export class SessionManager {
       budget: opts.budget,
       traceFile: opts.traceFile,
       renderHost: new WebRenderHost(),
+      ...(opts.visibleToUser ? { visibleToUser: true } : {}),
       systemSpaceDirs,
       preloadSpaceDirs,
       projectSpacesDir,
@@ -2044,6 +2068,11 @@ export class SessionManager {
     agentSlug: string;
     message: string;
     budget?: BuildSessionArgs['budget'];
+    /** A human will read this turn's output even though nobody can answer an
+     *  `ask()` — a THING run in a team channel. Turns ON the anti-silent guard so
+     *  a turn that works but displays nothing is nudged instead of settling in
+     *  silence; deliberately does NOT grant the consent prompter. */
+    visibleToUser?: boolean;
   }): Promise<HeadlessRunResult> {
     return this.runExclusive(opts.sessionId, async () => {
       let session: Session | undefined;
@@ -2075,6 +2104,7 @@ export class SessionManager {
           spaceRef: opts.spaceRef,
           agentSlug: opts.agentSlug,
           budget: opts.budget,
+          ...(opts.visibleToUser ? { visibleToUser: true } : {}),
         });
         session = this.buildSessionFn(args);
 

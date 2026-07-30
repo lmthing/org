@@ -118,6 +118,47 @@ describe('SessionManager.runHeadless (keyless, mock provider)', () => {
     expect(JSON.stringify(res)).not.toContain('const step');
   });
 
+  it('(e) a WATCHED silent turn is nudged; an unwatched one is left alone', async () => {
+    // The anti-silent guard skips forks, hooks and code-node runs because nobody
+    // reads those. A THING turn in a team channel IS read — by everyone in the
+    // thread — so a turn that does work and displays nothing must be nudged, not
+    // allowed to settle in silence. That silence is why a channel got no answer.
+    const root = await makeRoot();
+    const calls = { n: 0 };
+    // Always produces a real statement, never a display() — the shape that
+    // settles `done` having shown a reader nothing.
+    const silent = createMockStreamFn(() => {
+      calls.n++;
+      return `const step = ${calls.n};`;
+    });
+    const build = (args: BuildSessionArgs) =>
+      new Session(
+        {
+          spaceDir: args.spaceDir,
+          agentSlug: args.agentSlug,
+          modelAlias: 'mock',
+          renderHost: args.renderHost,
+          systemSpaceDirs: [],
+          budget: args.budget,
+          interactive: args.interactive === true || args.visibleToUser === true,
+        },
+        { streamFn: silent },
+      );
+
+    const unwatched = new SessionManager({ streamFn: silent, lmthingRoot: root, buildSession: build });
+    await unwatched.runHeadless({ agentSlug: 'thing', message: 'go' });
+    const withoutGuard = calls.n;
+
+    calls.n = 0;
+    const watched = new SessionManager({ streamFn: silent, lmthingRoot: root, buildSession: build });
+    await watched.runHeadless({ agentSlug: 'thing', message: 'go', visibleToUser: true });
+    const withGuard = calls.n;
+
+    // Unwatched: asked once and left to finish silently. Watched: asked again,
+    // which is the nudge — "you did work and showed the reader nothing".
+    expect(withGuard).toBeGreaterThan(withoutGuard);
+  });
+
   it('(b) surfaces { ok:false, error } when the run throws', async () => {
     const root = await makeRoot();
     const manager = new SessionManager({

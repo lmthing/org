@@ -658,6 +658,13 @@ async function runThingReply(
       sessionId,
       agentSlug: THING_AGENT,
       message: promptFor(message),
+      // People are watching this thread. Without it the turn loop's anti-silent
+      // guard stays off — the guard is meant to skip forks, hooks and code-node
+      // runs that nobody reads — so a turn that did work and displayed nothing
+      // settled `done` in silence and the thread got no answer at all.
+      // Deliberately NOT `interactive`: that also grants the consent prompter,
+      // which needs somebody able to ANSWER, and a channel has no such client.
+      visibleToUser: true,
     });
 
     const answer = result.ok
