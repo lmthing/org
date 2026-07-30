@@ -464,6 +464,35 @@ describe('THING in a thread', () => {
     expect(messages[1]!.text).toContain('budget exhausted');
   });
 
+  it('a CRASHED turn still reaches the person who asked', async () => {
+    // The success path stamps `mentions: [asker]` and calls `deliver` (badge +
+    // push). The crash path did neither, so the one outcome you most need to be
+    // told about was the only one that never reached you: you asked THING
+    // something, closed the tab, and the thread quietly held a failure addressed
+    // to nobody.
+    //
+    // Distinct from the `ok: false` case above, which returns normally and so
+    // took the stamped path all along. This is a THROW.
+    const manager = {
+      runHeadlessThreaded: vi.fn(async () => {
+        throw new Error('the pod fell over');
+      }),
+    } as any;
+    const res = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing hi' }),
+      res, { channelId: 'general' }, {} as any,
+    );
+    await settle();
+
+    const { messages } = await readMessages(root, 'general');
+    const asker = messages[0]!.userId;
+    expect(asker, 'the test caller must have an identity for this to mean anything').toBeTruthy();
+    expect(messages[1]).toMatchObject({ kind: 'system' });
+    expect(messages[1]!.text).toContain('the pod fell over');
+    expect(messages[1]!.mentions, 'a crash must be addressed to whoever asked').toContain(asker);
+  });
+
   it('a plain reply in a THING thread reaches THING — no second @thing', async () => {
     // Having to re-address the agent in a thread it is already in is not how a
     // conversation works, and the effect was a reply that went nowhere: the

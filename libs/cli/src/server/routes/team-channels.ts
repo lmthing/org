@@ -799,8 +799,16 @@ async function runThingReply(
       kind: 'system',
       text: `THING could not answer: ${err instanceof Error ? err.message : String(err)}`,
       threadId,
+      // Reach the asker on a FAILURE too. The success path stamps this and the
+      // crash path did not, so the one outcome you most need to be told about was
+      // the only one that never badged you or reached your phone — you asked,
+      // closed the tab, and the thread quietly held a failure addressed to nobody.
+      ...(message.userId ? { mentions: [message.userId] } : {}),
     });
     broadcastChannelEvent({ type: 'message', message: reply }, to);
+    // Same reason: `deliver` is what raises the badge and sends the push. Without
+    // it the message exists and nothing announces it.
+    track(deliver(root, channel, reply).catch(() => {}));
     broadcastChannelEvent(
       { type: 'thing_status', channelId: message.channelId, threadId, status: 'error' },
       to,
