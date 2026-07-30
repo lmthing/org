@@ -1,0 +1,61 @@
+id: 13-plant-care
+title: A small houseplant tracker, built entirely as SPEC views
+project: plant-care
+
+# A deliberately SMALL brief (2 tables, ~6 endpoints, 4 pages) driven STRAIGHT at
+# `system-viewbuilder/automator` via `space_session` — THING is bypassed on purpose, so what this
+# measures is the view-spec pipeline itself, not routing. See PROGRESS.md, Wave 3.
+
+persona: >
+  A first live-run harness for `system-viewbuilder`, not a real persona. The brief is delivered the
+  way THING's delegate would phrase it: outcomes and known rows, no product vocabulary about specs,
+  sections or elements — the pipeline has to choose those itself.
+
+promise: >
+  The 23-node `build_live_project` tasklist runs end to end with a model in the loop and lands an app
+  whose build, app-wide view validation and render smoke are ALL clean — with the UI authored purely
+  as specs (no TSX writer is even in the profile).
+
+knows:
+  - "Watering intervals are in whole days; 'resting' plants should not appear in the due list."
+
+invariants:
+  - IF THE APP SHOWS IT, IT'S A DB ROW — never chat prose, never a hardcoded literal in a spec.
+  - ONE SECTION READS ONE ENDPOINT, and that endpoint's Output satisfies every binding the section shows.
+  - A TOGGLE IS AN ENDPOINT that flips the stored value server-side — the spec language has no `!`.
+  - EXIT STATUS IS GROUND TRUTH — `finalize` resolves ok only when build + validateAppViews + renderSmokeViews are all clean.
+  - A SURFACE THE VOCABULARY CANNOT EXPRESS IS DECLARED, never forced into the nearest section kind.
+  - NO TSX IS AUTHORED — `writeProjectPage`/`writeProjectComponent` are absent from the profile, so every page is a `.view.json`.
+
+steps:
+  # 1 — the whole build, in one delegate-shaped turn straight at the space.
+  - space_session: system-viewbuilder/automator
+    say: >
+      Build a houseplant-care app INTO this live project.
+
+      I want to keep track of my houseplants and every time I water one.
+
+      Move these plants in as real rows: Monstera — living room, water every 7 days, last watered
+      2026-07-10. Snake plant — bedroom, every 21 days, last watered 2026-06-20. Fiddle leaf fig —
+      living room, every 10 days, last watered 2026-07-28. Basil — kitchen, every 2 days, last
+      watered 2026-07-20.
+
+      The app should give me: a home dashboard showing how many plants I have and how many are
+      overdue, with the list of what needs water today or is already late; a page listing every
+      plant with its room and how many days until its next watering; a page per plant showing its
+      details and its watering history; and a way to add a new plant. From the list I want to mark a
+      plant as watered today in one tap, and I want to be able to put a plant on "resting" so it
+      stops showing up in the due list until I turn that back off.
+    expect:
+      - the tasklist `build_live_project` runs (not a hand-authored sequence of writer calls in one turn)
+      - two tables exist with the four seeded plants as real rows
+      - every page on disk is a `pages/<route>.view.json` — there is no `pages/*.tsx` except generated wrappers
+      - "days until next watering", "overdue" and the resting flag are COMPUTED/FLIPPED server-side, not in a spec
+      - finalize reports ok only if build + validateAppViews + renderSmokeViews are all clean
+
+  # 2 — the app must actually build and serve.
+  - open_app: true
+    expect:
+      - appBuild built=true with routes for every planned page
+      - appCheck ok=true with zero typecheck errors
+      - the root page returns 200
