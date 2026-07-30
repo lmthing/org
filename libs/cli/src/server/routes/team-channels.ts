@@ -15,7 +15,8 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { stat } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import {
   descriptorToText,
@@ -697,6 +698,10 @@ async function runThingReply(
   // this turn. Snapshotted before the run, not diffed against a stored list,
   // because a project can also gain an app from Studio while nobody is watching.
   const appsBefore = await projectsWithApps(root);
+  // Snapshotted alongside it, for the same reason: what the team had BEFORE this
+  // turn, so a change is attributable to it rather than diffed against a stored
+  // list a Studio edit could have moved while nobody was watching.
+  const fingerprintsBefore = await appFingerprints(root);
 
   const key = pendingKey(message.channelId, threadId);
   // The host is OURS, not a throwaway, so an `ask()` becomes a question in the
@@ -792,7 +797,7 @@ async function runThingReply(
       to,
     );
 
-    if (result.ok) await announceNewApps(root, message, threadId, appsBefore, to);
+    if (result.ok) await announceNewApps(root, message, threadId, appsBefore, to, fingerprintsBefore);
   } catch (err) {
     const reply = await appendMessage(root, {
       channelId: message.channelId,
@@ -928,6 +933,57 @@ async function projectsWithApps(root: string): Promise<Set<string>> {
   }
 }
 
+/** The authored surface of an app — what a build reads, not what it emits. */
+const APP_DIRS = ['database', 'api', 'pages', 'components'] as const;
+
+/**
+ * A cheap fingerprint of a project's authored files, for telling "this app
+ * CHANGED" from "this app existed already".
+ *
+ * Membership of {@link projectsWithApps} can only answer "did a `pages/` dir
+ * appear", which is true exactly once in an app's life. Every later turn — every
+ * "add a column", "add a page", "sort it by deadline" — left the set identical,
+ * so the channel said nothing at all about work it had just done.
+ *
+ * Name + mtime, not content: an authoring write always moves mtime, and hashing
+ * bodies would make this cost scale with the app rather than with the number of
+ * files. Only the four AUTHORED dirs are walked — build output lives under
+ * `.data/`, so a rebuild alone cannot look like an edit.
+ */
+async function appFingerprints(root: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  try {
+    const projects = await listProjects(root);
+    await Promise.all(
+      projects.map(async (p) => {
+        const parts: string[] = [];
+        for (const dir of APP_DIRS) {
+          const base = join(root, p.id, dir);
+          let entries;
+          try {
+            entries = await readdir(base, { recursive: true, withFileTypes: true });
+          } catch {
+            continue;
+          }
+          for (const e of entries) {
+            if (!e.isFile()) continue;
+            try {
+              const st = await stat(join(e.parentPath ?? base, e.name));
+              parts.push(`${dir}/${e.name}:${st.mtimeMs}`);
+            } catch {
+              /* raced with a write — the next turn will see it */
+            }
+          }
+        }
+        if (parts.length) out.set(p.id, createHash('sha1').update(parts.sort().join('|')).digest('hex'));
+      }),
+    );
+  } catch {
+    /* no projects yet */
+  }
+  return out;
+}
+
 /**
  * Pin any app THING just built to the channel it was asked for in, and say so
  * three ways.
@@ -951,30 +1007,47 @@ async function announceNewApps(
   threadId: string,
   before: Set<string>,
   to: ReturnType<typeof audienceFor>,
+  fingerprintsBefore: Map<string, string> = new Map(),
 ): Promise<void> {
   try {
     const after = await projectsWithApps(root);
     const fresh = [...after].filter((id) => !before.has(id));
-    if (!fresh.length) return;
+    // An app the team ALREADY had, whose authored files this turn changed. Without
+    // this the channel announced an app exactly once in its life and then went
+    // silent for every later change — so "add a column for whether the pictures
+    // are in" produced a reply saying it was done and no sign of it anywhere in
+    // the surface the team actually looks at.
+    const fingerprintsAfter = await appFingerprints(root);
+    const updated = [...after].filter(
+      (id) => before.has(id) && fingerprintsBefore.get(id) !== fingerprintsAfter.get(id),
+    );
+    if (!fresh.length && !updated.length) return;
 
     const projects = await listProjects(root);
     const nameOf = new Map(projects.map((p) => [p.id, p.name]));
     const channels = await ensureDefaultChannel(root);
     const current = channels.find((c) => c.id === ask.channelId)?.apps ?? [];
-    const channel = await patchChannel(root, ask.channelId, { apps: [...current, ...fresh] });
+    // Pin anything this turn touched that this channel does not already carry —
+    // an app the team built elsewhere and has now been working on HERE belongs in
+    // this channel's header too.
+    const pin = [...fresh, ...updated].filter((id) => !current.includes(id));
+    const channel = await patchChannel(root, ask.channelId, { apps: [...current, ...pin] });
     broadcastChannelEvent({ type: 'channel', channel }, to);
 
-    for (const projectId of fresh) {
+    for (const projectId of [...fresh, ...updated]) {
+      const isNew = fresh.includes(projectId);
       const name = nameOf.get(projectId) ?? projectId;
       const card = await appendMessage(root, {
         channelId: ask.channelId,
         kind: 'system',
-        text: `${name} is ready.`,
+        text: isNew ? `${name} is ready.` : `${name} was updated.`,
         threadId,
         app: { projectId, name },
       });
       broadcastChannelEvent({ type: 'message', message: card }, to);
-      broadcastChannelEvent(
+      // Only a genuinely NEW app throws itself open beside the member. An update
+      // to something they are already looking at must not seize the pane.
+      if (isNew) broadcastChannelEvent(
         {
           type: 'app_created',
           channelId: ask.channelId,

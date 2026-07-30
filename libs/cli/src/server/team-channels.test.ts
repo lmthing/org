@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, rm, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   appendMessage,
@@ -462,6 +462,79 @@ describe('THING in a thread', () => {
     const { messages } = await readMessages(root, 'general');
     expect(messages[1]).toMatchObject({ kind: 'system' });
     expect(messages[1]!.text).toContain('budget exhausted');
+  });
+
+  describe('the app card', () => {
+    /** A project on disk with an authored app surface, as a build would leave it. */
+    async function writeApp(projectId: string, files: Record<string, string>) {
+      await mkdir(join(root, projectId), { recursive: true });
+      await writeFile(join(root, projectId, 'project.json'), JSON.stringify({ id: projectId, name: projectId }), 'utf8');
+      for (const [rel, body] of Object.entries(files)) {
+        await mkdir(dirname(join(root, projectId, rel)), { recursive: true });
+        await writeFile(join(root, projectId, rel), body, 'utf8');
+      }
+    }
+
+    it('announces a NEW app as ready, and pins it to the channel', async () => {
+      const manager = {
+        runHeadlessThreaded: vi.fn(async (opts: any) => {
+          await writeApp('jobs', { 'pages/index.tsx': 'export default () => null;', 'database/jobs.json': '{}' });
+          return { ok: true, result: 'built it', sessionId: opts.sessionId };
+        }),
+      } as any;
+      await handlePostMessage(manager, root)(
+        mkReq('POST', '/api/team/channels/general/messages', { text: '@thing build me a tracker' }),
+        mkRes(), { channelId: 'general' }, {} as any,
+      );
+      await settle();
+
+      const { messages } = await readMessages(root, 'general');
+      const card = messages.find((m) => m.kind === 'system' && /is ready/.test(m.text));
+      expect(card, 'a new app must announce itself').toBeTruthy();
+      const channels = await ensureDefaultChannel(root);
+      expect(channels.find((c) => c.id === 'general')?.apps).toContain('jobs');
+    });
+
+    it('announces an UPDATE to an app the team already had', async () => {
+      // The card fired only when a project GAINED a pages/ dir, which happens
+      // exactly once in an app's life. Every later change — a column, a page, a
+      // sort order — left the project set identical, so THING replied "done" and
+      // the surface the team actually looks at showed nothing at all.
+      await writeApp('jobs', { 'pages/index.tsx': 'export default () => null;', 'database/jobs.json': '{"columns":{}}' });
+      // mtime resolution: make the edit distinguishable from the seed write.
+      await new Promise((r) => setTimeout(r, 20));
+
+      const manager = {
+        runHeadlessThreaded: vi.fn(async (opts: any) => {
+          await writeFile(join(root, 'jobs', 'database', 'jobs.json'), '{"columns":{"pictures_in":{}}}', 'utf8');
+          return { ok: true, result: 'added it', sessionId: opts.sessionId };
+        }),
+      } as any;
+      await handlePostMessage(manager, root)(
+        mkReq('POST', '/api/team/channels/general/messages', { text: '@thing add a column for the pictures' }),
+        mkRes(), { channelId: 'general' }, {} as any,
+      );
+      await settle();
+
+      const { messages } = await readMessages(root, 'general');
+      const card = messages.find((m) => m.kind === 'system' && /was updated/.test(m.text));
+      expect(card, 'a change to an existing app must announce itself').toBeTruthy();
+      expect(card!.app).toMatchObject({ projectId: 'jobs' });
+    });
+
+    it('says nothing when the turn changed no app', async () => {
+      // The other half: a plain question must not produce a card.
+      await writeApp('jobs', { 'pages/index.tsx': 'export default () => null;' });
+      const { manager } = mkManager('just answering');
+      await handlePostMessage(manager, root)(
+        mkReq('POST', '/api/team/channels/general/messages', { text: '@thing what is the status' }),
+        mkRes(), { channelId: 'general' }, {} as any,
+      );
+      await settle();
+
+      const { messages } = await readMessages(root, 'general');
+      expect(messages.filter((m) => m.kind === 'system')).toHaveLength(0);
+    });
   });
 
   it('a pagination cursor that is not in the channel is reported, not silently reset', async () => {
