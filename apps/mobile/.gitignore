@@ -19,3 +19,8 @@ play-service-account.json
 # `certs/certificate.pem` is deliberately NOT ignored: it is the PUBLIC half, it is
 # compiled into the app binary, and the build fails without it.
 certs/private-key.pem
+
+# Downloaded EAS build artifacts (an AAB is ~55 MB, an APK ~80 MB). Kept out of the
+# repo: the canonical copy is the EAS build record, which also carries the fingerprint
+# and versionCode that make a binary identifiable.
+build-artifacts/
