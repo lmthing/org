@@ -28,7 +28,7 @@ import type { HeadlessRunResult, SessionManager } from '../session-manager.js';
 import { readBody, sendJson } from './utils.js';
 import { readCaller, type TeamCaller } from '../team-guard.js';
 import { listProjects } from '../projects.js';
-import { getOrCreateThreadSession } from '../webhook-threads.js';
+import { getOrCreateThreadSession, getThreadSession } from '../webhook-threads.js';
 import { audienceFor, broadcastChannelEvent, connectedUserIds } from '../ws/team-channels.js';
 import {
   addMentions,
@@ -552,10 +552,39 @@ export function handlePostMessage(
     // turn a delivered message into an error the composer reports.
     track(deliver(root, channel, message).catch(() => {}));
 
-    if (mentionsThing(text)) {
+    if (await addressesThing(root, message)) {
       track(runThingReply(manager, root, message, channel));
     }
   };
+}
+
+/**
+ * Whether this message is talking to THING.
+ *
+ * `@thing` addresses it anywhere. **Inside a thread THING is already in, every
+ * reply addresses it** — having to re-@ the agent in a thread it is a
+ * participant of is not how a conversation works, and the effect was that a
+ * natural reply went nowhere and the thread looked dead.
+ *
+ * "Already in" is decided by the presence of a thread session rather than by
+ * scanning the channel log for a `thing` message: the entry exists exactly when
+ * THING has run in this thread, which is O(1) and — unlike any scan — cannot be
+ * defeated by a busy channel pushing the thread's root out of the read window.
+ * It is a read; a message that turns out not to be addressed must not mint a
+ * session for a conversation that never happened.
+ *
+ * A channel-level post still needs the mention. Threads are the scope that makes
+ * implicit addressing safe: you opt in by opening one with THING.
+ */
+async function addressesThing(root: string, message: ChannelMessage): Promise<boolean> {
+  if (mentionsThing(message.text)) return true;
+  if (!message.threadId) return false;
+  const session = await getThreadSession(
+    teamDir(root),
+    `channel:${message.channelId}`,
+    message.threadId,
+  ).catch(() => null);
+  return session !== null;
 }
 
 /**

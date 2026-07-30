@@ -426,6 +426,84 @@ describe('THING in a thread', () => {
     expect(messages[1]!.text).toContain('budget exhausted');
   });
 
+  it('a plain reply in a THING thread reaches THING — no second @thing', async () => {
+    // Having to re-address the agent in a thread it is already in is not how a
+    // conversation works, and the effect was a reply that went nowhere: the
+    // thread simply looked dead.
+    const { manager, runs } = mkManager('42');
+    const opened = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing what is 6*7?' }),
+      opened, { channelId: 'general' }, {} as any,
+    );
+    const asked = opened.json().message as ChannelMessage;
+    await settle();
+    expect(runs).toHaveLength(1);
+
+    const followUp = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', {
+        text: 'and what about 6*8?',
+        threadId: asked.id,
+      }),
+      followUp, { channelId: 'general' }, {} as any,
+    );
+    await settle();
+
+    expect(runs).toHaveLength(2);
+    // The mention is gone from the text, so the prompt is the question as typed.
+    expect(runs[1]!.message).toBe('[ana@example.com in #general] and what about 6*8?');
+    // Same thread ⇒ same session, which is what "it remembers" rests on.
+    expect(runs[1]!.sessionId).toBe(runs[0]!.sessionId);
+  });
+
+  it('a plain reply in a thread THING is NOT in stays between the humans', async () => {
+    // The implicit addressing is scoped to threads THING is already in. A thread
+    // opened between colleagues must not start invoking an agent nobody asked for.
+    const { manager, runs } = mkManager();
+    const opened = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: 'ship it?' }),
+      opened, { channelId: 'general' }, {} as any,
+    );
+    const rootMsg = opened.json().message as ChannelMessage;
+    await settle();
+
+    const reply = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', {
+        text: 'yes, after the review',
+        threadId: rootMsg.id,
+      }),
+      reply, { channelId: 'general' }, {} as any,
+    );
+    await settle();
+
+    expect(runs).toHaveLength(0);
+    expect(manager.runHeadlessThreaded).not.toHaveBeenCalled();
+  });
+
+  it('a channel-level post still needs the mention', async () => {
+    // Threads are the scope that makes implicit addressing safe — you opt in by
+    // opening one. A channel where every message invoked THING is unusable.
+    const { manager, runs } = mkManager('42');
+    const asked = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing hello' }),
+      asked, { channelId: 'general' }, {} as any,
+    );
+    await settle();
+    expect(runs).toHaveLength(1);
+
+    const bare = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: 'unrelated chatter' }),
+      bare, { channelId: 'general' }, {} as any,
+    );
+    await settle();
+    expect(runs).toHaveLength(1);
+  });
+
   it('answers immediately, without waiting for the agent turn', async () => {
     // A slow turn must not block the composer.
     let release: () => void = () => {};

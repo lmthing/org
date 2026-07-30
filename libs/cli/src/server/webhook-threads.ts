@@ -67,6 +67,28 @@ async function saveWebhookThreads(projectRoot: string, map: WebhookThreadMap): P
  * still runs its own valid — if separately-threaded — session); it never
  * corrupts an EXISTING thread's mapping.
  */
+/**
+ * The sessionId for a thread, or null if the agent has never run in it.
+ *
+ * The read-only half of {@link getOrCreateThreadSession}, and the difference
+ * matters: this is asked BEFORE deciding whether to run at all, so minting an id
+ * here would record a conversation that never happened and make the next message
+ * think one had.
+ *
+ * Team channels use it to answer "is this thread a conversation with THING?"
+ * without scanning the channel log — an entry exists exactly when THING has run
+ * in the thread, which is both O(1) and immune to a busy channel pushing the
+ * thread's root out of any window a scan would read.
+ */
+export async function getThreadSession(
+  projectRoot: string,
+  path: string,
+  threadKey: string,
+): Promise<string | null> {
+  const map = await loadWebhookThreads(projectRoot);
+  return map[`${path}::${threadKey}`] ?? null;
+}
+
 export async function getOrCreateThreadSession(projectRoot: string, path: string, threadKey: string): Promise<string> {
   const key = `${path}::${threadKey}`;
   const map = await loadWebhookThreads(projectRoot);

@@ -436,6 +436,14 @@ function ThreadRail({
   onTyping: () => void
 }) {
   const groups = useMemo(() => groupMessages(replies), [replies])
+  // Once THING has answered in a thread, every reply reaches it without `@thing`
+  // — so stop telling people to type it. The server decides the same thing from
+  // the thread's session; a `thing` message in the transcript is that decision
+  // made visible, which is why this reads the kind rather than re-parsing text.
+  const withThing = useMemo(
+    () => [root, ...replies].some((m) => m?.kind === 'thing'),
+    [root, replies],
+  )
   return (
     <RailPane
       title="Thread"
@@ -468,7 +476,13 @@ function ThreadRail({
       <Composer
         // Same reason as the channel composer: the rail is full-width on a phone but the box is
         // still two lines, and the hint is what pushed it over.
-        placeholder={compact ? 'Reply in thread' : 'Reply in thread… (@thing to ask THING)'}
+        placeholder={
+          compact
+            ? 'Reply in thread'
+            : withThing
+              ? 'Reply in thread… THING is listening'
+              : 'Reply in thread… (@thing to ask THING)'
+        }
         directory={directory}
         meId={meId}
         onTyping={onTyping}
