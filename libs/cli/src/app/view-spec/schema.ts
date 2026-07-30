@@ -458,7 +458,8 @@ export const IDENT_PATTERN = '^[A-Za-z_][A-Za-z0-9_]*$';
 export const IDENT_RE = new RegExp(IDENT_PATTERN);
 
 /**
- * **An agent slug** — `pantry-keeper`, `data-modeler`, `spec-builder`, `thing`.
+ * **A kebab-case name** — an agent slug (`pantry-keeper`, `data-modeler`, `spec-builder`,
+ * `thing`) or, since the WAVE-3 amendment below, an endpoint name.
  *
  * WAVE-2 AMENDMENT (T1, blocking). `chat.agent` was pinned to {@link IDENT_PATTERN}, which
  * rejects a hyphen — and **kebab-case is this codebase's own convention** for agent slugs
@@ -468,10 +469,20 @@ export const IDENT_RE = new RegExp(IDENT_PATTERN);
  * was no spec-side workaround, which is what makes it a bucket-1 blocker rather than an
  * inconvenience.
  *
+ * WAVE-3 AMENDMENT (LIVE-RUN, blocking, same shape as WAVE-2). `plan_endpoints` names
+ * endpoints in kebab-case (`create-plant`), and the endpoint validator's own "did you mean"
+ * suggestions are spelled in kebab-case — but {@link ENDPOINT}, {@link INVALIDATES} and
+ * `x-options`' `query` were still pinned to {@link IDENT_PATTERN}, which rejects the hyphen.
+ * That made every real endpoint name **structurally unspellable by the writer that is
+ * supposed to name it**: a genuine contradiction, not a gap, so it promotes on first
+ * occurrence per the improvement loop's blocking rule. `chat.agent` was the first field hit
+ * by this class; these were the rest. `REVEALS` (section ids) and prop keys stay on
+ * {@link IDENT_PATTERN} — those really are model-chosen identifiers, not codebase names.
+ *
  * Note what this pattern is and is not. It is a **syntax** check, and syntax was never the
- * valuable check here: the one worth running is *does this agent exist in this project's
- * space*, phrased as a menu of the real agents. That check needs the project, so it belongs
- * to `validate.ts` — this pattern's only remaining job is to keep a URL, a path or a
+ * valuable check here: the one worth running is *does this agent/endpoint exist in this
+ * project's space*, phrased as a menu of the real ones. That check needs the project, so it
+ * belongs to `validate.ts` — this pattern's only remaining job is to keep a URL, a path or a
  * sentence out of the field.
  */
 export const AGENT_NAME_PATTERN = '^[A-Za-z0-9][A-Za-z0-9_-]*$';
@@ -1495,7 +1506,7 @@ export const X_OPTIONS_SCHEMA: JsonSchema = {
   additionalProperties: false,
   required: ['query', 'label', 'value'],
   properties: {
-    query: { type: 'string', pattern: IDENT_PATTERN },
+    query: { type: 'string', pattern: AGENT_NAME_PATTERN },
     // An argument map like every other (Wave-2): a constant or a binding. `label`/`value`
     // stay strict bindings — they are paths INTO each option row, never constants.
     input: { type: 'object', additionalProperties: { type: ['string', 'number', 'boolean'], pattern: VALUE_PATTERN } },
@@ -1552,11 +1563,11 @@ const ICON: JsonSchema = { enum: [...ICON_NAMES] };
 /** A tone token. */
 const TONE: JsonSchema = { enum: [...TONES] };
 /** A list of endpoint names to invalidate. */
-const INVALIDATES: JsonSchema = { type: 'array', items: { type: 'string', pattern: IDENT_PATTERN } };
+const INVALIDATES: JsonSchema = { type: 'array', items: { type: 'string', pattern: AGENT_NAME_PATTERN } };
 /** A list of section ids to reveal. */
 const REVEALS: JsonSchema = { type: 'array', items: { type: 'string', pattern: IDENT_PATTERN } };
 /** An endpoint name. */
-const ENDPOINT: JsonSchema = { type: 'string', pattern: IDENT_PATTERN };
+const ENDPOINT: JsonSchema = { type: 'string', pattern: AGENT_NAME_PATTERN };
 /**
  * An **argument map** — dependent-query inputs, navigate params, mutation args.
  *

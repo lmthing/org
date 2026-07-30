@@ -799,6 +799,29 @@ describe('the Wave-2 amendments — the four things the T1 migration could not s
       expect(item({ meta: { value: '$.prepMinutes', suffix: '{{ unit }}' } }).ok).toBe(false);
     });
   });
+
+  describe('5. an endpoint name takes the same kebab-case AGENT_NAME_PATTERN as an agent slug', () => {
+    it('accepts a kebab-case query/mutation — plan_endpoints names endpoints this way', () => {
+      expect(wrapSection({ kind: 'list', query: 'list-plants' }).errors).toEqual([]);
+      expect(wrapSection({ kind: 'create', mutation: 'create-plant' }).errors).toEqual([]);
+      expect(wrapSection({ kind: 'detail', query: 'get-plant' }).errors).toEqual([]);
+      expect(
+        wrapSection({ kind: 'create', mutation: 'create-plant', invalidates: ['list-plants'] }).errors,
+      ).toEqual([]);
+      expect(
+        wrapSection({
+          kind: 'create',
+          mutation: 'create-plant',
+          prefill: { endpoint: 'get-plant-defaults' },
+        }).errors,
+      ).toEqual([]);
+    });
+
+    it('still keeps a section id strict — REVEALS/id are model-chosen, not codebase names', () => {
+      expect(wrapSection({ kind: 'toolbar', reveals: ['filters-panel'] }).ok).toBe(false);
+      expect(wrapSection({ kind: 'toolbar', reveals: ['filtersPanel'] }).errors).toEqual([]);
+    });
+  });
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
