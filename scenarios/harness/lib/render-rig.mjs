@@ -74,7 +74,7 @@
  * they never ran. `node scenarios/harness/lib/render-rig.mjs --self-test <baseUrl> <route>`.
  */
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { productConstants, servedPath } from './view-facts.mjs';
@@ -118,6 +118,39 @@ export const PROFILE_BASE = join(homedir(), 'snap', 'chromium', 'common', 'lmthi
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** How long a `p-*` profile dir may survive before the next launch reaps it. */
+const STALE_PROFILE_MS = 30 * 60 * 1000;
+
+/**
+ * Reap `p-*` profile dirs older than half an hour, the same orphan-reaper pattern `local.mjs` uses for
+ * leaked run servers.
+ *
+ * The per-launch cleanup in `kill()` occasionally loses a race with a browser that is still flushing
+ * its profile as it exits, so a run can leave one behind. One stray dir is litter, not a failure — but
+ * litter that accumulates forever eventually becomes one, and a run in flight must never have its
+ * profile pulled out from under it, hence the age floor.
+ */
+function sweepStaleProfiles(base = PROFILE_BASE, maxAgeMs = STALE_PROFILE_MS) {
+  const cutoff = Date.now() - maxAgeMs;
+  let reaped = 0;
+  try {
+    for (const name of readdirSync(base)) {
+      if (!name.startsWith('p-')) continue;
+      const abs = join(base, name);
+      try {
+        if (statSync(abs).mtimeMs > cutoff) continue;
+        rmSync(abs, { recursive: true, force: true });
+        reaped++;
+      } catch {
+        /* someone else's live profile, or already gone */
+      }
+    }
+  } catch {
+    /* no base dir yet — nothing to reap */
+  }
+  return reaped;
+}
+
 /**
  * Launch the browser headless and return `{ binary, port, kill() }`.
  *
@@ -140,7 +173,10 @@ export async function launchBrowser({ binary = null, profileDir = null, timeoutM
   const ephemeral = profileDir === null;
   try {
     mkdirSync(ephemeral ? PROFILE_BASE : profileDir, { recursive: true });
-    if (ephemeral) profileDir = mkdtempSync(join(PROFILE_BASE, 'p-'));
+    if (ephemeral) {
+      sweepStaleProfiles();
+      profileDir = mkdtempSync(join(PROFILE_BASE, 'p-'));
+    }
   } catch {
     profileDir = profileDir ?? PROFILE_BASE; // the browser will say so in its own words if unusable
   }
@@ -1052,12 +1088,16 @@ export async function renderCheck({
     const reason = `the rig failed mid-run: ${String(e?.message ?? e)}`;
     return { ...base, unavailable: true, reason, ok: null, pages, findings, counts: null, browser: { binary: browser.binary, port: browser.port }, ms: Date.now() - started };
   } finally {
+    // ORDER MATTERS. `Browser.close` first, because a snap-launched browser cannot be killed by
+    // signal at all; then a beat for it to flush and exit, because `kill()` also removes the profile
+    // dir and a browser still writing into it wins that race and leaves the dir behind.
     try {
       if (cdp) await cdp.send('Browser.close', {}, { timeoutMs: 3000 }).catch(() => {});
     } catch {
       /* falls through to the kill below */
     }
     cdp?.close();
+    await sleep(300);
     browser.kill();
   }
 
