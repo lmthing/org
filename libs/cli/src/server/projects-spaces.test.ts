@@ -127,8 +127,8 @@ describe('SessionManager.listProjectSpaces (keyless, on-disk)', () => {
   });
 });
 
-describe('SessionManager.listProjects — synthetic system project', () => {
-  it('surfaces system/user spaces under a synthetic "system" project, browsable + listable', async () => {
+describe('SessionManager.listProjects — the system spaces are not a project', () => {
+  it('keeps "system" out of the project list while its spaces stay browsable', async () => {
     const root = await mkdtemp(join(tmpdir(), 'lmthing-sysproj-'));
     tmpDirs.push(root);
 
@@ -142,14 +142,13 @@ describe('SessionManager.listProjects — synthetic system project', () => {
 
     const manager = makeManager(root);
 
-    // listProjects prepends the synthetic system project.
+    // The list every project switcher renders: real projects only, no "system".
     const projects = await manager.listProjects();
     const ids = projects.map((p) => p.id);
-    expect(ids).toContain('system');
-    expect(ids).toContain('user');
-    expect(ids[0]).toBe('system'); // prepended
+    expect(ids).not.toContain('system');
+    expect(ids).toEqual(['user']);
 
-    // Its spaces resolve from <root>/system/spaces/.
+    // Its spaces still resolve from <root>/system/spaces/ through the ordinary route.
     const sysSpaces = await manager.listProjectSpaces('system');
     expect(sysSpaces.map((s) => s.id).sort()).toEqual(['system-global', 'user-thing']);
   });
@@ -177,7 +176,7 @@ describe('SessionManager.listProjects — synthetic system project', () => {
     expect(typeof blog?.createdAt).toBe('number'); // defaulted from mtime
   });
 
-  it('omits the synthetic system project when there are no system spaces', async () => {
+  it('omits "system" when there are no system spaces either', async () => {
     const root = await mkdtemp(join(tmpdir(), 'lmthing-sysproj-empty-'));
     tmpDirs.push(root);
     await mkdir(join(root, 'user'), { recursive: true });
@@ -187,7 +186,7 @@ describe('SessionManager.listProjects — synthetic system project', () => {
     expect(ids).not.toContain('system');
   });
 
-  it('refuses to delete the synthetic system project', async () => {
+  it('refuses to delete the system spaces dir as a project', async () => {
     const root = await mkdtemp(join(tmpdir(), 'lmthing-sysproj-del-'));
     tmpDirs.push(root);
     await writeAgent(join(root, 'system', 'spaces', 'user-thing'), 'thing', '---\ntitle: THING\n---\nMain.\n');

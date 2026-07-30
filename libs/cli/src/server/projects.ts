@@ -8,12 +8,12 @@
  *   <root>/<projectId>/project.json  ← { id, name, createdAt }
  *
  * The default project id is "user". The system spaces live under
- * `<root>/system/spaces/` and are surfaced as a synthetic, read-only-ish
- * "system" project (id {@link SYSTEM_PROJECT_ID}) so Studio can browse and edit
- * them through the same `/api/projects/:id/spaces/...` endpoints as any other
- * project — `<root>/system/spaces/<id>` matches the generic
- * `<root>/<projectId>/spaces/<id>` shape, so no special-casing is needed in the
- * space/files routes, only in {@link listProjects}.
+ * `<root>/system/spaces/` and are reachable through the same
+ * `/api/projects/:id/spaces/...` endpoints as any other project — id
+ * {@link SYSTEM_PROJECT_ID} — because `<root>/system/spaces/<id>` matches the
+ * generic `<root>/<projectId>/spaces/<id>` shape, so no special-casing is
+ * needed in the space/files routes. It is NOT a project: {@link listProjects}
+ * never returns it, so it never appears in a project switcher.
  */
 
 import { mkdir, writeFile, readFile, readdir, rm, stat } from 'node:fs/promises';
@@ -348,17 +348,25 @@ export async function readProjectMeta(root: string, id: string): Promise<Project
 }
 
 /**
- * List all projects under `root` (any sub-dir that has a project.json), plus a
- * synthetic {@link SYSTEM_PROJECT_ID} project (prepended) whenever the system
- * spaces dir exists and is non-empty. The system entry lets Studio list, view,
- * and edit the system/user spaces through the standard project/space routes.
+ * List all projects under `root` — any sub-dir that has a project.json, sorted
+ * by `createdAt` ascending.
+ *
+ * {@link SYSTEM_PROJECT_ID} is NOT one of them. `<root>/system/` holds the
+ * shipped system spaces, not somewhere a person works, and this list is what
+ * every project switcher/dropdown renders (chat sidebar, Studio sidebar, the
+ * team `@` directory, the install target picker, Home). It used to be prepended
+ * as a synthetic entry so Studio could browse the system spaces from the
+ * switcher; that entry is gone, and those spaces are still reachable through
+ * the ordinary `/api/projects/system/spaces/...` routes — `<root>/system/spaces/<id>`
+ * matches the generic `<root>/<projectId>/spaces/<id>` shape, so nothing else
+ * needed a special case.
  */
 export async function listProjects(root: string): Promise<ProjectMeta[]> {
   const entries = await safeDirEntries(root);
   const results: ProjectMeta[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    if (entry.name === SYSTEM_PROJECT_ID) continue; // surfaced synthetically below
+    if (entry.name === SYSTEM_PROJECT_ID) continue; // the system spaces dir, never a project
     try {
       const meta = await readProjectMeta(root, entry.name);
       results.push(meta);
@@ -367,12 +375,6 @@ export async function listProjects(root: string): Promise<ProjectMeta[]> {
     }
   }
   results.sort((a, b) => a.createdAt - b.createdAt);
-
-  // Prepend the synthetic "system" project when system spaces are present.
-  const systemSpaces = await listSubdirs(join(root, SYSTEM_PROJECT_ID, 'spaces'));
-  if (systemSpaces.length > 0) {
-    results.unshift({ id: SYSTEM_PROJECT_ID, name: 'System', createdAt: 0 });
-  }
   return results;
 }
 
