@@ -167,11 +167,18 @@ function ghPages404Plugin() {
  * hand to a `TamaguiProvider`, which is a use no bundler may elide.
  */
 function tamaguiConfigGuardPlugin() {
-  const CONFIG_MODULE = path.join('libs', 'ui', 'src', 'theme', 'tamagui.config')
-  const PRIMITIVES = path.join('libs', 'ui', 'src', 'elements', 'primitives')
+  // Forward slashes, NOT `path.join`. Bundler module ids are normalised to POSIX
+  // separators on every platform, so a Windows `path.join` yields
+  // `libs\ui\src\theme\tamagui.config` and matches nothing. That failure is not
+  // symmetrical and so not self-cancelling: `usesTamagui` still fires, because
+  // `@tamagui/core` contains no separator at all — leaving the guard certain the
+  // config is absent from a bundle that in fact contains it, and failing the
+  // Windows build of a perfectly good tree.
+  const CONFIG_MODULE = 'libs/ui/src/theme/tamagui.config'
+  const PRIMITIVES = 'libs/ui/src/elements/primitives'
 
   /** @param {string} id */
-  const norm = (id) => id.split('?')[0]
+  const norm = (id) => id.split('?')[0].replace(/\\/g, '/')
 
   return {
     name: 'lmthing-tamagui-config-guard',
