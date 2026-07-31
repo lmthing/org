@@ -15,7 +15,7 @@ import { mkdtemp, rm, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { runBackup, dumpAllProjectDbs } from './backup.js';
 
 const execFileAsync = promisify(execFile);
@@ -44,7 +44,7 @@ async function makeBareRemote(): Promise<string> {
 
 /**
  * Scaffold a real project with a project.json and a seeded `.data/app.db`.
- * Seeded through raw better-sqlite3 (a plain on-disk sqlite file) so this test
+ * Seeded through raw `node:sqlite` (a plain on-disk sqlite file) so this test
  * couples only to the store's guaranteed open+dump contract, not 2A's
  * schema-authoring API. `insertRows` lets a second row set be added on re-dump.
  */
@@ -66,7 +66,7 @@ function insertRows(
   rows: Array<{ id: string; title: string }>,
   createTable: boolean,
 ): void {
-  const db = new Database(dbPath);
+  const db = new DatabaseSync(dbPath);
   try {
     if (createTable) {
       db.exec('CREATE TABLE IF NOT EXISTS feed_items (id TEXT PRIMARY KEY, title TEXT)');

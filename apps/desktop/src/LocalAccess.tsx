@@ -4,6 +4,11 @@ import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import type { DesktopHostBridge, HostBridgeState } from './host-bridge'
 
+interface LocalPod {
+  base: string
+  port: number
+}
+
 interface StoredGrant {
   id: string
   path: string
@@ -33,8 +38,31 @@ export function LocalAccess({ bridge }: { bridge: DesktopHostBridge }) {
   const [grants, setGrants] = React.useState<StoredGrant[]>([])
   const [state, setState] = React.useState<HostBridgeState>({ status: 'idle', activity: [] })
   const [error, setError] = React.useState<string | null>(null)
+  const [localPod, setLocalPod] = React.useState<LocalPod | null>(null)
 
   React.useEffect(() => bridge.subscribe(setState), [bridge])
+  React.useEffect(() => {
+    void invoke<LocalPod | null>('local_mode_status').then(setLocalPod).catch(() => {})
+  }, [])
+
+  /**
+   * Switch between the cloud pod and a workspace running on this machine.
+   *
+   * Reloads afterwards, and that is not laziness: the bridge is injected before any page script and
+   * read synchronously during module init, so a LIVE page cannot be repointed at a different pod.
+   * It is also the honest behaviour — every socket, transcript and cached session belongs to the
+   * pod being left behind.
+   */
+  const toggleLocal = React.useCallback(async () => {
+    setError(null)
+    try {
+      if (localPod) await invoke('local_mode_disable')
+      else await invoke<LocalPod>('local_mode_enable')
+      window.location.reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }, [localPod])
 
   const refresh = React.useCallback(async () => {
     try {
@@ -109,6 +137,22 @@ export function LocalAccess({ bridge }: { bridge: DesktopHostBridge }) {
           {error}
         </Prim.Text>
       ) : null}
+
+      <Prim.Col gap="$1" paddingVertical="$2" borderTopWidth={1} borderBottomWidth={1} borderColor="$border">
+        <Prim.Row alignItems="center" gap="$2">
+          <Prim.Text fontWeight="$semibold">Where your workspace runs</Prim.Text>
+          <Prim.Box flex={1} />
+          <Button
+            label={localPod ? 'Switch to the cloud' : 'Run it on this computer'}
+            onPress={() => void toggleLocal()}
+          />
+        </Prim.Row>
+        <Prim.Text fontSize="$xs" color="$muted-foreground">
+          {localPod
+            ? `Running here, on port ${localPod.port}. Works offline; teams and notifications need the cloud.`
+            : 'Running in the cloud. Switching runs it here instead — faster and offline, but no teams.'}
+        </Prim.Text>
+      </Prim.Col>
 
       <Prim.Row gap="$2">
         <Button label="Add folder (read only)" onPress={() => void addFolder('ro')} />

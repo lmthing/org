@@ -29,7 +29,7 @@ import type { ColumnSchema, ColumnType, TableSchema } from '@lmthing/core';
 import { openProjectDb, restoreFromSql, schemaToCreateTableSql, type ProjectDb } from './store.js';
 import { loadProjectApp } from './loader.js';
 
-/** The subset of a `better-sqlite3` Database we call on `ProjectDb.raw`. */
+/** The subset of a `node:sqlite` DatabaseSync we call on `ProjectDb.raw`. */
 interface RawDb {
   exec(sql: string): unknown;
   pragma?(source: string): unknown;

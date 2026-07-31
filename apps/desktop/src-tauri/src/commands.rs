@@ -20,6 +20,7 @@ use tauri::{AppHandle, Manager, State};
 use crate::browser::{self, BrowserEndpoint};
 use crate::fsops;
 use crate::grants::{Grant, Grants, Mode};
+use crate::sidecar::{self, LocalPod};
 
 /// The persisted form. The absolute path lives HERE and is never sent over the bridge.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,6 +93,74 @@ pub fn browser_status(state: State<'_, BrowserState>) -> Option<BrowserEndpoint>
         .lock()
         .ok()
         .and_then(|s| s.as_ref().map(|p| p.endpoint.clone()))
+}
+
+/// The running local pod, if any.
+#[derive(Default)]
+pub struct SidecarState(pub Mutex<Option<sidecar::LocalPodProcess>>);
+
+fn mode_file(app: &AppHandle) -> Option<std::path::PathBuf> {
+    let dir = app.path().app_config_dir().ok()?;
+    let _ = std::fs::create_dir_all(&dir);
+    Some(dir.join("local-mode"))
+}
+
+/// The persisted local-mode base, read at window creation.
+pub fn persisted_local_base(app: &AppHandle) -> Option<String> {
+    let p = mode_file(app)?;
+    let text = std::fs::read_to_string(p).ok()?;
+    let trimmed = text.trim().to_string();
+    (!trimmed.is_empty()).then_some(trimmed)
+}
+
+/// Start the bundled `lmthing serve` and remember that this is how the app should come back.
+///
+/// The caller reloads the window afterwards: the bridge is injected before any page script and read
+/// synchronously during module init, so there is no way to repoint a LIVE page at a different pod.
+/// Restarting is also the honest behaviour — every socket and cached session belongs to the pod
+/// being left behind.
+#[tauri::command]
+pub fn local_mode_enable(
+    app: AppHandle,
+    state: State<'_, SidecarState>,
+) -> Result<LocalPod, String> {
+    let mut slot = state.0.lock().map_err(|_| "sidecar state is poisoned")?;
+    if let Some(p) = slot.as_ref() {
+        return Ok(p.pod.clone());
+    }
+    let workspace = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("workspace");
+    let proc = sidecar::start(workspace)?;
+    let pod = proc.pod.clone();
+    if let Some(f) = mode_file(&app) {
+        let _ = std::fs::write(f, &pod.base);
+    }
+    *slot = Some(proc);
+    Ok(pod)
+}
+
+#[tauri::command]
+pub fn local_mode_disable(app: AppHandle, state: State<'_, SidecarState>) -> Result<(), String> {
+    let mut slot = state.0.lock().map_err(|_| "sidecar state is poisoned")?;
+    if let Some(mut p) = slot.take() {
+        let _ = p.child.kill();
+    }
+    if let Some(f) = mode_file(&app) {
+        let _ = std::fs::remove_file(f);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn local_mode_status(state: State<'_, SidecarState>) -> Option<LocalPod> {
+    state
+        .0
+        .lock()
+        .ok()
+        .and_then(|s| s.as_ref().map(|p| p.pod.clone()))
 }
 
 fn store_path(app: &AppHandle) -> Option<std::path::PathBuf> {

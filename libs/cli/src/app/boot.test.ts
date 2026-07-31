@@ -2,9 +2,9 @@
  * {@link bootProjectApp} — the per-project app boot sequence (steps 1–3):
  * conditional DR restore, open, and additive-vs-non-additive schema reconcile.
  *
- * Task 2A's real `./store.js` (`better-sqlite3`-backed) is not merged when this
+ * Task 2A's real `./store.js` (`node:sqlite`-backed) is not merged when this
  * suite is authored, so we `vi.mock('./store.js')` with a **minimal functional
- * shim also backed by `better-sqlite3`**, exercising boot against a real SQLite
+ * shim also backed by `node:sqlite`**, exercising boot against a real SQLite
  * file through task 2A's documented API surface only (`openProjectDb`,
  * `restoreFromSql`, `schemaToCreateTableSql`, and `ProjectDb.{raw,listTables,
  * tableColumns,dumpToSql,close}`). The integrator should confirm the suite stays
@@ -16,10 +16,10 @@ import { mkdtemp, mkdir, writeFile, rm, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-// ── Minimal better-sqlite3-backed shim for task 2A's ./store.js ───────────────
+// ── Minimal `node:sqlite`-backed shim for task 2A's ./store.js ───────────────
 // The factory is hoisted; it must be self-contained (dynamic imports only).
 vi.mock('./store.js', async () => {
-  const Database = (await import('better-sqlite3')).default;
+  const { DatabaseSync } = await import('node:sqlite');
   const { mkdirSync } = await import('node:fs');
   const { dirname } = await import('node:path');
 
@@ -46,7 +46,7 @@ vi.mock('./store.js', async () => {
           .all()
           .map((r: any) => r.name),
       tableColumns: (t: string): string[] =>
-        (raw.pragma(`table_info(${q(t)})`) as any[]).map((r) => r.name),
+        (raw.prepare(`PRAGMA table_info(${q(t)})`).all() as any[]).map((r) => r.name),
       dumpToSql: (): string => {
         let out = '';
         const tbls = raw
@@ -75,13 +75,13 @@ vi.mock('./store.js', async () => {
   return {
     openProjectDb(dbPath: string, _opts?: unknown) {
       mkdirSync(dirname(dbPath), { recursive: true });
-      const raw = new Database(dbPath);
-      raw.pragma('foreign_keys = ON');
+      const raw = new DatabaseSync(dbPath);
+      raw.exec('PRAGMA foreign_keys = ON');
       return wrap(raw);
     },
     restoreFromSql(dbPath: string, sql: string) {
       mkdirSync(dirname(dbPath), { recursive: true });
-      const raw = new Database(dbPath);
+      const raw = new DatabaseSync(dbPath);
       raw.exec(sql);
       raw.close();
     },

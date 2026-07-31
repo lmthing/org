@@ -1,6 +1,17 @@
 /**
- * `better-sqlite3`-backed project data store — the ONLY place the native
- * `better-sqlite3` module is imported in the whole codebase.
+ * SQLite-backed project data store, on Node's OWN `node:sqlite`.
+ *
+ * This used to be the only place the native `better-sqlite3` module was imported in the whole
+ * codebase, and that one import was the reason the pod image needed `node-gyp` and a C toolchain —
+ * and the reason the desktop app's local-mode sidecar could not simply be JavaScript. The repo
+ * already requires Node >= 24, where `node:sqlite` is built in with a near-identical synchronous
+ * API, so the dependency bought nothing that Node did not already provide.
+ *
+ * Three differences from `better-sqlite3`, all handled at the top of this file rather than at each
+ * call site:
+ *   - no `.pragma()`  → `exec('PRAGMA …')`
+ *   - no `.transaction()` → explicit `BEGIN`/`COMMIT`/`ROLLBACK` (see {@link transaction})
+ *   - `fileMustExist` is not a constructor option → checked before opening
  *
  * A project owns its data as a SQLite database (`<project>/.data/app.db`, WAL).
  * The schemas live on disk as `database/<table>.json` files ({@link TableSchema},
@@ -33,7 +44,7 @@ import { mkdirSync, rmSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import {
   isBelongsTo,
   isHasMany,
@@ -50,6 +61,45 @@ import {
   type UpdateOpts,
   type RemoveOpts,
 } from '@lmthing/core';
+
+/**
+ * Run `fn` inside a transaction.
+ *
+ * `better-sqlite3` wrapped this for you; `node:sqlite` does not, so it is written once here rather
+ * than at each call site. The `ROLLBACK` is the whole point: a partial multi-row insert is worse
+ * than a failed one, because the caller is told it failed while half the rows are already there.
+ */
+/**
+ * A value as SQLite accepts it.
+ *
+ * `node:sqlite` types its bind parameters precisely where `better-sqlite3` typed them as `any`.
+ * Everything reaching a bind site here has already been through `toSqlite`, which is what
+ * guarantees the shape — so this names that guarantee in one place instead of scattering casts.
+ */
+type Bind = null | number | bigint | string | Uint8Array;
+
+/** `node:sqlite` reports `changes` as `number | bigint`; every caller here wants a count. */
+function changeCount(info: { changes: number | bigint }): number {
+  return typeof info.changes === 'bigint' ? Number(info.changes) : info.changes;
+}
+
+function transaction<T>(db: DatabaseSync, fn: () => T): T {
+  db.exec('BEGIN');
+  try {
+    const out = fn();
+    db.exec('COMMIT');
+    return out;
+  } catch (err) {
+    // Best-effort: if the ROLLBACK itself fails the connection is already unusable, and the
+    // original error is the one worth propagating.
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      /* connection is gone */
+    }
+    throw err;
+  }
+}
 
 /** The public handle returned by {@link openProjectDb}. */
 /** Fired (main-process, synchronously after commit) on every row-mutating db write, so the
@@ -69,8 +119,8 @@ export interface ProjectDb {
    * cross-thread proxy is Phase 3.
    */
   async: AsyncDbApi;
-  /** The underlying `better-sqlite3` handle (boot reconcile inspects it). */
-  raw: Database.Database;
+  /** The underlying `node:sqlite` handle (boot reconcile inspects it). */
+  raw: DatabaseSync;
   /** Full schema + data `.sql` dump (deterministic; for the GitHub backup). */
   dumpToSql(): string;
   /** The user tables present in the live db (excludes `sqlite_*` internal). */
@@ -295,9 +345,14 @@ export function openProjectDb(dbPath: string, opts: OpenProjectDbOpts = {}): Pro
   const create = opts.create ?? true;
   mkdirSync(dirname(dbPath), { recursive: true });
 
-  const raw = new Database(dbPath, { fileMustExist: !create });
-  raw.pragma('journal_mode = WAL');
-  raw.pragma('foreign_keys = ON');
+  // `fileMustExist` has no `node:sqlite` equivalent, so the check is explicit — and the error is
+  // the one a caller can act on rather than "unable to open database file".
+  if (!create && !existsSync(dbPath)) {
+    throw new Error(`no database at ${dbPath}`);
+  }
+  const raw = new DatabaseSync(dbPath);
+  raw.exec('PRAGMA journal_mode = WAL');
+  raw.exec('PRAGMA foreign_keys = ON');
 
   // Schema registry — maps a live table name to the loaded schema, so
   // marshalling knows column types and `include` can resolve relations. Seeded
@@ -402,7 +457,7 @@ export function openProjectDb(dbPath: string, opts: OpenProjectDbOpts = {}): Pro
 
     const cols = Object.keys(row);
     const placeholders = cols.map(() => '?').join(', ');
-    const bind = cols.map((c) => toSqlite(types.get(c) ?? 'string', row[c]));
+    const bind = cols.map((c) => toSqlite(types.get(c) ?? 'string', row[c])) as Bind[];
     const sql =
       cols.length === 0
         ? `INSERT INTO ${ident(table)} DEFAULT VALUES RETURNING *`
@@ -413,7 +468,7 @@ export function openProjectDb(dbPath: string, opts: OpenProjectDbOpts = {}): Pro
 
   function insert(table: string, values: Row | Row[]): Row | Row[] {
     if (Array.isArray(values)) {
-      const txn = raw.transaction((rows: Row[]) => rows.map((r) => insertOne(table, r)));
+      const txn = (rows: Row[]) => transaction(raw, () => rows.map((r) => insertOne(table, r)));
       return txn(values);
     }
     return insertOne(table, values);
@@ -443,18 +498,18 @@ export function openProjectDb(dbPath: string, opts: OpenProjectDbOpts = {}): Pro
     const setCols = Object.keys(o.set);
     if (setCols.length === 0) return 0;
     const setClause = setCols.map((c) => `${ident(c)} = ?`).join(', ');
-    const setBinds = setCols.map((c) => toSqlite(types.get(c) ?? 'string', o.set[c]));
+    const setBinds = setCols.map((c) => toSqlite(types.get(c) ?? 'string', o.set[c])) as Bind[];
     const { clause, binds } = buildWhere(table, o.where);
     const info = raw
       .prepare(`UPDATE ${ident(table)} SET ${setClause}${clause}`)
-      .run(...setBinds, ...binds);
-    return info.changes;
+      .run(...setBinds, ...(binds as Bind[]));
+    return changeCount(info);
   }
 
   function remove(table: string, o: RemoveOpts): number {
     const { clause, binds } = buildWhere(table, o.where);
-    const info = raw.prepare(`DELETE FROM ${ident(table)}${clause}`).run(...binds);
-    return info.changes;
+    const info = raw.prepare(`DELETE FROM ${ident(table)}${clause}`).run(...(binds as Bind[]));
+    return changeCount(info);
   }
 
   // ── Reads ─────────────────────────────────────────────────────────────────
@@ -478,7 +533,7 @@ export function openProjectDb(dbPath: string, opts: OpenProjectDbOpts = {}): Pro
       if (opts.limit === undefined) sql += ` LIMIT -1`;
       sql += ` OFFSET ${Number(opts.offset)}`;
     }
-    const rawRows = raw.prepare(sql).all(...binds) as Row[];
+    const rawRows = raw.prepare(sql).all(...(binds as Bind[])) as Row[];
     const rows = rawRows.map((r) => marshalRow(table, r));
 
     if (opts.include && opts.include.length > 0) expandIncludes(table, rows, opts.include);
@@ -633,11 +688,11 @@ export function restoreFromSql(dbPath: string, sql: string): void {
   for (const suffix of ['', '-wal', '-shm']) {
     if (existsSync(dbPath + suffix)) rmSync(dbPath + suffix);
   }
-  const raw = new Database(dbPath);
+  const raw = new DatabaseSync(dbPath);
   try {
-    raw.pragma('journal_mode = WAL');
+    raw.exec('PRAGMA journal_mode = WAL');
     raw.exec(sql);
-    raw.pragma('foreign_keys = ON');
+    raw.exec('PRAGMA foreign_keys = ON');
   } finally {
     raw.close();
   }

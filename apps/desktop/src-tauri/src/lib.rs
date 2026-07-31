@@ -15,13 +15,13 @@ mod fsops;
 mod grants;
 mod menu;
 mod navigation;
+mod sidecar;
 
 use config::{DesktopBridge, Tokens};
 use tauri::{Manager, Theme, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 
 pub fn run() {
-    let bridge = DesktopBridge::load();
     let tokens = Tokens::load();
 
     let builder = tauri::Builder::default();
@@ -59,6 +59,9 @@ pub fn run() {
             commands::browser_start,
             commands::browser_stop,
             commands::browser_status,
+            commands::local_mode_enable,
+            commands::local_mode_disable,
+            commands::local_mode_status,
         ])
         .setup(move |app| {
             // The grant list, restored from disk. Empty on a fresh install: the bridge can reach
@@ -80,6 +83,10 @@ pub fn run() {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 let _ = app.deep_link().register_all();
             }
+
+            // Built HERE rather than before the builder, so a persisted local-mode setting is
+            // read from this app's own config directory — which needs the AppHandle.
+            let bridge = DesktopBridge::load_with(commands::persisted_local_base(app.handle()));
 
             let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("lmthing")

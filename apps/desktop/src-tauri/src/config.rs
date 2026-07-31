@@ -44,6 +44,22 @@ pub struct DesktopBridge {
 }
 
 impl DesktopBridge {
+    /// Read the persisted local-mode setting, if any.
+    ///
+    /// Written by `commands::local_mode_enable` and read here at window creation, because the
+    /// bridge is injected before any page script runs and `@lmthing/auth` reads it synchronously
+    /// during module init — there is no later moment to change it in. Switching modes therefore
+    /// restarts the window, which is also the honest behaviour: every socket and every cached
+    /// session belongs to the pod being left behind.
+    pub fn load_with(local_base: Option<String>) -> Self {
+        let mut me = Self::load();
+        if let Some(base) = local_base {
+            me.mode = "local";
+            me.api_base = base;
+        }
+        me
+    }
+
     pub fn load() -> Self {
         Self {
             protocol_version: PROTOCOL_VERSION,

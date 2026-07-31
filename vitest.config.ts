@@ -17,6 +17,11 @@ export default defineConfig({
   // prefix, exactly as `libs/utils/src/vite.mjs` does it.
   resolve: {
     alias: {
+      // Vite 5.4 predates `node:sqlite` in its builtin list: it strips the `node:` prefix and looks
+      // for a package called `sqlite`, which fails to load every suite touching the project data
+      // store. The shim asks Node directly through `createRequire`. Remove once the toolchain
+      // knows the module.
+      'node:sqlite': path.resolve(__dirname, 'scripts/node-sqlite-shim.mjs'),
       '@lmthing/ui/chat/css': path.resolve(__dirname, 'libs/ui/src/chat/app/styles.css'),
       '@lmthing/ui': path.resolve(__dirname, 'libs/ui/src'),
       '@lmthing/css/tamagui-tokens': path.resolve(__dirname, 'libs/css/src/tamagui/tokens.generated.ts'),

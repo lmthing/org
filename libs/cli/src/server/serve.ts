@@ -542,7 +542,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     });
     // Run all boot-time app/cron work OFF the readiness path. The HTTP server is
     // already listening (above), so the K8s startup probe (`GET /api/sessions`)
-    // must NOT be blocked by the synchronous better-sqlite3 opens/reconciles in the
+    // must NOT be blocked by the synchronous SQLite opens/reconciles in the
     // db-warm loop or by an overdue cron hook that runs a full agent turn. This runs
     // in the background (not awaited) and yields the event loop between units so the
     // probe is serviced promptly; the pod is Ready in ~1-2s regardless of how many
