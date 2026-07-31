@@ -31,6 +31,12 @@ export interface AppGlobalImpls {
   /** Project-rooted db (sync agent surface), provided by libs/cli's better-sqlite3
    *  store in Phase 2. Unscoped — core applies the per-verb table grant on top. */
   db?: DbApi;
+  /** Forwards a `hostFs` yield to the LMThing desktop attached to this pod — the person's OWN
+   *  machine, not the pod's disk. Value-yielding like `apiCall`: NOT injected here but wired
+   *  through the yield router (`createHostFsGlobals` + `YieldRouterContext.hostFsResolver`). The
+   *  host (libs/cli) supplies a resolver bound to its `HostBridge`; absent ⇒ a structured
+   *  "no desktop bridge" result rather than a bound `undefined`. */
+  hostFs?: import('../eval/host-fs-yield.js').HostFsResolver;
   /** Agent-facing `apiCall` — enter the project's own `api/` endpoints by name.
    *  Value-yielding (Promise-returning): unlike the synchronous globals below it is
    *  NOT injected here but wired through the yield router (`createApiCallGlobal` +

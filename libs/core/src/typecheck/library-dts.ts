@@ -133,6 +133,32 @@ export const SCRATCH_DTS = `/** Create (once) a throwaway scratch directory and 
 declare function createScratch(): string;`;
 
 /**
+ * The person's OWN machine, through the LMThing desktop app — emitted only under `fs:local:read`.
+ *
+ * Every signature takes a `rootId` and a RELATIVE path, and there is no absolute-path form
+ * anywhere: a path outside the granted folders is not rejected, it is inexpressible. That is the
+ * security design (`apps/desktop/src-tauri/src/grants.rs` is the enforcement), and stating it in
+ * the DTS is what makes an agent write correct calls in the first place rather than discover the
+ * rule from a refusal.
+ *
+ * Batch-shaped deliberately: each of these is a WAN round trip to somebody's laptop.
+ */
+export const LOCAL_FS_READ_DTS = `/** Folders the person has granted this workspace. Empty when no desktop is connected. */
+declare function localRoots(): Promise<Array<{ id: string; label: string; mode: 'ro' | 'rw' }>>;
+/** List a granted folder (recursively). \`path\` is relative to the root; omit for its top level. */
+declare function localTree(rootId: string, path?: string): Promise<{ ok: boolean; entries: Array<{ path: string; kind: 'file' | 'dir'; size: number }>; truncated: boolean; error?: string }>;
+/** Metadata for one entry. */
+declare function localStat(rootId: string, path: string): Promise<{ ok: boolean; kind?: 'file' | 'dir'; size?: number; mtime?: number; error?: string }>;
+/** Read a file inside a granted folder. Use \`offset\`/\`limit\` for large files rather than fetching them whole. */
+declare function localRead(rootId: string, path: string, opts?: { offset?: number; limit?: number }): Promise<{ ok: boolean; content: string; lines: number; truncated: boolean; error?: string }>;
+/** Search a granted folder. Prefer this to walking the tree yourself — one round trip instead of many. */
+declare function localSearch(rootId: string, query: string, opts?: { path?: string }): Promise<{ ok: boolean; hits: Array<{ path: string; line: number; text: string }>; truncated: boolean; error?: string }>;`;
+
+/** The write half — emitted only under `fs:local:write`, and refused by roots granted read-only. */
+export const LOCAL_FS_WRITE_DTS = `/** Create or replace a file inside a granted folder. Fails when the grant is read-only. */
+declare function localWrite(rootId: string, path: string, content: string): Promise<{ ok: boolean; bytes: number; error?: string }>;`;
+
+/**
  * App-capability globals (project-as-application). Each fragment is emitted ONLY
  * when the owning agent holds the capability — the integrator gates them per
  * `allowWrite`/per-capability in `buildAmbientDts`. Kept dependency-free (no

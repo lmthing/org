@@ -546,6 +546,7 @@ export class ForkEngine {
           // grants into forks; consent-marked kinds (installSpace) FAIL CLOSED —
           // no requestConsent is ever wired for a headless fork leaf.
           storeResolver: this.opts.appGlobals?.store,
+      hostFsResolver: this.opts.appGlobals?.hostFs,
           emitEventResolver: this.opts.appGlobals?.emitEvent,
           // Same turn-bound team resolver as the parent. A read-only fork role has
           // already lost `team:post` (intersectAppCaps), so the writers are neither

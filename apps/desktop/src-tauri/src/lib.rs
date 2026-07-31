@@ -9,6 +9,7 @@
 //! for safety, which is the point: the surface that has to be right is one function.
 
 mod config;
+mod grants;
 mod menu;
 mod navigation;
 

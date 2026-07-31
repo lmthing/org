@@ -11,6 +11,8 @@ import { SessionLedger } from './session-ledger.js';
 import { emitInternalSignal } from './internal-signals.js';
 import { integrationStatusFor } from './routes/store-spaces.js';
 import { createStoreResolver } from './store-resolver.js';
+import { createHostFsResolver } from './host-fs-resolver.js';
+import type { HostBridge } from '../rpc/host-bridge.js';
 import { createEmitEventResolver, type ManualEmitDepth } from './emit-event.js';
 import { transcribeAudio } from '../providers/transcribe.js';
 import {
@@ -321,6 +323,7 @@ export class SessionManager {
    *  the server port + gateway config. Invoked after installs (serve.ts callback) and
    *  authoring writes (S11 calls {@link republish}). Absent under bare `lmthing serve`
    *  wiring that never sets it — then {@link republish} is a no-op. */
+  private hostBridge: HostBridge | undefined;
   private republishFn?: () => Promise<void>;
   /** Drop `serve.ts`'s cached page bundle for a project (injected at boot, like
    *  {@link republishFn}). The served bundle is cached for the server's LIFETIME, so an
@@ -407,7 +410,25 @@ export class SessionManager {
    *  router emits the clear "no connection resolver configured" error. */
   private withConnections(appGlobals?: AppGlobalImpls, projectRoot?: string): AppGlobalImpls | undefined {
     const resolver = this.getConnectionResolver(projectRoot);
-    return { ...appGlobals, callConnection: appGlobals?.callConnection ?? resolver };
+    const bridge = this.hostBridge;
+    return {
+      ...appGlobals,
+      callConnection: appGlobals?.callConnection ?? resolver,
+      // The desktop's local filesystem, folded in here rather than in `withStore` because it is
+      // POD-wide: a desktop attaches to the workspace, not to a project, so a session outside a
+      // project should still reach it. Absent when no bridge is configured (a team pod), which the
+      // router reports as a structured "no desktop bridge" result.
+      ...(bridge ? { hostFs: appGlobals?.hostFs ?? createHostFsResolver(bridge) } : {}),
+    };
+  }
+
+  /** The pod's desktop bridge, wired once from `serve.ts` at boot.
+   *
+   *  A setter rather than a constructor option for the same reason `setRepublish` is one: the
+   *  manager is constructed before the HTTP server that owns the socket. Pod-wide rather than
+   *  per-project, because a desktop attaches to the WORKSPACE. */
+  setHostBridge(bridge: HostBridge): void {
+    this.hostBridge = bridge;
   }
 
   /** Wire the republish-on-write callable (S9). Called once from `serve.ts` at boot. */

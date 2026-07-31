@@ -60,6 +60,8 @@ import { listProjects } from './projects.js';
 import { handleAgentWsUpgrade } from './ws/agent.js';
 import { handleTerminalWsUpgrade } from './ws/terminal.js';
 import { handleChannelWsUpgrade } from './ws/team-channels.js';
+import { handleHostWsUpgrade } from './ws/host.js';
+import { HostBridge } from '../rpc/host-bridge.js';
 
 export interface SessionServerOpts {
   port: number;
@@ -460,6 +462,10 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // ─── WebSocket upgrade ────────────────────────────────────────────────────
   const terminalCwd = effectiveLmthingRoot ?? process.cwd();
   const wss = new WebSocketServer({ noServer: true });
+  // One per pod process: holds the attached desktop (at most one) and every in-flight reverse RPC.
+  // Handed to the manager so `localRead`/`localWrite` reach it from any session.
+  const hostBridge = new HostBridge({ log: (m) => console.log(m) });
+  manager.setHostBridge(hostBridge);
 
   httpServer.on('upgrade', (req, socket, head) => {
     // Dev: let Vite's own upgrade listener handle its HMR socket (identified by
@@ -479,6 +485,12 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
 
     if (url.pathname === '/api/team/ws') {
       handleChannelWsUpgrade(req, socket, head, wss);
+      return;
+    }
+    // The desktop shell's reverse-RPC socket. Must be matched BEFORE the fallthrough below, which
+    // hands anything unrecognised to the agent handler and destroys it.
+    if (url.pathname === '/api/host/ws') {
+      handleHostWsUpgrade(req, socket, head, wss, hostBridge);
       return;
     }
     const termMatch = url.pathname.match(/^\/api\/terminals\/([^/]+)$/);

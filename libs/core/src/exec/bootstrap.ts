@@ -4,6 +4,7 @@ import { injectGlobal, marshalToQuickJS } from '../sandbox/host-bridge.js';
 import { injectSpaceFunctions } from '../sandbox/inject-functions.js';
 import { injectHostTools } from '../globals/host-tools.js';
 import { createScratchTools } from '../globals/scratch.js';
+import { createHostFsGlobals } from '../globals/host-fs.js';
 import { createAskGlobal } from '../globals/ask.js';
 import { createDisplayGlobal } from '../globals/display.js';
 import { createInspectGlobal } from '../globals/inspect.js';
@@ -36,7 +37,9 @@ import { createConsentRequestGlobal } from '../globals/consent.js';
 import { CATALOG_NAMES } from '../ui/catalog.js';
 import {
   ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, SET_SESSION_META_DTS,
-  EXEC_SHELL_DTS, SCRATCH_DTS, composeDbDts, CAPABILITY_DTS_FRAGMENTS,
+  EXEC_SHELL_DTS, SCRATCH_DTS,
+  LOCAL_FS_READ_DTS,
+  LOCAL_FS_WRITE_DTS, composeDbDts, CAPABILITY_DTS_FRAGMENTS,
   PROJECT_TABLE_DTS, PROJECT_READ_DTS, composeConnectionsDts, type DbTableSchema,
   PROCESS_EXIT_DTS,
 } from '../typecheck/library-dts.js';
@@ -213,6 +216,27 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   injectGlobal(ctx, 'inspect', createInspectGlobal(pushYield) as AnyFn);
   injectGlobal(ctx, 'sleep', createSleepGlobal(pushYield, opts.clock) as AnyFn);
   injectGlobal(ctx, 'fetch', createFetchGlobal(pushYield) as AnyFn);
+
+  // 5b. The person's OWN filesystem, through the attached LMThing desktop (`fs:local:*`).
+  //     Distinct from 4c in every way that matters: scratch is a throwaway directory on the POD's
+  //     disk that the runtime just created, while this is somebody's real machine reached over a
+  //     network. Hence a yield rather than a synchronous host call, and hence the enforcement
+  //     living on the desktop in Rust rather than here — the pod is the party running the
+  //     untrusted instruction and cannot be asked to police it.
+  if (caps.localFsRead || caps.localFsWrite) {
+    const local = createHostFsGlobals(pushYield);
+    if (caps.localFsRead) {
+      injectGlobal(ctx, 'localRoots', local.localRoots as (...a: unknown[]) => unknown);
+      injectGlobal(ctx, 'localTree', local.localTree as (...a: unknown[]) => unknown);
+      injectGlobal(ctx, 'localStat', local.localStat as (...a: unknown[]) => unknown);
+      injectGlobal(ctx, 'localRead', local.localRead as (...a: unknown[]) => unknown);
+      injectGlobal(ctx, 'localSearch', local.localSearch as (...a: unknown[]) => unknown);
+    }
+    if (caps.localFsWrite) {
+      injectGlobal(ctx, 'localWrite', local.localWrite as (...a: unknown[]) => unknown);
+    }
+  }
+
   // readDocument: universal (like fetch), NOT capability-gated — any agent/fork/
   // delegate can read an attached upload's text by id. The host resolver is threaded
   // via the yield router (documentResolver); absent ⇒ a clear retryable error.
@@ -346,7 +370,7 @@ export interface AmbientDtsOpts {
    *  internal-only, and `execShell` + `createScratch` are emitted ONLY under `scratchFs`
    *  (the engineer's sandbox). The project-app globals are gated on the `app` grants. Pass
    *  the full CapabilityProfile (it satisfies this Pick). */
-  capabilities: Pick<CapabilityProfile, 'ask' | 'orchestrate' | 'delegate' | 'setSessionMeta' | 'allowWrite' | 'scratchFs' | 'app'>;
+  capabilities: Pick<CapabilityProfile, 'ask' | 'orchestrate' | 'delegate' | 'setSessionMeta' | 'allowWrite' | 'scratchFs' | 'localFsRead' | 'localFsWrite' | 'app'>;
   /** Function/component overlay (buildOverlay output). Empty/omitted → none. */
   overlay?: string;
   /** Declare the `currentTask` capture global (fork + delegate contexts). */
@@ -436,6 +460,12 @@ export function buildAmbientDts(opts: AmbientDtsOpts): string {
     // builder functions, so a stray readFile/writeFile/execShell call fails typecheck.
     caps.scratchFs ? EXEC_SHELL_DTS : '',
     caps.scratchFs ? SCRATCH_DTS : '',
+    // Same both-directions rule as scratch above: a `localRead` call from an agent without
+    // `fs:local:read` is a TYPECHECK error (retryable, and the model is told why) rather than a
+    // runtime refusal it has to discover. The write half is separately gated so a read-only fork
+    // keeps the readers — see `intersectAppCaps`.
+    caps.localFsRead ? LOCAL_FS_READ_DTS : '',
+    caps.localFsWrite ? LOCAL_FS_WRITE_DTS : '',
     buildAppCapabilityDts(caps.app, opts.appDts, opts.projectRoot, opts.dbSchema),
     opts.overlay ?? '',
     opts.currentTask ? CURRENT_TASK_DTS : '',

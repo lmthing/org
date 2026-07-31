@@ -192,6 +192,20 @@ describe('team mode on', () => {
       }
     });
 
+    it('refuses the desktop host bridge to EVERYONE, editors included', () => {
+      // Not a role question, which is why it is checked before the role is even read. A team pod is
+      // shared, and an agent in it can be prompted by anyone with write access to a channel — so
+      // the bridge would hand that agent a path to one member's laptop: their filesystem, and a
+      // browser logged into their accounts. A different product, not a stronger version of this one.
+      for (const who of [VIEWER, EDITOR]) {
+        const d = guardWebSocket(req('GET', who), '/api/host/ws');
+        expect(d.ok).toBe(false);
+        expect(d.status).toBe(403);
+      }
+      // And with no caller at all, rather than falling through to the 401 path.
+      expect(guardWebSocket(req('GET', {}), '/api/host/ws')).toMatchObject({ ok: false, status: 403 });
+    });
+
     it('refuses a viewer a terminal — that is shell access to the workspace', () => {
       const d = guardWebSocket(req('GET', VIEWER), '/api/terminals/t1');
       expect(d.ok).toBe(false);

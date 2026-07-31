@@ -38,6 +38,8 @@ export type CapabilityId =
   | 'store:install'
   | 'events:emit'
   | 'fs:scratch'
+  | 'fs:local:read'
+  | 'fs:local:write'
   | 'team:read'
   | 'team:post';
 
@@ -58,6 +60,8 @@ export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
   'store:install',
   'events:emit',
   'fs:scratch',
+  'fs:local:read',
+  'fs:local:write',
   'team:read',
   'team:post',
 ]);
@@ -70,6 +74,25 @@ export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
 export const TEAM_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
   'team:read',
   'team:post',
+]);
+
+/**
+ * Grants that a TEAM pod must never hold, whatever an agent declares.
+ *
+ * The mirror image of {@link TEAM_CAPABILITY_IDS}: those are dropped OFF a team pod, these are
+ * dropped ON one. A team pod is shared, and an agent in it can be prompted by anyone with write
+ * access to a channel — so these would give that agent a path to one member's laptop: their
+ * filesystem, and a browser logged into their accounts. That is a categorically different product
+ * from "my own agent can see my own files", not a stronger version of it.
+ *
+ * `libs/cli/src/server/team-guard.ts#guardWebSocket` refuses `/api/host/ws` on a team pod as well.
+ * Belt and braces on purpose: this half removes the globals AND their DTS declarations, so a call
+ * is a typecheck error rather than a runtime refusal, and that half means there is no transport
+ * even if a capability somehow survived.
+ */
+export const DESKTOP_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
+  'fs:local:read',
+  'fs:local:write',
 ]);
 
 /**
@@ -138,6 +161,8 @@ const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId
   'store:install',
   'events:emit',
   'fs:scratch',
+  'fs:local:read',
+  'fs:local:write',
   'team:read',
   'team:post',
 ]);
@@ -200,6 +225,22 @@ export interface AppCapabilities {
   'store:install'?: true;
   'events:emit'?: true;
   'fs:scratch'?: true;
+  /**
+   * Read files from folders the PERSON granted the LMThing desktop app — their own machine, not
+   * the pod's disk. Reached over the desktop bridge (`libs/cli/src/rpc/host-bridge.ts`).
+   *
+   * Two ids rather than one, for the reason `intersectAppCaps` already gives for the team surface:
+   * a single `fs:local` would have to be kept whole for a read-only fork (arming it with writers)
+   * or dropped whole (blinding it). A read-only `explore`/`plan` fork examining a local repository
+   * is the single most obvious use of this feature, so the split is the difference between it
+   * working and it being unusable.
+   *
+   * The grant list is the PERSON'S and lives on their machine; it is deliberately not configurable
+   * from frontmatter, so an agent can neither narrow nor WIDEN its own scope.
+   */
+  'fs:local:read'?: true;
+  /** As `fs:local:read`, plus creating and modifying files in a grant marked read-write. */
+  'fs:local:write'?: true;
   'team:read'?: true;
   'team:post'?: true;
 }
@@ -414,6 +455,11 @@ export function parseCapabilities(raw: unknown, ctx: ParseCapabilitiesCtx): AppC
   // a malformed declaration cannot hide on a personal pod and surface in prod.
   if (!isTeamPod()) {
     for (const id of TEAM_CAPABILITY_IDS) delete result[id];
+  } else {
+    // The mirror image, and dropped rather than rejected for the same reason: one `instruct.md`
+    // ships to both kinds of pod, so throwing here would make the space fail to load on a team
+    // pod entirely. See DESKTOP_ONLY_CAPABILITY_IDS.
+    for (const id of DESKTOP_ONLY_CAPABILITY_IDS) delete result[id];
   }
 
   return result;

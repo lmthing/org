@@ -78,6 +78,11 @@ export interface YieldRouterContext {
   /** Resolve an `apiCall()` yield — enter the project's api runtime by endpoint
    *  `name` (host-supplied via the project's app globals). Absent outside a
    *  project-app context; an `apiCall` yield then rejects with a clear error. */
+  /**
+   * Forwards a `hostFs` yield to the attached LMThing desktop. Host-supplied by `libs/cli`;
+   * absent ⇒ a structured "no desktop bridge" result rather than a bound `undefined`.
+   */
+  hostFsResolver?: import('./host-fs-yield.js').HostFsResolver;
   apiCallResolver?: ApiCallFn;
   /** The running agent's `api:call: { allow: [...] }` grant — the endpoints it may
    *  enter. Enforced in the `apiCall` yield (a name outside the list is refused with a
@@ -202,6 +207,15 @@ export async function routeCommonYield(
       const [url, fetchOpts] = req.args as [string, import('../globals/fetch.js').FetchOpts | undefined];
       const { resolveFetchYield } = await import('./fetch-yield.js');
       const value = await resolveFetchYield(url, fetchOpts);
+      return { handled: true, value };
+    }
+    case 'hostFs': {
+      // The person's OWN machine, reached over the desktop bridge. Async by necessity (it crosses a
+      // network), which is why it is a yield rather than an extension of the synchronous host-tools
+      // surface — see `globals/host-fs.ts`.
+      const [op, ...rest] = req.args as [string, ...unknown[]];
+      const { resolveHostFsYield } = await import('./host-fs-yield.js');
+      const value = await resolveHostFsYield(ctx.hostFsResolver, op, rest);
       return { handled: true, value };
     }
     case 'apiCall': {

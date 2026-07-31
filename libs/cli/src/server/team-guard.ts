@@ -158,6 +158,20 @@ export function guardRequest(req: IncomingMessage, pathname: string): GuardDecis
 export function guardWebSocket(req: IncomingMessage, pathname: string): GuardDecision {
   if (!isTeamMode()) return { ok: true };
 
+  // The desktop host bridge is refused on a team pod OUTRIGHT — before any role check, so not even
+  // an editor can attach one.
+  //
+  // A team pod is shared. An agent in it can be prompted by anyone with write access to a channel,
+  // and the bridge would give that agent a path to one member's laptop: their filesystem, and a
+  // browser logged into their accounts. That is a categorically different product from "my own
+  // agent can see my own files", not a stronger version of it.
+  //
+  // Belt and braces: `spaces/capabilities.ts` also drops `fs:local:*` and `browser:cdp` when
+  // `isTeamPod()`, so the capability is absent even if this route were somehow reached.
+  if (pathname === '/api/host/ws') {
+    return { ok: false, status: 403, error: 'the desktop bridge is not available on a team workspace' };
+  }
+
   const caller = readCaller(req);
   if (!caller) {
     return { ok: false, status: 401, error: 'team workspace requires a team token' };
