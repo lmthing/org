@@ -35,6 +35,10 @@ Ask of the `text`:
   "run `<cmd>` and paste the result."
 - **Does the fix match the symptom?** A fix to a different file than the one failing is a sign it
   found something plausible rather than the cause. Ask what made it conclude that was the problem.
+- **A citation to `AGENTS.md` or `ARCHITECTURE.md` is legitimate.** The pod writes both into the
+  data root on every boot and zerostack reads them automatically. You did not send them, but they
+  are real and authoritative about this system's formats — treat a claim grounded in them as
+  sourced, and do not burn a turn asking it to prove they exist.
 - **Did it edit anything generated?** `types/generated.d.ts` or anything under `.data/` means the
   fix is temporary at best. Send it back to fix the source (`database/*.json`).
 - **Did it say "should now work"?** That phrasing almost always means it did not check. Ask it to.
