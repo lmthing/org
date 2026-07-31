@@ -104,6 +104,33 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
   );
 }
 
+// ─── Retry (a failed turn) ────────────────────────────────────────────────────
+
+/**
+ * An error block used to render as text only — a network hiccup or an LLM error ended the
+ * conversation dead, and the only way forward was to retype the whole message. This resends the
+ * user turn that led to the error, the same way the composer sends one (`noteUser` echoes it into
+ * the transcript, `sendMessage` puts it back on the wire).
+ */
+function RetryButton({ text }: { text: string }) {
+  const noteUser = useStore((s) => s.noteUserMessage);
+  const retry = () => {
+    const send = getLiveSend();
+    if (!send) return;
+    noteUser(text);
+    send({ type: 'sendMessage', content: text });
+  };
+  return (
+    <Prim.Pressable
+      onClick={retry}
+      transition="quick" animateOnly={["opacity"]} alignItems="center" gap="$1" marginTop="0.375rem" paddingHorizontal="$2" paddingVertical="$1" borderWidth={1} borderColor="color-mix(in srgb, var(--destructive) 40%, transparent)" borderRadius="$radius-lg" fontSize="$xs" color="$destructive" display="inline-flex" hoverStyle={{ opacity: 0.8 }}
+      aria-label="Retry the last message"
+    >
+      <Prim.Text>↻ Retry</Prim.Text>
+    </Prim.Pressable>
+  );
+}
+
 // ─── Attribution button ───────────────────────────────────────────────────────
 
 function AttributionButton({ nodeId, label }: { nodeId: string; label: string }) {
@@ -196,13 +223,48 @@ function UserAttachment({ att }: { att: TraceAttachment }) {
   );
 }
 
+/** The error block, with a Retry that resends whatever user turn preceded it — the nearest
+ *  `'user'` block earlier in the transcript. Absent (edge case: an error with no prior user turn,
+ *  e.g. a resumed session) simply omits the button rather than retrying nothing. */
+function ErrorMessage({ block }: { block: Extract<ConvoBlock, { type: 'error' }> }) {
+  const retryText = useStore((s) => {
+    const blocks = s.model.blocks;
+    const idx = blocks.findIndex((b) => b.id === block.id);
+    for (let i = idx - 1; i >= 0; i--) {
+      const b = blocks[i]!;
+      if (b.type === 'user') return b.content;
+    }
+    return undefined;
+  });
+  return (
+    <Prim.Box className="lm-fade-in" paddingVertical="$2" data-testid="block">
+      <Prim.Box borderColor="color-mix(in srgb, var(--destructive) 30%, transparent)" backgroundColor="color-mix(in srgb, var(--destructive) 10%, transparent)" borderWidth={1} borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$2" fontSize="$sm" color="$destructive" fontFamily="$mono">
+        <Prim.Text>{block.message}</Prim.Text>
+        {retryText && <RetryButton text={retryText} />}
+      </Prim.Box>
+    </Prim.Box>
+  );
+}
+
 // ─── Message ──────────────────────────────────────────────────────────────────
 
 interface MessageProps {
   block: ConvoBlock;
 }
 
-export function Message({ block }: MessageProps) {
+/**
+ * Wrapped in `React.memo` (as is `AssistantTurn` below, with the SAME custom comparator — see
+ * `blockRenderEqual`): `ChatView` re-renders the whole transcript on every streamed batch, and
+ * `groupBlocks` there recomputes only when a block is added — so without this, every message that
+ * had already finished minutes ago re-ran its markdown/code-block parse on every single token of
+ * whatever is streaming now, since `blocks.map(...)`/`AssistantTurn` recreate the `<Message>`
+ * element on each pass regardless. `feedLive` (`store/session-slice.ts`) only ever `push`es a NEW
+ * block object onto `model.blocks` — an existing block's OWN object reference never changes
+ * (`resolveAskBlock` is the one exception, mutating `state`/`answer` in place, which is exactly
+ * why the comparator is custom rather than the memo default) — so the memo skips the parse for
+ * every block whose reference carried over unchanged, which on a long session is most of them.
+ */
+function MessageImpl({ block }: MessageProps) {
   const node = useStore((s) => s.model.nodes[block.nodeId]);
   const showAttribution = node && node.kind !== 'session' && node.kind !== 'run';
   const childNodeIds = node?.childIds ?? [];
@@ -270,13 +332,7 @@ export function Message({ block }: MessageProps) {
 
   // Error callout
   if (block.type === 'error') {
-    return (
-      <Prim.Box className="lm-fade-in" paddingVertical="$2" data-testid="block">
-        <Prim.Box borderColor="color-mix(in srgb, var(--destructive) 30%, transparent)" backgroundColor="color-mix(in srgb, var(--destructive) 10%, transparent)" borderWidth={1} borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$2" fontSize="$sm" color="$destructive" fontFamily="$mono">
-          <Prim.Text>{block.message}</Prim.Text>
-        </Prim.Box>
-      </Prim.Box>
-    );
+    return <ErrorMessage block={block} />;
   }
 
   // Ask form
@@ -291,11 +347,37 @@ export function Message({ block }: MessageProps) {
   );
 }
 
+/**
+ * Whether two (possibly-identical-object) blocks render the same thing.
+ *
+ * Reference equality is NOT enough for an `ask` block on its own: `resolveAskBlock`
+ * (`store/model.ts`) mutates an open ask's `state`/`answer` IN PLACE rather than replacing the
+ * block object. That means a comparator cannot simply diff `state`/`answer` between the two
+ * sides either — by the time a `React.memo` comparator runs, `prevProps` and `nextProps` are
+ * both looking at the SAME (already-mutated) object, so both observations agree with each other
+ * regardless of whether the ask just flipped from open to answered. There is no earlier snapshot
+ * left to diff against.
+ *
+ * So an `ask` block is never treated as unchanged by identity alone — this matches today's
+ * (correct, unmemoized) behaviour for that one block type exactly, at the cost of not memoizing
+ * it. Every other block type is created once and never mutated after (see the audit of every
+ * `m.blocks.push`/field assignment in `model.ts`), so reference equality really does mean
+ * "unchanged" for them — which is where the memoization actually pays off: `display` blocks are
+ * the ones carrying the markdown/code-block parse this exists to skip.
+ */
+function blockRenderEqual(a: ConvoBlock, b: ConvoBlock): boolean {
+  if (a !== b) return false;
+  if (a.type === 'ask') return false;
+  return true;
+}
+
+export const Message = React.memo(MessageImpl, (prev, next) => blockRenderEqual(prev.block, next.block));
+
 // ─── AssistantTurn ────────────────────────────────────────────────────────────
 // Groups a run of assistant-side blocks (display + ask) with the agent avatar
 // and a single copy button for all text content in the turn.
 
-export function AssistantTurn({ blocks, nodeIds }: { blocks: ConvoBlock[]; nodeIds?: string[] }) {
+function AssistantTurnImpl({ blocks, nodeIds }: { blocks: ConvoBlock[]; nodeIds?: string[] }) {
   const textContent = blocks
     .filter((b): b is Extract<ConvoBlock, { type: 'display' }> => b.type === 'display' && typeof b.descriptor === 'string')
     .map((b) => b.descriptor as string)
@@ -320,3 +402,26 @@ export function AssistantTurn({ blocks, nodeIds }: { blocks: ConvoBlock[]; nodeI
     </Prim.Box>
   );
 }
+
+/**
+ * Memoized with a custom comparator, not the default shallow one — same reason as `Message`
+ * above. `blocks` is the array `groupBlocks` (memoized in `ChatView`) hands down; an ask inside it
+ * resolving mutates that ask's block IN PLACE, so the array reference is unchanged and a default
+ * comparator would silently skip the re-render that shows the answer.
+ */
+function assistantTurnPropsEqual(
+  prev: { blocks: ConvoBlock[]; nodeIds?: string[] },
+  next: { blocks: ConvoBlock[]; nodeIds?: string[] },
+): boolean {
+  if (prev.blocks.length !== next.blocks.length) return false;
+  for (let i = 0; i < prev.blocks.length; i++) {
+    if (!blockRenderEqual(prev.blocks[i]!, next.blocks[i]!)) return false;
+  }
+  const pn = prev.nodeIds ?? [];
+  const nn = next.nodeIds ?? [];
+  if (pn.length !== nn.length) return false;
+  for (let i = 0; i < pn.length; i++) if (pn[i] !== nn[i]) return false;
+  return true;
+}
+
+export const AssistantTurn = React.memo(AssistantTurnImpl, assistantTurnPropsEqual);

@@ -366,10 +366,14 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
 
        A `$7` square, the same box as send. It was a bare 16px glyph with `padding: $1` pulled back
        out by `margin: -0.25rem`, which made the gap either side of it unlike every other gap in the
-       row and its tap target smaller than the button beside it. */
+       row and its tap target smaller than the button beside it.
+
+       `$7` is 28px — under the 44px minimum touch target on a phone, where this control is the
+       only pointer this composer has (no hover to widen the effective hit area). Base (mobile-
+       first) is `$11` = 44px; `$md` shrinks it back to the original `$7` once a mouse is likely. */
     <Prim.Text as="label"
       key="attach"
-      {...(attaching || isDisabled ? { opacity: 0.5, pointerEvents: 'none' as const } : {})} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} width="$7" height="$7" borderRadius="$radius-lg" display="flex" alignItems="center" justifyContent="center" color="$muted-foreground" cursor="pointer" hoverStyle={{ color: "$foreground" }}
+      {...(attaching || isDisabled ? { opacity: 0.5, pointerEvents: 'none' as const } : {})} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} width="$11" height="$11" $md={{ width: "$7", height: "$7" }} borderRadius="$radius-lg" display="flex" alignItems="center" justifyContent="center" color="$muted-foreground" cursor="pointer" hoverStyle={{ color: "$foreground" }}
       title="Add an image, audio, or file to your message"
     >
       <Prim.Svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><Prim.Line x1="12" y1="5" x2="12" y2="19" /><Prim.Line x1="5" y1="12" x2="19" y2="12" /></Prim.Svg>
@@ -388,6 +392,10 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
       rows={1}
       placeholder={budgetBlocked ? 'Budget reached — try again after it resets' : 'Message THING…'}
       data-testid="message-input"
+      // Web only: autofocus on a phone pops the on-screen keyboard the instant the surface
+      // mounts, before the reader has decided to type anything, which is exactly the kind of
+      // surprise a native app should not spring. A desktop tab gaining focus costs nothing.
+      {...(isWeb ? { autoFocus: true } : {})}
       // Native only, and passed conditionally because the web `TextArea` is a Tamagui component
       // over a real `<textarea>` — an unknown prop would reach the DOM. Web has no need of it:
       // `adjustHeight` already measures there.
@@ -411,7 +419,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
       type="button"
       onClick={() => void toggleRecord()}
       disabled={(isDisabled || attaching) && !recording}
-      className={recording ? 'animate-pulse' : undefined} {...(recording ? { color: '$destructive' } : { color: '$muted-foreground', hoverStyle: { color: '$foreground' } })} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} width="$7" height="$7" borderRadius="$radius-lg" display="flex" alignItems="center" justifyContent="center" disabledStyle={{ opacity: 0.5 }}
+      className={recording ? 'animate-pulse' : undefined} {...(recording ? { color: '$destructive' } : { color: '$muted-foreground', hoverStyle: { color: '$foreground' } })} transition="quick" animateOnly={["color", "background-color", "border-color"]} flexShrink={0} width="$11" height="$11" $md={{ width: "$7", height: "$7" }} borderRadius="$radius-lg" display="flex" alignItems="center" justifyContent="center" disabledStyle={{ opacity: 0.5 }}
       title={recording ? 'Stop recording' : 'Record a voice message'}
       aria-label={recording ? 'Stop recording' : 'Record a voice message'}
       data-testid="mic-button"
@@ -429,7 +437,7 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
       key="send"
       onClick={handleSend}
       disabled={isDisabled || attaching || (!text.trim() && attachments.length === 0)}
-      transition="quick" flexShrink={0} width="$7" height="$7" borderRadius="$radius-lg" backgroundColor="$primary" color="$primary-foreground" alignItems="center" justifyContent="center" disabledStyle={{ opacity: 0.4 }} hoverStyle={{ opacity: 0.9 }} display="flex"
+      transition="quick" flexShrink={0} width="$11" height="$11" $md={{ width: "$7", height: "$7" }} borderRadius="$radius-lg" backgroundColor="$primary" color="$primary-foreground" alignItems="center" justifyContent="center" disabledStyle={{ opacity: 0.4 }} hoverStyle={{ opacity: 0.9 }} display="flex"
       aria-label="Send message"
     >
       <Prim.Svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><Prim.Path d="m3 3 3 9-3 9 19-9Z"/></Prim.Svg>
@@ -489,10 +497,15 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
                   ? { backgroundColor: '$accent', color: '$accent-foreground' }
                   : { hoverStyle: { backgroundColor: 'color-mix(in srgb, var(--accent) 50%, transparent)' } })}
                 paddingHorizontal="$3" paddingVertical="$1.5" cursor="pointer"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  applyCompletion(c);
-                }}
+                // `onMouseDown` used to be the ONLY pointer path to SELECT a completion — mouse
+                // only, so on touch this dropdown was reachable by keyboard alone. `onClick` is
+                // the same cross-platform primitive every other control in this file already uses
+                // (`plusButton`/`micButton`/`sendButton` above), and `nativeSafeProps` maps it to
+                // `onPress` on native — a tap now selects. `onMouseEnter` stays: it only syncs the
+                // keyboard-arrow highlight to the mouse position, a desktop-only nicety with no
+                // touch equivalent (there is no hover to sync to), and is harmless there since
+                // `onClick` no longer depends on it to select the right item.
+                onClick={() => applyCompletion(c)}
                 onMouseEnter={() => setSelectedIndex(i)}
               >
                 {c}

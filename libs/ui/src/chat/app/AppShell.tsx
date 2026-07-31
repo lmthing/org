@@ -134,7 +134,7 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges }: AppS
           open={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           side="left"
-          width="16rem"
+          width="$64"
         >
           {drawerSidebarContent}
         </Drawer>
@@ -177,7 +177,7 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges }: AppS
           open={devPanelOpen}
           onClose={() => setDevPanelOpen(false)}
           side="right"
-          width="24rem"
+          width="$96"
           title="DevTools"
         >
           <DevPanel onClose={() => setDevPanelOpen(false)} height="100%" />

@@ -37,7 +37,7 @@ function TextField({ label, placeholder, required, onChange }: TextFieldProps): 
     <Prim.Box marginBottom={8}>
       <Prim.Text as="label" display="block" marginBottom={4}>
         {label}
-        {required && <Prim.Text color="red"> *</Prim.Text>}
+        {required && <Prim.Text color="$destructive"> *</Prim.Text>}
       </Prim.Text>
       <Prim.TextField
         type="text"

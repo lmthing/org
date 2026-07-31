@@ -220,10 +220,18 @@ export function Sidebar({ onProjectSettings, className, width, height, collapsib
                     {costLabel && <Prim.Text color="color-mix(in srgb, var(--muted-foreground) 50%, transparent)" marginLeft="0.375rem">{costLabel}</Prim.Text>}
                   </Prim.Text>
                 </Prim.Pressable>
+                {/* `display="none"` + `$group-hover` used to gate this on a mouse hover — a
+                    web-only Tamagui affordance (`$group-hover` has no native fork at all, so
+                    on a phone this button was permanently absent) and, even on web, unreachable
+                    without a pointer that can hover, i.e. on touch. A session could not be
+                    deleted at all from a phone. Always rendered now; `$md` shrinks the touch
+                    target back down once a mouse (and hover) is available, matching the
+                    Composer's touch-target sizing. */}
                 <Prim.Pressable
                   onClick={() => void deleteSession(s.sessionId)}
-                  display="none" width="$5" height="$5" alignItems="center" justifyContent="center" color="$muted-foreground" borderRadius="$radius" fontSize="$xs" flexShrink={0} $group-hover={{ display: "flex" }} hoverStyle={{ color: "$destructive" }}
+                  width="$11" height="$11" $md={{ width: "$5", height: "$5" }} alignItems="center" justifyContent="center" color="$muted-foreground" borderRadius="$radius" fontSize="$xs" flexShrink={0} hoverStyle={{ color: "$destructive" }}
                   title="Delete"
+                  aria-label="Delete conversation"
                 ><Prim.Text>×</Prim.Text></Prim.Pressable>
               </Prim.Row>
             );

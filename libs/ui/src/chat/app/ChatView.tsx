@@ -113,6 +113,9 @@ export function ChatView({
   const projects = useStore(s => s.projects);
   const activeProjectId = useStore(s => s.activeProjectId);
   const model = useStore(s => s.model);
+  // Only read to KEY the Composer below — see the note at that call site. Nothing here reacts to
+  // it directly; a change remounts the Composer instead.
+  const activeSessionId = useStore(s => s.activeSessionId);
   const follow = useStore(s => s.follow);
   const setFollow = useStore(s => s.setFollow);
   const noteUser = useStore(s => s.noteUserMessage);
@@ -123,20 +126,28 @@ export function ChatView({
   const [atBottom, setAtBottom] = React.useState(true);
 
   const blocks = model?.blocks ?? [];
-  const groups = groupBlocks(blocks);
+  // `groupBlocks` walked every block on EVERY render with no memoization — harmless for a short
+  // session, increasingly not for a long one: each streamed token batch re-ran it (and, with it,
+  // every finished message's markdown/code-block parse) for content that had not changed at all.
+  //
+  // Two dependencies, not one, because `model.blocks` is a MUTATED array, not a rebuilt one
+  // (`feedLive` in `session-slice.ts` calls `m.blocks.push(...)` on the same object session after
+  // session) — `blocks.length` is what actually changes when a new block arrives, while `blocks`
+  // itself only gets a new reference on `resetSession` (a session switch). Depending on the array
+  // reference alone would never re-group a growing conversation; depending on the length alone
+  // would risk reusing a stale grouping across two sessions that happen to have the same block
+  // count at switch time.
+  const groups = React.useMemo(() => groupBlocks(blocks), [blocks, blocks.length]);
 
   // Auto-scroll to bottom when following.
   //
-  // `scrollIntoView` is a DOM method and the ref holds a React Native component instance on native,
-  // so the call is OPTIONAL, not merely null-guarded — an unguarded one is a render-time
-  // "undefined is not a function" that takes the whole transcript down. Degrading to "no
-  // auto-scroll" is deliberate: native has no scrolling host here to drive (the transcript is a
-  // `Box`, not a `ScrollView`), and porting that is its own change — see docs/mobile-native-chat.md.
-  React.useEffect(() => {
-    if (follow && atBottom) {
-      bottomRef.current?.scrollIntoView?.({ behavior: 'smooth' });
-    }
-  }, [blocks.length, follow, atBottom]);
+  // Driven through `Prim.Scroll`'s `stickToEnd` prop below, not an effect: the transcript IS a
+  // `Prim.Scroll` (a real `ScrollView` on native), and `stickToEnd` is wired to each target's own
+  // measurement moment (`onContentSizeChange` on native, a layout effect on web — see the
+  // primitive). An effect calling `scrollIntoView` here would be a DOM method the ref holds no
+  // native equivalent for — a no-op on a phone, silently, which is exactly how the transcript
+  // stopped following new output there. (This comment used to claim "the transcript is a `Box`,
+  // not a `ScrollView`" — stale; it already is one, see below.)
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
@@ -218,12 +229,18 @@ export function ChatView({
             {formatCost(sessionCostUsd)}
           </Prim.Text>
         )}
+        {/* The one status a phone still needs even with the rest of the workbench hidden: if the
+            socket drops the app just looks stuck otherwise, with nothing telling the reader why.
+            It used to live inside the row below and disappear with it below `md` — a single glyph,
+            so it always renders regardless of breakpoint. */}
+        <ConnectionDot />
+
         {/* The workbench controls — everything that is a DEVELOPER affordance rather than part of
             chatting. A phone is 360dp wide: seven of these plus the title do not fit, and the ones
             that fought hardest for the room are the ones a touch user cannot even use (`Load trace`
             opens a file picker; `Restart CLI` restarts a local process). They are hidden below the
             `md` breakpoint — base styles ARE the mobile styles here, `$md` is the desktop override —
-            leaving the phone header as hamburger · title · cost · theme. */}
+            leaving the phone header as hamburger · title · cost · connection · theme. */}
         <Prim.Row gap="$2" alignItems="center" flexShrink={0} display="none" $md={{ display: 'flex' }}>
           {mode === 'live' && (
             <Prim.Pressable
@@ -238,7 +255,6 @@ export function ChatView({
               <Prim.Text>{follow ? '⊙' : '○'}</Prim.Text>
             </Prim.Pressable>
           )}
-          <ConnectionDot />
           <TraceLoader />
           <Prim.Pressable
             onClick={() => onOpenDevPanel?.()}
@@ -299,7 +315,21 @@ export function ChatView({
             and a mismatched one on the right, reading as "the replies are pushed off to the side".
             Stating the width makes `maxWidth` the cap it was meant to be on a wide window, and a
             no-op on a narrow one. */}
-        <Prim.Col width="100%" maxWidth={768} marginHorizontal="auto" paddingVertical="$6" minHeight="100%">
+        {/* `justifyContent: flex-end` once there IS a conversation, so a short one sits against the
+            composer rather than floating at the top of an empty screen. `Prim.Scroll`'s own
+            bottom-anchoring cannot do it here: this column asks for `minHeight: 100%` (so the empty
+            state can fill and centre), which leaves the Scroll no free space to give its spacer.
+            Safe on this element specifically — it is not the scrolling box, so end-alignment cannot
+            make the overflow unreachable the way it would one level up. Gated on having content,
+            because the empty state wants to stay centred. */}
+        <Prim.Col
+          width="100%"
+          maxWidth={768}
+          marginHorizontal="auto"
+          paddingVertical="$6"
+          minHeight="100%"
+          {...(groups.length ? { justifyContent: 'flex-end' as const } : {})}
+        >
           {groups.length === 0 ? (
             <EmptyState
               projectName={!singleSession && spaceLabel ? spaceLabel : undefined}
@@ -330,7 +360,14 @@ export function ChatView({
       )}
 
       {/* Composer */}
-      <Composer onSend={handleSend} projectId={projectId} />
+      {/* Keyed on the session: `Composer` holds its draft (`text`/`attachments`/`recording`/
+          `dropdownOpen`) as local state that nothing ever reset on a session switch, because
+          neither this component nor `Composer` unmounts when `switchSession` swaps the socket —
+          so a draft typed in one chat was still sitting in the box after switching to another,
+          one keystroke away from being sent into the wrong conversation. A `key` change forces
+          React to tear down and remount `Composer` fresh, which resets everything at once rather
+          than each field needing its own effect. */}
+      <Composer key={activeSessionId} onSend={handleSend} projectId={projectId} />
 
       <BugReportDialog open={bugOpen} onClose={() => setBugOpen(false)} screenshot={null} />
     </Prim.Box>

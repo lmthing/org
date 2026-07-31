@@ -1,5 +1,5 @@
 import * as Prim from '../../elements/primitives/index';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useReplSession } from '../client/useReplSession';
 import { DisplayBlock } from './DisplayBlock';
 import { AskBlock } from './AskBlock';
@@ -56,7 +56,12 @@ export function ReplChatView({
   // track them here and interleave them into the transcript by recording how
   // many agent blocks existed when each was sent.
   const [userMsgs, setUserMsgs] = useState<{ id: string; text: string; afterBlock: number }[]>([]);
-  const blocksEndRef = useRef<HTMLDivElement | null>(null);
+  // Whether the transcript is scrolled to (or near) its end. Gates auto-follow the same way
+  // `ChatView` does — see `stickToEnd` below. Was an unconditional `scrollIntoView` on every
+  // `blocks`/`userMsgs` change, which yanked the reader back to the bottom on the very next token
+  // even after they had scrolled up mid-response to re-read something, in both the Studio THING
+  // dock and the project-app `<Chat>` widget (this component's two hosts).
+  const [atBottom, setAtBottom] = useState(true);
 
   const { blocks, model, sendMessage, submitForm, cancelAsk, isConnected, isDone } = useReplSession({
     baseUrl,
@@ -75,9 +80,14 @@ export function ReplChatView({
     return () => clearInterval(t);
   }, [activeWork.length]);
 
-  useEffect(() => {
-    blocksEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [blocks, userMsgs.length]);
+  // These are DOM scroll metrics — `undefined` with no scrolling host, same as `ChatView`'s
+  // `handleScroll`. Left ungated is how the unconditional `scrollIntoView` this replaces got here
+  // in the first place: it worked on web and simply never ran on native (no crash, no follow).
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (typeof el?.scrollHeight !== 'number') return;
+    setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 60);
+  };
 
   const handleSend = useCallback(() => {
     const text = inputValue.trim();
@@ -149,10 +159,13 @@ export function ReplChatView({
         )}
       </Prim.Box>
 
-      <Prim.Box {...styles.blocks}>
+      {/* `Prim.Scroll`, not a `Box` with `overflowY: auto` — Yoga has no overflow scrolling, so on
+          a phone this transcript was CLIPPED at one screenful with no gesture to reach the rest
+          (see the primitive's own note). `stickToEnd` follows the conversation on both targets
+          and only while the reader is at (or near) the bottom — see `atBottom` above. */}
+      <Prim.Scroll {...styles.blocks} stickToEnd={atBottom} onScroll={handleScroll} aria-label="conversation" aria-live="polite" aria-atomic="false">
         {transcript}
-        <Prim.Box ref={blocksEndRef} />
-      </Prim.Box>
+      </Prim.Scroll>
 
       {activeWork.length > 0 && (
         <Prim.Box {...styles.activityBox} data-testid="repl-live-activity" aria-label="sub-agent activity">
@@ -224,7 +237,12 @@ const styles = {
 
   statusBar: { display: "flex", alignItems: "center", paddingVertical: "4px", paddingHorizontal: "12px", borderBottomWidth: "1px", borderBottomStyle: "solid", borderBottomColor: "var(--border)", flexShrink: 0 } as const,
   resyncButton: { marginLeft: "auto", paddingVertical: "2px", paddingHorizontal: "10px", borderRadius: 4, borderWidth: "1px", borderStyle: "solid", borderColor: "var(--border)", backgroundColor: "var(--secondary)", color: "var(--secondary-foreground)", fontSize: 12, cursor: "pointer" } as const,
-  blocks: { flexGrow: 1, flexShrink: 1, flexBasis: "0%", overflowY: "auto", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" } as const,
+  // `overflow` itself is `Prim.Scroll`'s own job now (see the call site) — this only sizes,
+  // pads and column-stacks the region. Stated explicitly rather than left to `Scroll`'s own
+  // `stickToEnd`-gated default: that default only applies while `stickToEnd` is true, and
+  // `atBottom` (the value passed in) turns false the moment the reader scrolls up — the exact
+  // moment this must NOT fall back to `Box`'s own default `display: block`.
+  blocks: { flexGrow: 1, flexShrink: 1, flexBasis: "0%", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" } as const,
   userMsg: {
     alignSelf: 'flex-end',
     maxWidth: '85%',

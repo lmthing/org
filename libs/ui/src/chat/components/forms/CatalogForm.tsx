@@ -19,7 +19,7 @@ import type { FieldSpec } from '@lmthing/core/ui';
 // It was also the ONE key blocking this bag from converting: `font` is a shorthand with no Tamagui
 // prop form, so `style-bags-to-props.mjs` correctly refused the whole thing, and 16 call sites stayed
 // on `style`.
-const inputStyle = { backgroundColor: "var(--lm-bg)", color: "var(--lm-text)", borderWidth: "1px", borderStyle: "solid", borderColor: "var(--lm-border)", borderRadius: "var(--radius-lm-md, 6px)", paddingVertical: "4px", paddingHorizontal: "8px", outlineWidth: 0, outlineStyle: "none", width: "100%" } as const;
+const inputStyle = { backgroundColor: "var(--background)", color: "var(--foreground)", borderWidth: "1px", borderStyle: "solid", borderColor: "var(--border)", borderRadius: "$radius-md", paddingVertical: "4px", paddingHorizontal: "8px", outlineWidth: 0, outlineStyle: "none", width: "100%" } as const;
 
 function Control({
   field,
@@ -80,7 +80,7 @@ function Control({
       return (
         <Prim.Box display="flex" gap={2}>
           {Array.from({ length: max }, (_, i) => (
-            <Prim.Pressable key={i} onClick={() => onChange(i + 1)} backgroundColor="none" borderWidth={0} cursor="pointer" color={i < cur ? 'var(--lm-amber)' : 'var(--lm-muted)'} fontSize={16}>★</Prim.Pressable>
+            <Prim.Pressable key={i} onClick={() => onChange(i + 1)} backgroundColor="none" borderWidth={0} cursor="pointer" color={i < cur ? 'var(--warning)' : 'var(--muted-foreground)'} fontSize={16}>★</Prim.Pressable>
           ))}
         </Prim.Box>
       );
@@ -107,12 +107,12 @@ function Control({
  *  preflight already declares it for `button` (`@lmthing/css/preflight.css:107-108`). */
 function btnProps(primary: boolean) {
   return {
-    backgroundColor: primary ? 'color-mix(in srgb, var(--lm-accent) 20%, transparent)' : 'transparent',
-    color: primary ? 'var(--lm-accent)' : 'var(--lm-text)',
+    backgroundColor: primary ? 'color-mix(in srgb, var(--agent) 20%, transparent)' : 'transparent',
+    color: primary ? 'var(--agent)' : 'var(--foreground)',
     borderWidth: 1,
     borderStyle: 'solid' as const,
-    borderColor: primary ? 'var(--lm-accent)' : 'var(--lm-border)',
-    borderRadius: 'var(--radius-lm-md, 6px)',
+    borderColor: primary ? 'var(--agent)' : 'var(--border)',
+    borderRadius: '$radius-md',
     paddingVertical: '4px',
     paddingHorizontal: '12px',
     cursor: 'pointer',
@@ -164,10 +164,10 @@ export function CatalogForm({
     <Prim.Box display="flex" flexDirection="column" gap={8}>
       {spec.fields.map((f) => (
         <Prim.Text as="label" key={f.name} display="flex" flexDirection="column" gap={2}>
-          {f.label ? <Prim.Text fontSize={12} color="var(--lm-text)">{f.label}</Prim.Text> : null}
+          {f.label ? <Prim.Text fontSize={12} color="var(--foreground)">{f.label}</Prim.Text> : null}
           <Control field={f} value={values[f.name]} onChange={(v) => set(f.name, v)} onEnter={submit} />
-          {f.help ? <Prim.Text fontSize={10} color="var(--lm-muted)">{f.help}</Prim.Text> : null}
-          {f.error ? <Prim.Text fontSize={10} color="var(--lm-red)">{f.error}</Prim.Text> : null}
+          {f.help ? <Prim.Text fontSize={10} color="var(--muted-foreground)">{f.help}</Prim.Text> : null}
+          {f.error ? <Prim.Text fontSize={10} color="var(--destructive)">{f.error}</Prim.Text> : null}
         </Prim.Text>
       ))}
       <Prim.Pressable {...btnProps(true)} alignSelf="flex-start" onClick={submit}><Prim.Text>{spec.submitLabel}</Prim.Text></Prim.Pressable>

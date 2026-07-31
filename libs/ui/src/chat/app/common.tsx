@@ -11,23 +11,26 @@ export const STATUS_GLYPH: Record<NodeStatus, string> = {
 };
 
 // Colour tables hold the VALUE, not a className — a lookup of class strings is still a className
-// at the call site. `var(--lm-…)` (not the token it aliases) so a space's runtime theme override
-// still reaches them. See docs/tamagui-idiomatic-migration.md §5.
+// at the call site. These used to read `var(--lm-…)`, a bridge `app/styles.css:42-55` aliases onto
+// these same tokens for the web `/chat` route only. React Native never loads that stylesheet — its
+// primitive layer rewrites ANY `var(--x)` straight to the (nonexistent) Tamagui token `$x`, with no
+// knowledge of the bridge — so every status/kind colour in the execution tree and inspector
+// silently vanished on a phone. Spelled as the real, always-registered token directly instead.
 const STATUS_COLOR: Record<NodeStatus, string> = {
-  queued: 'var(--lm-muted)',
-  running: 'var(--lm-accent)',
-  done: 'var(--lm-green)',
-  error: 'var(--lm-red)',
-  skipped: 'var(--lm-muted)',
+  queued: 'var(--muted-foreground)',
+  running: 'var(--agent)',
+  done: 'var(--success)',
+  error: 'var(--destructive)',
+  skipped: 'var(--muted-foreground)',
 };
 
 const KIND_COLOR: Record<NodeKind, string> = {
-  session: 'var(--lm-text)',
-  run: 'var(--lm-muted)',
-  fork: 'var(--lm-cyan)',
-  delegate: 'var(--lm-purple)',
-  tasklist: 'var(--lm-amber)',
-  task: 'var(--lm-amber)',
+  session: 'var(--foreground)',
+  run: 'var(--muted-foreground)',
+  fork: 'var(--knowledge)',
+  delegate: 'var(--agent)',
+  tasklist: 'var(--warning)',
+  task: 'var(--warning)',
 };
 
 export function StatusIcon({ status }: { status: NodeStatus }): React.ReactElement {
@@ -60,9 +63,9 @@ export function KindBadge({ kind }: { kind: NodeKind }): React.ReactElement {
 
 export function Badge({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 'muted' | 'amber' | 'red' }): React.ReactElement {
   const TONE = {
-    amber: { color: 'var(--lm-amber)', borderColor: 'color-mix(in srgb, var(--lm-amber) 40%, transparent)' },
-    red: { color: 'var(--lm-red)', borderColor: 'color-mix(in srgb, var(--lm-red) 40%, transparent)' },
-    muted: { color: 'var(--lm-muted)', borderColor: 'var(--lm-border)' },
+    amber: { color: 'var(--warning)', borderColor: 'color-mix(in srgb, var(--warning) 40%, transparent)' },
+    red: { color: 'var(--destructive)', borderColor: 'color-mix(in srgb, var(--destructive) 40%, transparent)' },
+    muted: { color: 'var(--muted-foreground)', borderColor: 'var(--border)' },
   } as const;
   return (
     <Prim.Text
@@ -97,13 +100,13 @@ export function CodeBlock({ code }: { code: string }): React.ReactElement {
       lineHeight={18}
       whiteSpace="pre-wrap"
       wordWrap="break-word"
-      backgroundColor="var(--lm-bg)"
+      backgroundColor="var(--background)"
       borderWidth={1}
-      borderColor="var(--lm-border)"
+      borderColor="var(--border)"
       borderRadius="$radius"
       padding="$2"
       overflowX="auto"
-      color="var(--lm-text)"
+      color="var(--foreground)"
     >
       {code}
     </Prim.Pre>
@@ -112,7 +115,7 @@ export function CodeBlock({ code }: { code: string }): React.ReactElement {
 
 export function Tabs<T extends string>({ tabs, active, onChange }: { tabs: readonly T[]; active: T; onChange: (t: T) => void }): React.ReactElement {
   return (
-    <Prim.Row borderColor="var(--lm-border)" gap="$1" borderBottomWidth={1} role="tablist">
+    <Prim.Row borderColor="var(--border)" gap="$1" borderBottomWidth={1} role="tablist">
       {tabs.map((t) => (
         <Prim.Pressable
           key={t}
@@ -129,8 +132,8 @@ export function Tabs<T extends string>({ tabs, active, onChange }: { tabs: reado
           borderBottomWidth={2}
           marginBottom={-1}
           {...(active === t
-            ? { borderBottomColor: 'var(--lm-accent)', color: 'var(--lm-text)' }
-            : { borderBottomColor: 'transparent', color: 'var(--lm-muted)', hoverStyle: { color: 'var(--lm-text)' } })}
+            ? { borderBottomColor: 'var(--agent)', color: 'var(--foreground)' }
+            : { borderBottomColor: 'transparent', color: 'var(--muted-foreground)', hoverStyle: { color: 'var(--foreground)' } })}
         >
           {t}
         </Prim.Pressable>

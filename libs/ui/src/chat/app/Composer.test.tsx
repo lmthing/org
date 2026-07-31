@@ -166,3 +166,65 @@ describe('Composer — growing past one line', () => {
     expect(view.container.querySelector('textarea')).toBe(field)
   })
 })
+
+/**
+ * Touch target sizing. `$7` (28px) is under the 44px minimum on a phone, where these buttons are
+ * the only pointer this composer has — no hover to widen the effective hit area the way a mouse
+ * cursor's precision does. Base (mobile-first) styling now asks for `$11` (44px); `$md` shrinks it
+ * back to the original `$7` once a mouse is likely. Asserted on the emitted atomic class, which
+ * carries the token name verbatim (`_width-c-size-11`, matching the Drawer suite's approach).
+ */
+describe('Composer — touch target sizing', () => {
+  it('sizes the attach/mic/send controls at the mobile ($11/44px) token by default', () => {
+    const { container } = render(
+      <P>
+        <Composer onSend={() => {}} />
+      </P>,
+    )
+    const attach = container.querySelector('[title="Add an image, audio, or file to your message"]')!
+    const mic = container.querySelector('[data-testid="mic-button"]')!
+    const send = container.querySelector('[aria-label="Send message"]')!
+    for (const el of [attach, mic, send]) {
+      expect(el.className).toMatch(/_width-c-size-11\b/)
+      expect(el.className).toMatch(/_height-c-size-11\b/)
+    }
+  })
+})
+
+/**
+ * The `@` completion dropdown used to be selectable only via `onMouseDown` (and highlighted only
+ * via `onMouseEnter`) — both mouse-only, so on touch the dropdown was reachable by keyboard alone.
+ * `onClick` (which `nativeSafeProps` maps to `onPress` on native) now selects a completion, the
+ * same primitive every other control in this file already used.
+ */
+describe('Composer — @ completion dropdown selection', () => {
+  const originalFetch = globalThis.fetch
+  afterEach(() => {
+    vi.stubGlobal('fetch', originalFetch)
+  })
+
+  it('applies a completion on click, without needing a mousedown', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ completions: ['@alice', '@bob'] }))),
+    )
+    const view = render(
+      <P>
+        <Composer onSend={() => {}} projectId="p1" />
+      </P>,
+    )
+    const field = view.container.querySelector('textarea')! as HTMLTextAreaElement
+    // Let the completions fetch resolve.
+    await act(async () => {
+      await Promise.resolve()
+    })
+    act(() => {
+      fireEvent.change(field, { target: { value: '@al' } })
+    })
+    const item = view.getByText('@alice')
+    act(() => {
+      fireEvent.click(item)
+    })
+    expect(field.value).toContain('@alice')
+  })
+})

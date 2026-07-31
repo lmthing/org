@@ -11,13 +11,22 @@ interface DrawerProps {
   className?: string;
   side?: 'right' | 'left';
   /**
-   * Drawer width as a CSS length. This used to be a Tailwind CLASS (`'w-80'`) passed through to
-   * `className` — a utility in the public API, which could not survive the Tailwind deletion.
+   * Drawer width as a Tamagui size TOKEN (`'$80'`) or a bare number of pixels — never a CSS length
+   * string like `'24rem'`.
+   *
+   * This used to accept exactly that: a CSS length, because it was a Tailwind CLASS (`'w-80'`)
+   * passed through to `className` before the Tailwind deletion. On web a `rem` string still resolves
+   * fine, but on React Native `rem` has no meaning at all, and `width` is not one of the props
+   * `nativeSafeProps` numeric-casts (`elements/primitives/_native.tsx` — deliberately: RN accepts a
+   * percentage STRING for `width`, so it isn't numeric-only). So `"24rem"` reached Yoga unparsed and
+   * the drawer sized to its content instead of the width its caller asked for. A Tamagui token
+   * resolves on both targets; the native `Sheet` fork already relies on exactly this
+   * (`elements/overlays/sheet/index.native.tsx` — `maxWidth: '$96'`).
    */
-  width?: string;
+  width?: string | number;
 }
 
-export function Drawer({ open, onClose, title, children, className, side = 'right', width = '20rem' }: DrawerProps) {
+export function Drawer({ open, onClose, title, children, className, side = 'right', width = '$80' }: DrawerProps) {
   React.useEffect(() => {
     if (!open) return;
     // Escape on web; the Android back gesture on native — same one line, see platform/keyboard.
@@ -35,7 +44,7 @@ export function Drawer({ open, onClose, title, children, className, side = 'righ
         display="flex"
         {...(side === 'right' ? { marginLeft: 'auto' } : { marginRight: 'auto' })}
         {...(side === 'right' ? { borderLeftWidth: 1 } : { borderRightWidth: 1 })}
-        className={cn("lm-slide-in-right", className)} width={width} position="relative" flexDirection="column" backgroundColor="$card" borderColor="$border" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 10 }} shadowRadius={15} height="100%">
+        className={cn("lm-slide-in-right", className)} width={width} maxWidth="100%" position="relative" flexDirection="column" backgroundColor="$card" borderColor="$border" shadowColor="rgba(0,0,0,0.1)" shadowOffset={{ width: 0, height: 10 }} shadowRadius={15} height="100%">
         {title && (
           <Prim.Row justifyContent="space-between" paddingHorizontal="$4" paddingVertical="$3" borderBottomWidth={1} borderColor="$border" alignItems="center" flexShrink={0}>
             <Prim.Text fontWeight="$semibold" fontSize="$sm" color="$foreground">{title}</Prim.Text>

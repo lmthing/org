@@ -6,6 +6,51 @@ import { CodeBlock } from '../../elements/content/code-block';
 import { preview } from '../app/common';
 // `.lm-prose` lives in the shared markdown stylesheet; state the dependency where it is used.
 
+/**
+ * `--lm-*` colour bridge, inlined.
+ *
+ * This renderer used to spell every colour as `var(--lm-<name>)`, relying on `app/styles.css` (a
+ * web-only stylesheet the `/chat` ROUTE loads) to alias each one onto a shared design token. React
+ * Native never loads that CSS file — its primitive layer (`elements/primitives/_native.tsx`)
+ * rewrites ANY `var(--x)` straight to the Tamagui token `$x` with no knowledge of the bridge, so
+ * `var(--lm-text)` became the token `$lm-text`, which does not exist, and the colour silently
+ * vanished on a phone. This IS the renderer for everything `display()` produces, so that took down
+ * colour for the whole /chat transcript, `DisplayBlock`, and the team channels on native.
+ *
+ * The fix is to reach the same token `app/styles.css:42-55` aliases onto, directly, so the value is
+ * a real token on both targets rather than a web-only indirection. Kept as a table (not inlined at
+ * each call site) because a couple of call sites resolve the name from an agent-authored prop
+ * (`color`/`variant`) at runtime rather than a literal.
+ */
+const LM_COLOR_ALIASES: Record<string, string> = {
+  bg: 'background',
+  panel: 'muted',
+  panel2: 'accent',
+  border: 'border',
+  text: 'foreground',
+  muted: 'muted-foreground',
+  accent: 'agent',
+  green: 'success',
+  red: 'destructive',
+  amber: 'warning',
+  purple: 'agent',
+  cyan: 'knowledge',
+};
+
+/**
+ * An agent-authored colour name (`"red"`, `"accent"`, or an arbitrary CSS colour like `"crimson"`)
+ * → a value both targets can render. A known bridge name resolves to its real token as
+ * `var(--token)` (which the native primitive layer rewrites to `$token`, a token that actually
+ * exists); anything else passes through unchanged — a literal CSS colour an agent wrote works on
+ * web as-is, and is at least AS correct on native as the old `var(--lm-<name>)` fallback, which
+ * never reached the fallback on native at all (the rewrite rule captures only the name before the
+ * comma).
+ */
+function lmColor(name: string): string {
+  const token = LM_COLOR_ALIASES[name];
+  return token ? `var(--${token})` : name;
+}
+
 export interface Descriptor { type: string; props?: Record<string, unknown>; children?: unknown[] }
 export function isDescriptor(v: unknown): v is Descriptor {
   return !!v && typeof v === 'object' && 'type' in (v as object);
@@ -38,7 +83,7 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
   // channel message), so a bare string in it is the native "Text strings must be
   // rendered within a <Text>" trap — wrap it here rather than at every caller.
   if (Array.isArray(d)) return d.map((c, i) => inView(renderDescriptor(c, i), i));
-  if (!isDescriptor(d)) return <Prim.Text color="var(--lm-muted)" fontFamily="$mono">{preview(d, 400)}</Prim.Text>;
+  if (!isDescriptor(d)) return <Prim.Text color="var(--muted-foreground)" fontFamily="$mono">{preview(d, 400)}</Prim.Text>;
   // A component nobody ships is a styling question; the sentence inside it is
   // not. Render the children and drop the box, rather than printing the
   // descriptor's own JSON at the reader — which is what this used to do.
@@ -64,17 +109,17 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       // React Native and throws on mount, and the `text-lg font-semibold text-lm-text
       // my-1` className this used to carry was Tailwind, which was deleted — so it was
       // styling nothing on web either.
-      return <Prim.Text as={Tag} key={key} color="var(--lm-text)" fontSize={size} fontWeight="$semibold" marginVertical="0.25rem">{body}</Prim.Text>;
+      return <Prim.Text as={Tag} key={key} color="var(--foreground)" fontSize={size} fontWeight="$semibold" marginVertical="0.25rem">{body}</Prim.Text>;
     }
-    case 'h2': return <Prim.Text as="h2" key={key} color="var(--lm-text)" fontSize="$base" fontWeight="$semibold" marginVertical="0.25rem">{body}</Prim.Text>;
-    case 'h3': return <Prim.Text as="h3" key={key} color="var(--lm-text)" fontSize="$sm" fontWeight="$semibold" marginVertical="0.25rem">{body}</Prim.Text>;
-    case 'p': case 'paragraph': return <Prim.Text as="p" key={key} color="var(--lm-text)" marginVertical="0.25rem">{body}</Prim.Text>;
-    case 'text': return <Prim.Text key={key} style={color ? { color: `var(--lm-${color}, ${color})` } : undefined} {...(props['bold'] ? { fontWeight: '$semibold' } : {})} {...(props['dim'] ? { color: 'var(--lm-muted)' } : {})} {...(props['italic'] ? { fontStyle: 'italic' as const } : {})}>{body}</Prim.Text>;
+    case 'h2': return <Prim.Text as="h2" key={key} color="var(--foreground)" fontSize="$base" fontWeight="$semibold" marginVertical="0.25rem">{body}</Prim.Text>;
+    case 'h3': return <Prim.Text as="h3" key={key} color="var(--foreground)" fontSize="$sm" fontWeight="$semibold" marginVertical="0.25rem">{body}</Prim.Text>;
+    case 'p': case 'paragraph': return <Prim.Text as="p" key={key} color="var(--foreground)" marginVertical="0.25rem">{body}</Prim.Text>;
+    case 'text': return <Prim.Text key={key} style={color ? { color: lmColor(color) } : undefined} {...(props['bold'] ? { fontWeight: '$semibold' } : {})} {...(props['dim'] ? { color: 'var(--muted-foreground)' } : {})} {...(props['italic'] ? { fontStyle: 'italic' as const } : {})}>{body}</Prim.Text>;
     case 'strong': return <Prim.Text as="strong" key={key} fontWeight="$semibold">{body}</Prim.Text>;
     case 'em': return <Prim.Text as="em" key={key}>{body}</Prim.Text>;
-    case 'muted': return <Prim.Text key={key} color="var(--lm-muted)">{body}</Prim.Text>;
-    case 'kbd': return <Prim.Text as="kbd" key={key} borderColor="var(--lm-border)" backgroundColor="var(--lm-panel)" fontFamily="$mono" fontSize="11px" borderWidth={1} borderRadius="$radius" paddingHorizontal="$1">{body}</Prim.Text>;
-    case 'code': return <Prim.Text as="code" key={key} color="var(--lm-cyan)" backgroundColor="var(--lm-bg)" fontFamily="$mono" paddingHorizontal="$1" borderRadius="$radius">{body}</Prim.Text>;
+    case 'muted': return <Prim.Text key={key} color="var(--muted-foreground)">{body}</Prim.Text>;
+    case 'kbd': return <Prim.Text as="kbd" key={key} borderColor="var(--border)" backgroundColor="var(--muted)" fontFamily="$mono" fontSize="11px" borderWidth={1} borderRadius="$radius" paddingHorizontal="$1">{body}</Prim.Text>;
+    case 'code': return <Prim.Text as="code" key={key} color="var(--knowledge)" backgroundColor="var(--background)" fontFamily="$mono" paddingHorizontal="$1" borderRadius="$radius">{body}</Prim.Text>;
     // A `CodeBlock` is the ONE descriptor whose size is unbounded — THING answers a "build me an
     // app" turn with whole source files, and on a phone each one was thirty screenfuls between one
     // sentence and the next. `CodeBlock` (the element) keeps a short block exactly as it was and
@@ -86,9 +131,9 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
         : (d.children ?? []).every((c) => typeof c === 'string')
           ? (d.children as string[]).join('')
           : null;
-      const preProps = { fontFamily: '$mono', fontSize: '12px', color: 'var(--lm-text)', backgroundColor: 'var(--lm-bg)', borderWidth: 1, borderColor: 'var(--lm-border)', borderRadius: '$radius', padding: '$2', marginVertical: '$1', overflowX: 'auto', whiteSpace: 'pre-wrap' } as const;
+      const preProps = { fontFamily: '$mono', fontSize: '12px', color: 'var(--foreground)', backgroundColor: 'var(--background)', borderWidth: 1, borderColor: 'var(--border)', borderRadius: '$radius', padding: '$2', marginVertical: '$1', overflowX: 'auto', whiteSpace: 'pre-wrap' } as const;
       if (source === null) return <Prim.Pre key={key} {...preProps}><Prim.Text as="code">{body}</Prim.Text></Prim.Pre>;
-      return <CodeBlock key={key} code={source} {...(typeof props['lang'] === 'string' ? { language: props['lang'] } : {})} preProps={preProps} fadeColor="var(--lm-bg)" />;
+      return <CodeBlock key={key} code={source} {...(typeof props['lang'] === 'string' ? { language: props['lang'] } : {})} preProps={preProps} fadeColor="var(--background)" />;
     }
     case 'markdown': {
       let markdown = text;
@@ -101,15 +146,15 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       return <Markdown key={key} source={markdown} preset="prose" />;
     }
     case 'span': return <Prim.Text key={key}>{body}</Prim.Text>;
-    case 'quote': return <Prim.Box as="blockquote" key={key} borderColor="var(--lm-border)" color="var(--lm-muted)" borderLeftWidth={2} paddingLeft="$2" fontStyle="italic" marginVertical="0.25rem">{inView(body)}</Prim.Box>;
-    case 'link': return <Prim.Link key={key} href={String(props['href'] ?? '#')} target="_blank" rel="noreferrer" color="var(--lm-accent)" textDecorationLine="underline">{body}</Prim.Link>;
+    case 'quote': return <Prim.Box as="blockquote" key={key} borderColor="var(--border)" color="var(--muted-foreground)" borderLeftWidth={2} paddingLeft="$2" fontStyle="italic" marginVertical="0.25rem">{inView(body)}</Prim.Box>;
+    case 'link': return <Prim.Link key={key} href={String(props['href'] ?? '#')} target="_blank" rel="noreferrer" color="var(--agent)" textDecorationLine="underline">{body}</Prim.Link>;
 
     // ── media ──
     case 'image': case 'img': {
       const src = String(props['src'] ?? props['url'] ?? '');
       const alt = String(props['alt'] ?? props['caption'] ?? 'image');
       if (!src) return null;
-      return <Prim.Image key={key} src={src} alt={alt} borderColor="var(--lm-border)" maxWidth="100%" maxHeight="360px" borderRadius="$radius-lg" borderWidth={1} marginVertical="$1" objectFit="contain" />;
+      return <Prim.Image key={key} src={src} alt={alt} borderColor="var(--border)" maxWidth="100%" maxHeight="360px" borderRadius="$radius-lg" borderWidth={1} marginVertical="$1" objectFit="contain" />;
     }
     case 'audio': {
       const src = String(props['src'] ?? props['url'] ?? '');
@@ -131,24 +176,24 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'columns': return <Prim.Box key={key} display="grid" marginVertical="0.25rem" gridTemplateColumns={`repeat(${(d.children ?? []).length || 1}, minmax(0,1fr))`} gap={((props['gap'] as number) ?? 2) * 4}>{inView(body)}</Prim.Box>;
     case 'spacer': return <Prim.Box key={key} flexGrow={1} />;
     case 'divider': return (
-      <Prim.Row key={key} color="var(--lm-muted)" gap="$2" marginVertical="$2" fontSize="11px" alignItems="center">
-        <Prim.Text borderColor="var(--lm-border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />{props['label'] ? <Prim.Text>{String(props['label'])}</Prim.Text> : null}<Prim.Text borderColor="var(--lm-border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />
+      <Prim.Row key={key} color="var(--muted-foreground)" gap="$2" marginVertical="$2" fontSize="11px" alignItems="center">
+        <Prim.Text borderColor="var(--border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />{props['label'] ? <Prim.Text>{String(props['label'])}</Prim.Text> : null}<Prim.Text borderColor="var(--border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />
       </Prim.Row>
     );
 
     // ── surfaces ──
     case 'card': case 'panel': return (
-      <Prim.Box key={key} borderColor="var(--lm-border)" backgroundColor="var(--lm-panel2)" borderWidth={1} borderRadius="$radius" padding="$2" marginVertical="0.25rem">
-        {props['title'] ? <Prim.Text color="var(--lm-text)" fontSize="$sm" fontWeight="$semibold" marginBottom="0.25rem">{String(props['title'])}</Prim.Text> : null}{inView(body)}
+      <Prim.Box key={key} borderColor="var(--border)" backgroundColor="var(--accent)" borderWidth={1} borderRadius="$radius" padding="$2" marginVertical="0.25rem">
+        {props['title'] ? <Prim.Text color="var(--foreground)" fontSize="$sm" fontWeight="$semibold" marginBottom="0.25rem">{String(props['title'])}</Prim.Text> : null}{inView(body)}
       </Prim.Box>
     );
     case 'callout': case 'alert': case 'banner': {
       const variant = props['variant'] as string | undefined;
       const tone = variant === 'error' ? 'red' : variant === 'success' ? 'green' : variant === 'warning' ? 'amber' : 'accent';
-      return <Prim.Box key={key} marginVertical="0.25rem" borderLeftWidth={2} borderLeftColor={`var(--lm-${tone})`} color={`var(--lm-${tone})`} backgroundColor="var(--lm-panel2)" paddingHorizontal="$2" paddingVertical="$1" borderRadius="$radius">{props['title'] ? <Prim.Text fontWeight="$semibold">{String(props['title'])}</Prim.Text> : null}{inView(body)}</Prim.Box>;
+      return <Prim.Box key={key} marginVertical="0.25rem" borderLeftWidth={2} borderLeftColor={lmColor(tone)} color={lmColor(tone)} backgroundColor="var(--accent)" paddingHorizontal="$2" paddingVertical="$1" borderRadius="$radius">{props['title'] ? <Prim.Text fontWeight="$semibold">{String(props['title'])}</Prim.Text> : null}{inView(body)}</Prim.Box>;
     }
     case 'badge': case 'tag': case 'pill': {
-      const tone = `var(--lm-${color ?? 'accent'})`;
+      const tone = lmColor(color ?? 'accent');
       return <Prim.Text key={key} display="inline-block" borderRadius={d.type.toLowerCase() === 'pill' ? '$radius-full' : '$radius'} paddingHorizontal="$1.5" paddingVertical="$0.5" fontSize="10px" color={tone} backgroundColor={`color-mix(in srgb, ${tone} 20%, transparent)`}>{body}</Prim.Text>;
     }
 
@@ -158,8 +203,8 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       const items = props['items'] as (string | number)[] | undefined;
       const lis = items ? items.map((it, i) => <Prim.ListItem key={i}><Prim.Text>{String(it)}</Prim.Text></Prim.ListItem>) : kids;
       return ordered
-        ? <Prim.List ordered key={key} color="var(--lm-text)" marginLeft="1.25rem" marginVertical="0.25rem" style={{ listStyleType: 'decimal' }}>{lis}</Prim.List>
-        : <Prim.List key={key} color="var(--lm-text)" marginLeft="1.25rem" marginVertical="0.25rem" style={{ listStyleType: 'disc' }}>{lis}</Prim.List>;
+        ? <Prim.List ordered key={key} color="var(--foreground)" marginLeft="1.25rem" marginVertical="0.25rem" style={{ listStyleType: 'decimal' }}>{lis}</Prim.List>
+        : <Prim.List key={key} color="var(--foreground)" marginLeft="1.25rem" marginVertical="0.25rem" style={{ listStyleType: 'disc' }}>{lis}</Prim.List>;
     }
     case 'listitem': return <Prim.ListItem key={key}>{inView(body)}</Prim.ListItem>;
     case 'table': {
@@ -167,29 +212,29 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       const rows = (props['rows'] as (string | number)[][]) ?? [];
       return (
         <Prim.Table key={key} marginVertical="$1" fontSize="12px" borderColor="$collapse">
-          {columns.length > 0 && <Prim.Thead><Prim.Tr>{columns.map((c, i) => <Prim.Th key={i} textAlign="left" fontWeight="$semibold" color="var(--lm-muted)" borderBottomWidth={1} borderColor="var(--lm-border)" paddingHorizontal="$2" paddingVertical="$1"><Prim.Text>{c}</Prim.Text></Prim.Th>)}</Prim.Tr></Prim.Thead>}
-          <Prim.Tbody>{rows.map((r, ri) => <Prim.Tr key={ri}>{r.map((cell, ci) => <Prim.Td key={ci} borderBottomWidth={1} borderColor="var(--lm-border)" paddingHorizontal="$2" paddingVertical="$1" color="var(--lm-text)"><Prim.Text>{String(cell)}</Prim.Text></Prim.Td>)}</Prim.Tr>)}</Prim.Tbody>
+          {columns.length > 0 && <Prim.Thead><Prim.Tr>{columns.map((c, i) => <Prim.Th key={i} textAlign="left" fontWeight="$semibold" color="var(--muted-foreground)" borderBottomWidth={1} borderColor="var(--border)" paddingHorizontal="$2" paddingVertical="$1"><Prim.Text>{c}</Prim.Text></Prim.Th>)}</Prim.Tr></Prim.Thead>}
+          <Prim.Tbody>{rows.map((r, ri) => <Prim.Tr key={ri}>{r.map((cell, ci) => <Prim.Td key={ci} borderBottomWidth={1} borderColor="var(--border)" paddingHorizontal="$2" paddingVertical="$1" color="var(--foreground)"><Prim.Text>{String(cell)}</Prim.Text></Prim.Td>)}</Prim.Tr>)}</Prim.Tbody>
         </Prim.Table>
       );
     }
     case 'keyvalue': {
       const pairs = (props['pairs'] as Record<string, unknown>) ?? {};
-      return <Prim.Box as="dl" key={key} fontSize="12px" marginVertical="0.25rem">{Object.entries(pairs).map(([k, v]) => <Prim.Row key={k} gap="$2"><Prim.Text as="dt" color="var(--lm-muted)" minWidth="120px">{k}</Prim.Text><Prim.Text as="dd" color="var(--lm-text)">{String(v)}</Prim.Text></Prim.Row>)}</Prim.Box>;
+      return <Prim.Box as="dl" key={key} fontSize="12px" marginVertical="0.25rem">{Object.entries(pairs).map(([k, v]) => <Prim.Row key={k} gap="$2"><Prim.Text as="dt" color="var(--muted-foreground)" minWidth="120px">{k}</Prim.Text><Prim.Text as="dd" color="var(--foreground)">{String(v)}</Prim.Text></Prim.Row>)}</Prim.Box>;
     }
     case 'timeline': {
       const items = (props['items'] as { title: string; time?: string; detail?: string }[]) ?? [];
-      return <Prim.List key={key} borderColor="var(--lm-border)" borderLeftWidth={1} paddingLeft="$3" marginVertical="0.25rem">{items.map((it, i) => <Prim.ListItem key={i} marginBottom="0.25rem"><Prim.Text color="var(--lm-text)">{it.title}{it.time ? <Prim.Text color="var(--lm-muted)" fontSize="10px" marginLeft="0.5rem">{it.time}</Prim.Text> : null}</Prim.Text>{it.detail ? <Prim.Text color="var(--lm-muted)" fontSize="11px">{it.detail}</Prim.Text> : null}</Prim.ListItem>)}</Prim.List>;
+      return <Prim.List key={key} borderColor="var(--border)" borderLeftWidth={1} paddingLeft="$3" marginVertical="0.25rem">{items.map((it, i) => <Prim.ListItem key={i} marginBottom="0.25rem"><Prim.Text color="var(--foreground)">{it.title}{it.time ? <Prim.Text color="var(--muted-foreground)" fontSize="10px" marginLeft="0.5rem">{it.time}</Prim.Text> : null}</Prim.Text>{it.detail ? <Prim.Text color="var(--muted-foreground)" fontSize="11px">{it.detail}</Prim.Text> : null}</Prim.ListItem>)}</Prim.List>;
     }
 
     // ── indicators ──
     case 'progressbar': {
       const max = (props['max'] as number) ?? (Number(props['value']) <= 1 ? 1 : 100);
       const pct = Math.max(0, Math.min(100, (Number(props['value'] ?? 0) / max) * 100));
-      return <Prim.Box key={key} marginVertical="0.25rem"><Prim.Box backgroundColor="var(--lm-panel)" height="$2" borderRadius="$radius" overflow="hidden"><Prim.Box backgroundColor="var(--lm-accent)" height="100%" width={`${pct}%`} /></Prim.Box>{props['label'] ? <Prim.Text color="var(--lm-muted)" fontSize="10px" marginTop="0.125rem">{String(props['label'])}</Prim.Text> : null}</Prim.Box>;
+      return <Prim.Box key={key} marginVertical="0.25rem"><Prim.Box backgroundColor="var(--muted)" height="$2" borderRadius="$radius" overflow="hidden"><Prim.Box backgroundColor="var(--agent)" height="100%" width={`${pct}%`} /></Prim.Box>{props['label'] ? <Prim.Text color="var(--muted-foreground)" fontSize="10px" marginTop="0.125rem">{String(props['label'])}</Prim.Text> : null}</Prim.Box>;
     }
-    case 'spinner': return <Prim.Row key={key} color="var(--lm-muted)" gap="$2" fontSize="12px" marginVertical="$1" alignItems="center"><Prim.Text className="lm-spin">◐</Prim.Text>{props['label'] ? <Prim.Text>{String(props['label'])}</Prim.Text> : null}</Prim.Row>;
-    case 'statcard': return <Prim.Box key={key} borderColor="var(--lm-border)" backgroundColor="var(--lm-panel2)" borderWidth={1} borderRadius="$radius" padding="$2" display="inline-block" marginVertical="0.25rem"><Prim.Text color="var(--lm-muted)" fontSize="10px" textTransform="uppercase">{String(props['label'] ?? '')}</Prim.Text><Prim.Text color="var(--lm-text)" fontSize="$lg" fontWeight="$semibold">{String(props['value'] ?? '')}</Prim.Text>{props['delta'] ? <Prim.Text color="var(--lm-green)" fontSize="11px">{String(props['delta'])}</Prim.Text> : null}</Prim.Box>;
-    case 'details': return <Prim.Box as="details" key={key} borderColor="var(--lm-border)" backgroundColor="var(--lm-panel2)" borderWidth={1} borderRadius="$radius" padding="$2" marginVertical="0.25rem"><Prim.Box as="summary" cursor="pointer"><Prim.Text color="var(--lm-text)">{String(props['summary'] ?? 'Details')}</Prim.Text></Prim.Box><Prim.Box marginTop="0.25rem">{inView(body)}</Prim.Box></Prim.Box>;
+    case 'spinner': return <Prim.Row key={key} color="var(--muted-foreground)" gap="$2" fontSize="12px" marginVertical="$1" alignItems="center"><Prim.Text className="lm-spin">◐</Prim.Text>{props['label'] ? <Prim.Text>{String(props['label'])}</Prim.Text> : null}</Prim.Row>;
+    case 'statcard': return <Prim.Box key={key} borderColor="var(--border)" backgroundColor="var(--accent)" borderWidth={1} borderRadius="$radius" padding="$2" display="inline-block" marginVertical="0.25rem"><Prim.Text color="var(--muted-foreground)" fontSize="10px" textTransform="uppercase">{String(props['label'] ?? '')}</Prim.Text><Prim.Text color="var(--foreground)" fontSize="$lg" fontWeight="$semibold">{String(props['value'] ?? '')}</Prim.Text>{props['delta'] ? <Prim.Text color="var(--success)" fontSize="11px">{String(props['delta'])}</Prim.Text> : null}</Prim.Box>;
+    case 'details': return <Prim.Box as="details" key={key} borderColor="var(--border)" backgroundColor="var(--accent)" borderWidth={1} borderRadius="$radius" padding="$2" marginVertical="0.25rem"><Prim.Box as="summary" cursor="pointer"><Prim.Text color="var(--foreground)">{String(props['summary'] ?? 'Details')}</Prim.Text></Prim.Box><Prim.Box marginTop="0.25rem">{inView(body)}</Prim.Box></Prim.Box>;
 
     // A Fragment is not a container, so it cannot hold a bare string on native
     // either — whatever View it lands in still refuses one.

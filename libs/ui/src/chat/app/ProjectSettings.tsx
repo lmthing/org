@@ -196,7 +196,7 @@ export function ProjectSettings({ open, onClose, projectId, projectName, onInteg
   ];
 
   return (
-    <Drawer open={open} onClose={onClose} title={`${projectName ?? 'Project'} settings`} width="24rem" side="right">
+    <Drawer open={open} onClose={onClose} title={`${projectName ?? 'Project'} settings`} width="$96" side="right">
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
       {tab === 'instructions' && <InstructionsTab projectId={projectId} />}
       {tab === 'documents' && <DocumentsTab projectId={projectId} />}

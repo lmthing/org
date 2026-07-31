@@ -73,8 +73,11 @@ describe('web renderDescriptor — display catalog', () => {
     const { container, getByText } = render(<>{renderDescriptor(CALLOUT_FIXTURE)}</>);
     expect(getByText('Done')).toBeTruthy();
     expect(getByText('All checks passed.')).toBeTruthy();
-    // `variant="success"` picks the green accent; a raw color literal would be a token violation.
-    expect(container.innerHTML).toContain('lm-green');
+    // `variant="success"` picks the `success` token; a raw color literal would be a token violation.
+    // Was `lm-green` — the chat surface's `--lm-*` bridge only exists in a web-only stylesheet, so a
+    // `var(--lm-green)` value silently vanished on React Native. `renderDescriptor` now resolves
+    // straight to the real, cross-target token instead (`render-descriptor.tsx#lmColor`).
+    expect(container.innerHTML).toContain('success');
   });
 
   it('List renders a <ul> with an <li> for each item', () => {
@@ -115,5 +118,16 @@ describe('web CatalogForm — form catalog', () => {
   it('renders a submit button', () => {
     const { getByText } = render(<CatalogForm descriptor={FORM_FIXTURE} onSubmit={() => {}} />);
     expect(getByText('Submit')).toBeTruthy();
+  });
+
+  // This is the file `ask()` renders through on BOTH targets (there is no `CatalogForm.native.tsx`
+  // fork), so a `var(--lm-*)` colour here vanished on a phone exactly like `renderDescriptor`'s —
+  // see that suite's regression guard for the full mechanism. `--radius-lm-md` was the same class
+  // of bug for a RADIUS token (a probable typo for `--radius-md`, invisible on web only because of
+  // its literal `6px` fallback).
+  it('carries no --lm-* alias or --radius-lm-* token in its rendered output', () => {
+    const out = html(<CatalogForm descriptor={FORM_FIXTURE} onSubmit={() => {}} />);
+    expect(out).not.toMatch(/lm-(text|muted|accent|green|red|amber|purple|cyan|bg|panel)\b/);
+    expect(out).not.toMatch(/radius-lm-/);
   });
 });
