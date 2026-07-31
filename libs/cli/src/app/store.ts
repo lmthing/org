@@ -43,8 +43,9 @@
 import { mkdirSync, rmSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite';
 import {
   isBelongsTo,
   isHasMany,
@@ -61,6 +62,23 @@ import {
   type UpdateOpts,
   type RemoveOpts,
 } from '@lmthing/core';
+
+/**
+ * `node:sqlite`, loaded so that no bundler can see the specifier.
+ *
+ * A plain `import { DatabaseSync } from 'node:sqlite'` is correct and works everywhere the code
+ * runs from source — vitest, `pnpm lmthing`, every scenario. It does NOT survive bundling: esbuild
+ * rewrites `node:sqlite` to a bare `sqlite` before its own `external` list is consulted, whatever
+ * `target` says, and the built CLI then dies at import with "Cannot find package 'sqlite'". The
+ * only gate that could see that was the compute image's warm-up boot.
+ *
+ * The specifier is held in a variable rather than passed as a literal, because a literal is
+ * exactly what a bundler follows. The `import type` above keeps the real types.
+ */
+const SQLITE_MODULE = 'node:sqlite';
+const { DatabaseSync } = createRequire(import.meta.url)(SQLITE_MODULE) as {
+  DatabaseSync: typeof DatabaseSyncType;
+};
 
 /**
  * Run `fn` inside a transaction.

@@ -975,6 +975,28 @@ export class TeamScenarioRunner {
       rec.notes.push('server back up; channel sockets will reconnect on demand');
     }
 
+    // `attach_desktop:` — try to attach a desktop host bridge, and record what the pod said.
+    //
+    // A team pod must REFUSE this, before any role check, so that no agent in a shared channel has
+    // a path to one member's laptop (`libs/cli/src/server/team-guard.ts`). The verb exists so that
+    // refusal is asserted against a running pod rather than trusted from a unit test — this is the
+    // one property whose failure mode is a security hole rather than a broken feature.
+    if (step.attach_desktop) {
+      const { tryAttachDesktop } = await import('../harness/lib/desktop-bridge.mjs');
+      const outcome = await tryAttachDesktop({ base: pod.base, token: 'team-scenario' });
+      rec.desktopBridge = { attached: outcome.attached, ...(outcome.error ? { error: outcome.error } : {}) };
+      if (outcome.attached) {
+        // Not a failed assertion to be scored later: a team pod that ACCEPTS a desktop is a hole,
+        // and the run stops rather than carrying on to ask an agent to use it.
+        await outcome.desktop.close();
+        rec.notes.push('⚠️ the team pod ACCEPTED a desktop bridge — this must never happen');
+        throw new FatalError(
+          'a team pod accepted a desktop host bridge; team-guard.ts is not refusing /api/host/ws',
+        );
+      }
+      rec.notes.push(`desktop bridge refused: ${outcome.error}`);
+    }
+
     if (step.concurrent) {
       rec.concurrent = step.concurrent.length;
       const subs = step.concurrent.map((s) => ({ ...s, reply_to: s.reply_to ?? step.reply_to }));

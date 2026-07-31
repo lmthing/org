@@ -28,5 +28,10 @@ export default defineConfig({
   // a dynamic-require shim that only works if a real CJS `require` exists at runtime —
   // there is none in an ESM bundle, so bundling `typescript` crashes on the very first
   // `import ts from 'typescript'` with "Dynamic require of \"fs\" is not supported".
+  //
+  // `node:sqlite` is deliberately NOT here, and cannot be: esbuild rewrites `node:sqlite` to a bare
+  // `sqlite` before external matching ever runs, whatever the target — so the built CLI died at
+  // import with "Cannot find package 'sqlite'". It is loaded through `createRequire` in
+  // `src/app/store.ts` instead, where no bundler can see the specifier at all.
   external: ['ink', 'react', 'ws', 'esbuild', 'unpdf', 'xlsx', 'officeparser', 'typescript'],
 });

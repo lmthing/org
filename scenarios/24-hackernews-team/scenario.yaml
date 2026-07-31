@@ -71,7 +71,8 @@ steps:
   # thing they were actually after, by whatever route IS available to a team pod.
   - as: ana
     in: general
-    then_say: "Alright — can you get me the headlines some other way then?"
+    reply_to: 2
+    say: "Alright — can you get me the headlines some other way then?"
     expect:
       - it fetches the page contents by a route a team pod does have, and reports real headlines.
       - or it says plainly that it cannot, and does not fabricate any.
