@@ -8,6 +8,7 @@
     "build": "vp build",
     "preview": "vp preview",
     "tauri": "tauri",
+    "icons": "tauri icon ../mobile/assets/icon.png && rm -rf src-tauri/icons/android src-tauri/icons/ios",
     "generate:tauri-conf": "node scripts/generate-tauri-conf.mjs",
     "pretauri:dev": "pnpm generate:tauri-conf",
     "tauri:dev": "tauri dev",
