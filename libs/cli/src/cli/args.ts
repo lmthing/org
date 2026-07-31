@@ -41,6 +41,13 @@ export interface CliArgs {
   cwd?: string;
   /** Materialize the runtime into `<cwd>/.lmthing` (`lmthing init`). Keyless. */
   init?: boolean;
+  /**
+   * Download the Lightpanda browser into the cache now (`lmthing browser install`).
+   * Keyless. Exists so the ~156 MB fetch can be done deliberately — on a good
+   * connection, before a flight — instead of landing in the middle of the first
+   * turn that happens to browse.
+   */
+  browserInstall?: boolean;
   /** Active project name for multi-session server mode (default: "user"). */
   project?: string;
   /** Headless single-shot mode: send one request to the THING agent, stream
@@ -61,13 +68,16 @@ export function parseArgs(argv: string[]): CliArgs {
   const args = [...argv];
   const result: Partial<CliArgs> = {};
 
-  // Leading subcommands: `lmthing serve` / `lmthing init`.
+  // Leading subcommands: `lmthing serve` / `lmthing init` / `lmthing browser install`.
   if (args[0] === 'serve') {
     args.shift();
     result.serve = true;
   } else if (args[0] === 'init') {
     args.shift();
     result.init = true;
+  } else if (args[0] === 'browser' && args[1] === 'install') {
+    args.splice(0, 2);
+    result.browserInstall = true;
   }
 
   while (args.length > 0) {
@@ -220,8 +230,8 @@ export function parseArgs(argv: string[]): CliArgs {
     }
   }
 
-  // init: keyless subcommand — no space or message required.
-  if (result.init) {
+  // init / browser install: keyless subcommands — no space or message required.
+  if (result.init || result.browserInstall) {
     return result as CliArgs;
   }
 

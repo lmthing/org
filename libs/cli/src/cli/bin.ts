@@ -311,6 +311,31 @@ async function main(): Promise<void> {
     return;
   }
 
+  // `lmthing browser install`: fetch the browser now rather than mid-turn (keyless).
+  if (args.browserInstall) {
+    const { installLightpanda, lightpandaCachePath } = await import('../browser/lightpanda-install.js');
+    let lastPct = -1;
+    const res = await installLightpanda({
+      log: (msg) => process.stderr.write(`${msg}\n`),
+      force: true,
+      onProgress: (received, total) => {
+        if (!total || !process.stderr.isTTY) return;
+        const pct = Math.floor((received / total) * 100);
+        if (pct === lastPct) return;
+        lastPct = pct;
+        process.stderr.write(`\r  ${pct}%  ${(received / 1e6).toFixed(0)}/${(total / 1e6).toFixed(0)} MB`);
+      },
+    });
+    if (process.stderr.isTTY) process.stderr.write('\n');
+    if (!res.ok) {
+      process.stderr.write(`lmthing: could not install the browser — ${res.reason}\n`);
+      process.exitCode = 1;
+      return;
+    }
+    process.stdout.write(`browser installed at ${lightpandaCachePath()}\n  sha256 ${res.sha256}\n`);
+    return;
+  }
+
   // Make the CLI able to browse: ensure a Lightpanda MCP endpoint is available
   // (connect to LIGHTPANDA_MCP_URL, or spawn `lightpanda serve` when a binary is
   // present) for the `system-browser` space's functions. Best-effort — a missing

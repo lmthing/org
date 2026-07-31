@@ -12,9 +12,21 @@
 // Policy (predictable, non-surprising):
 //   - `LIGHTPANDA_MCP_URL` set        → use that external server, never spawn.
 //   - a binary is resolvable          → spawn `lightpanda serve` (unless
-//     (`LIGHTPANDA_BIN` or on PATH)      `LIGHTPANDA_AUTOSTART` is falsey).
+//     (`LIGHTPANDA_BIN`, the bundle      `LIGHTPANDA_AUTOSTART` is falsey).
+//      cache, or on PATH)
+//   - nothing available, but this is  → publish a loopback shim that installs
+//     a bundled run                      Lightpanda on the FIRST browse
+//                                        (browser/lightpanda-proxy.ts).
 //   - nothing available               → no-op; browser functions will report
 //                                        "unreachable" with a setup hint.
+//
+// The shim branch is deliberately NOT the default. A bundled `lmthing` ships
+// without a browser (156 MB, and most runs never browse) and owns a cache to put
+// one in, so installing on demand is the only way its browsing works at all. A
+// checkout is not in that position: turning a missing binary into a silent
+// 156 MB download during someone's dev run would be a surprise, and "unreachable,
+// here is how to start one" is the honest answer there. `LIGHTPANDA_AUTO_INSTALL=1`
+// opts a checkout in; `LIGHTPANDA_AUTO_INSTALL=0` opts a bundle out.
 //
 // Everything here is best-effort: a failure to start the browser must never
 // abort the CLI — browsing simply stays unavailable.
@@ -99,7 +111,30 @@ export interface EnsureBrowserResult {
   /** The spawned child, when `spawned` is true. */
   child?: SpawnedChild;
   /** Machine-readable outcome for tests/logging. */
-  reason: 'external' | 'spawned' | 'spawn-not-ready' | 'no-binary' | 'autostart-disabled' | 'spawn-failed';
+  reason:
+    | 'external'
+    | 'spawned'
+    | 'spawn-not-ready'
+    | 'no-binary'
+    | 'autostart-disabled'
+    | 'spawn-failed'
+    /** No binary yet, but a shim is published that installs one on first browse. */
+    | 'deferred';
+  /** The shim, when `reason` is 'deferred' — held so the caller can shut it down. */
+  proxy?: { url: string; close(): Promise<void> };
+}
+
+/**
+ * Whether a missing binary should be installed on demand rather than reported.
+ *
+ * True for a bundled run (the launcher publishes `LMTHING_BUNDLE_ROOT`), because
+ * a bundle has no other way to ever browse. Opt in or out explicitly with
+ * `LIGHTPANDA_AUTO_INSTALL`.
+ */
+export function autoInstallEnabled(env: NodeJS.ProcessEnv): boolean {
+  const raw = env['LIGHTPANDA_AUTO_INSTALL'];
+  if (raw !== undefined) return !['0', 'false', 'no', 'off', ''].includes(raw.trim().toLowerCase());
+  return Boolean(env['LMTHING_BUNDLE_ROOT']?.trim());
 }
 
 /**
@@ -129,8 +164,20 @@ export async function ensureLightpanda(deps: EnsureBrowserDeps): Promise<EnsureB
   if (autostartDisabled(env['LIGHTPANDA_AUTOSTART'])) {
     return { spawned: false, reason: 'autostart-disabled' };
   }
-  const bin = findLightpandaBinary(env, exists);
+  // The bundle cache counts as "resolvable": once a browse has installed one, every
+  // later run must spawn it directly rather than going back through the shim.
+  const { cachedLightpanda } = await import('./lightpanda-install.js');
+  const bin = findLightpandaBinary(env, exists) ?? cachedLightpanda(env, exists);
   if (!bin) {
+    if (autoInstallEnabled(env)) {
+      // Imported here rather than at module scope: the proxy imports back from
+      // this file, and this keeps its code off the path of every run that will
+      // never touch it.
+      const { startLightpandaProxy } = await import('./lightpanda-proxy.js');
+      const proxy = await startLightpandaProxy({ env, spawn, fetchImpl, log, exists, sleep });
+      env['LIGHTPANDA_MCP_URL'] = proxy.url;
+      return { url: proxy.url, spawned: false, reason: 'deferred', proxy };
+    }
     return { spawned: false, reason: 'no-binary' };
   }
 

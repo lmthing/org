@@ -15,6 +15,7 @@
   },
   "scripts": {
     "build": "tsup && node scripts/copy-system-spaces.mjs",
+    "bundle": "node scripts/bundle/build.mjs",
     "typecheck": "tsc --noEmit",
     "dev": "tsup --watch",
     "fetch-azure-prices": "npx tsx scripts/fetch-azure-prices.ts",

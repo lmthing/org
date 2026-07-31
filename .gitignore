@@ -2,6 +2,10 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Single-file CLI executables (scripts/bundle/build.mjs) — 200 MB artifacts,
+# produced by CI and attached to a release, never committed.
+libs/cli/dist-bundle/
+
 # Environment — contains API keys, never commit
 .env
 .env.local
