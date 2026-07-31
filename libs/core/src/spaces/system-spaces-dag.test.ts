@@ -209,6 +209,172 @@ describe('shipped system spaces load + validate', () => {
     expect(add['report']!.role).toBe('explore');
   });
 
+  it('THING tell_the_team isolates team:post to ONE terminal node that chooses neither the channel nor the words', async () => {
+    // 20-studio run 2 step 5: asked to "let the others know", THING posted into the channel it was
+    // ALREADY in (a no-op dressed as an action), attributed the news to the wrong person, then
+    // stacked a "correction" message on top — three faults in one improvised turn, with
+    // `teamChannels()` never called. The three judgments now live in three nodes: choose_channel and
+    // compose are role `explore`, so `intersectAppCaps` strips `team:post` and they physically cannot
+    // say anything; only the terminal `post` node can, and it sends exactly what the other two
+    // settled. Giving either upstream node team:post (or role general) turns this RED.
+    const space = await loadSpace(resolve(SYS, 'user-thing'), { requireAgents: false });
+    const tell = await loadTasklistFromSpace(space, 'tell_the_team');
+
+    expect(() => validateDag(tell), 'tell_the_team DAG').not.toThrow();
+    expect(space.tasklists['tell_the_team']!.input).toEqual({ request: 'string', substance: 'string' });
+    expect(Object.keys(tell).sort()).toEqual(['choose_channel', 'compose', 'post']);
+
+    // choose_channel: read-only, reads the channel list AND the candidates' history before picking,
+    // and has a first-class "the only place is where I already am" verdict so a no-op can never be
+    // reported as a delivery.
+    const choose = tell['choose_channel']!;
+    expect(choose.role).toBe('explore');
+    expect(choose.capabilities).toEqual(['team:read']);
+    expect(choose.dependsOn ?? []).toEqual([]);
+    expect(choose.instruction).toContain('teamChannels()');
+    expect(choose.instruction).toContain('teamHistory(');
+    expect(choose.instruction).toMatch(/"here"/);
+
+    // compose: read-only, and the attribution direction is its job — the source is the ASKER, the
+    // readers are the audience, and there is exactly one message with no correction after it.
+    const compose = tell['compose']!;
+    expect(compose.role).toBe('explore');
+    expect(compose.capabilities).toEqual(['team:read']);
+    expect(compose.dependsOn).toEqual(['choose_channel']);
+    expect(compose.instruction).toMatch(/direction of attribution/i);
+    expect(compose.instruction).toMatch(/right the first time/i);
+
+    // post: the ONLY node that can speak. It branches on choose_channel.status and posts nothing on
+    // the ask/here branches.
+    const post = tell['post']!;
+    expect(resolveGoalTask(tell)!.id).toBe('post');
+    expect(post.role).toBe('general');
+    expect(post.capabilities).toEqual(expect.arrayContaining(['team:read', 'team:post']));
+    expect(post.dependsOn).toEqual(['choose_channel', 'compose']);
+    expect(post.instruction).toContain('teamPost(choose_channel.channelId, compose.text)');
+    expect(post.instruction).toMatch(/choose_channel\.status/);
+    expect(post.instruction).toMatch(/post NOTHING/);
+    expect(post.instruction).toMatch(/r\.ok/);
+  });
+
+  it('THING answer_from_team_record answers from the workspace record, read-only, and cannot claim absence without saying what it read', async () => {
+    // 20-studio run 2 step 11: a direct question about the team's own state was answered by replaying
+    // the thread verbatim and asserting "No decision yet" for something decided one step earlier — a
+    // query-vs-remember failure. The lookup is now a DAG: plan_lookup names the PLACES (channels +
+    // tables) without answering, read_source fans out one read per place and EXTRACTS, and the goal
+    // carries a required `checked` so "no record" can only be said by something that looked.
+    const space = await loadSpace(resolve(SYS, 'user-thing'), { requireAgents: false });
+    const rec = await loadTasklistFromSpace(space, 'answer_from_team_record');
+
+    expect(() => validateDag(rec), 'answer_from_team_record DAG').not.toThrow();
+    expect(space.tasklists['answer_from_team_record']!.input).toEqual({ question: 'string' });
+    expect(Object.keys(rec).sort()).toEqual(['answer', 'plan_lookup', 'read_source']);
+
+    // Every node is read-only: this workflow can neither change anything nor say anything out loud.
+    for (const node of Object.values(rec)) {
+      expect(node.role, `${node.id} role`).toBe('explore');
+      expect(node.capabilities ?? [], `${node.id} caps`).not.toContain('team:post');
+    }
+
+    const plan = rec['plan_lookup']!;
+    expect(plan.capabilities).toEqual(expect.arrayContaining(['team:read', 'db:read']));
+    expect(plan.instruction).toContain('teamChannels()');
+    expect(plan.instruction).toContain('db.tables()');
+    // The thread in front of THING is explicitly NOT a source — that is the whole defect.
+    expect(plan.instruction).toMatch(/thread you are standing in is not a source/i);
+
+    // One read per place, in parallel, extracting rather than replaying.
+    const read = rec['read_source']!;
+    expect(read.forEach).toBe('plan_lookup.sources');
+    expect(read.dependsOn).toEqual(['plan_lookup']);
+    expect(read.capabilities).toEqual(expect.arrayContaining(['team:read', 'db:read']));
+    expect(read.instruction).toContain('teamHistory(item.id');
+    expect(read.instruction).toMatch(/replay of the conversation/i);
+
+    // The goal must report what was READ alongside the answer.
+    const ans = rec['answer']!;
+    expect(resolveGoalTask(rec)!.id).toBe('answer');
+    expect(Object.keys(ans.output)).toEqual(expect.arrayContaining(['answer', 'found', 'checked']));
+    expect(ans.dependsOn).toEqual(['plan_lookup', 'read_source']);
+    expect(ans.instruction).toMatch(/no decision yet/i); // the exact phrase the defect produced
+    expect(ans.instruction).toMatch(/more recent record is what stands/i);
+  });
+
+  it("THING settle_team_decision can neither act nor speak — its ONLY exit is a question the caller must put with ask()", async () => {
+    // 20-studio run 2 step 7: THING correctly recognised that a decision was the team's and then
+    // wrote the question as a normal completed turn, so `ask()` never engaged and the answer arrived
+    // as an unrelated new turn. A fork has no `ask()` (it is absent from the fork DTS), so the
+    // structural fix is that this tasklist's terminal node holds NOTHING — no db, no channels, no
+    // writers — and can only resolve {status:'ask', question, options}, which is not a reply. Giving
+    // relay any capability, or making the conditional check_settled the goal, turns this RED.
+    const space = await loadSpace(resolve(SYS, 'user-thing'), { requireAgents: false });
+    const set = await loadTasklistFromSpace(space, 'settle_team_decision');
+
+    expect(() => validateDag(set), 'settle_team_decision DAG').not.toThrow();
+    expect(space.tasklists['settle_team_decision']!.input).toEqual({ request: 'string', background: 'string' });
+    expect(Object.keys(set).sort()).toEqual(['check_settled', 'frame', 'relay']);
+
+    // Nothing anywhere in this DAG can act or post.
+    for (const node of Object.values(set)) {
+      expect(node.role, `${node.id} role`).toBe('explore');
+      expect(node.capabilities ?? [], `${node.id} caps`).not.toContain('team:post');
+      expect(node.capabilities ?? [], `${node.id} caps`).not.toContain('db:write');
+    }
+
+    // frame decides whose call it is. The builder-switch defect (run 2 step 3) is the same class:
+    // voiding a requirement somebody else stated is never the asker's call, and never THING's.
+    const frame = set['frame']!;
+    expect(frame.dependsOn ?? []).toEqual([]);
+    expect(Object.keys(frame.output)).toEqual(
+      expect.arrayContaining(['verdict', 'question', 'options', 'whoDecides', 'reason']),
+    );
+    expect(frame.instruction).toMatch(/requirement somebody on the team already stated/i);
+    expect(frame.instruction).toMatch(/person who set that requirement is the one who can lift it/i);
+
+    // check_settled only runs on the 'theirs' branch — re-asking a closed question reopens it.
+    const check = set['check_settled']!;
+    expect(check.condition).toMatch(/frame\.verdict\s*==\s*'theirs'/);
+    expect(check.dependsOn).toEqual(['frame']);
+    expect(check.goal).toBeFalsy();
+
+    // relay is the UNCONDITIONAL goal terminal holding NO capabilities at all, and it branches on
+    // frame.verdict FIRST because check_settled may have been skipped (an absent upstream).
+    const relay = set['relay']!;
+    expect(resolveGoalTask(set)!.id).toBe('relay');
+    expect(relay.condition).toBeUndefined();
+    expect(relay.capabilities).toEqual([]);
+    expect(relay.dependsOn).toEqual(['frame', 'check_settled']);
+    expect(relay.instruction).toMatch(/branch on `frame\.verdict` FIRST/);
+    expect(relay.instruction).toMatch(/unchanged/);
+  });
+
+  /**
+   * CLASS-GUARD for the team surface: `team:post` leaves a permanent record in a shared log and
+   * badges other people's phones, so across every shipped tasklist exactly ONE node may hold it —
+   * the terminal `post` node of `tell_the_team`, which chooses neither its channel nor its words.
+   * Any new node that grants itself the writers (or a node that omits `capabilities:` entirely and
+   * therefore INHERITS THING's `team:post`) turns this RED, which is the point: a read step that can
+   * also broadcast is how a "let the others know" turn ends up posting three times.
+   */
+  it('team:post is reachable from exactly one shipped tasklist node', async () => {
+    const holders: string[] = [];
+    for (const spaceName of ['system-architect', 'system-research', 'system-appbuilder', 'system-viewbuilder', 'user-thing', 'user-memory']) {
+      const space = await loadSpace(resolve(SYS, spaceName), { requireAgents: false });
+      for (const tlName of Object.keys(space.tasklists)) {
+        const tl = await loadTasklistFromSpace(space, tlName);
+        for (const [id, node] of Object.entries(tl)) {
+          if (!/\bteamPost\(|\bteamPinApp\(/.test(node.instruction)) continue;
+          holders.push(`${spaceName}/${tlName}#${id}`);
+          // A node that calls the writers must DECLARE them, and must be write-capable to keep them
+          // (intersectAppCaps drops team:post for explore/plan).
+          expect(node.capabilities ?? [], `${spaceName}/${tlName}#${id} must declare team:post`).toContain('team:post');
+          expect(node.role, `${spaceName}/${tlName}#${id} role`).toBe('general');
+        }
+      }
+    }
+    expect(holders).toEqual(['user-thing/tell_the_team#post']);
+  });
+
   it('THING resolve_flagged_figure isolates db:write to the confidence-gated fix node', async () => {
     // Step-9 L2 (06-tanzania run 21): THING diagnosed a double-counted figure PERFECTLY, computed the
     // exact correct total, then ended the turn asking "want me to fix it?" — zero db mutations. Two L1
