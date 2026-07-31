@@ -167,14 +167,10 @@ describe('system-space smoke: the new frontmatter allow-list gate breaks nothing
       'system-appbuilder/api-author',
       'system-appbuilder/automator',
       'system-appbuilder/data-modeler',
-      'system-appbuilder/page-builder',
+      'system-appbuilder/spec-builder',
       'system-desktop-browser/devtools',
       'system-engineer/engineer',
       'system-store/finder',
-      'system-viewbuilder/api-author',
-      'system-viewbuilder/automator',
-      'system-viewbuilder/data-modeler',
-      'system-viewbuilder/spec-builder',
       'user-memory/memory',
       'user-thing/thing',
     ]);
@@ -188,6 +184,8 @@ describe('system-space smoke: the new frontmatter allow-list gate breaks nothing
     // app-architect (and the store-catalog build_app/publish_app pipeline) is gone — the
     // automator is now the sole builder agent, defaultAction build_live_project, and holds
     // the full live-project authoring set (project:manage moved to THING, not the builder).
+    // The UI grant is `views:write` — the SPEC writers — and never `pages:write`; the test
+    // below turns that into a space-wide invariant.
     const automator = appbuilder!.agents['automator'];
     expect(automator, 'automator agent present').toBeTruthy();
     expect(automator!.capabilities).toEqual({
@@ -195,13 +193,13 @@ describe('system-space smoke: the new frontmatter allow-list gate breaks nothing
       'db:schema': {},
       'db:read': {},
       'db:write': {},
-      'pages:write': true,
+      'views:write': true,
       'api:write': true,
     });
   });
 
   /**
-   * The `system-viewbuilder` guarantee is enforced by capability ABSENCE, not by prose. Its whole
+   * The `system-appbuilder` guarantee is enforced by capability ABSENCE, not by prose. Its whole
    * premise is that the UI is 100% spec — which is what lets the same app render natively in the
    * mobile app with no WebView — and the mechanism is that no agent in that space holds
    * `pages:write`. Not granted ⇒ `writeProjectPage`/`writeProjectComponent` are neither injected nor
@@ -209,29 +207,20 @@ describe('system-space smoke: the new frontmatter allow-list gate breaks nothing
    * retry, rather than a rule it is asked to respect. A well-meaning "just add pages:write so it can
    * also write a component" would silently dissolve that, and nothing else in the repo would notice.
    */
-  it('every system-viewbuilder agent holds views:write and NEVER pages:write', async () => {
+  it('every system-appbuilder agent holds views:write and NEVER pages:write', async () => {
     const dirs = defaultSystemSpaceDirs();
     const spaces = await loadSystemSpaces(dirs);
-    const viewbuilder = spaces.find((s) => s.dir.endsWith('system-viewbuilder'));
-    expect(viewbuilder, 'system-viewbuilder loads').toBeTruthy();
+    const appbuilder = spaces.find((s) => s.dir.endsWith('system-appbuilder'));
+    expect(appbuilder, 'system-appbuilder loads').toBeTruthy();
 
-    for (const [slug, agent] of Object.entries(viewbuilder!.agents)) {
+    for (const [slug, agent] of Object.entries(appbuilder!.agents)) {
       expect(agent.capabilities?.['pages:write'], `${slug} must not hold pages:write`).toBeUndefined();
     }
-
-    const automator = viewbuilder!.agents['automator'];
-    expect(automator, 'automator agent present').toBeTruthy();
-    expect(automator!.capabilities).toEqual({
-      'hooks:write': true,
-      'db:schema': {},
-      'db:read': {},
-      'db:write': {},
-      'api:write': true,
-      'views:write': true,
-    });
+    // The UI grant every authoring agent in this space actually carries.
+    expect(appbuilder!.agents['automator']!.capabilities?.['views:write']).toBe(true);
 
     // The spec-builder is the narrow specialist: it authors views and reads data, nothing else.
-    const specBuilder = viewbuilder!.agents['spec-builder'];
+    const specBuilder = appbuilder!.agents['spec-builder'];
     expect(specBuilder, 'spec-builder agent present').toBeTruthy();
     expect(specBuilder!.capabilities).toEqual({ 'views:write': true, 'db:read': {} });
   });

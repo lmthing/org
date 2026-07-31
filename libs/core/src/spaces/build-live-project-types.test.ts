@@ -5,16 +5,15 @@ import { describe, it, expect, beforeAll } from 'vitest';
  *
  *  - `09-emit_types.ts` writes `types/contract.d.ts` from the validated plan BEFORE any
  *    implementation node runs. The fault it exists to kill was measured live: `plan_endpoints`
- *    declares `fields` as "the SINGLE SOURCE OF TRUTH for the response shape", and
- *    `implement_pages` is told to read exactly those keys — but nothing compared the two, so the
+ *    declares `fields` as "the SINGLE SOURCE OF TRUTH for the response shape", and every section a
+ *    page binds is checked against exactly those keys — but nothing compared the two, so the
  *    plan's names only ever existed as prose in a fork's scope and a page could ship reading a
  *    key no handler emitted.
  *  - `11-reconcile_tables.ts` re-emits it from the schema that actually LANDED.
  *    `writeProjectTable` MERGES and can never drop a column
  *    (`libs/cli/src/app/authoring/globals.ts#mergeWithExistingTable`), so `database/*.json` and
  *    `plan_tables.tables` legitimately disagree after `implement_tables` — and types emitted from
- *    the plan would be a lie exactly when `implement_endpoints`/`implement_pages` compile against
- *    them.
+ *    the plan would be a lie exactly when `implement_endpoints` compiles against them.
  *
  * Both are HOST-RUN code nodes with NO salvage path: a throw fails the node and aborts the whole
  * tasklist, so every finding must come back as DATA. Both are checked for that here.
@@ -113,10 +112,10 @@ const ENDPOINTS = [
   },
 ];
 
-/** A `plan_components.components[]` entry — `{ name, purpose, props }`. */
+/** A `plan_view_components.components[]` entry — `{ name, purpose, props }`. */
 const COMPONENTS = [{ name: 'TripCard', purpose: 'One trip, on several pages', props: ['title: string', 'nights: number'] }];
 
-const CONTRACT = { plan_tables: { tables: [TRIPS, COSTS] }, plan_endpoints: { endpoints: ENDPOINTS }, plan_components: { components: COMPONENTS } };
+const CONTRACT = { plan_tables: { tables: [TRIPS, COSTS] }, plan_endpoints: { endpoints: ENDPOINTS }, plan_view_components: { components: COMPONENTS } };
 
 /** A ctx that records what was written. `writeProjectFile` is the writer the nodes probe for. */
 function writerCtx(files: Record<string, string> = {}) {
@@ -155,7 +154,7 @@ describe('build_live_project — emit_types (09-emit_types.ts)', () => {
     // `dependsOn` and not the transitive closure, and `validate_contract` resolves only
     // `{ ok, errorCount, errors }` — so without them `inputs` carries no contract at all.
     expect(emitNode.dependsOn).toContain('validate_contract');
-    expect(emitNode.dependsOn).toEqual(expect.arrayContaining(['plan_tables', 'plan_endpoints', 'plan_components']));
+    expect(emitNode.dependsOn).toEqual(expect.arrayContaining(['plan_tables', 'plan_endpoints', 'plan_view_components']));
     // A scalar `ok` + counts: the condition DSL's `getAtPath` returns `undefined` for arrays, so
     // `emit_types.endpointNames.length > 0` is not expressible in a `when:`.
     expect(emitNode.output['ok']).toBe('boolean');

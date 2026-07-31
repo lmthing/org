@@ -18,7 +18,11 @@ BINDING list) are in scope. This is still a THINKING step — no writers.
 
 For every planned table produce its full `schema` AND the actual `rows` read from the material, so the
 implement step seeds data at creation. Do NOT invent rows: use only values the source states
-(identifiers, contacts, dates, payments, stated totals, attribution). And do NOT drop a value the source
+(identifiers, contacts, dates, payments, stated totals, attribution). **The channel the material
+arrived on is NOT the attribution**: "from an attachment", "pasted by the user", "from the upload"
+fills a `source` column while losing the only thing it was for — who said it, or where it came from
+originally. If the material names an author, a sender, a publication or an issuing body, that is the
+value; if it genuinely names none, leave it null rather than recording the transport. And do NOT drop a value the source
 DID state: if `read_sources` captured a booking reference, flight number, amount, or contact detail for a
 row, put it in that row's field — a column left null when the brief has the value (a blank `flight_no`
 when the notes give one, a blank `amount_usd` when the spreadsheet cell has a number) is a

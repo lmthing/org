@@ -273,6 +273,13 @@ const MARK = {
   components: '// ─────────── components ───────────',
 };
 
+/** Per-endpoint markers — the verbatim twin of `09-emit_types.ts`. They are what makes the
+ *  contract ADDITIVE across runs (see {@link carryForwardEndpoints}); this node must emit them
+ *  too, because when `plan_endpoints` reaches it, it re-renders the endpoints section itself and
+ *  would otherwise delete what `emit_types` had just preserved. */
+const ENDPOINT_MARK = '//#endpoint ';
+const ENDPOINT_NAMES_MARK = '//#endpoint-names';
+
 const HEADER = [
   '/**',
   ' * types/contract.d.ts — this app\'s TYPE CONTRACT.',
@@ -404,7 +411,7 @@ function renderShape(
   return { typeName, preBlocks, block: [`interface ${typeName} {`, ...body, '}'].join('\n') };
 }
 
-function renderEndpoints(endpoints: ContractEndpoint[]): string {
+function renderEndpoints(endpoints: ContractEndpoint[], carried: CarriedEndpoint[] = []): string {
   const name = uniqueNamer();
   const blocks: string[] = [];
   for (const endpoint of endpoints) {
@@ -412,7 +419,7 @@ function renderEndpoints(endpoints: ContractEndpoint[]): string {
     const params = routeParams(endpoint.route);
     const fields = (endpoint.fields ?? []).map(parseField).filter(Boolean) as ParsedField[];
     const item = renderShape(`${base}Item`, base, fields, name, 'field');
-    const lines: string[] = [];
+    const lines: string[] = [`${ENDPOINT_MARK}${endpoint.name}`];
     for (const pre of item.preBlocks) lines.push(pre, '');
     const purpose = doc(endpoint.purpose);
     lines.push(`/** \`${endpoint.name}\`${endpoint.route ? ` — ${endpoint.route}` : ''}${purpose ? `: ${purpose}` : ''} */`);
@@ -444,7 +451,21 @@ function renderEndpoints(endpoints: ContractEndpoint[]): string {
     );
     blocks.push(lines.join('\n'));
   }
-  const names = endpoints.map((e) => String(e.name)).filter(Boolean);
+
+  // Verbatim twin of `09-emit_types.ts#renderEndpoints`: an endpoint a PREVIOUS contract declared
+  // that this plan does not mention keeps its declarations, unless a planned endpoint already
+  // claims one of its identifiers (a duplicate `interface` is a compile error).
+  const claimed = new Set(declaredNames(blocks.join('\n')));
+  const kept: string[] = [];
+  for (const entry of carried) {
+    const own = declaredNames(entry.text);
+    if (own.some((n) => claimed.has(n))) continue;
+    for (const n of own) claimed.add(n);
+    kept.push(entry.name);
+    blocks.push(`${ENDPOINT_MARK}${entry.name}\n${entry.text}`);
+  }
+
+  const names = [...endpoints.map((e) => String(e.name)).filter(Boolean), ...kept];
   const union =
     names.length > 0
       ? `/** Every endpoint name the plan assigned — the exact strings \`useApi\`/\`useApiMutation\`/\n *  \`apiCall\` take, and each handler's \`export const name\`. */\ntype EndpointName =\n${[
@@ -453,8 +474,63 @@ function renderEndpoints(endpoints: ContractEndpoint[]): string {
           .map((n) => `  | ${quote(n)}`)
           .join('\n')};`
       : '/** No endpoints in the contract. */\ntype EndpointName = never;';
-  blocks.push(union);
+  blocks.push(`${ENDPOINT_NAMES_MARK}\n${union}`);
   return blocks.join('\n\n');
+}
+
+/** An endpoint block lifted verbatim out of a previously-emitted contract. */
+interface CarriedEndpoint {
+  name: string;
+  text: string;
+}
+
+/** Every top-level `interface X` / `type X` a block declares — the collision key for a carry-forward. */
+function declaredNames(text: string): string[] {
+  const out: string[] = [];
+  for (const line of text.split('\n')) {
+    const m = /^(?:export\s+)?(?:interface|type)\s+([A-Za-z_$][A-Za-z0-9_$]*)/.exec(line);
+    if (m) out.push(m[1] as string);
+  }
+  return out;
+}
+
+/**
+ * Endpoints a previously-emitted contract declared that the current plan does not mention.
+ *
+ * The full rationale is on `09-emit_types.ts#carryForwardEndpoints`. The short version: a
+ * follow-up request re-plans only what IT is about, so re-emitting from the plan alone deleted the
+ * types every already-shipped handler compiles against — measured live, it took a working app to
+ * `POST …/app/build → 400` and a 404 root route. `section` is the endpoints section text (this
+ * node has already sliced it with {@link sectionsOf}).
+ */
+function carryForwardEndpoints(section: string, planned: Set<string>): CarriedEndpoint[] {
+  if (!section) return [];
+  const out: CarriedEndpoint[] = [];
+  let current: CarriedEndpoint | null = null;
+  let lines: string[] = [];
+  const flush = (): void => {
+    if (current) {
+      const text = lines.join('\n').trim();
+      if (text) out.push({ name: current.name, text });
+    }
+    current = null;
+    lines = [];
+  };
+  for (const line of section.split('\n')) {
+    if (line.startsWith(ENDPOINT_NAMES_MARK)) {
+      flush();
+      break;
+    }
+    if (line.startsWith(ENDPOINT_MARK)) {
+      flush();
+      const name = line.slice(ENDPOINT_MARK.length).trim();
+      if (name && !planned.has(name)) current = { name, text: '' };
+      continue;
+    }
+    if (current) lines.push(line);
+  }
+  flush();
+  return out;
 }
 
 function renderComponents(components: ContractComponent[]): string {
@@ -611,9 +687,14 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
   const endpoints = pick<ContractEndpoint>(input, 'endpoints', 'plan_endpoints');
   const components = pick<ContractComponent>(input, 'components', 'plan_view_components');
   const rows = renderRows(landed);
+  // Re-rendering the endpoints section from the plan must not DELETE an endpoint the plan does not
+  // mention — on a follow-up edit that is every endpoint the app already shipped.
+  const plannedEndpointNames = new Set((endpoints ?? []).map((e) => String(e.name)).filter(Boolean));
   const dts = assembleDts({
     rows: rows.text,
-    endpoints: endpoints ? renderEndpoints(endpoints) : (prior?.endpoints ?? renderEndpoints([])),
+    endpoints: endpoints
+      ? renderEndpoints(endpoints, carryForwardEndpoints(prior?.endpoints ?? '', plannedEndpointNames))
+      : (prior?.endpoints ?? renderEndpoints([])),
     // The server surface is keyed on the LANDED tables (ground truth), always re-rendered fresh —
     // `ctx.db.query` must track what actually persisted, not a stale prior emission.
     server: renderServer(rows.rowTypeByTable),

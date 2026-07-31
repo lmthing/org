@@ -84,7 +84,7 @@ describe('buildAmbientDts — app-capability DTS composition', () => {
    * The TWO AUTHORING MEDIA are separated by capability, and this is where that separation is
    * observable end to end: through the real composer, not the fragment map.
    *
-   * `system-viewbuilder` promises apps that are 100% spec and render natively with no WebView.
+   * `system-appbuilder` promises apps that are 100% spec and render natively with no WebView.
    * Nothing in a prompt can promise that — a weak model told "do not write TSX" will write TSX. The
    * guarantee is that `writeProjectPage` is NOT IN ITS DTS, so the attempt is a typecheck error it
    * sees and retries. That holds only while `views:write` and `pages:write` are distinct ids: a
@@ -95,7 +95,7 @@ describe('buildAmbientDts — app-capability DTS composition', () => {
     expect(viewsOnly).toContain('writeProjectView(');
     expect(viewsOnly).toContain('writeProjectViewComponent(');
     expect(viewsOnly).toContain('writeProjectViewShell(');
-    // The whole point: a viewbuilder agent cannot author freehand TSX, because it cannot NAME it.
+    // The whole point: a system-appbuilder agent cannot author freehand TSX, because it cannot NAME it.
     expect(viewsOnly).not.toContain('writeProjectPage(');
     expect(viewsOnly).not.toContain('writeProjectComponent(');
 

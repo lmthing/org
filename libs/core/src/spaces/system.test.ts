@@ -70,7 +70,9 @@ describe('system spaces', () => {
     expect(dirs.some((d) => d.endsWith('system-spaces/system-research'))).toBe(true);
     expect(dirs.some((d) => d.endsWith('system-spaces/system-browser'))).toBe(true);
     expect(dirs.some((d) => d.endsWith('system-spaces/system-appbuilder'))).toBe(true);
-    expect(dirs.some((d) => d.endsWith('system-spaces/system-viewbuilder'))).toBe(true);
+    // There is exactly ONE builder: the TSX appbuilder was deleted and the spec builder took its
+    // name, so `system-viewbuilder` must NOT come back as a second entry.
+    expect(dirs.some((d) => d.endsWith('system-spaces/system-viewbuilder'))).toBe(false);
     expect(dirs.some((d) => d.endsWith('system-spaces/system-vision'))).toBe(true);
     expect(dirs.some((d) => d.endsWith('system-spaces/system-files'))).toBe(true);
     expect(dirs.some((d) => d.endsWith('system-spaces/system-store'))).toBe(true);
@@ -93,29 +95,34 @@ describe('system spaces', () => {
   // Live-prod evidence (scenario 06): the automator built 7 tables with 96 real seeded rows,
   // 4 pages and 6 endpoints — and NOT ONE declared relation, so `db.query(t, {include})`
   // (a shipped, documented feature) had nothing to expand and no page could fetch a parent
-  // with its children; and NOT ONE components/<Name>.tsx, though it holds the writer.
-  it('the automator + data-modeler are told to DECLARE RELATIONS and factor shared components', async () => {
+  // with its children; and NOT ONE reusable component, though it holds the writer.
+  it('the automator + data-modeler are told to DECLARE RELATIONS and factor shared view components', async () => {
     const spaces = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'system-appbuilder')]);
     const automator = spaces[0]?.agents['automator'];
     const modeler = spaces[0]?.agents['data-modeler'];
     expect(automator, 'system-appbuilder must ship an "automator"').toBeDefined();
     expect(modeler, 'system-appbuilder must ship a "data-modeler"').toBeDefined();
 
-    // A child table with no declared relation is a modeling bug — both authors are told so.
-    // Behind `('app_building','authoring','tables-and-relations')` — loaded precisely when a table
-    // is being authored, which is the only moment this rule can be acted on.
-    expect(automatorCorpus()).toMatch(/DECLARE THE RELATION when one table's rows belong/);
-    expect(automatorCorpus()).toMatch(/include: \['items'\]/);
-    expect(modeler!.instructBody).toMatch(/declare the relation/i);
+    // A child table with no declared relation is a modeling bug, and the data-modeler — the agent
+    // whose whole job is the schema — carries the rule AND the payoff it buys, because "declare a
+    // relation" with no `include` example reads as bookkeeping rather than a query that works.
+    expect(modeler!.instructBody).toMatch(/BELONG to another table's rows, declare the relation/);
+    expect(modeler!.instructBody).toMatch(/include: \['comments'\]/);
+    expect(modeler!.instructBody).toMatch(/authored with no relation is a modeling bug/);
 
-    // Repeated UI becomes a named component (the writer exists; it was never used). Behind
-    // `('app_building','authoring','pages-and-components')` — the aspect loaded when a page is
-    // being authored, which is the only moment a second copy of a card can be noticed.
-    expect(automatorCorpus()).toMatch(/appears on more than one page is a COMPONENT/);
-    expect(automatorCorpus()).toMatch(/writeProjectComponent\('<Name>'/);
+    // The automator authors tables freeform too, so the relation SHAPE has to be reachable from
+    // its own corpus — both directions and the required description, which the writer enforces.
+    expect(automatorCorpus()).toMatch(/`belongsTo`[\s\S]{0,200}`hasMany`/);
+    expect(automatorCorpus()).toMatch(/"relations"/);
+    expect(automatorCorpus()).toMatch(/Both need a `description`/);
+
+    // Repeated UI becomes a named VIEW component — a spec composition referenced by name, not a
+    // second copy of the same element tree pasted into two pages.
+    expect(automatorCorpus()).toMatch(/reusable view components/i);
+    expect(automatorCorpus()).toMatch(/referenced from a section as `\{ use: '<Name>' \}`/);
     // The writer itself stays advertised in the always-on body — you cannot decide to load the
-    // component aspect if you do not know the writer exists.
-    expect(automator!.instructBody).toMatch(/writeProjectComponent\(name, src\)/);
+    // component detail if you do not know the writer exists.
+    expect(automator!.instructBody).toMatch(/writeProjectViewComponent\(name, def\)/);
   });
 
   // ── No shipped prompt may carry a live scenario's fixture data ───────────────────

@@ -76,19 +76,16 @@ currentTask.resolve(await tasklist('build_live_project', { query, attachmentIds 
 ```
 
 Pass the `attachmentIds` you were given (omit only if there were none) so the pipeline reads the
-source itself. Resolve it in that SAME statement — never bind the envelope to a name and resolve it in
-a later statement, because a binding does not reliably survive a turn boundary.
+source itself. Resolve it in that SAME statement — never bind the envelope to a name and resolve it
+in a later statement, because a binding does not reliably survive a turn boundary.
 
-**Even when the envelope shows problems, relay it — do NOT go investigate.** `finalize` (the
-pipeline's own goal task) already did the diagnosis: its envelope carries `missing`, `errors` and
-`cannotExpress`, structured for exactly this handoff. Reading a flagged endpoint's source, building a
-`display()` diagnostic, or otherwise reasoning about the failure yourself is a SECOND model turn on
-top of the one-statement resolve above — the one thing this section forbids — and it is also how the
-envelope gets bound to a name (`const result = await tasklist(…)`) and then referenced too late,
-which is exactly the lost-envelope case below. If the app isn't fully clean, the honest, correct,
-ONE-statement response is still `currentTask.resolve(await tasklist('build_live_project', { query,
-attachmentIds }))` — let the caller read `ok`/`missing`/`errors` off what the pipeline already
-computed.
+**Even when the envelope shows problems, relay it — do NOT go investigate.** `finalize` already did
+the diagnosis: its envelope carries `missing`, `errors` and `cannotExpress`, structured for exactly
+this handoff. Reading a flagged endpoint's source or building a `display()` diagnostic is a SECOND
+model turn on top of the one-statement resolve above, and it is also how the envelope gets bound to a
+name and referenced too late — the lost-envelope case below. If the app isn't fully clean, the honest
+ONE-statement response is still that same `currentTask.resolve(await tasklist(…))` — let the caller
+read `ok`/`missing`/`errors` off what the pipeline already computed.
 
 **If the envelope is gone (`Cannot find name 'result'`), you have exactly one correct move: resolve
 `{ ok: false }` saying the pipeline ran but its result was lost.** Do NOT call
@@ -113,6 +110,9 @@ data model, not a usable section: with no `writeProjectView`, `/app/<project>/` 
 new. Finish in the SAME turn — after the table, author the `writeProjectApi` that reads its real rows
 and the `writeProjectView` that shows them — and author the page EARLY, as soon as the first table
 exists, so a turn that runs long still leaves something openable. Openable first, complete second.
+**A repair request naming a missing page is a WRITE, not a diagnosis**: "there is no home page", "it
+opens on nothing" — write the missing page and the read API it needs in THIS turn, then say what you
+wrote. Listing directories to report what is absent leaves the user exactly where they started.
 
 ## Everything else sits one load away
 
@@ -171,5 +171,4 @@ Data gets into the app three ways — seeded at table creation, collected from t
 `create` section, or arriving on a schedule or an event →
 `loadKnowledge('app_building', 'authoring', 'seeding-and-collecting')`.
 
-**Stuck ≠ refused.** Fix the field a rejection names; but an app that boots blank, a page that will
-not build, or a refusal explaining nothing goes to `system-engineer/engineer` — it sees the disk.
+**Stuck ≠ refused.** Fix the field a rejection names; an app that boots blank or a refusal explaining nothing goes to `system-engineer/engineer` — it sees the disk.

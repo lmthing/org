@@ -31,7 +31,17 @@
  * against the real filesystem like any other relative specifier. Type-only imports are erased by
  * esbuild, so the bundle is unaffected.
  *
- * The emitter below is DUPLICATED verbatim in `11-reconcile_tables.ts`. That is not a style
+ * THE CONTRACT IS ADDITIVE ACROSS RUNS.
+ * A follow-up request re-runs this whole pipeline, and `plan_endpoints` then returns the endpoints
+ * THAT CHANGE is about — not the ones the app already has. Emitting only those used to DELETE the
+ * declarations every already-shipped handler compiles against, which bricked a working app on the
+ * first follow-up edit. So an endpoint the previous `contract.d.ts` declared and the new plan does
+ * not mention is carried forward verbatim, and its name stays in `EndpointName` — see
+ * {@link carryForwardEndpoints}, which also explains why that is unconditional.
+ *
+ * The emitter below is DUPLICATED verbatim in `11-reconcile_tables.ts` — INCLUDING the carry-
+ * forward, which that node needs for the same reason (it re-emits the endpoints section from the
+ * same plan). That is not a style
  * choice: a code node is transpiled ALONE — `worker-load.ts#transpileFile` runs esbuild
  * `transform` (not `bundle`) over the single node file and hands the string to a worker that
  * evaluates it with `new Function(...)` and a `require` shim bound to the worker entry's own
@@ -60,6 +70,10 @@ export const node = {
     endpointCount: 'number',
     componentCount: 'number',
     endpointNames: 'array',
+    /** Endpoints a PREVIOUS contract declared that this plan does not mention, kept verbatim so a
+     *  follow-up edit cannot delete the types the already-shipped handlers compile against. */
+    carriedEndpoints: 'array',
+    carriedCount: 'number',
     error: 'string',
   },
 };
@@ -76,6 +90,10 @@ interface Ctx {
    *  Declared optional and probed at call time so its absence is reported as data rather than
    *  crashing the node. */
   writeProjectFile?: (path: string, contents: string) => Awaitable<{ ok: boolean; error?: string }>;
+  /** Read a project-relative file. Used to carry a PREVIOUS contract's endpoint declarations
+   *  forward — see {@link carryForwardEndpoints}. Optional and probed: on a first build there is
+   *  no previous contract, and its absence must degrade to "emit the plan", never to a throw. */
+  readProjectFile?: (path: string) => Awaitable<{ ok: boolean; content: string; error?: string }>;
 }
 
 /** The path the contract lands at. Relative-imported by project source; never `@app/types`. */
@@ -309,6 +327,18 @@ const MARK = {
   components: '// ─────────── components ───────────',
 };
 
+/**
+ * A per-endpoint marker line opening each endpoint's block inside the endpoints section, and the
+ * one that opens the trailing `EndpointName` union.
+ *
+ * These exist so a LATER run of this node can find, and carry forward, the declarations belonging
+ * to an endpoint the new plan does not mention — see {@link carryForwardEndpoints}. They are plain
+ * comments: `tsc` ignores them, and `11-reconcile_tables.ts` copies the endpoints section through
+ * verbatim (`sectionsOf`), so they survive a table re-emit untouched.
+ */
+const ENDPOINT_MARK = '//#endpoint ';
+const ENDPOINT_NAMES_MARK = '//#endpoint-names';
+
 const HEADER = [
   '/**',
   ' * types/contract.d.ts — this app\'s TYPE CONTRACT.',
@@ -472,7 +502,7 @@ function renderShape(
   return { typeName, preBlocks, block: [`interface ${typeName} {`, ...body, '}'].join('\n') };
 }
 
-function renderEndpoints(endpoints: ContractEndpoint[]): string {
+function renderEndpoints(endpoints: ContractEndpoint[], carried: CarriedEndpoint[] = []): string {
   const name = uniqueNamer();
   const blocks: string[] = [];
   for (const endpoint of endpoints) {
@@ -482,7 +512,7 @@ function renderEndpoints(endpoints: ContractEndpoint[]): string {
     // A field carrying a nested `item` shape becomes a named `<Base><Key>Item` interface referenced as
     // `[]`/`| null`, so list/record data is structural (never a `string` the page must parse).
     const item = renderShape(`${base}Item`, base, fields, name, 'field');
-    const lines: string[] = [];
+    const lines: string[] = [`${ENDPOINT_MARK}${endpoint.name}`];
     for (const pre of item.preBlocks) lines.push(pre, '');
     const purpose = doc(endpoint.purpose);
     lines.push(`/** \`${endpoint.name}\`${endpoint.route ? ` — ${endpoint.route}` : ''}${purpose ? `: ${purpose}` : ''} */`);
@@ -522,7 +552,21 @@ function renderEndpoints(endpoints: ContractEndpoint[]): string {
     );
     blocks.push(lines.join('\n'));
   }
-  const names = endpoints.map((e) => String(e.name)).filter(Boolean);
+
+  // Endpoints the NEW plan does not mention but a PREVIOUS contract declared, re-emitted verbatim.
+  // Their declarations are skipped if a freshly-rendered one already claims the same identifier —
+  // a duplicate `interface` is a compile error, so a name collision must lose to the current plan.
+  const claimed = new Set(declaredNames(blocks.join('\n')));
+  const kept: string[] = [];
+  for (const entry of carried) {
+    const own = declaredNames(entry.text);
+    if (own.some((n) => claimed.has(n))) continue;
+    for (const n of own) claimed.add(n);
+    kept.push(entry.name);
+    blocks.push(`${ENDPOINT_MARK}${entry.name}\n${entry.text}`);
+  }
+
+  const names = [...endpoints.map((e) => String(e.name)).filter(Boolean), ...kept];
   const union =
     names.length > 0
       ? `/** Every endpoint name the plan assigned — the exact strings \`useApi\`/\`useApiMutation\`/\n *  \`apiCall\` take, and each handler's \`export const name\`. */\ntype EndpointName =\n${[
@@ -531,8 +575,98 @@ function renderEndpoints(endpoints: ContractEndpoint[]): string {
           .map((n) => `  | ${quote(n)}`)
           .join('\n')};`
       : '/** No endpoints in the contract. */\ntype EndpointName = never;';
-  blocks.push(union);
+  blocks.push(`${ENDPOINT_NAMES_MARK}\n${union}`);
   return blocks.join('\n\n');
+}
+
+/** An endpoint block lifted verbatim out of a previously-emitted contract. */
+interface CarriedEndpoint {
+  name: string;
+  /** Everything the previous file declared for it, minus its `//#endpoint` marker line. */
+  text: string;
+}
+
+/** Every top-level `interface X` / `type X` a block declares — the collision key for a carry-forward. */
+function declaredNames(text: string): string[] {
+  const out: string[] = [];
+  for (const line of text.split('\n')) {
+    const m = /^(?:export\s+)?(?:interface|type)\s+([A-Za-z_$][A-Za-z0-9_$]*)/.exec(line);
+    if (m) out.push(m[1] as string);
+  }
+  return out;
+}
+
+/** Every endpoint name an emitted contract carries a block for, in file order. */
+export function emittedEndpointNames(dts: string): string[] {
+  const out: string[] = [];
+  for (const line of endpointsSectionOf(dts).split('\n')) {
+    if (line.startsWith(ENDPOINT_NAMES_MARK)) break;
+    if (line.startsWith(ENDPOINT_MARK)) {
+      const name = line.slice(ENDPOINT_MARK.length).trim();
+      if (name) out.push(name);
+    }
+  }
+  return out;
+}
+
+/** Slice a previously-emitted contract's endpoints section out of the whole file. `''` when the
+ *  text is not a file this emitter wrote. */
+function endpointsSectionOf(text: string): string {
+  const from = text.indexOf(MARK.endpoints);
+  const to = text.indexOf(MARK.server);
+  if (from < 0 || to < from) return '';
+  return text.slice(from + MARK.endpoints.length, to);
+}
+
+/**
+ * **Why an incremental edit used to brick a working app.**
+ *
+ * This node writes `types/contract.d.ts` WHOLESALE from the current plan. On a follow-up request
+ * ("also record which mechanic did the work") the pipeline re-plans, and `plan_endpoints` returns
+ * the endpoints THIS change is about — not the ones the app already has. Every declaration the
+ * already-on-disk handlers reference then vanished from the file: measured live on scenario
+ * 30-bike-workshop run 202, six shipped endpoints lost their types, `appCheck` went to 12
+ * `Cannot find name 'BikesListInput'` errors, `ts-json-schema-generator` threw on the first of
+ * them, `POST …/app/build` answered 400 and the root route 404'd. The app was working before the
+ * edit and unopenable after it.
+ *
+ * So the contract is now ADDITIVE across runs: an endpoint the previous contract declared and the
+ * new plan does not mention keeps its exact declarations, and its name stays in `EndpointName`.
+ *
+ * Carrying forward unconditionally is deliberate — this node cannot see `api/**`, and the two
+ * outcomes are not symmetric. Keeping the types of an endpoint the model genuinely deleted costs
+ * an unused ambient interface, which nothing reads and no gate fails on; dropping the types of an
+ * endpoint that still exists costs the whole app. `validateAppViews` still resolves every view's
+ * endpoint against the REAL handlers, so a stale name cannot become a shipped binding.
+ */
+function carryForwardEndpoints(section: string, planned: Set<string>): CarriedEndpoint[] {
+  if (!section) return [];
+  const out: CarriedEndpoint[] = [];
+  let current: CarriedEndpoint | null = null;
+  let lines: string[] = [];
+  const flush = (): void => {
+    if (current) {
+      const text = lines.join('\n').trim();
+      if (text) out.push({ name: current.name, text });
+    }
+    current = null;
+    lines = [];
+  };
+  for (const line of section.split('\n')) {
+    if (line.startsWith(ENDPOINT_NAMES_MARK)) {
+      flush();
+      break;
+    }
+    if (line.startsWith(ENDPOINT_MARK)) {
+      flush();
+      const name = line.slice(ENDPOINT_MARK.length).trim();
+      if (name && !planned.has(name)) current = { name, text: '' };
+      continue;
+    }
+    if (current) lines.push(line);
+  }
+  flush();
+  return out;
 }
 
 function renderComponents(components: ContractComponent[]): string {
@@ -577,12 +711,17 @@ function assembleDts(sections: { rows: string; endpoints: string; server: string
   ].join('\n');
 }
 
-/** The contract → the full `.d.ts` text. Pure: same contract in, same bytes out. */
-export function emitContractDts(contract: Contract): string {
+/**
+ * The contract → the full `.d.ts` text. Pure: same contract (and same previous file) in, same
+ * bytes out. `previous` is the contract already on disk, if any; its endpoint declarations are
+ * carried forward for anything the plan no longer mentions ({@link carryForwardEndpoints}).
+ */
+export function emitContractDts(contract: Contract, previous = ''): string {
   const rows = renderRows(contract.tables);
+  const planned = new Set(contract.endpoints.map((e) => String(e.name)).filter(Boolean));
   return assembleDts({
     rows: rows.text,
-    endpoints: renderEndpoints(contract.endpoints),
+    endpoints: renderEndpoints(contract.endpoints, carryForwardEndpoints(endpointsSectionOf(previous), planned)),
     server: renderServer(rows.rowTypeByTable),
     components: renderComponents(contract.components),
   });
@@ -637,7 +776,24 @@ export function readContract(inputs: Record<string, unknown>): Contract {
 
 export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Record<string, unknown>> {
   const contract = readContract(inputs ?? {});
-  const dts = emitContractDts(contract);
+
+  // The contract already on disk, if this app has been built before. Read failures are NOT a
+  // finding: on a first build there is no file, and this node must never throw.
+  let previous = '';
+  if (typeof ctx.readProjectFile === 'function') {
+    try {
+      const r = await ctx.readProjectFile(CONTRACT_PATH);
+      if (r?.ok && typeof r.content === 'string') previous = r.content;
+    } catch {
+      previous = '';
+    }
+  }
+  const planned = new Set(contract.endpoints.map((e) => String(e.name)).filter(Boolean));
+  const dts = emitContractDts(contract, previous);
+  // Read the carried names back OUT of the emitted text rather than re-deriving them: a candidate
+  // whose identifiers collided with a planned endpoint's is dropped, and the report must say what
+  // the file actually contains.
+  const carried = emittedEndpointNames(dts).filter((n) => !planned.has(n));
 
   let written = false;
   let error = '';
@@ -663,6 +819,8 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     endpointCount: contract.endpoints.length,
     componentCount: contract.components.length,
     endpointNames: contract.endpoints.map((e) => String(e.name)),
+    carriedEndpoints: carried,
+    carriedCount: carried.length,
     error,
   };
 }

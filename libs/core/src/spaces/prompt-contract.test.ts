@@ -44,14 +44,14 @@ describe('system-appbuilder/automator — the empty-app failure', () => {
     expect(
       instruct,
       'a first whole-app build must route to build_live_project, never freeform in one turn (freeform is the single-page/empty-app failure)',
-    ).toMatch(/whole app authored freeform in one model turn is the single-page/i);
+    ).toMatch(/ALWAYS runs the `build_live_project` tasklist — never freeform/i);
 
     // The page-required gate still applies to the freeform GROW path.
-    expect(instruct).toMatch(/not done until the new section serves a PAGE/i);
+    expect(instruct).toMatch(/not done until the new data serves a PAGE/i);
 
     // The ordering rule (the one that survives running out of turn) — the regression guard.
     expect(instruct).toMatch(/openable first|make it openable early/i);
-    expect(instruct).toMatch(/run out of turn|cut off/i);
+    expect(instruct).toMatch(/turn that runs long|run out of turn|cut off/i);
   });
 });
 
@@ -73,16 +73,19 @@ describe('system-appbuilder/automator — attribution survives the seed', () => 
     // when `('app_building','authoring','seeding-data')` is loaded — so it is asserted on the corpus.
     const instruct = automatorCorpus();
 
+    // Provenance is a COLUMN decision, so the rule lives with the node that designs the schema
+    // rather than in the automator's always-on body — the automator no longer designs tables itself.
     expect(
-      instruct,
-      'the automator must be told to keep WHO/WHERE material came from on the record, not just its operational content',
+      readFileSync(join(SYSTEM_SPACES, 'system-appbuilder', 'tasklists', 'build_live_project', '04-plan_tables.md'), 'utf8'),
+      'the table plan must keep WHO/WHERE material came from on the record, not just its operational content',
     ).toMatch(/attribution|credited_to|provenance/i);
 
     // The near-miss guard: a `source` field filled with "from an attachment" LOOKS done and is not.
+    // Lives with the schema decision, for the same reason the rule above does.
     expect(
-      instruct,
-      'the automator must be warned that recording the CHANNEL the material arrived on is not the attribution',
-    ).toMatch(/transport is not the attribution|channel the material arrived on/i);
+      readFileSync(join(SYSTEM_SPACES, 'system-appbuilder', 'tasklists', 'build_live_project', '04-plan_tables.md'), 'utf8'),
+      'the table plan must warn that recording the CHANNEL the material arrived on is not the attribution',
+    ).toMatch(/transport is not the attribution|channel the material\s+arrived on/i);
   });
 });
 
@@ -431,9 +434,9 @@ describe('system-appbuilder live-project build action', () => {
     );
 
     expect(automator).toMatch(/currentTask\.resolve\(await tasklist\('build_live_project', \{ query, attachmentIds \}\)\)/);
-    expect(automator).toMatch(/do not continue with a second model turn or manually replace its result/i);
+    expect(automator).toMatch(/do NOT continue with a\s+second model turn/i);
     // The route is invocation-independent: a MODEL-DRIVEN whole-app delegate must reach the tasklist too.
-    expect(automator).toMatch(/no matter how you were invoked|delegated to you MODEL-DRIVEN/i);
+    expect(automator).toMatch(/Whether the runtime started you on the `build_live_project` action OR a caller delegated/i);
   });
 
   it('builds the live app as a plan → per-item build DAG (multiple pages + reusable components)', () => {
@@ -456,32 +459,32 @@ describe('system-appbuilder live-project build action', () => {
     expect(read('05-plan_endpoints.md')).toMatch(/UNIQUE lowercase-hyphen id/);
     expect(read('12-implement_endpoints.md')).toMatch(/const name = ep\.name;/);
     expect(read('12-implement_endpoints.md')).toMatch(/VERBATIM/);
-    expect(read('07-plan_pages.md')).toMatch(/plan_endpoints\.endpoints\[\]\.name/);
+    expect(read('07-plan_views.md')).toMatch(/plan_endpoints\.endpoints\[\]\.name/);
 
     // Reusable components are their own plan → implement pair.
-    expect(read('14-implement_components.md')).toMatch(/writeProjectComponent\(/);
-    expect(read('14-implement_components.md')).toMatch(/PascalCase/);
+    expect(read('14-implement_view_components.md')).toMatch(/writeProjectViewComponent\(/);
+    expect(read('14-implement_view_components.md')).toMatch(/PascalCase/);
 
-    // Pages read endpoints via useApi AND import the reusable components.
-    const pages = read('15-implement_pages.md');
-    expect(pages).toMatch(/writeProjectPage\(/);
-    expect(pages).toMatch(/useApi/);
-    expect(pages).toMatch(/components\//);
-    // The forbidden-import guard survives the redesign.
-    expect(pages).toMatch(/react-router/);
-    expect(pages).toMatch(/@radix-ui/);
-    // Null-safety: nullable DB columns must be COALESCED before use (the park-fees crash fix) —
-    // stated as a general principle, not a list of specific methods.
-    expect(pages).toMatch(/GUARD NULLS/);
-    expect(pages).toMatch(/COALESCE/);
+    // A page NAMES its endpoints — it does not fetch them. There is no `useApi` here (and no client
+    // code at all), so the medium's own writer is what the node must model.
+    const pages = read('15-implement_views.md');
+    expect(pages).toMatch(/writeProjectView\(/);
+    // The forbidden-import guard is MOOT in this medium — a spec has no imports to forbid. Its
+    // successor is navigation as a DECLARED target rather than an interpolated string, which is what
+    // keeps the "no expressions anywhere" guarantee real instead of decorative.
+    expect(pages).toMatch(/navigate/);
+    expect(pages).toMatch(/rowAction/);
+    // Null-safety needs no guard clause in a spec: a binding that resolves to null renders the
+    // renderer's own empty treatment rather than throwing, so the whole "COALESCE before use" rule
+    // has no code to attach to. The equivalent guarantee is that a binding is a PATH and nothing
+    // else — no expression can be written that could dereference a null in the first place.
+    expect(pages).toMatch(/No `\?:`, no `\+`, no `\$\{…\}`/);
 
-    // Every model-authored implement node carries ✅do/❌never code examples grounded in real
+    // The ONE node that still emits real TypeScript keeps its ✅do/❌never examples, grounded in real
     // generated-code failures — the NO-DOM `console` trap being the recurring one.
-    for (const f of ['12-implement_endpoints.md', '14-implement_components.md', '15-implement_pages.md']) {
-      expect(read(f)).toMatch(/console/);
-      expect(read(f)).toMatch(/NO-DOM ambient/);
-      expect(read(f)).toMatch(/❌/);
-    }
+    expect(read('12-implement_endpoints.md')).toMatch(/console/);
+    expect(read('12-implement_endpoints.md')).toMatch(/NO-DOM ambient/);
+    expect(read('12-implement_endpoints.md')).toMatch(/❌/);
 
     // IDs are system-generated: plan_tables tells the model to OMIT the id, and reach for the `uuid()`
     // space function only to wire a relation. (The store also regenerates a blank generated PK.)
@@ -495,25 +498,32 @@ describe('system-appbuilder live-project build action', () => {
     expect(read('05-plan_endpoints.md')).toMatch(/`fields`/);
     expect(read('05-plan_endpoints.md')).toMatch(/EXACT keys of ONE item/);
     expect(read('12-implement_endpoints.md')).toMatch(/item\.fields/);
-    expect(read('15-implement_pages.md')).toMatch(/plan_endpoints\.endpoints/);
-    expect(read('15-implement_pages.md')).toMatch(/verbatim/i);
+    expect(read('15-implement_views.md')).toMatch(/plan_endpoints/);
+    expect(read('15-implement_views.md')).toMatch(/verbatim/i);
 
-    // finalize writes the persistent chat dock layout.
-    expect(read('18-finalize.md')).toMatch(/writeProjectPage\('_layout'/);
-    expect(read('18-finalize.md')).toMatch(/<Chat\s+agent="thing"/);
+    // The assistant dock is part of the SHELL spec now, not a hand-written `_layout` page.
+    expect(read('15b-implement_shell.md')).toMatch(/writeProjectViewShell\(/);
+    expect(read('15b-implement_shell.md')).toMatch(/assistant/);
+    expect(read('15b-implement_shell.md')).toMatch(/agent: 'thing'/);
+    // finalize carries an inexpressible surface through to the caller — with no second builder to
+    // hand it to, saying so IS the deliverable.
+    expect(read('18-finalize.md')).toMatch(/cannotExpress/);
 
     // Pages are detailed ONE per node too: plan_pages fans out over the binding page list, so no
     // single node holds every page's detail (the "split the monolithic page node" fix).
-    expect(read('07-plan_pages.md')).toMatch(/forEach: plan_app\.pages/);
-    expect(read('15-implement_pages.md')).toMatch(/forEach: plan_pages\b/);
+    expect(read('07-plan_views.md')).toMatch(/forEach: plan_app\.pages/);
+    expect(read('15-implement_views.md')).toMatch(/forEach: plan_views\b/);
 
     // A page write that returns `{ ok: false }` (a TSX parse slip RETURNS, it does not throw) is read
     // and RETRIED with a corrected source before resolving — the fix for the silent 1-of-N page drop
     // where the no-retry template resolved a failed write blind while finalize still declared victory.
     expect(pages).toMatch(/if \(!w\.ok\)/);
-    expect(pages).toMatch(/writeProjectPage\(pg\.route, src2\)/);
+    expect(pages).toMatch(/writeProjectView\(pg\.route, spec2\)/);
     expect(pages).toMatch(/resolve\(\{ route: pg\.route, ok: w\.ok, error/);
-    expect(pages).toMatch(/NEVER resolve the failed first attempt/i);
+    // Pinned STRUCTURALLY rather than as prose: the retry REASSIGNS `w` (it is not a fresh `w2`), so
+    // the `resolve({ ok: w.ok })` above necessarily reports the retry's outcome and cannot resolve the
+    // failed first attempt. That is the silent 1-of-N page drop, closed by the shape of the code.
+    expect(pages).toMatch(/\n\s*w = writeProjectView\(pg\.route, spec2\)/);
 
     // finalize reports pages HONESTLY from disk and surfaces any planned page that went missing — it
     // does NOT declare a clean `ok` on a partial build (the reporting half of the silent-drop fix).
@@ -535,8 +545,10 @@ describe('system-appbuilder live-project build action', () => {
     expect(fix).toMatch(/goto: verify/); // resumes the gate instead of a hand-unrolled second pass
     expect(fix).toMatch(/readProjectFile\(/); // reads the failing file before fixing it
     expect(fix).toMatch(/item\.errors|f\.errors/); // fixes the SPECIFIC reported errors
-    // Nothing is excluded or stubbed to make the build pass.
-    expect(read('index.md')).toMatch(/never (silently )?(excluded|stubbed)|excluded or stubbed/i);
+    // Nothing is excluded or stubbed to make the build pass. Stated in the new pipeline as a
+    // FAILURE obligation on `finalize` rather than a prohibition on the implementers: it fails
+    // loudly carrying anything planned that never landed, so a quiet omission cannot read as done.
+    expect(read('index.md')).toMatch(/FAILS LOUDLY carrying the[\s\S]{0,80}anything planned that is missing/i);
 
     // finalize is the sole authoritative build-invoker (subsumes the no-build-trigger defect): it runs
     // buildApp() itself and gates `ok` on a CLEAN, BUILT app — a residual compiler error fails loudly.
@@ -544,11 +556,16 @@ describe('system-appbuilder live-project build action', () => {
     // finalize CARRIES their residue rather than re-implementing them: a non-empty verify.offending
     // means the fix loop exhausted its attempts with faults still open, and gates `ok` the same as a
     // compiler error.
+    // finalize runs NO build of its own — the last `verify` is the authoritative one, and a second
+    // build here could only disagree with it (which is how a stale gate value once reported a clean
+    // app as broken). It reads verify's verdict instead, and `ok` requires all THREE ground truths.
     const finalize = read('18-finalize.md');
-    expect(finalize).toMatch(/const check = await buildApp\(\)/);
-    expect(finalize).toMatch(/check\.ok && check\.built/);
+    expect(finalize).not.toMatch(/await buildApp\(\)/);
+    expect(finalize).toMatch(/verify\.ok/);
+    expect(finalize).toMatch(/verify\.viewsValidated/);
+    expect(finalize).toMatch(/verify\.renderSmoked/);
     expect(finalize).toMatch(/verify\.offending/); // carries the gate's residue
-    expect(finalize).toMatch(/allErrors\.length === 0/); // ok gates on compiler errors + gate misses
+    expect(finalize).toMatch(/allErrors/); // ok gates on the gate's errors + gate misses
   });
 
   it('the mechanical scans live in the CODE NODE, and no prompt duplicates them (06-tanzania run 32)', () => {
@@ -560,15 +577,14 @@ describe('system-appbuilder live-project build action', () => {
     // not defined cascades) — and a gate that fails to execute contributes no findings, which the
     // pipeline reads as "clean". They are now one host-run code node; its behaviour is tested for
     // real in build-live-project-gate.test.ts. Here we only pin WHERE they live.
+    // The TSX-era source scans (page→endpoint via `useApi`, descriptor-return, param arity) are GONE
+    // with the medium that needed them: a spec cannot contain a fetch call or a JSX return at all, so
+    // there is nothing to scan for. `verify` now merges three executed ground truths instead.
     const verify = read('16-verify.ts');
-    expect(verify, 'page→endpoint scan').toContain('useApiMutation|useApi|apiCall');
-    expect(verify, 'reads real endpoint names off api/').toContain('export\\s+const\\s+name\\s*=');
-    expect(verify, 'names the unknown-endpoint failure mode').toContain('BEFORE issuing any request');
-    expect(verify, 'param-arity scan').toContain('stringified into the path');
-    expect(verify, 'descriptor-return scan').toContain('return\\s*\\{\\s*type\\s*:');
-    expect(verify, 'names the React runtime failure').toContain('React error #31');
+    expect(verify, 'builds + typechecks the generated wrappers').toContain('buildProjectApp');
+    expect(verify, 'app-wide view validation').toContain('validateAppViews');
+    expect(verify, 'mounts every view against live endpoint responses').toContain('renderSmokeViews');
     expect(verify, 'endpoint→table scan').toContain('db\\s*\\.\\s*(?:query|insert|update|remove)');
-    expect(verify, 'surface-token-as-text scan').toContain('SURFACE token');
 
     // The duplication is GONE: finalize consumes verify's result instead of re-scanning, and the
     // second compile/fix pair no longer exists at all.
@@ -580,9 +596,10 @@ describe('system-appbuilder live-project build action', () => {
 
     // The fix node carries repair guidance for each gate-error class.
     const fix = read('17-fix.md');
-    expect(fix, 'repair guidance for a bad endpoint reference').toMatch(/plan_endpoints\.endpoints[\s\S]{0,200}VERBATIM/);
-    expect(fix, 'repair guidance rewrites the descriptor as JSX').toMatch(/rewrite/i);
-    expect(fix, 'repair guidance names JSX as the target shape').toMatch(/\bJSX\b/);
+    expect(fix, 'repair guidance points at the endpoint plan').toMatch(/plan_endpoints/);
+    // The repair target is a SPEC and a BINDING — there is no JSX to rewrite.
+    expect(fix, 'repair guidance names the spec as the target shape').toMatch(/\bspec\b/i);
+    expect(fix, 'repair guidance names bindings').toMatch(/binding/i);
   });
 });
 
@@ -595,8 +612,9 @@ describe('system-appbuilder repair turns', () => {
 
     // The one-liner is ALWAYS ON — a repair turn that never loads an aspect must still write.
     expect(automator).toMatch(/A repair request naming a missing page is a WRITE, not a diagnosis/i);
-    // The concrete instruction rides with the grow-an-app detail, which such a turn does load.
-    expect(automatorCorpus()).toMatch(/write the `index` page and its needed read API immediately/i);
+    // The concrete instruction is in the same always-on body — a repair turn that loads nothing must
+    // still write, so this one cannot sit behind a `loadKnowledge`.
+    expect(automator).toMatch(/write the missing page and the read API it needs/i);
   });
 });
 

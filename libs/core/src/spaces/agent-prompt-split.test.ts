@@ -67,8 +67,8 @@ const SPLIT_AGENTS = [
     priorLines: 781,
   },
   {
-    label: 'system-viewbuilder/automator',
-    space: 'system-viewbuilder',
+    label: 'system-appbuilder/automator',
+    space: 'system-appbuilder',
     agent: 'automator',
     domains: ['app_building'],
     maxBodyLines: 175,

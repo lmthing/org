@@ -300,8 +300,8 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
     expect(CAPABILITY_DTS_FRAGMENTS['api:write']).toContain('writeProjectApi(');
   });
 
-  // `system-viewbuilder`'s central guarantee — "100% spec, zero WebView by construction" — is not
-  // enforced by prose telling the model to avoid TSX. It is enforced HERE: a viewbuilder agent
+  // `system-appbuilder`'s central guarantee — "100% spec, zero WebView by construction" — is not
+  // enforced by prose telling the model to avoid TSX. It is enforced HERE: a system-appbuilder agent
   // holds `views:write` and NOT `pages:write`, so `writeProjectPage` is absent from its ambient
   // DTS and a freehand-TSX attempt is a typecheck error it can see and retry.
   //
@@ -330,9 +330,9 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
     expect(pages).not.toContain('writeProjectViewShell(');
   });
 
-  it('buildApp stays under pages:write — the viewbuilder gates its build host-side', () => {
+  it('buildApp stays under pages:write — the spec builder gates its build host-side', () => {
     // Moving `buildApp` to `views:write` would look like a convenience and would be the same
-    // mistake in reverse: the viewbuilder's build gate is `16-verify`, a HOST-run code node calling
+    // mistake in reverse: the spec builder's build gate is `16-verify`, a HOST-run code node calling
     // `buildProjectApp`, precisely so the verdict is exit status rather than a model self-report.
     expect(CAPABILITY_DTS_FRAGMENTS['pages:write']).toContain('buildApp(');
     expect(CAPABILITY_DTS_FRAGMENTS['views:write']).not.toContain('buildApp(');
@@ -352,7 +352,7 @@ describe('project-file reader field names are unambiguous (readProjectFile.conte
     expect(PROJECT_READ_DTS).not.toMatch(/readProjectFile\([^)]*\):\s*{[^}]*\btext\b/);
   });
 
-  it('the automator instruct shows readProjectFile(...).content and warns off .text', () => {
+  it('the automator instruct names each reader\'s field and warns that readProjectFile(...).text aborts the turn', () => {
     const instruct = readFileSync(
       resolve(
         dirname(fileURLToPath(import.meta.url)),
@@ -360,13 +360,21 @@ describe('project-file reader field names are unambiguous (readProjectFile.conte
       ),
       'utf8',
     );
-    // It must give the model a correct example to copy: reading a project file's body via .content.
-    expect(instruct).toMatch(/readProjectFile\([^)]*\)\.content/);
+    const flat = instruct.replace(/\s+/g, ' ');
+    // The body must carry the disambiguation itself — this is a rule that has to hold on a turn
+    // that loaded no knowledge aspect, because it fires the moment the agent inspects a project.
+    expect(flat).toMatch(/Field names differ by reader/i);
+    // Each reader paired with ITS field, so the model has a correct thing to copy rather than a
+    // memory of "the body field".
+    expect(flat).toMatch(/`readProjectFile\(path\)` → read the body from \*\*`\.content`\*\*/);
+    expect(flat).toMatch(/`readDocument\(id\)`[^.]*→ read from \*\*`\.text`\*\*/);
+    expect(flat).toMatch(/`listProjectDir\(dir\)`[^.]*\*\*`\.entries`\*\*/);
+    // And the mistake itself named as what it costs: a typecheck error that ends the turn before
+    // any write lands (the 09-home-renovation loop).
+    expect(flat).toMatch(/`readProjectFile\(\.\.\.\)\.text` is a typecheck error/);
     // It must NOT model the wrong pattern in a real CODE example — i.e. `readProjectFile('<path>').text`
     // with a quoted path arg. (The prose warning uses the `readProjectFile(...)` placeholder, which is
     // deliberately excluded so the guidance can name the mistake without tripping this guard.)
     expect(instruct).not.toMatch(/readProjectFile\(\s*['"][^)]*\)\.text\b/);
-    // And it must explicitly disambiguate the two readers' fields.
-    expect(instruct).toMatch(/\.content\b.*NOT\s+\.text|NOT\s+\.text.*readDocument/is);
   });
 });

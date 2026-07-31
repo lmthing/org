@@ -71,7 +71,7 @@ function typecheckPrelude(task: TaskNode, tl: TasklistDir, allFns: Record<string
 }
 
 describe('shipped system spaces load + validate', () => {
-  for (const name of ['system-architect', 'system-research', 'system-appbuilder', 'system-viewbuilder', 'user-thing', 'user-memory']) {
+  for (const name of ['system-architect', 'system-research', 'system-appbuilder', 'user-thing', 'user-memory']) {
     it(`${name}: agents have charters and all tasklists are valid DAGs`, async () => {
       const space = await loadSpace(resolve(SYS, name), { requireAgents: false });
       // Every agent ships a non-trivial charter (fork-safe identity).
@@ -360,7 +360,7 @@ describe('shipped system spaces load + validate', () => {
    */
   it('team:post is reachable from exactly one shipped tasklist node', async () => {
     const holders: string[] = [];
-    for (const spaceName of ['system-architect', 'system-research', 'system-appbuilder', 'system-viewbuilder', 'user-thing', 'user-memory']) {
+    for (const spaceName of ['system-architect', 'system-research', 'system-appbuilder', 'user-thing', 'user-memory']) {
       const space = await loadSpace(resolve(SYS, spaceName), { requireAgents: false });
       for (const tlName of Object.keys(space.tasklists)) {
         const tl = await loadTasklistFromSpace(space, tlName);
@@ -524,7 +524,7 @@ describe('shipped system spaces load + validate', () => {
    */
   it('every capabilities-narrowed tasklist node that reads the db (db.query/db.tables) declares db:read', async () => {
     const offenders: string[] = [];
-    for (const spaceName of ['system-architect', 'system-research', 'system-appbuilder', 'system-viewbuilder', 'user-thing', 'user-memory']) {
+    for (const spaceName of ['system-architect', 'system-research', 'system-appbuilder', 'user-thing', 'user-memory']) {
       const space = await loadSpace(resolve(SYS, spaceName), { requireAgents: false });
       for (const tlName of Object.keys(space.tasklists)) {
         const tl = await loadTasklistFromSpace(space, tlName);
@@ -575,6 +575,10 @@ describe('shipped system spaces load + validate', () => {
     // build_live_project (the automator's default action) is the sole appbuilder tasklist now.
     expect(Object.keys(space.tasklists)).toEqual(['build_live_project']);
     expect(space.agents['app-architect']).toBeUndefined();
+    // There is ONE builder and its pages are SPECS: the TSX page-builder agent is gone, and the
+    // spec-builder is the specialist that took its place.
+    expect(space.agents['page-builder']).toBeUndefined();
+    expect(space.agents['spec-builder']).toBeDefined();
 
     // build_live_project is a plan → per-category implement (forEach) → finalize pipeline.
     const live = await loadTasklistFromSpace(space, 'build_live_project');
@@ -591,22 +595,24 @@ describe('shipped system spaces load + validate', () => {
     expect(live['plan_endpoints']!.dependsOn).toEqual([
       'plan_app', 'plan_tables', 'user_stories',
     ]);
-    expect(live['plan_components']!.dependsOn).toEqual(['plan_app', 'plan_endpoints', 'user_stories']);
-    expect(live['plan_pages']!.dependsOn).toEqual([
-      'plan_app', 'plan_endpoints', 'plan_components', 'user_stories',
+    expect(live['plan_view_components']!.dependsOn).toEqual(['plan_app', 'plan_endpoints', 'user_stories']);
+    expect(live['plan_views']!.dependsOn).toEqual([
+      'plan_app', 'plan_endpoints', 'plan_view_components', 'user_stories',
     ]);
     // Each category is a plan node → an implement node that fans out over the plan's list.
     expect(live['implement_tables']!.forEach).toBe('plan_tables.tables');
     expect(live['implement_endpoints']!.forEach).toBe('plan_endpoints.endpoints');
-    expect(live['implement_components']!.forEach).toBe('plan_components.components');
-    // Pages are the exception: plan_app emits a LIGHTWEIGHT page list, plan_pages is ITSELF a
+    expect(live['implement_view_components']!.forEach).toBe('plan_view_components.components');
+    // Pages are the exception: plan_app emits a LIGHTWEIGHT page list, plan_views is ITSELF a
     // per-page forEach that details one page per node (so no node holds every page's detail), and
-    // implement_pages fans out over that aggregated per-page array (the bare task id).
-    expect(live['plan_pages']!.forEach).toBe('plan_app.pages');
-    expect(live['implement_pages']!.forEach).toBe('plan_pages');
-    // Pages know the endpoints they read AND the reusable components they import.
-    expect(live['implement_pages']!.dependsOn).toEqual([
-      'plan_pages', 'plan_endpoints', 'plan_components', 'implement_components', 'emit_types',
+    // implement_views fans out over that aggregated per-page array (the bare task id).
+    expect(live['plan_views']!.forEach).toBe('plan_app.pages');
+    expect(live['implement_views']!.forEach).toBe('plan_views');
+    // A page names the endpoints its sections read AND the view components they `{ use: … }` — and
+    // depends on `implement_view_components` because an unresolved `use` makes the whole page fail
+    // to save, not just that one section.
+    expect(live['implement_views']!.dependsOn).toEqual([
+      'plan_views', 'plan_endpoints', 'plan_view_components', 'implement_view_components', 'implement_endpoints', 'emit_types',
     ]);
     // Implementation hangs off the VALIDATED contract and the EMITTED types, so every generated
     // file is typechecked against declarations that already exist — plus `reconcile_tables`, which
@@ -615,9 +621,16 @@ describe('shipped system spaces load + validate', () => {
       'plan_endpoints', 'plan_tables', 'emit_types', 'reconcile_tables',
     ]);
     expect(live['implement_tables']!.dependsOn).toEqual(['plan_tables', 'emit_types']);
-    expect(live['implement_components']!.dependsOn).toEqual(['plan_components', 'emit_types']);
+    expect(live['implement_view_components']!.dependsOn).toEqual([
+      'plan_view_components', 'plan_endpoints', 'implement_endpoints', 'emit_types',
+    ]);
+    // THE SHELL is a node of its own and it runs BEFORE the gate, not after: the app-wide checks
+    // ask "is every route reachable from the nav?", so a shell written after `verify` would be a
+    // shell nothing checked. It needs the routes that ACTUALLY landed, hence `implement_views`.
+    expect(live['implement_shell']!.dependsOn).toEqual(['plan_app', 'plan_views', 'implement_views']);
+    expect(live['implement_shell']!.forEach).toBeUndefined();
 
-    // The four HOST-RUN code nodes. A code node cannot fail to reproduce its own logic, which is
+    // The HOST-RUN code nodes. A code node cannot fail to reproduce its own logic, which is
     // the whole reason these are not prose (`gateErrors is not defined` cascades were 35% of the
     // errors across run 32's build steps).
     for (const id of ['validate_contract', 'emit_types', 'reconcile_tables', 'smoke_endpoints', 'check_acceptance', 'verify']) {
@@ -625,9 +638,11 @@ describe('shipped system spaces load + validate', () => {
     }
     // The contract is cross-checked BEFORE any code exists, and a failure resumes the DESIGN
     // carrying the reasons — `carry` is the point: getUpstreamOutputs only passes `dependsOn`, and
-    // the resumed node cannot depend on its own checker without making the graph cyclic.
+    // the resumed node cannot depend on its own checker without making the graph cyclic. It sees
+    // `plan_views` because the view checks (a section's kind, its endpoint, its bindings) are the
+    // half of the contract that only exists once the pages are planned.
     expect(live['validate_contract']!.dependsOn).toEqual([
-      'plan_tables', 'plan_endpoints', 'plan_components', 'plan_pages', 'plan_automations',
+      'plan_tables', 'plan_endpoints', 'plan_view_components', 'plan_views', 'plan_automations',
     ]);
     // CONDITIONAL AUTOMATIONS: a per-story cron/event plan (usually EMPTY) that fans out one hook per
     // node. `plan_automations` reads only the stories + tables; `implement_automations` runs after the
@@ -650,10 +665,10 @@ describe('shipped system spaces load + validate', () => {
     // OWN `dependsOn`, not the transitive closure, so a contract it did not name would arrive
     // undefined.
     expect(live['emit_types']!.dependsOn).toEqual([
-      'validate_contract', 'plan_tables', 'plan_endpoints', 'plan_components',
+      'validate_contract', 'plan_tables', 'plan_endpoints', 'plan_view_components',
     ]);
     expect(live['reconcile_tables']!.dependsOn).toEqual([
-      'implement_tables', 'plan_tables', 'plan_endpoints', 'plan_components',
+      'implement_tables', 'plan_tables', 'plan_endpoints', 'plan_view_components',
     ]);
     // Nothing else in the pipeline ever RUNS an endpoint; a handler returning structurally-valid
     // zeros passes typecheck, esbuild and every static scan.
@@ -662,34 +677,43 @@ describe('shipped system spaces load + validate', () => {
     // machine-checkable floors; `check_acceptance` (host-run) calls each endpoint against the SEEDED
     // data and evaluates them — SHAPE is not MEANING. It needs the data landed (implement_tables), not
     // just the endpoints, and splits CODE faults (routed to fix via verify) from extraction DATA gaps.
-    expect(live['plan_acceptance']!.dependsOn).toEqual(['plan_endpoints', 'plan_pages', 'user_stories', 'read_sources']);
+    expect(live['plan_acceptance']!.dependsOn).toEqual(['plan_endpoints', 'plan_views', 'user_stories', 'read_sources']);
     expect(live['plan_acceptance']!.forEach).toBeUndefined();
     expect(live['check_acceptance']!.kind).toBe('code');
     expect(live['check_acceptance']!.dependsOn).toEqual(['plan_acceptance', 'implement_endpoints', 'implement_tables']);
-    // GATE-AND-RETRY: after every file is written, `verify` — a HOST-RUN code node — compiles the
-    // app (buildProjectApp = typecheck → esbuild) AND runs the mechanical scans the compiler cannot
-    // (endpoint→table, page→endpoint, param arity, the { type, props } descriptor shape, a surface
-    // token used as text). It routes each offending FILE to a per-file fix fork. `fix` then RESUMES
-    // `verify` through onFail, so the cycle loops until clean instead of being hand-unrolled into
-    // compile_pass1 → fix_pass1 → compile_pass2 → fix_pass2 (which duplicated the scan three times
-    // and capped the retry budget at however many copies were written).
+    // GATE-AND-RETRY: after every artifact is written, `verify` — a HOST-RUN code node — merges the
+    // real build (buildProjectApp = typecheck → esbuild over the generated wrappers) with the two
+    // app-wide view gates (`validateAppViews`, `renderSmokeViews`) and the endpoint probes. It routes
+    // each offending ARTIFACT to a per-file fix fork, and `fix` then RESUMES `verify` through onFail,
+    // so the cycle loops until clean instead of being hand-unrolled into compile_pass1 → fix_pass1 →
+    // compile_pass2 → fix_pass2 (which duplicated the scan three times and capped the retry budget at
+    // however many copies were written). The SHELL is in scope because a nav fault is app-wide and
+    // has to be fixable.
     expect(live['verify']!.kind).toBe('code');
     expect(live['verify']!.dependsOn).toEqual([
-      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'check_acceptance', 'implement_components', 'implement_pages', 'implement_automations',
+      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'check_acceptance', 'implement_view_components', 'implement_views', 'implement_shell', 'implement_automations',
     ]);
     expect(live['fix']!.forEach).toBe('verify.offending');
     expect(live['fix']!.onFail).toEqual({ goto: 'verify', when: 'verify.ok == false', maxAttempts: 3 });
-    // finalize runs after the loop settles and is the sole authoritative build-invoker.
+    // finalize runs after the loop settles and REPORTS the last verify rather than building again.
+    // It depends on `plan_views` for a reason worth pinning: a page the planner said it could not
+    // fully express carries `cannotExpress`, and with no second builder to hand that to, reporting
+    // it to the user IS the deliverable — a dependency drop would silently bury it.
     expect(live['finalize']!.dependsOn).toEqual([
-      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'check_acceptance', 'implement_components', 'implement_pages', 'implement_automations', 'verify', 'fix',
+      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'check_acceptance', 'implement_view_components', 'implement_views', 'implement_shell', 'implement_automations', 'verify', 'fix', 'plan_views',
     ]);
     // Every implement node is model-driven (a code node would need codeNodeCtxFactory threaded through
     // the delegate path THING uses; a model node needs no host factory and writes via writeProjectTable).
     // The model-driven nodes run with write access (role general).
-    for (const id of ['user_stories', 'plan_app', 'plan_tables', 'implement_tables', 'plan_endpoints', 'implement_endpoints', 'plan_components', 'implement_components', 'plan_pages', 'implement_pages', 'plan_automations', 'implement_automations', 'fix', 'finalize']) {
+    for (const id of ['user_stories', 'plan_app', 'plan_tables', 'implement_tables', 'plan_endpoints', 'implement_endpoints', 'plan_view_components', 'implement_view_components', 'plan_views', 'implement_views', 'implement_shell', 'plan_automations', 'implement_automations', 'fix', 'finalize']) {
       expect(live[id]!.role).toBe('general');
     }
-    // finalize is the sole goal — it writes the chat _layout and reports the build.
+    // The TSX pipeline's nodes are GONE, not renamed alongside their replacements — a leftover
+    // `implement_pages` would be an unreachable node writing through a writer nobody holds.
+    for (const id of ['plan_pages', 'implement_pages', 'plan_components', 'implement_components']) {
+      expect(live[id], `${id} must not survive the one-builder merge`).toBeUndefined();
+    }
+    // finalize is the sole goal — it reports the build HONESTLY off the last verify.
     expect(live['finalize']!.goal).toBe(true);
     expect(resolveGoalTask(live)!.id).toBe('finalize');
   });

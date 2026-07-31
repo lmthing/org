@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 
 /**
- * **A write endpoint's request BODY is part of the contract** — `system-viewbuilder` only.
+ * **A write endpoint's request BODY is part of the contract** — `system-appbuilder` only.
  *
  * The bug this file exists for was total and silent. `plan_endpoints` described only a `fields` list
  * ("the keys of ONE item in the RESPONSE"), so nothing anywhere described what a caller SENDS.
@@ -32,7 +32,7 @@ let validate: (ctx: unknown, inputs: Record<string, unknown>) => Promise<Validat
 let reconcile: (ctx: unknown, inputs: Record<string, unknown>) => Promise<EmitResult & { written: boolean }>;
 
 const nodeUrl = (file: string): string =>
-  new URL(`../../system-spaces/system-viewbuilder/tasklists/build_live_project/${file}`, import.meta.url).href;
+  new URL(`../../system-spaces/system-appbuilder/tasklists/build_live_project/${file}`, import.meta.url).href;
 
 beforeAll(async () => {
   emit = ((await import(nodeUrl('09-emit_types.ts'))) as { run: typeof emit }).run;

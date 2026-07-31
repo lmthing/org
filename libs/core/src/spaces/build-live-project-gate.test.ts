@@ -11,19 +11,38 @@ import { describe, it, expect, beforeAll } from 'vitest';
  * defined` cascades) — and a gate that fails to execute contributes no findings, which the
  * pipeline reads as "clean". The scans are now real code, so this exercises the real `run()`.
  *
- * Each fault below is invisible to `buildApp()` (typecheck + esbuild); three were measured live:
- *  - `useApi('costs-summary')` — an endpoint never generated. The client rejects an unknown name
- *    BEFORE issuing a request, so the page renders an error state with no network trace.
- *  - a `[id]` route called with no input — the missing value is stringified into the path, which
- *    still matches and passes validation, returning a plausible 200 carrying the wrong row.
- *  - `Page()` returning a bare `{ type, props }` literal — this system's OWN display()-descriptor
- *    shape, not renderable React: typechecks, then throws React error #31.
- *  - `text-muted` — a surface token as a text colour. A shipped app carried 149 of these at
- *    contrast 1.08 where WCAG AA needs 4.5.
+ * **What this gate checks changed with the one-builder merge.** Pages are SPECS now: no imports, no
+ * JSX, no class names. So the TSX scans this file used to drive — a `useApi` name no endpoint
+ * exports, a `[id]` route called with no input, a `Page()` returning a `{ type, props }` descriptor,
+ * a surface token used as a text colour — are gone, because those faults cannot be AUTHORED here and
+ * a scan for them could only produce false positives. In their place the node merges three ground
+ * truths, none of them a model self-assessment:
+ *
+ *  1. `buildProjectApp()` — the real typecheck + esbuild over the host-generated page wrappers.
+ *  2. `validateAppViews()` — the WHOLE-APP checks a per-page save cannot make.
+ *  3. `renderSmokeViews()` — every view MOUNTED against the app's live endpoint responses.
+ *
+ * (3) is the one nothing else can see: a spec whose every name resolves and whose every binding is
+ * contract-valid still ships a blank page when the endpoint's computed field is not computed. An
+ * always-null binding is therefore an ENDPOINT defect and must be routed to the HANDLER — pointing
+ * it at the view teaches the fixer to delete the binding, i.e. to delete the feature.
+ *
+ * The ONE mechanical scan that survives is the one whose fault class survives too: a handler or hook
+ * naming a table that does not exist. The db surface is dynamically typed, so it builds CLEAN and
+ * 500s on every call — and that 500 is what a section renders as permanently empty.
  */
 
 type Offending = { path: string; kind: string; errors: Array<{ line?: number; phase: string; message: string }> };
-type GateResult = { ok: boolean; built: boolean; routes: string[]; offending: Offending[]; offendingCount: number };
+type GateResult = {
+  ok: boolean;
+  built: boolean;
+  routes: string[];
+  offending: Offending[];
+  offendingCount: number;
+  viewsValidated: boolean;
+  renderSmoked: boolean;
+  unavailable: string[];
+};
 
 // The node lives outside libs/core's tsconfig `include: ["src"]`, so it is reached by a computed
 // dynamic import rather than a static one.
@@ -38,14 +57,46 @@ beforeAll(async () => {
   run = mod.run;
 });
 
+/** `libs/cli/src/app/view-spec/messages.ts#ViewError`. */
+type ViewError = {
+  code: string;
+  path: string;
+  message: string;
+  severity: 'error' | 'warning';
+  file?: string;
+  endpoint?: string;
+};
+
+const viewResult = (errors: ViewError[], checked = 3) => ({
+  ok: errors.length === 0,
+  errorCount: errors.filter((e) => e.severity === 'error').length,
+  warningCount: errors.filter((e) => e.severity === 'warning').length,
+  checked,
+  errors,
+});
+const smokeResult = (errors: ViewError[], extra: Record<string, unknown> = {}) => ({
+  ...viewResult(errors),
+  unavailable: false,
+  rendererMounted: true,
+  ...extra,
+});
+
 /**
  * A project as a flat `path -> contents` map plus a scripted `buildApp()` result. `listProjectDir`
  * returns BARE entry names for ONE directory level — never full paths — exactly like the real
  * global in `sdk/org/libs/cli/src/app/authoring/globals.ts`.
+ *
+ * `validateAppViews`/`renderSmokeViews` are supplied CLEAN by default. That default is the point:
+ * the node treats an ABSENT view gate as a finding (see the tests below), so a mock that omitted
+ * them would report two errors on every otherwise-clean project.
  */
-function ctxFor(files: Record<string, string>, build?: Record<string, unknown>) {
+function ctxFor(
+  files: Record<string, string>,
+  build?: Record<string, unknown>,
+  views?: { validate?: unknown; smoke?: unknown },
+) {
   const paths = Object.keys(files);
-  return {
+  const ctx: Record<string, unknown> = {
     buildProjectApp: async () => ({ ok: true, built: true, routes: ['/'], errors: [], ...(build ?? {}) }),
     listProjectDir: (dir: string) => {
       const entries = new Set<string>();
@@ -57,6 +108,23 @@ function ctxFor(files: Record<string, string>, build?: Record<string, unknown>) 
     },
     readProjectFile: (path: string) => ({ ok: true, content: files[path] ?? '' }),
   };
+  const validate = views && 'validate' in views ? views.validate : viewResult([]);
+  const smoke = views && 'smoke' in views ? views.smoke : smokeResult([]);
+  if (validate !== undefined) ctx['validateAppViews'] = () => validate;
+  if (smoke !== undefined) ctx['renderSmokeViews'] = () => smoke;
+  return ctx;
+}
+
+/** The ctx the node ACTUALLY gets: every authoring global proxied as an async RPC stub. */
+function asyncCtxFor(
+  files: Record<string, string>,
+  build?: Record<string, unknown>,
+  views?: { validate?: unknown; smoke?: unknown },
+) {
+  const sync = ctxFor(files, build, views) as Record<string, (...a: never[]) => unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [k, fn] of Object.entries(sync)) out[k] = async (...a: never[]) => fn(...a);
+  return out;
 }
 
 const LIST_ENDPOINT = `export const name = 'costs-list';
@@ -64,38 +132,29 @@ export interface Output { items: any[] }
 export default async function handler(_i: any, ctx: any) { return { items: await ctx.db.query('costs') }; }
 `;
 
-const DETAIL_ENDPOINT = `export const name = 'trips-detail';
-export interface Output { id: string }
-export default async function handler(_i: any, ctx: any) { return { id: '' }; }
-`;
-
-const page = (body: string) => `import { useApi } from '@app/runtime';
-export default function Page() {
-${body}
-}
-`;
-
 const findingsFor = (r: GateResult, path: string) =>
   (r.offending.find((o) => o.path === path)?.errors ?? []).map((e) => e.message).join(' | ');
 
-/** A clean baseline project: one table, one endpoint, one page that reads it correctly. */
+/** A clean baseline project: one table, one endpoint reading it, one page spec + its shell. */
 const CLEAN = {
   'database/costs.json': '{}',
   'api/costs-list/GET.ts': LIST_ENDPOINT,
+  'pages/index.view.json': '{"route":"index","sections":[]}',
+  'pages/_shell.view.json': '{"nav":[]}',
 };
 
-/** The ctx the node ACTUALLY gets: every authoring global proxied as an async RPC stub. */
-function asyncCtxFor(files: Record<string, string>, build?: Record<string, unknown>) {
-  const sync = ctxFor(files, build);
-  return {
-    buildProjectApp: sync.buildProjectApp,
-    listProjectDir: async (dir: string) => sync.listProjectDir(dir),
-    readProjectFile: async (path: string) => sync.readProjectFile(path),
-  };
-}
-
 describe('build_live_project — the verify gate (16-verify.ts)', () => {
-  it('LOAD-BEARING: scans still run when ctx is ASYNC — the real worker shape', async () => {
+  it('passes a clean project', async () => {
+    const r = await run(ctxFor(CLEAN), {});
+    expect(r.offending).toEqual([]);
+    expect(r.ok).toBe(true);
+    expect(r.offendingCount).toBe(0);
+    expect(r.viewsValidated).toBe(true);
+    expect(r.renderSmoked).toBe(true);
+    expect(r.unavailable).toEqual([]);
+  });
+
+  it('LOAD-BEARING: the scans still run when ctx is ASYNC — the real worker shape', async () => {
     // `worker-load-entry.ts` proxies every authoring global as an RPC stub returning a PROMISE, so
     // a synchronous `ctx.listProjectDir(dir).entries` reads a property off a Promise (undefined) and
     // every scan silently finds nothing. The node still resolves and still reports the compiler's
@@ -104,109 +163,195 @@ describe('build_live_project — the verify gate (16-verify.ts)', () => {
     const r = await run(
       asyncCtxFor({
         ...CLEAN,
-        'pages/index.tsx': page(`  const { data } = useApi('costs-summary');
-  return <p className="text-muted">{JSON.stringify(data)}</p>;`),
+        'api/costs-list/GET.ts': `export const name = 'costs-list';
+export default async function handler(_i: any, ctx: any) { return { items: await ctx.db.query('expenses') }; }
+`,
       }),
       {},
     );
     expect(r.ok).toBe(false);
-    const msg = findingsFor(r, 'pages/index.tsx');
-    expect(msg).toContain('costs-summary'); // page→endpoint scan ran
-    expect(msg).toContain('text-muted'); // surface-token scan ran
+    expect(findingsFor(r, 'api/costs-list/GET.ts')).toContain('expenses'); // the table scan ran
   });
 
   it('finds nothing to report on a clean project through an ASYNC ctx', async () => {
-    const r = await run(
-      asyncCtxFor({
-        ...CLEAN,
-        'pages/index.tsx': page(`  const { data } = useApi('costs-list');
-  return <div className="text-muted-foreground">{JSON.stringify(data)}</div>;`),
-      }),
-      {},
-    );
+    const r = await run(asyncCtxFor(CLEAN), {});
     expect(r.offending).toEqual([]);
     expect(r.ok).toBe(true);
   });
 
-  it('passes a clean project', async () => {
-    const r = await run(
-      ctxFor({
-        ...CLEAN,
-        'pages/index.tsx': page(`  const { data } = useApi('costs-list');
-  return <div className="text-muted-foreground">{JSON.stringify(data)}</div>;`),
-      }),
-      {},
-    );
-    expect(r.offending).toEqual([]);
-    expect(r.ok).toBe(true);
-    expect(r.offendingCount).toBe(0);
-  });
+  // ── (1) THE BUILD ────────────────────────────────────────────────────────────────────────────
 
-  it('flags a useApi name no endpoint exports', async () => {
+  it('folds real compiler errors in alongside the scans, grouped by file', async () => {
     const r = await run(
-      ctxFor({
-        ...CLEAN,
-        'pages/index.tsx': page(`  const { data } = useApi('costs-summary');
-  return <div>{JSON.stringify(data)}</div>;`),
-      }),
-      {},
-    );
-    expect(r.ok).toBe(false);
-    const msg = findingsFor(r, 'pages/index.tsx');
-    expect(msg).toContain('costs-summary');
-    expect(msg).toContain('costs-list'); // must name the real options — it is the fixer's whole input
-  });
-
-  it('flags a [id] route called with no input', async () => {
-    const r = await run(
-      ctxFor({
-        ...CLEAN,
-        'api/trips/[id]/GET.ts': DETAIL_ENDPOINT,
-        'pages/detail.tsx': page(`  const { data } = useApi('trips-detail');
-  return <div>{JSON.stringify(data)}</div>;`),
-      }),
-      {},
-    );
-    expect(r.ok).toBe(false);
-    expect(findingsFor(r, 'pages/detail.tsx')).toContain('[id]');
-  });
-
-  it('accepts the same [id] route once its param is supplied', async () => {
-    const r = await run(
-      ctxFor({
-        ...CLEAN,
-        'api/trips/[id]/GET.ts': DETAIL_ENDPOINT,
-        'pages/detail.tsx': page(`  const { data } = useApi('trips-detail', { id: 'abc' });
-  return <div>{JSON.stringify(data)}</div>;`),
-      }),
-      {},
-    );
-    expect(r.offending).toEqual([]);
-  });
-
-  it('does NOT flag useApiMutation on a [id] route with no hook-time input', async () => {
-    // Run 34 flagged `useApiMutation('notes-delete')` for a missing `[id]`. False positive: the hook
-    // returns a MUTATE FUNCTION and the input is supplied when THAT is called. `useApi`/`apiCall`
-    // take input positionally and are still checked (the test above).
-    const r = await run(
-      ctxFor({
-        ...CLEAN,
-        'api/notes/[id]/DELETE.ts': `export const name = 'notes-delete';
-export default async function handler(_i: any, ctx: any) { return { ok: true }; }
+      ctxFor(
+        {
+          ...CLEAN,
+          'api/costs-list/GET.ts': `export const name = 'costs-list';
+export default async function handler(_i: any, ctx: any) { return { items: await ctx.db.query('expenses') }; }
 `,
-        'pages/notes.tsx': page(`  const del = useApiMutation('notes-delete');
-  return <button onClick={() => del({ id: '1' })}>x</button>;`),
+        },
+        {
+          ok: false,
+          errors: [{ phase: 'typecheck', file: 'api/costs-list/GET.ts', line: 3, message: "Cannot find name 'console'." }],
+        },
+      ),
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.offending).toHaveLength(1); // one entry per FILE…
+    expect(r.offending[0]!.errors).toHaveLength(2); // …carrying compiler error AND gate finding
+    expect(r.offending[0]!.errors.map((e) => e.phase).sort()).toEqual(['gate', 'typecheck']);
+  });
+
+  it('reports a build failure even when every scan is clean', async () => {
+    const r = await run(
+      ctxFor(CLEAN, { ok: false, built: false, errors: [{ phase: 'build', file: 'api/costs-list/GET.ts', message: 'bundle failed' }] }),
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.built).toBe(false);
+  });
+
+  // ── (2) THE APP-WIDE VIEW VALIDATION ─────────────────────────────────────────────────────────
+
+  it('routes an app-wide view fault to the SHELL — the only artifact that owns the app as a whole', async () => {
+    // An orphan route and a dangling nav target belong to no single page. The shell is where a fix
+    // for either one actually goes, so that is where the finding has to land.
+    const r = await run(
+      ctxFor(CLEAN, undefined, {
+        validate: viewResult([
+          { code: 'orphan-route', path: 'nav', message: 'route "costs" is not reachable from the nav', severity: 'error' },
+        ]),
+      }),
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.offending.map((o) => o.path)).toEqual(['pages/_shell.view.json']);
+    expect(r.offending[0]!.kind).toBe('shell');
+    expect(findingsFor(r, 'pages/_shell.view.json')).toContain('not reachable from the nav');
+    expect(r.offending[0]!.errors[0]!.phase).toBe('views');
+  });
+
+  it('routes a per-artifact view fault to the artifact the message names, with the right kind', async () => {
+    // ORDER MATTERS in `kindOf`: the shell and the component dir both live UNDER `pages/`, so a
+    // generic "starts with pages/" branch first would hand every component to the fixer as a view —
+    // and the fix fork would reach for `writeProjectView` on a component definition.
+    const r = await run(
+      ctxFor(CLEAN, undefined, {
+        validate: viewResult([
+          { code: 'bad-field', path: 'sections[1].item', message: 'metaFormat is not a property', severity: 'error', file: 'pages/index.view.json' },
+          { code: 'bad-el', path: 'node.children[1].el', message: '"chip" is not an element', severity: 'error', file: 'pages/components/CostRow.view.json' },
+        ]),
+      }),
+      {},
+    );
+    const byPath = Object.fromEntries(r.offending.map((o) => [o.path, o.kind]));
+    expect(byPath['pages/index.view.json']).toBe('view');
+    expect(byPath['pages/components/CostRow.view.json']).toBe('viewComponent');
+    // The instance PATH rides along with the message — it is the whole reason the fixer can edit
+    // one field instead of rewriting the artifact.
+    expect(findingsFor(r, 'pages/index.view.json')).toContain('sections[1].item:');
+  });
+
+  it('REPORTS a warning but never ROUTES it — fix fans out over offending and would "repair" it', async () => {
+    const r = await run(
+      ctxFor(CLEAN, undefined, {
+        validate: viewResult([
+          { code: 'dead-component', path: 'components', message: 'CostRow is declared but nothing uses it', severity: 'warning', file: 'pages/components/CostRow.view.json' },
+        ]),
       }),
       {},
     );
     expect(r.offending).toEqual([]);
+    expect(r.ok).toBe(true);
   });
+
+  it('treats an UN-RUN view gate as a finding, not as clean', async () => {
+    // The failure this exists for is silent: a gate that did not execute contributes no findings,
+    // which every downstream reader takes for "clean". `checked: 0` with `ok: true` is exactly that
+    // shape, and so is a ctx that never got the global wired at all.
+    const zero = await run(ctxFor(CLEAN, undefined, { validate: viewResult([], 0) }), {});
+    expect(zero.ok).toBe(false);
+    expect(zero.viewsValidated).toBe(false);
+    expect(findingsFor(zero, 'pages/_shell.view.json')).toContain('examined 0 artifacts');
+
+    const missing = await run(ctxFor(CLEAN, undefined, { validate: undefined }), {});
+    expect(missing.ok).toBe(false);
+    expect(missing.viewsValidated).toBe(false);
+    expect(missing.unavailable).toContain('validateAppViews');
+    // And it must name the exact wiring that is absent — this message is the only thing that ever
+    // gets the global threaded through `ProjectAuthoringGlobals`.
+    expect(findingsFor(missing, 'pages/_shell.view.json')).toContain('libs/cli/src/app/authoring/globals.ts');
+  });
+
+  // ── (3) THE RENDER SMOKE — the failure only a MOUNT can see ───────────────────────────────────
+
+  it('routes an ALWAYS-NULL binding to the ENDPOINT that fails to compute it, never to the view', async () => {
+    // The single most important routing decision in this node. The symptom is on the page (a column
+    // of blanks) and the instinct is to hand the page to the fixer — which gets the binding deleted,
+    // i.e. the feature deleted, and the gate then goes quiet. `endpoint` on the ViewError is the
+    // override that says "the defect is in the handler", and it must beat `file`.
+    const r = await run(
+      ctxFor(CLEAN, undefined, {
+        smoke: smokeResult([
+          {
+            code: 'always-null',
+            path: 'sections[0].item.caption',
+            message: '$.paid_by_name was null on every row',
+            severity: 'error',
+            file: 'pages/index.view.json',
+            endpoint: 'costs-list',
+          },
+        ]),
+      }),
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.offending.map((o) => o.path)).toEqual(['api/costs-list/GET.ts']);
+    expect(r.offending[0]!.kind).toBe('api');
+    expect(r.offending[0]!.errors[0]!.phase).toBe('render-smoke');
+    expect(findingsFor(r, 'api/costs-list/GET.ts')).toContain('paid_by_name');
+  });
+
+  it('says so when the named endpoint has no module at all, rather than silently dropping it', async () => {
+    const r = await run(
+      ctxFor(CLEAN, undefined, {
+        smoke: smokeResult([
+          { code: 'always-null', path: 'sections[0]', message: '$.total was null on every row', severity: 'error', endpoint: 'costs-summary' },
+        ]),
+      }),
+      {},
+    );
+    expect(r.ok).toBe(false);
+    expect(r.offending.map((o) => o.path)).toEqual(['api']);
+    expect(findingsFor(r, 'api')).toContain('no api module exports the name "costs-summary"');
+    expect(findingsFor(r, 'api')).toContain('the endpoint was never written');
+  });
+
+  it('treats an UNAVAILABLE render smoke as a finding — a page that shows nothing would ship clean', async () => {
+    const unavailable = await run(
+      ctxFor(CLEAN, undefined, { smoke: { ...smokeResult([]), unavailable: true, reason: 'ctx has no callProjectApi' } }),
+      {},
+    );
+    expect(unavailable.ok).toBe(false);
+    expect(unavailable.renderSmoked).toBe(false);
+    expect(unavailable.unavailable).toContain('renderSmokeViews');
+    expect(findingsFor(unavailable, 'pages/_shell.view.json')).toContain('ctx has no callProjectApi');
+
+    const missing = await run(ctxFor(CLEAN, undefined, { smoke: undefined }), {});
+    expect(missing.ok).toBe(false);
+    expect(missing.renderSmoked).toBe(false);
+    expect(missing.unavailable).toContain('renderSmokeViews');
+    expect(findingsFor(missing, 'pages/_shell.view.json')).toContain('every binding contract-valid and every value null');
+  });
+
+  // ── FOLDED-IN RUNTIME PROBES ─────────────────────────────────────────────────────────────────
 
   it('FOLDS IN smoke_endpoints findings — fix fans out over verify.offending and nothing else', async () => {
     // `verify` depends on `smoke_endpoints` but originally never READ it, so every runtime fault the
     // only node that actually calls an endpoint could find was computed and discarded. Worse than not
     // probing: the pipeline reports a gate that ran and found nothing.
-    const r = await run(ctxFor({ ...CLEAN, 'pages/index.tsx': page(`  return <div>ok</div>;`) }), {
+    const r = await run(ctxFor(CLEAN), {
       smoke_endpoints: {
         ok: false,
         offending: [
@@ -223,69 +368,46 @@ export default async function handler(_i: any, ctx: any) { return { ok: true }; 
     expect(findingsFor(r, 'api/costs-list/GET.ts')).toContain('500');
   });
 
-  it('surfaces an UNAVAILABLE smoke probe rather than letting it read as clean', async () => {
-    const r = await run(ctxFor({ ...CLEAN, 'pages/index.tsx': page(`  return <div>ok</div>;`) }), {
-      smoke_endpoints: { ok: false, unavailable: true, reason: 'ctx has no callProjectApi', offending: [] },
+  it('FOLDS IN check_acceptance code faults — a valid shape carrying meaningless numbers', async () => {
+    const r = await run(ctxFor(CLEAN), {
+      check_acceptance: {
+        ok: false,
+        offending: [
+          {
+            path: 'api/costs-list/GET.ts',
+            kind: 'api',
+            errors: [{ phase: 'acceptance', message: 'total was 0 over 96 seeded rows' }],
+          },
+        ],
+      },
     });
     expect(r.ok).toBe(false);
-    expect(JSON.stringify(r.offending)).toContain('did not run');
+    expect(findingsFor(r, 'api/costs-list/GET.ts')).toContain('96 seeded rows');
+  });
+
+  it('surfaces an UNAVAILABLE probe rather than letting it read as clean', async () => {
+    for (const node of ['smoke_endpoints', 'check_acceptance']) {
+      const r = await run(ctxFor(CLEAN), {
+        [node]: { ok: false, unavailable: true, reason: 'ctx has no callProjectApi', offending: [] },
+      });
+      expect(r.ok, `${node} unavailable must fail the gate`).toBe(false);
+      expect(r.unavailable).toContain(node);
+      expect(JSON.stringify(r.offending)).toContain('did not run');
+    }
   });
 
   it('is unaffected when smoke_endpoints reports clean', async () => {
-    const r = await run(ctxFor({ ...CLEAN, 'pages/index.tsx': page(`  return <div>ok</div>;`) }), {
-      smoke_endpoints: { ok: true, offending: [], offendingCount: 0 },
-    });
+    const r = await run(ctxFor(CLEAN), { smoke_endpoints: { ok: true, offending: [], offendingCount: 0 } });
     expect(r.offending).toEqual([]);
     expect(r.ok).toBe(true);
   });
 
-  it('flags a Page() returning a { type, props } descriptor instead of JSX', async () => {
-    const r = await run(
-      ctxFor({
-        ...CLEAN,
-        'pages/index.tsx': `export default function Page() {
-  return { type: 'div', props: { className: 'p-4', children: 'Cash Expenses' } };
-}
-`,
-      }),
-      {},
-    );
-    expect(r.ok).toBe(false);
-    expect(findingsFor(r, 'pages/index.tsx')).toContain('React error #31');
-  });
-
-  it('flags a surface token used as a text colour', async () => {
-    const r = await run(
-      ctxFor({
-        ...CLEAN,
-        'pages/index.tsx': page(`  const { data } = useApi('costs-list');
-  return <p className="text-xs text-muted uppercase">{JSON.stringify(data)}</p>;`),
-      }),
-      {},
-    );
-    expect(r.ok).toBe(false);
-    const msg = findingsFor(r, 'pages/index.tsx');
-    expect(msg).toContain('text-muted');
-    expect(msg).toContain('text-muted-foreground'); // tells the fixer what to write instead
-  });
-
-  it('does NOT flag text-muted-foreground, nor bg-muted', async () => {
-    // A false positive here would teach the fixer to "correct" working code.
-    const r = await run(
-      ctxFor({
-        ...CLEAN,
-        'pages/index.tsx': page(`  const { data } = useApi('costs-list');
-  return <p className="bg-muted text-muted-foreground">{JSON.stringify(data)}</p>;`),
-      }),
-      {},
-    );
-    expect(r.offending).toEqual([]);
-  });
+  // ── THE ONE SURVIVING MECHANICAL SCAN: a table that does not exist ────────────────────────────
 
   it('flags an api module querying a table that does not exist', async () => {
     const r = await run(
       ctxFor({
-        'database/costs.json': '{}',
+        ...CLEAN,
         'api/costs-list/GET.ts': `export const name = 'costs-list';
 export default async function handler(_i: any, ctx: any) { return { items: await ctx.db.query('expenses') }; }
 `,
@@ -293,62 +415,22 @@ export default async function handler(_i: any, ctx: any) { return { items: await
       {},
     );
     expect(r.ok).toBe(false);
-    expect(findingsFor(r, 'api/costs-list/GET.ts')).toContain('expenses');
+    const msg = findingsFor(r, 'api/costs-list/GET.ts');
+    expect(msg).toContain('expenses');
+    expect(msg).toContain('costs'); // names the tables that DO exist — the fixer's whole input
+    // And it names the runtime consequence, which is what makes it worth a build failure: the file
+    // compiles, 500s on every call, and the section that reads it renders permanently empty.
+    expect(msg).toContain('builds clean but 500s at runtime');
+    expect(msg).toContain('renders permanently empty');
+    expect(r.offending.find((o) => o.path === 'api/costs-list/GET.ts')?.kind).toBe('api');
   });
 
-  it('scans components as well as pages', async () => {
-    const r = await run(
-      ctxFor({
-        ...CLEAN,
-        'components/Total.tsx': `import { useApi } from '@app/runtime';
-export default function Total() {
-  const { data } = useApi('costs-summary');
-  return <span className="text-muted">{JSON.stringify(data)}</span>;
-}
-`,
-      }),
-      {},
-    );
-    expect(r.offending.map((o) => o.path)).toEqual(['components/Total.tsx']);
-    expect(r.offending[0]!.kind).toBe('component');
-    expect(r.offending[0]!.errors).toHaveLength(2); // bad endpoint name AND the surface token
-  });
-
-  it('folds real compiler errors in alongside the scans, grouped by file', async () => {
-    const r = await run(
-      ctxFor(
-        {
-          ...CLEAN,
-          'pages/index.tsx': page(`  const { data } = useApi('nope');
-  return <div>{JSON.stringify(data)}</div>;`),
-        },
-        {
-          ok: false,
-          errors: [{ phase: 'typecheck', file: 'pages/index.tsx', line: 3, message: "Cannot find name 'console'." }],
-        },
-      ),
-      {},
-    );
+  it('never throws on a finding — a code node has no salvage path', async () => {
+    // A throw would fail the whole node and abort the tasklist instead of routing the faults to
+    // `fix`. Every fault must come back as DATA.
+    const r = await run(ctxFor({}, { ok: false, errors: [{ phase: 'typecheck', file: 'api/x/GET.ts', message: 'boom' }] }), {});
     expect(r.ok).toBe(false);
-    expect(r.offending).toHaveLength(1); // one entry per FILE…
-    expect(r.offending[0]!.errors).toHaveLength(2); // …carrying compiler error AND gate finding
-    expect(r.offending[0]!.errors.map((e) => e.phase).sort()).toEqual(['gate', 'typecheck']);
-  });
-
-  it('reports a build failure even when every scan is clean', async () => {
-    const r = await run(
-      ctxFor(
-        {
-          ...CLEAN,
-          'pages/index.tsx': page(`  const { data } = useApi('costs-list');
-  return <div>{JSON.stringify(data)}</div>;`),
-        },
-        { ok: false, built: false, errors: [{ phase: 'build', file: 'pages/index.tsx', message: 'bundle failed' }] },
-      ),
-      {},
-    );
-    expect(r.ok).toBe(false);
-    expect(r.built).toBe(false);
+    expect(Array.isArray(r.offending)).toBe(true);
   });
 
   // ── HOOK (automation) scans — a hook loads clean and then its handler 500s or never fires ──────
@@ -369,7 +451,7 @@ export default function Total() {
     const r = await run(ctxFor({ ...CLEAN, 'hooks/weekly-list.ts': CRON_BAD }), {});
     expect(r.ok).toBe(false);
     expect(findingsFor(r, 'hooks/weekly-list.ts')).toContain('shopping_list');
-    // Must be marked 'hook' so the per-file `fix` fork uses writeProjectHook, not writeProjectPage.
+    // Must be marked 'hook' so the per-file `fix` fork uses writeProjectHook, not writeProjectView.
     expect(r.offending.find((o) => o.path === 'hooks/weekly-list.ts')?.kind).toBe('hook');
   });
 
@@ -401,11 +483,29 @@ export default function Total() {
     expect(r.ok).toBe(true);
   });
 
-  it('never throws on a finding — a code node has no salvage path', async () => {
-    // A throw would fail the whole node and abort the tasklist instead of routing the faults to
-    // `fix`. Every fault must come back as DATA.
-    const r = await run(ctxFor({ 'pages/index.tsx': page(`  return { type: 'div', props: {} };`) }), {});
-    expect(r.ok).toBe(false);
-    expect(Array.isArray(r.offending)).toBe(true);
+  it('does NOT scan a spec for anything — a view spec has no imports, no JSX and no class names', async () => {
+    // The regression guard for the merge. A spec is JSON; carrying the TSX scans over would mean
+    // inventing findings on text that cannot express the fault. `$.` bindings, an element named
+    // `text`, a `chat` section naming an agent — none of these is a dangling endpoint reference,
+    // and none may be reported as one.
+    const r = await run(
+      ctxFor({
+        ...CLEAN,
+        'pages/index.view.json': JSON.stringify({
+          route: 'index',
+          sections: [
+            { kind: 'list', id: 'costs', query: 'costs-list', item: { title: '$.label', caption: '$.paid_by_name' } },
+            { kind: 'chat', id: 'dock', agent: 'thing' },
+          ],
+        }),
+        'pages/components/CostRow.view.json': JSON.stringify({
+          name: 'CostRow',
+          node: { el: 'row', children: [{ el: 'text', text: '$props.cost.label' }] },
+        }),
+      }),
+      {},
+    );
+    expect(r.offending).toEqual([]);
+    expect(r.ok).toBe(true);
   });
 });
