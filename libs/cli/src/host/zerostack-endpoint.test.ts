@@ -47,6 +47,22 @@ afterEach(async () => {
   rmSync(dataDir, { recursive: true, force: true });
 });
 
+/**
+ * Drive one turn the way a space function does: START it, then long-poll.
+ *
+ * `ask` no longer blocks — the sandbox's `fetch` aborts at 25s and reports `status: 0`, which is
+ * indistinguishable from a dead endpoint, so a minutes-long coding turn could never come back
+ * through one request.
+ */
+const runOp = async (url: string, body: Record<string, unknown>): Promise<Record<string, unknown>> => {
+  const started = await post(url, body);
+  if (started['running'] !== true) return started;
+  for (;;) {
+    const w = await post(url, { op: 'wait', sessionId: started['sessionId'], sliceMs: 500 });
+    if (w['running'] !== true) return w;
+  }
+};
+
 const post = async (url: string, body: unknown): Promise<Record<string, unknown>> => {
   const res = await fetch(url, {
     method: 'POST',
@@ -224,7 +240,7 @@ describe('the loopback zerostack endpoint', () => {
 
     it('runs a first turn WITHOUT -c and returns a session id', async () => {
       endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:m' });
-      const r = await post(endpoint.url, { op: 'ask', message: 'fix the thing' });
+      const r = await runOp(endpoint.url, { op: 'ask', message: 'fix the thing' });
 
       expect(r['ok']).toBe(true);
       expect(r['text']).toBe('fixed answer');
@@ -241,7 +257,7 @@ describe('the loopback zerostack endpoint', () => {
 
     it('runs the child in the DATA DIRECTORY — that is the whole grant', async () => {
       endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:m' });
-      await post(endpoint.url, { op: 'ask', message: 'x' });
+      await runOp(endpoint.url, { op: 'ask', message: 'x' });
       // realpath: macOS resolves /var → /private/var under tmpdir().
       expect(existsSync(argvLines()[0]!.cwd)).toBe(true);
       expect(argvLines()[0]!.cwd).toMatch(/zs-endpoint-/);
@@ -254,10 +270,10 @@ describe('the loopback zerostack endpoint', () => {
      */
     it('resumes with -c in the SAME per-session data dir', async () => {
       endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:m' });
-      const first = await post(endpoint.url, { op: 'ask', message: 'one' });
+      const first = await runOp(endpoint.url, { op: 'ask', message: 'one' });
       const id = String(first['sessionId']);
 
-      const second = await post(endpoint.url, { op: 'ask', message: 'two', sessionId: id });
+      const second = await runOp(endpoint.url, { op: 'ask', message: 'two', sessionId: id });
       expect(second['sessionId']).toBe(id);
 
       const lines = argvLines();
@@ -267,16 +283,55 @@ describe('the loopback zerostack endpoint', () => {
       expect(lines[1]!.xdg).toContain(id);
     });
 
+    /**
+     * THE regression test for this bridge's original design fault.
+     *
+     * `ask` used to block until the child exited. The sandbox's `fetch` aborts at 25s and reports
+     * `status: 0` (`libs/core/src/eval/fetch-yield.ts`), which is indistinguishable from a dead
+     * endpoint — so a minutes-long coding turn could essentially never come back, and a live
+     * engineer run hit it eight times and concluded the service was down.
+     *
+     * Here the child outlives many poll slices. `ask` must answer at once with `running: true`,
+     * every `wait` must answer inside its slice, and the final answer must still arrive intact.
+     */
+    it('survives a turn far longer than one poll slice — the 25s sandbox fetch cap', async () => {
+      process.env['LMTHING_ZEROSTACK_BIN'] = fakeZerostack(dataDir, `
+        if (process.argv[2] === '--version') { console.log('zerostack 1.7.2'); process.exit(0); }
+        setTimeout(() => { console.log('the slow answer'); process.exit(0); }, 2500);
+      `);
+      endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:m' });
+
+      const started = await post(endpoint.url, { op: 'ask', message: 'slow work', timeoutMs: 60_000 });
+      expect(started['running'], 'ask must NOT block on the child').toBe(true);
+      expect(String(started['sessionId'])).toMatch(/^[0-9a-f-]{36}$/);
+
+      let slices = 0;
+      let final: Record<string, unknown> = {};
+      for (;;) {
+        const t0 = Date.now();
+        const w = await post(endpoint.url, { op: 'wait', sessionId: started['sessionId'], sliceMs: 300 });
+        // Each slice must return promptly — that is the whole point of not blocking.
+        expect(Date.now() - t0).toBeLessThan(5_000);
+        if (w['running'] !== true) { final = w; break; }
+        slices++;
+        expect(slices, 'polling should converge, not spin').toBeLessThan(60);
+      }
+      expect(slices, 'the turn must genuinely have outlived at least one slice').toBeGreaterThan(0);
+      expect(final['ok']).toBe(true);
+      expect(final['text']).toBe('the slow answer');
+      expect(final['sessionId']).toBe(started['sessionId']);
+    }, 30_000);
+
     it('refuses an unknown session id rather than silently starting a new conversation', async () => {
       endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:m' });
-      const r = await post(endpoint.url, { op: 'ask', message: 'x', sessionId: 'nope' });
+      const r = await runOp(endpoint.url, { op: 'ask', message: 'x', sessionId: 'nope' });
       expect(r['ok']).toBe(false);
       expect(String(r['error'])).toMatch(/no zerostack session/);
     });
 
     it('passes the loop flags, which the lite binary would reject', async () => {
       endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:m' });
-      await post(endpoint.url, { op: 'loop', message: 'make it typecheck', validateCmd: 'tsc --noEmit', maxIterations: 3 });
+      await runOp(endpoint.url, { op: 'loop', message: 'make it typecheck', validateCmd: 'tsc --noEmit', maxIterations: 3 });
       const { argv } = argvLines()[0]!;
       expect(argv).toContain('--loop');
       expect(argv).toContain('--loop-run');
@@ -286,7 +341,7 @@ describe('the loopback zerostack endpoint', () => {
 
     it('lists sessions newest-first', async () => {
       endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:m' });
-      await post(endpoint.url, { op: 'ask', message: 'a' });
+      await runOp(endpoint.url, { op: 'ask', message: 'a' });
       const list = await post(endpoint.url, { op: 'sessions' });
       expect(list['ok']).toBe(true);
       expect((list['sessions'] as unknown[]).length).toBe(1);
@@ -299,7 +354,7 @@ describe('the loopback zerostack endpoint', () => {
         process.exit(3);
       `);
       endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:m' });
-      const r = await post(endpoint.url, { op: 'ask', message: 'x' });
+      const r = await runOp(endpoint.url, { op: 'ask', message: 'x' });
       expect(r['ok']).toBe(false);
       expect(r['exitCode']).toBe(3);
       expect(String(r['error'])).toMatch(/provider rejected the key/);
@@ -317,7 +372,7 @@ describe('the loopback zerostack endpoint', () => {
         setTimeout(() => {}, 60000);
       `);
       endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:m' });
-      const r = await post(endpoint.url, { op: 'ask', message: 'x', timeoutMs: 400 });
+      const r = await runOp(endpoint.url, { op: 'ask', message: 'x', timeoutMs: 400 });
       expect(r['timedOut']).toBe(true);
       expect(r['ok']).toBe(false);
       expect(r['text']).toContain('got this far');
@@ -332,7 +387,7 @@ describe('the loopback zerostack endpoint', () => {
         setTimeout(() => { console.log('done'); process.exit(0); }, 1500);
       `);
       endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:m' });
-      const first = post(endpoint.url, { op: 'ask', message: 'slow', timeoutMs: 10_000 });
+      const first = runOp(endpoint.url, { op: 'ask', message: 'slow', timeoutMs: 10_000 });
       // Let the first turn register before racing it.
       await new Promise((r) => setTimeout(r, 300));
       const sessions = await post(endpoint.url, { op: 'sessions' });
@@ -351,7 +406,7 @@ describe('the loopback zerostack endpoint', () => {
         setTimeout(() => {}, 60000);
       `);
       endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:m' });
-      const pending = post(endpoint.url, { op: 'ask', message: 'slow', timeoutMs: 30_000 });
+      const pending = runOp(endpoint.url, { op: 'ask', message: 'slow', timeoutMs: 30_000 });
       await new Promise((r) => setTimeout(r, 300));
       const list = await post(endpoint.url, { op: 'sessions' });
       const id = (list['sessions'] as Array<{ sessionId: string }>)[0]!.sessionId;

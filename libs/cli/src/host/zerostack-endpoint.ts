@@ -67,6 +67,13 @@ const MAX_TURN_TIMEOUT_MS = 30 * 60_000;
 /** Loop mode is explicitly the "go away and work" surface, so it gets its own, longer ceiling. */
 const MAX_LOOP_TIMEOUT_MS = 60 * 60_000;
 
+/**
+ * One long-poll slice. Must stay comfortably under the sandbox's own 25s `fetch` abort
+ * (`libs/core/src/eval/fetch-yield.ts`), which reports as `status: 0` and is indistinguishable
+ * from a dead endpoint — so the bridge answers first, with "still running".
+ */
+const WAIT_SLICE_MS = 15_000;
+
 /** Enough that a truncated answer is a real edge case; small enough that one runaway turn cannot exhaust pod memory. */
 const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 
@@ -283,6 +290,10 @@ export async function startZerostackEndpoint(opts: ZerostackEndpointOpts): Promi
   writeFileSync(join(opts.dataDir, 'ARCHITECTURE.md'), ZEROSTACK_ARCHITECTURE_MD, 'utf8');
 
   const running = new Map<string, RunningTurn>();
+  /** In-flight turn per session — awaited by `wait`, which may be called many times for one turn. */
+  const pending = new Map<string, Promise<ZerostackTurnResult>>();
+  /** The last finished result per session, so a `wait` arriving after completion still gets it. */
+  const finished = new Map<string, ZerostackTurnResult>();
 
   /** Per-session data dir. Creating it is what makes a session id real. */
   const sessionDir = (id: string) => join(sessionsRoot, id);
@@ -302,7 +313,7 @@ export async function startZerostackEndpoint(opts: ZerostackEndpointOpts): Promi
 
   function runTurn(args: {
     sessionId?: string; message: string; verbose?: boolean; timeoutMs?: number;
-    promptName?: string; loop?: { maxIterations?: number; validateCmd?: string };
+    promptName?: string; resume?: boolean; loop?: { maxIterations?: number; validateCmd?: string };
   }): Promise<ZerostackTurnResult> {
     return new Promise((resolve) => {
       if (!bin || !version) {
@@ -320,26 +331,19 @@ export async function startZerostackEndpoint(opts: ZerostackEndpointOpts): Promi
         return;
       }
 
-      const isNew = !args.sessionId;
+      // NEW is decided by the session DIRECTORY, not by whether an id was supplied: `startTurn`
+      // always supplies one (it mints the id so it can return it before the turn finishes).
       const id = args.sessionId ?? randomUUID();
       const dir = sessionDir(id);
-      if (isNew) {
-        mkdirSync(dir, { recursive: true });
-      } else if (!existsSync(dir)) {
+      const isNew = !existsSync(dir);
+      if (isNew && args.resume) {
         resolve({
           ok: false, sessionId: id, text: '', exitCode: null, timedOut: false,
           error: `no zerostack session "${id}" — omit sessionId to start a new one`,
         });
         return;
       }
-      if (running.has(id)) {
-        resolve({
-          ok: false, sessionId: id, text: '', exitCode: null, timedOut: false,
-          error: `session "${id}" already has a turn in flight — wait for it, or cancel it first`,
-        });
-        return;
-      }
-
+      if (isNew) mkdirSync(dir, { recursive: true });
       const isLoop = args.loop !== undefined;
       const ceiling = isLoop ? MAX_LOOP_TIMEOUT_MS : MAX_TURN_TIMEOUT_MS;
       const timeoutMs = Math.min(args.timeoutMs ?? DEFAULT_TURN_TIMEOUT_MS, ceiling);
@@ -440,6 +444,53 @@ export async function startZerostackEndpoint(opts: ZerostackEndpointOpts): Promi
     });
   }
 
+  /**
+   * Start a turn and return its session id WITHOUT waiting for it.
+   *
+   * The sandbox's `fetch` aborts at 25s and reports the failure as `status: 0`
+   * (`libs/core/src/eval/fetch-yield.ts`). A coding turn takes MINUTES, so a blocking `ask` could
+   * essentially never succeed — and the caller saw a bare "HTTP 0", which reads as "the service is
+   * down" rather than "still working". A live engineer run hit it eight times.
+   *
+   * So the turn is started here and collected by `wait` below, in slices that each finish well
+   * inside the sandbox's limit.
+   */
+  function startTurn(args: Parameters<typeof runTurn>[0]): { sessionId: string; immediate?: ZerostackTurnResult } {
+    const id = args.sessionId ?? randomUUID();
+    if (pending.has(id)) {
+      return { sessionId: id, immediate: { ok: false, sessionId: id, text: '', exitCode: null, timedOut: false, error: `session "${id}" already has a turn in flight — wait for it, or cancel it first` } };
+    }
+    finished.delete(id);
+    const p = runTurn({ ...args, sessionId: id });
+    pending.set(id, p);
+    // Recorded HERE rather than in the child's settle(), because a turn that fails validation
+    // (no binary, unusable model, unknown session) resolves without ever spawning one — and a
+    // `wait` that then found neither a pending nor a finished turn would report the far more
+    // confusing "no turn is running" instead of the actual reason.
+    void p.then((r) => { finished.set(id, r); }, () => { /* runTurn never rejects */ })
+      .finally(() => { pending.delete(id); });
+    return { sessionId: id };
+  }
+
+  /**
+   * Long-poll one turn. Resolves as soon as it finishes, or reports `running` when the slice
+   * elapses — deliberately shorter than the sandbox fetch abort, so the caller always gets an
+   * answer it can act on instead of a transport error it cannot distinguish from a dead endpoint.
+   */
+  async function waitTurn(sessionId: string, sliceMs: number): Promise<{ running: boolean; result?: ZerostackTurnResult }> {
+    const done = finished.get(sessionId);
+    if (done) return { running: false, result: done };
+    const p = pending.get(sessionId);
+    if (!p) {
+      return { running: false, result: { ok: false, sessionId, text: '', exitCode: null, timedOut: false, error: `no turn is running or finished for session "${sessionId}"` } };
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const slice = new Promise<null>((r) => { timer = setTimeout(() => r(null), sliceMs); });
+    const winner = await Promise.race([p, slice]);
+    if (timer) clearTimeout(timer);
+    return winner === null ? { running: true } : { running: false, result: winner as ZerostackTurnResult };
+  }
+
   async function listSessions(): Promise<Array<{ sessionId: string; updatedAt: number; busy: boolean }>> {
     let names: string[];
     try {
@@ -491,28 +542,37 @@ export async function startZerostackEndpoint(opts: ZerostackEndpointOpts): Promi
           });
           return;
 
+        // `ask`/`loop` START a turn and answer immediately; `wait` collects it. See `startTurn`.
         case 'ask':
-          reply(await runTurn({
-            ...(typeof body['sessionId'] === 'string' ? { sessionId: body['sessionId'] } : {}),
+        case 'loop': {
+          const resume = typeof body['sessionId'] === 'string' && body['sessionId'].length > 0;
+          const started = startTurn({
+            ...(resume ? { sessionId: String(body['sessionId']), resume: true } : {}),
             message: String(body['message'] ?? ''),
             ...(body['verbose'] === true ? { verbose: true } : {}),
             ...(typeof body['timeoutMs'] === 'number' ? { timeoutMs: body['timeoutMs'] } : {}),
             ...(typeof body['promptName'] === 'string' ? { promptName: body['promptName'] } : {}),
-          }));
+            ...(body.op === 'loop'
+              ? { loop: {
+                  ...(typeof body['maxIterations'] === 'number' ? { maxIterations: body['maxIterations'] } : {}),
+                  ...(typeof body['validateCmd'] === 'string' ? { validateCmd: body['validateCmd'] } : {}),
+                } }
+              : {}),
+          });
+          if (started.immediate) { reply({ ...started.immediate, running: false }); return; }
+          reply({ ok: true, sessionId: started.sessionId, running: true });
           return;
+        }
 
-        case 'loop':
-          reply(await runTurn({
-            ...(typeof body['sessionId'] === 'string' ? { sessionId: body['sessionId'] } : {}),
-            message: String(body['message'] ?? ''),
-            ...(body['verbose'] === true ? { verbose: true } : {}),
-            ...(typeof body['timeoutMs'] === 'number' ? { timeoutMs: body['timeoutMs'] } : {}),
-            loop: {
-              ...(typeof body['maxIterations'] === 'number' ? { maxIterations: body['maxIterations'] } : {}),
-              ...(typeof body['validateCmd'] === 'string' ? { validateCmd: body['validateCmd'] } : {}),
-            },
-          }));
+        case 'wait': {
+          const sessionId = String(body['sessionId'] ?? '');
+          if (!sessionId) { reply({ ok: false, running: false, error: 'wait needs a sessionId' }); return; }
+          // Capped well under the sandbox's 25s fetch abort so the caller always gets a real answer.
+          const sliceMs = Math.min(typeof body['sliceMs'] === 'number' ? body['sliceMs'] : WAIT_SLICE_MS, WAIT_SLICE_MS);
+          const w = await waitTurn(sessionId, sliceMs);
+          reply(w.running ? { ok: true, sessionId, running: true } : { ...w.result, running: false });
           return;
+        }
 
         case 'sessions':
           reply({ ok: true, sessions: await listSessions() });
