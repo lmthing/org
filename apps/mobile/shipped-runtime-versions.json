@@ -1,0 +1,32 @@
+{
+  "$comment": [
+    "The runtimeVersions of binaries that are actually OUT THERE — in the store, or on a",
+    "tester's phone. This file is the only thing CI can consult to answer 'would anyone",
+    "receive this update?', and getting that wrong is invisible: a publish aimed at a",
+    "runtimeVersion nobody has succeeds, reports success, and reaches no one.",
+    "",
+    "It exists because the honest source — asking EAS which builds exist — needs an",
+    "EXPO_TOKEN that has to be minted by hand in a browser, and a check nobody can run",
+    "without a secret is a check that will be skipped. A committed list is auditable, moves",
+    "in the same PR as the release it describes, and is wrong only in the safe direction:",
+    "a forgotten entry stops a publish, it does not push a bad one.",
+    "",
+    "ADD AN ENTRY when you upload a build to the store or hand an APK to testers. REMOVE",
+    "one when no device can still be running it — an entry left behind only means CI is",
+    "willing to publish for a runtimeVersion nobody has, which is harmless but pointless.",
+    "",
+    "Get the value from the build itself, never by re-resolving it later from a tree that",
+    "has moved on:",
+    "    eas build:list --platform android --json --non-interactive | jq '.[0].runtimeVersion'",
+    "or, from a local --local build's artifact:",
+    "    unzip -p <app>.aab base/assets/fingerprint"
+  ],
+  "android": [
+    {
+      "runtimeVersion": "7caf299512e56abcf4058df8731baf8fb396c887",
+      "versionCode": 8,
+      "builtFrom": "sdk/org 5c9e5db0",
+      "note": "first Play upload — app bundle, built locally with eas build --local"
+    }
+  ]
+}
