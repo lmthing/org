@@ -97,3 +97,32 @@ export function installSsoHandler(): void {
 
 /** Long enough for a real sign-in including a fresh GitHub login and 2FA. */
 const SSO_TIMEOUT_MS = 5 * 60_000
+
+/**
+ * Subscribe to View → Browser (⌘/Ctrl-B) from the native menu.
+ *
+ * Rust emits the event rather than acting on it, because which pane is open is React state and the
+ * shell has no business knowing it. This is the seam between the two.
+ *
+ * Returns a cleanup, and the `void` unlisten dance is not ceremony: `listen` resolves AFTER the
+ * effect may already have been torn down, so a naive version leaks a listener per mount and the
+ * menu item eventually toggles the pane several times per click.
+ */
+export function onMenuToggleBrowser(fn: () => void): () => void {
+  let unlisten: (() => void) | undefined
+  let cancelled = false
+  void import('@tauri-apps/api/event')
+    .then(({ listen }) => listen('lmthing://toggle-browser', () => fn()))
+    .then((off) => {
+      if (cancelled) off()
+      else unlisten = off
+    })
+    .catch(() => {
+      // No Tauri runtime — the app is being driven in a plain browser by the E2E. The menu does
+      // not exist there either, so there is nothing to report.
+    })
+  return () => {
+    cancelled = true
+    unlisten?.()
+  }
+}

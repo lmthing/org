@@ -18,7 +18,7 @@ mod navigation;
 mod sidecar;
 
 use config::{DesktopBridge, Tokens};
-use tauri::{Manager, Theme, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, Theme, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 
 pub fn run() {
@@ -71,9 +71,35 @@ pub fn run() {
                 commands::load_grants(app.handle()),
             )));
 
+            // Every OTHER piece of command state, and this is not optional bookkeeping: a command
+            // whose `State<'_, T>` was never managed fails at CALL time with "state not managed for
+            // field `state`", not at build time. `browser_start` shipped that way — the command was
+            // registered, the Rust compiled, `cargo test` passed, and the E2E never noticed because
+            // it stubs `invoke` wholesale. The first person to click Browser found it.
+            //
+            // Registering them together, right here, is what makes the omission visible: a new
+            // command with state has one obvious place to appear, next to the others.
+            app.manage(commands::BrowserState::default());
+            app.manage(commands::SidecarState::default());
+
             // Without an Edit menu, macOS ⌘C/⌘V/⌘A do nothing at all — AppKit routes them through
             // menu items, not the webview. See `menu.rs`.
             menu::install(app.handle())?;
+
+            // The menu's one non-predefined item. Forwarded to the webview as an event rather than
+            // acted on here: which pane is open is React state, and Rust has no business knowing
+            // it. The window is looked up by label because the handler outlives any one borrow of
+            // the builder above.
+            {
+                let handle = app.handle().clone();
+                app.on_menu_event(move |_app, event| {
+                    if event.id() == menu::TOGGLE_BROWSER {
+                        if let Some(w) = handle.get_webview_window("main") {
+                            let _ = w.emit("lmthing://toggle-browser", ());
+                        }
+                    }
+                });
+            }
 
             // Development only, and only where the OS has no installer to do it. A packaged
             // build gets its scheme from the bundle manifest; runtime registration exists so
@@ -170,6 +196,52 @@ fn parse_hex(hex: &str) -> Option<tauri::window::Color> {
 #[cfg(test)]
 mod tests {
     use super::parse_hex;
+
+    /// Every `State<'_, T>` a command asks for must be `app.manage`d.
+    ///
+    /// This is a SOURCE check, and it has to be, because the compiler cannot see the connection at
+    /// all: `#[tauri::command]` resolves state by TYPE at runtime, so a command whose state was
+    /// never managed compiles cleanly, links cleanly, passes `cargo test` and then fails the first
+    /// time a person clicks the button — "state not managed for field `state`". `browser_start`
+    /// shipped exactly that way. The E2E could not catch it either, because it stubs `invoke`
+    /// wholesale and never reaches Rust.
+    ///
+    /// Reading the two files is crude next to a real registry, and it is what the failure mode
+    /// deserves: the whole bug is that the two lists silently disagreed.
+    #[test]
+    fn every_command_state_is_managed() {
+        let commands = include_str!("commands.rs");
+        // COMMENTS STRIPPED. Without this the check passes on a `// app.manage(...)` line, because
+        // a commented-out call still contains the substring — which is exactly how somebody
+        // disables one while debugging and forgets. Verified by commenting the line out and
+        // watching this fail.
+        let lib: String = include_str!("lib.rs")
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let mut wanted: Vec<&str> = Vec::new();
+        for (_, rest) in commands.match_indices("State<'_, ").map(|(i, _)| (i, &commands[i..])) {
+            let after = &rest["State<'_, ".len()..];
+            let Some(end) = after.find('>') else { continue };
+            let ty = after[..end].trim();
+            if !wanted.contains(&ty) {
+                wanted.push(ty);
+            }
+        }
+        assert!(!wanted.is_empty(), "no command state found — has commands.rs moved?");
+
+        for ty in wanted {
+            let managed = format!("app.manage(commands::{ty}");
+            assert!(
+                lib.contains(&managed),
+                "`{ty}` is asked for by a command but never managed in lib.rs's setup — every call \
+                 to that command will fail at RUNTIME with \"state not managed\". Add \
+                 `{managed}::default());`",
+            );
+        }
+    }
 
     #[test]
     fn parses_a_token_colour_and_rejects_junk() {

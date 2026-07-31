@@ -11,6 +11,7 @@ import { LocalAccess } from './LocalAccess'
 import { BrowserPane } from './BrowserPane'
 import { SplitPane } from './SplitPane'
 import { DesktopHostBridge } from './host-bridge'
+import { onMenuToggleBrowser } from './desktop'
 
 /**
  * The signed-in app: a Home dashboard, the chat surface and the team workspace.
@@ -68,6 +69,10 @@ export function HomeShell() {
     setTeamFocus({ teamId: id, ...(channelId ? { channelId } : {}) })
     setTab('teams')
   }, [])
+
+  // View → Browser (⌘/Ctrl-B). The menu bar is present on every surface, unlike the ☰ button,
+  // which only renders on Home — so this is the one control that can open the pane from anywhere.
+  React.useEffect(() => onMenuToggleBrowser(() => setBrowserOpen((open) => !open)), [])
 
   React.useEffect(() => {
     const onVisible = () => {
