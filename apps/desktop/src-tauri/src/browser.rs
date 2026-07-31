@@ -33,8 +33,9 @@
 //! to hand the person a normal window when the pane is not the right tool — a file upload dialog,
 //! a video call, anything where a streamed image is a poor substitute for the real thing.
 
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
+use std::process::{Child, ChildStderr, Command, Stdio};
 
 use serde::Serialize;
 
@@ -88,6 +89,38 @@ const MAC_PATHS: &[&str] = &[
     "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
 ];
 
+/// Is this binary a snap, directly or through Ubuntu's wrapper script?
+///
+/// It matters because of what snap confinement does to `--user-data-dir`: it IGNORES it. The
+/// browser runs against the person's own everyday profile instead of the throwaway one this app
+/// creates — so the "its cookie jar is something you opted into and can throw away" guarantee at
+/// the top of this file is simply not true under a snap, and an agent would be driving a browser
+/// signed into everything they have ever signed into.
+///
+/// Ubuntu's `/usr/bin/chromium-browser` is a shell script that execs `/snap/bin/chromium`, so
+/// resolving symlinks is not enough on its own — the script has to be read.
+pub fn is_snap(path: &Path) -> bool {
+    if std::fs::canonicalize(path)
+        .unwrap_or_else(|_| path.to_path_buf())
+        .to_string_lossy()
+        .contains("/snap/")
+    {
+        return true;
+    }
+    // A wrapper is tiny; anything large is the real binary and not worth reading.
+    match std::fs::metadata(path) {
+        Ok(m) if m.len() < 64_000 => std::fs::read_to_string(path)
+            .map(|t| t.contains("/snap/bin/"))
+            .unwrap_or(false),
+        _ => false,
+    }
+}
+
+/// Find a browser, preferring one whose profile flag is actually honoured.
+///
+/// Two passes over the same candidates: everything non-snap first, then snaps. A snap is used only
+/// when it is the only thing installed — better a browser with a shared profile than no browser —
+/// and `LMTHING_BROWSER` overrides the lot, because an explicit choice is a person's to make.
 pub fn find_browser() -> Option<PathBuf> {
     if let Ok(explicit) = std::env::var("LMTHING_BROWSER") {
         let p = PathBuf::from(explicit);
@@ -102,12 +135,12 @@ pub fn find_browser() -> Option<PathBuf> {
             return Some(path);
         }
     }
-    for name in CANDIDATES {
-        if let Some(p) = which(name) {
-            return Some(p);
-        }
-    }
-    None
+    let found: Vec<PathBuf> = CANDIDATES.iter().filter_map(|n| which(n)).collect();
+    found
+        .iter()
+        .find(|p| !is_snap(p))
+        .or_else(|| found.first())
+        .cloned()
 }
 
 /// `PATH` lookup without pulling in a crate for it.
@@ -160,9 +193,15 @@ pub fn launch_args(profile_dir: &Path, headless: bool) -> Vec<String> {
 
 /// Launch the browser with a debugging port and its own profile.
 ///
-/// `--remote-debugging-port=0` lets the OS pick, and Chromium writes the chosen port to
-/// `DevToolsActivePort` in the profile directory — which is the only reliable way to learn it,
-/// since nothing is printed on stdout in a form worth parsing.
+/// The chosen endpoint is learned from STDERR, where Chromium prints `DevTools listening on ws://…`
+/// — not from the `DevToolsActivePort` file in the profile directory, which is only a fallback.
+///
+/// That order is the opposite of the obvious one, and it is what makes this work on Ubuntu and its
+/// derivatives. `chromium` there is a SNAP, whose confinement means `--user-data-dir` is quietly
+/// ignored: the browser starts, serves, and writes its port file somewhere inside the snap's own
+/// home. Reading the profile directory then times out with "the browser started but never reported
+/// a debugging port" — which is true, and describes the wrong thing entirely. The stderr line is
+/// printed by every Chromium build regardless of confinement, and carries the whole URL.
 pub fn launch(profile_dir: PathBuf, headless: bool) -> Result<BrowserProcess, String> {
     let bin = find_browser().ok_or_else(|| {
         "No Chromium-family browser found. Install Chromium, Chrome, Brave or Edge, or set \
@@ -174,12 +213,17 @@ pub fn launch(profile_dir: PathBuf, headless: bool) -> Result<BrowserProcess, St
     // port immediately and everything then connects to a browser that is not there.
     let _ = std::fs::remove_file(profile_dir.join("DevToolsActivePort"));
 
-    let child = Command::new(&bin)
+    let mut child = Command::new(&bin)
         .args(launch_args(&profile_dir, headless))
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("could not start {}: {e}", bin.display()))?;
 
-    let (port, path) = read_devtools_endpoint(&profile_dir)?;
+    let stderr = child.stderr.take();
+    let (port, path) = match stderr.and_then(read_devtools_from_stderr) {
+        Some(found) => found,
+        None => read_devtools_endpoint(&profile_dir)?,
+    };
     Ok(BrowserProcess {
         child,
         endpoint: BrowserEndpoint {
@@ -188,6 +232,29 @@ pub fn launch(profile_dir: PathBuf, headless: bool) -> Result<BrowserProcess, St
             headless,
         },
     })
+}
+
+/// Read the endpoint off the browser's own startup line.
+///
+/// `DevTools listening on ws://127.0.0.1:41439/devtools/browser/<uuid>` — printed on stderr by
+/// every Chromium build, before it is ready for anything else. Returns `None` rather than blocking
+/// forever if the stream ends or the line never comes, so the caller can fall back to the file.
+fn read_devtools_from_stderr(stderr: ChildStderr) -> Option<(u16, String)> {
+    let reader = BufReader::new(stderr);
+    for line in reader.lines().map_while(Result::ok) {
+        if let Some(found) = parse_devtools_stderr(&line) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// Pull the port and browser path out of that line.
+pub fn parse_devtools_stderr(line: &str) -> Option<(u16, String)> {
+    let rest = line.split("ws://").nth(1)?;
+    let (hostport, path) = rest.split_once('/')?;
+    let port = hostport.rsplit(':').next()?.trim().parse::<u16>().ok()?;
+    Some((port, format!("/{}", path.trim())))
 }
 
 /// Poll for the file Chromium writes once its debugging server is listening.
@@ -237,6 +304,23 @@ mod tests {
     }
 
     #[test]
+    fn a_snap_is_recognised_through_its_wrapper_script() {
+        // Ubuntu's `/usr/bin/chromium-browser` is a shell script that execs `/snap/bin/chromium`,
+        // so it looks like an ordinary binary until you read it. Getting this wrong means silently
+        // handing an agent the person's everyday browser profile.
+        let dir = std::env::temp_dir().join("lmthing-snap-detect");
+        let _ = std::fs::create_dir_all(&dir);
+        let wrapper = dir.join("chromium-browser");
+        std::fs::write(&wrapper, "#!/bin/sh\nexec /snap/bin/chromium \"$@\"\n").unwrap();
+        assert!(is_snap(&wrapper), "a wrapper that execs a snap IS a snap");
+
+        let real = dir.join("brave-browser");
+        std::fs::write(&real, "#!/bin/sh\nexec /opt/brave.com/brave/brave \"$@\"\n").unwrap();
+        assert!(!is_snap(&real), "an ordinary wrapper is not");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn which_finds_something_that_exists_and_nothing_that_does_not() {
         assert!(which("sh").is_some() || which("cmd.exe").is_some());
         assert!(which("lmthing-definitely-not-a-real-binary").is_none());
@@ -267,6 +351,21 @@ mod tests {
         // browser; a launch without it would quietly use the default profile.
         assert!(args.iter().any(|a| a.starts_with("--user-data-dir=")));
         assert_eq!(args.last().map(String::as_str), Some("about:blank"));
+    }
+
+    #[test]
+    fn reads_the_endpoint_off_the_browsers_own_startup_line() {
+        // The shape Chromium actually prints — and the ONLY way to learn the port under a snap,
+        // whose confinement makes `--user-data-dir` a no-op so the port file never appears where
+        // this app looks for it.
+        assert_eq!(
+            parse_devtools_stderr(
+                "DevTools listening on ws://127.0.0.1:41439/devtools/browser/4bcac5fe-87cd-4"
+            ),
+            Some((41439, "/devtools/browser/4bcac5fe-87cd-4".to_string()))
+        );
+        assert_eq!(parse_devtools_stderr("[0731/203744:ERROR:registration_request.cc] nope"), None);
+        assert_eq!(parse_devtools_stderr(""), None);
     }
 
     #[test]
