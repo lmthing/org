@@ -69,7 +69,16 @@ module.exports = {
     // nothing else.
     slug: 'lmthing',
     version: '0.1.0',
-    orientation: 'portrait',
+    // `ios.supportsTablet: true` below asks for real iPad chrome, which on Apple's own review
+    // guidance includes rotation — an app that opts into tablet support and then locks
+    // orientation is asking for one without the other. Every screen in this app (Home, Chat,
+    // Teams) is Tamagui flex layout with no fixed-portrait assumption baked in (`DashboardHome`'s
+    // own centered `maxWidth={768}` column, for one), so there is no layout reason to lock it
+    // either. `'default'` follows the device's own rotation lock rather than overriding it —
+    // this is a native-project change (it is baked into the generated Info.plist /
+    // AndroidManifest, hence `runtimeVersion: { policy: 'fingerprint' }` below), so it ships on
+    // the next store build, not an OTA.
+    orientation: 'default',
     userInterfaceStyle: 'automatic',
     scheme: 'lmthing',
     newArchEnabled: true,

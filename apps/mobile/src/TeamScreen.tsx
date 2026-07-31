@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { ActivityIndicator, AppState, Linking } from 'react-native'
 import * as Prim from '@lmthing/ui/elements/primitives'
 import { TeamChannelsView, createTeamClient, type Rail } from '@lmthing/ui/team'
 import { useAuth } from '@lmthing/auth'
@@ -6,6 +7,7 @@ import { listTeams, teamAppUrl, teamTokenGetter, TEAM_BASE_URL, type TeamSummary
 import { registerForPush } from './push'
 import { AppScreen } from './AppScreen'
 import { fetchAppTarget, type AppTarget } from './app-views'
+import { resolveFocusTeamId } from './team-focus'
 
 /**
  * The team surface on a phone.
@@ -19,7 +21,21 @@ import { fetchAppTarget, type AppTarget } from './app-views'
  * up here would be a fork of the product wearing a file path — see this app's
  * `scripts/lint-barrel-imports.mjs`.
  */
-export function TeamScreen({ onMentionCount }: { onMentionCount?: (count: number) => void }) {
+export function TeamScreen({
+  onMentionCount,
+  openTeamId,
+  openChannelId,
+}: {
+  onMentionCount?: (count: number) => void
+  /**
+   * Focus this team — a tap on a TEAMS row or an invitation on the Home dashboard, or a push
+   * notification's deep link. A request that names a team the member is not actually on is
+   * ignored rather than honoured; see `./team-focus.ts#resolveFocusTeamId`.
+   */
+  openTeamId?: string | null
+  /** Also select this channel once its team is open — set together with `openTeamId`. */
+  openChannelId?: string | null
+}) {
   const { getAccessToken } = useAuth()
   const [teams, setTeams] = React.useState<TeamSummary[] | null>(null)
   const [teamId, setTeamId] = React.useState<string | null>(null)
@@ -37,17 +53,34 @@ export function TeamScreen({ onMentionCount }: { onMentionCount?: (count: number
   const [probing, setProbing] = React.useState<string | null>(null)
   const [nativeApp, setNativeApp] = React.useState<{ id: string; target: AppTarget } | null>(null)
 
-  React.useEffect(() => {
-    void (async () => {
-      try {
-        const list = await listTeams(getAccessToken)
-        setTeams(list)
-        setTeamId((current) => current ?? list[0]?.id ?? null)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err))
-      }
-    })()
+  // Pulled out of the mount effect so a failed fetch has something for a Retry button to call —
+  // previously there was none, and because this tab is mounted-but-hidden (never unmounted, see
+  // `App.tsx#HomeShell`) rather than remounted, switching away and back could not retry it either.
+  const refresh = React.useCallback(async () => {
+    try {
+      const list = await listTeams(getAccessToken)
+      setError(null)
+      setTeams(list)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
   }, [getAccessToken])
+
+  React.useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  // Coming back from the background is the other time this list goes stale — a member could
+  // have been added to a team, or removed from one, entirely outside this app. Nothing else here
+  // watches `AppState`, and a stale list just sat there until the member happened to remember to
+  // pull down (there is no pull-to-refresh either — `TeamChannelsView` owns the actual scrollable
+  // list and has no `onRefresh` to give it one; see this fix's report).
+  React.useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void refresh()
+    })
+    return () => subscription.remove()
+  }, [refresh])
 
   // Registering the device is not gated on opening a team: a member should be
   // notified about a DM whether or not they happened to open the app on the team
@@ -55,6 +88,30 @@ export function TeamScreen({ onMentionCount }: { onMentionCount?: (count: number
   React.useEffect(() => {
     void registerForPush(getAccessToken)
   }, [getAccessToken])
+
+  // Which team is selected — a request to focus one (never a team the member is not actually on,
+  // so a stale invite id or a push notification for a team since left does not silently swap the
+  // screen onto some OTHER team) FIRST, falling back to the first remaining team when the current
+  // selection no longer exists (a refresh can drop it — membership revoked, the team deleted —
+  // and without this fallback that read as a permanent "Opening the team…" spinner rather than
+  // landing somewhere real). One effect, not two, so the two rules cannot race each other's
+  // `setTeamId` in the same commit.
+  React.useEffect(() => {
+    if (!teams?.length) return
+    setTeamId((current) => {
+      const focused = resolveFocusTeamId(teams, openTeamId, current)
+      return focused && teams.some((t) => t.id === focused) ? focused : teams[0]!.id
+    })
+  }, [openTeamId, teams])
+
+  // A channel named alongside it — e.g. `team-push.ts`'s deep link. Applied independently of
+  // whether the team switch above landed on this render or a later one; `TeamChannelsView`
+  // simply shows nothing selected if the id turns out not to exist, same as any other unknown id.
+  React.useEffect(() => {
+    if (!openChannelId) return
+    setActiveChannelId(openChannelId)
+    setRail(null)
+  }, [openChannelId])
 
   // One getter per team, shared by the channel client and by anything else that has to
   // reach this team's pod — the getter caches the minted token in memory, so making a
@@ -102,10 +159,65 @@ export function TeamScreen({ onMentionCount }: { onMentionCount?: (count: number
 
   const team = teams?.find((t) => t.id === teamId)
 
-  if (error) return <Centered>{error}</Centered>
-  if (!teams) return <Centered>Loading your teams…</Centered>
-  if (!teams.length) return <Centered>You are not on a team yet.</Centered>
-  if (!client || !team) return <Centered>Opening the team…</Centered>
+  // Each of these used to be a bare sentence and a dead end: no spinner, no retry, and (since
+  // this tab is hidden rather than unmounted, see `refresh` above) no way to make a failed fetch
+  // try again short of force-quitting the app.
+  if (error) {
+    return (
+      <Centered>
+        <Prim.Text textAlign="center" color="$destructive">
+          {error}
+        </Prim.Text>
+        <RetryButton onPress={() => void refresh()} />
+      </Centered>
+    )
+  }
+  if (!teams) {
+    return (
+      <Centered>
+        <ActivityIndicator />
+        <Prim.Text textAlign="center" marginTop="$3">
+          Loading your teams…
+        </Prim.Text>
+      </Centered>
+    )
+  }
+  if (!teams.length) {
+    return (
+      <Centered>
+        <Prim.Text textAlign="center">You are not on a team yet.</Prim.Text>
+        <Prim.Text textAlign="center" fontSize="$sm" color="$muted-foreground" marginTop="$1">
+          An invitation lands here once someone adds you — pull down, or open lmthing.team to
+          create or join one.
+        </Prim.Text>
+        <RetryButton onPress={() => void refresh()} />
+        <Prim.Pressable
+          onClick={() => void Linking.openURL(TEAM_BASE_URL)}
+          minHeight="$12"
+          paddingHorizontal="$4"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          marginTop="$2"
+          aria-label="Open lmthing.team"
+        >
+          <Prim.Text color="$primary" fontWeight="$semibold">
+            Open lmthing.team
+          </Prim.Text>
+        </Prim.Pressable>
+      </Centered>
+    )
+  }
+  if (!client || !team) {
+    return (
+      <Centered>
+        <ActivityIndicator />
+        <Prim.Text textAlign="center" marginTop="$3">
+          Opening the team…
+        </Prim.Text>
+      </Centered>
+    )
+  }
 
   // A spec app covers the surface rather than sitting in the rail — it IS a set of screens,
   // not a page to glance at. Closing it puts the member back exactly where they were, because
@@ -160,10 +272,38 @@ export function TeamScreen({ onMentionCount }: { onMentionCount?: (count: number
   )
 }
 
+/**
+ * A centered status screen: a spinner or a message, and now optionally something to press.
+ * Column, not the `display: 'flex'` default a bare `Prim.Box` reads as ROW on native (see
+ * `App.tsx#HomeShell`'s note on the same trap) — a spinner beside its caption instead of above it
+ * was the first symptom of getting this wrong. Every child is a real element (`Prim.Text`,
+ * `ActivityIndicator`, a `Pressable`), never a bare string — those are silently dropped inside a
+ * View on this target.
+ */
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <Prim.Box display="flex" flex={1} alignItems="center" justifyContent="center" padding="$4">
-      <Prim.Text textAlign="center">{children}</Prim.Text>
-    </Prim.Box>
+    <Prim.Col flex={1} alignItems="center" justifyContent="center" padding="$4" gap="$2">
+      {children}
+    </Prim.Col>
+  )
+}
+
+/** A tap target that reaches the platform minimum (Apple 44pt / Android 48dp) either way. */
+function RetryButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Prim.Pressable
+      onClick={onPress}
+      minHeight="$12"
+      paddingHorizontal="$4"
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
+      marginTop="$2"
+      aria-label="Retry"
+    >
+      <Prim.Text color="$primary" fontWeight="$semibold">
+        Retry
+      </Prim.Text>
+    </Prim.Pressable>
   )
 }

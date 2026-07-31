@@ -1,10 +1,10 @@
 import * as React from 'react'
-import { Alert, Linking } from 'react-native'
+import { ActivityIndicator, Alert, Linking } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as Prim from '@lmthing/ui/elements/primitives'
 import { AppView } from '@lmthing/ui/elements/content/app-view'
 import { ViewNotFound, ViewRenderer, createViewClient } from '@lmthing/ui/view'
-import { apiBase } from '@lmthing/ui/platform'
+import { apiBase, onDismiss } from '@lmthing/ui/platform'
 
 import { appUrl as personalAppUrl } from './hosts'
 import {
@@ -71,6 +71,13 @@ export function AppScreen({
 }) {
   const [target, setTarget] = React.useState<AppTarget | null>(decided ?? null)
 
+  // `Drawer`/`Dialog` (`libs/ui`) already wire the Android back button to their own `onDismiss`,
+  // but a full-screen project app had no listener at all — with none claiming the event, the
+  // DEFAULT action (background, or exit at the top of the stack) took over, and the only way out
+  // was the tiny corner × below. This makes back behave like that × everywhere this screen is
+  // reached from (Home's `openApp` cover, `TeamScreen`'s pinned-app screen).
+  React.useEffect(() => onDismiss(onClose), [onClose])
+
   React.useEffect(() => {
     if (decided) {
       setTarget(decided)
@@ -100,7 +107,16 @@ export function AppScreen({
         <Prim.Text fontSize="$sm" fontWeight="$semibold" flex={1} minWidth={0}>
           {name}
         </Prim.Text>
-        <Prim.Pressable onClick={onClose} aria-label="Close app" padding="$1">
+        <Prim.Pressable
+          onClick={onClose}
+          aria-label="Close app"
+          // 16px icon + 16px padding each side = 48×48 — Android's stated minimum (and above
+          // Apple's 44) rather than the 24×24 this was (`padding="$1"`, 4px).
+          padding="$4"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+        >
           {/*
             Drawn from the SVG primitives rather than taken from `elements/primitives/icons`.
             That barrel re-exports `@tamagui/lucide-icons-2`, which is DECLARED in `libs/ui`'s
@@ -202,8 +218,12 @@ function NativeApp({
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <Prim.Box display="flex" flex={1} alignItems="center" justifyContent="center" padding="$4">
+    <Prim.Col flex={1} alignItems="center" justifyContent="center" padding="$4" gap="$3">
+      {/* Deciding native-vs-WebView (`fetchAppTarget`) is one round trip to the pod, not
+          instant — bare text alone read as a hang, with no way to tell "still working" from
+          "frozen". */}
+      <ActivityIndicator />
       <Prim.Text textAlign="center">{children}</Prim.Text>
-    </Prim.Box>
+    </Prim.Col>
   )
 }

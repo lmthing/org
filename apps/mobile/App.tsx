@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { KeyboardAvoidingView, Platform, useColorScheme } from 'react-native'
+import { ActivityIndicator, Alert, AppState, KeyboardAvoidingView, Platform, useColorScheme } from 'react-native'
 import { TamaguiProvider } from '@tamagui/core'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
@@ -10,9 +10,11 @@ import { ChatShell, Drawer } from '@lmthing/ui/chat'
 import { DashboardHome } from '@lmthing/ui/dashboard'
 import { SurfaceSwitcher, type Surface as NavTab } from '@lmthing/ui/elements/nav/surface-switcher'
 import * as Prim from '@lmthing/ui/elements/primitives'
+import { onDismiss } from '@lmthing/ui/platform'
 import { ensureComputePod, waitForPodEdge } from './src/ensure-pod'
 import { TeamScreen } from './src/TeamScreen'
 import { AppScreen } from './src/AppScreen'
+import { unregisterPush, watchPushDeepLinks, type PushDeepLink } from './src/push'
 
 /**
  * Root of the LMThing mobile app.
@@ -113,39 +115,68 @@ function AuthGate() {
   const { isAuthenticated, isLoading, getAccessToken } = useAuth()
   const [pod, setPod] = React.useState<PodState>('pending')
   const [error, setError] = React.useState<string | null>(null)
-  const startedRef = React.useRef(false)
+  // Bumped by the Retry button below. Previously a failed `ensureComputePod`/`waitForPodEdge` —
+  // a bad network, the 120s cold-wake timeout, a 5xx — landed on static text with no way back
+  // in short of force-quitting: `startedRef` latched true on the FIRST attempt and never let a
+  // second one start. Including it in the effect's deps is what makes a bump actually retry.
+  const [attempt, setAttempt] = React.useState(0)
 
   React.useEffect(() => {
-    if (!isAuthenticated || startedRef.current) return
-    startedRef.current = true
+    if (!isAuthenticated) return
+    let cancelled = false
+    setPod('pending')
+    setError(null)
     void (async () => {
       try {
         await ensureComputePod(getAccessToken)
         await waitForPodEdge(getAccessToken)
-        setPod('ready')
+        if (!cancelled) setPod('ready')
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err))
-        setPod('error')
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err))
+          setPod('error')
+        }
       }
     })()
-  }, [isAuthenticated, getAccessToken])
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthenticated, getAccessToken, attempt])
 
   if (isLoading) return null
   if (!isAuthenticated) return <LoginScreen />
 
   if (pod === 'error') {
     return (
-      <Prim.Box display="flex" alignItems="center" justifyContent="center" flex={1} padding="$4">
+      <Prim.Col alignItems="center" justifyContent="center" flex={1} padding="$4" gap="$3">
         <Prim.Text textAlign="center">{error ?? 'Could not start your workspace.'}</Prim.Text>
-      </Prim.Box>
+        <Prim.Pressable
+          onClick={() => setAttempt((n) => n + 1)}
+          minHeight="$12"
+          paddingHorizontal="$5"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          borderRadius="$radius-lg"
+          backgroundColor="$muted"
+          aria-label="Retry"
+        >
+          <Prim.Text color="$primary" fontWeight="$semibold">
+            Retry
+          </Prim.Text>
+        </Prim.Pressable>
+      </Prim.Col>
     )
   }
 
   if (pod !== 'ready') {
     return (
-      <Prim.Box display="flex" alignItems="center" justifyContent="center" flex={1}>
+      <Prim.Col alignItems="center" justifyContent="center" flex={1} gap="$3">
+        {/* A cold-wake can take much of the 120s `waitForPodEdge` budget — bare text alone read
+            as a hang, with no way to tell "still working" from "frozen". */}
+        <ActivityIndicator />
         <Prim.Text>Starting your workspace…</Prim.Text>
-      </Prim.Box>
+      </Prim.Col>
     )
   }
 
@@ -185,6 +216,16 @@ function HomeShell() {
   // the same reason `TeamScreen` owns its rail.
   const [openApp, setOpenApp] = React.useState<{ id: string; name: string } | null>(null)
   const [navOpen, setNavOpen] = React.useState(false)
+  // A request to focus a specific team (+ optionally a channel in it) inside `TeamScreen` — a tap
+  // on Home's TEAMS/INVITATIONS rows, or a tapped push notification. `TeamScreen` decides whether
+  // the request actually names a team the member is on; this shell only carries it.
+  const [teamFocus, setTeamFocus] = React.useState<PushDeepLink | null>(null)
+  // Bumped on every return from the background, and handed to `DashboardHome` as a `key` — the
+  // one way to make it refetch without a reload prop of its own to call (see this fix's report:
+  // adding one is a `libs/ui/src/dashboard/DashboardHome.tsx` change, out of this partition).
+  // Remounting a HIDDEN pane costs nothing a user can see; it does NOT touch `ChatShell` or
+  // `TeamScreen`, which hold live sockets a remount would drop mid-conversation.
+  const [homeKey, setHomeKey] = React.useState(0)
 
   const badges = teamMentions > 0 ? { teams: teamMentions } : undefined
 
@@ -192,6 +233,59 @@ function HomeShell() {
     setTab(surface)
     setNavOpen(false)
   }, [])
+
+  const openTeam = React.useCallback((team: { id: string }) => {
+    setTeamFocus({ teamId: team.id })
+    setTab('teams')
+  }, [])
+
+  // Nothing reacted to the app coming back from the background at all — a stale Home list just
+  // sat there until the member happened to remember to pull down (there is no pull-to-refresh
+  // either; see this fix's report).
+  React.useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setHomeKey((k) => k + 1)
+    })
+    return () => subscription.remove()
+  }, [])
+
+  // The gateway deliberately sends `data: { url }` in every push payload so a tap lands in the
+  // right place (`cloud/gateway/src/lib/push.ts`), but nothing native-side ever read it — a tap
+  // just foregrounded whichever tab was last open. Covers both the cold-start tap (the process
+  // did not exist yet to have a listener) and the already-running one; see
+  // `./src/push.ts#watchPushDeepLinks`.
+  React.useEffect(() => {
+    let unsubscribe: (() => void) | undefined
+    let cancelled = false
+    void watchPushDeepLinks((link) => {
+      setTeamFocus(link)
+      setTab('teams')
+      // A tapped notification is a request to go there NOW — closing whatever full-screen app
+      // was covering the tabs, the same way a hardware back press does below.
+      setOpenApp(null)
+    }).then((unsub) => {
+      if (cancelled) unsub()
+      else unsubscribe = unsub
+    })
+    return () => {
+      cancelled = true
+      unsubscribe?.()
+    }
+  }, [])
+
+  // Android's back button, for the two things in THIS shell it did nothing for: a full-screen
+  // project app (the AppScreen cover below), and — new — stepping from Chat/Teams back to Home
+  // instead of exiting the app outright. `Drawer`'s own `onDismiss` already closes `navOpen`
+  // (libs/ui), and `AppScreen` (below) wires its own `onClose` — this effect's guard keeps it from
+  // ever being registered AT THE SAME TIME as either of those two, rather than relying on Android's
+  // LIFO dispatch to sort out three simultaneous listeners. Chat's OWN thread rail (`AppShell`'s
+  // mobile sidebar, `libs/ui`) is invisible to this shell, so that case genuinely does rely on
+  // LIFO ordering — its listener mounts (and registers) only once that rail opens, strictly AFTER
+  // this one, so it is asked first and returns `true` before this "go to Home" fallback ever runs.
+  React.useEffect(() => {
+    if (openApp || navOpen || tab === 'home') return undefined
+    return onDismiss(() => setTab('home'))
+  }, [openApp, navOpen, tab])
 
   // Covers the tabs rather than replacing a pane: an app is a place you go INTO and come back from,
   // and the chat socket behind it should not be torn down to look at one.
@@ -227,8 +321,11 @@ function HomeShell() {
         <Prim.Row flexShrink={0} alignItems="center" paddingHorizontal="$2" paddingTop="$2">
           <Prim.Pressable
             onClick={() => setNavOpen(true)}
-            width="$8"
-            height="$8"
+            // 48×48 — Android's stated minimum (and above Apple's 44) rather than the 32×32 this
+            // was: a hit-test that small under-shoots BOTH platforms' own guidance, which is a
+            // press that lands next to the button often enough to read as "broken", not "small".
+            width="$12"
+            height="$12"
             display="flex"
             alignItems="center"
             justifyContent="center"
@@ -244,11 +341,19 @@ function HomeShell() {
 
       <Prim.Box flex={1} flexDirection="column" display={tab === 'home' ? 'flex' : 'none'}>
         <DashboardHome
+          // Remounted whenever the app returns to the foreground (see the `AppState` effect
+          // above) — `DashboardHome` has no reload prop of its own to call instead.
+          key={homeKey}
           onNewChat={() => setTab('chat')}
           onOpenConversation={() => setTab('chat')}
           // `DashboardHome` has always offered this and this app never passed it, so tapping a
           // project on Home did nothing at all — a personal app could not be opened on a phone.
           onOpenProject={(project) => setOpenApp({ id: project.id, name: project.name })}
+          // Ditto for a TEAMS row or an INVITATIONS card: `onOpenTeam` defaults to a cross-app
+          // browser hand-off (`openTeamsSurface` → `crossAppOrigin('team')`), which resolves to
+          // `''` on native (`isWeb()` is false) and silently no-ops. This app CAN open a team —
+          // it has its own `TeamScreen` — so it says which one instead of leaving Home to guess.
+          onOpenTeam={openTeam}
         />
       </Prim.Box>
       <Prim.Box flex={1} flexDirection="column" display={tab === 'chat' ? 'flex' : 'none'}>
@@ -256,14 +361,76 @@ function HomeShell() {
         <ChatShell onSwitchSurface={switchTo} {...(badges ? { surfaceBadges: badges } : {})} />
       </Prim.Box>
       <Prim.Box flex={1} flexDirection="column" display={tab === 'teams' ? 'flex' : 'none'}>
-        <TeamScreen onMentionCount={setTeamMentions} />
+        <TeamScreen
+          onMentionCount={setTeamMentions}
+          openTeamId={teamFocus?.teamId}
+          openChannelId={teamFocus?.channelId}
+        />
       </Prim.Box>
 
-      <Drawer open={navOpen} onClose={() => setNavOpen(false)} side="left" width="16rem">
-        <Prim.Box flex={1} flexDirection="column" paddingTop="$3">
-          <SurfaceSwitcher current={tab} onSwitch={switchTo} {...(badges ? { badges } : {})} />
-        </Prim.Box>
+      {/* `width="$64"` — 256, byte-identical to the `16rem` this was. Not a CSS length: `rem` is
+          font-relative and has no native meaning, so it reached Yoga unparsed and the drawer sized
+          to content instead of 16rem wide. A `$`-prefixed value is a Tamagui token, resolved by
+          the SAME config on both targets — `size['64']` in `libs/css/src/tamagui/tokens.generated.ts`
+          is exactly 256, so this is not an approximation. `Drawer.tsx`'s own contract (`width?: string
+          | number`, matching this fix) now says so explicitly. */}
+      <Drawer open={navOpen} onClose={() => setNavOpen(false)} side="left" width="$64">
+        <Prim.Col flex={1} paddingTop="$3">
+          <Prim.Box flex={1}>
+            <SurfaceSwitcher current={tab} onSwitch={switchTo} {...(badges ? { badges } : {})} />
+          </Prim.Box>
+          <SignOutRow />
+        </Prim.Col>
       </Drawer>
     </Prim.Box>
+  )
+}
+
+/**
+ * Sign out, reachable at all — `DashboardHome`'s ACCOUNT section (`libs/ui`, out of this
+ * partition) offers "Delete account" and "Privacy policy" only; there was no way to sign out
+ * short of clearing the app's storage from the OS settings. Lives in the nav drawer rather than
+ * in Home because that is the one thing in this shell composed from OUTSIDE the shared surfaces
+ * (see `HomeShell`'s own doc comment on the divergence budget).
+ *
+ * Also unregisters this device from push (`unregisterPush` → `POST /api/push/unsubscribe`)
+ * BEFORE clearing the session — after `logout()` the access token this needs is gone. Without
+ * it a signed-out phone kept its subscription row and went on receiving the account's team
+ * notifications the moment anyone else signed into the same device: a privacy bug, not a
+ * tidiness one.
+ */
+function SignOutRow() {
+  const { logout, getAccessToken } = useAuth()
+
+  const handlePress = () => {
+    Alert.alert('Sign out', 'You can sign back in any time.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: () => {
+          void unregisterPush(getAccessToken).finally(() => logout())
+        },
+      },
+    ])
+  }
+
+  return (
+    <Prim.Pressable
+      onClick={handlePress}
+      minHeight="$12"
+      paddingHorizontal="$4"
+      display="flex"
+      flexDirection="row"
+      alignItems="center"
+      borderTopWidth={1}
+      borderColor="$border"
+      pressStyle={{ opacity: 0.6 }}
+      aria-label="Sign out"
+    >
+      <Prim.Text color="$destructive" fontWeight="$medium">
+        Sign out
+      </Prim.Text>
+    </Prim.Pressable>
   )
 }
