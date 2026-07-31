@@ -33,6 +33,7 @@ import {
   handleListChannels,
   handleListMessages,
   handlePostMessage,
+  runningTurns,
   settleChannelWork,
 } from './routes/team-channels.js';
 import { registerChannelSocket, resetChannelSockets } from './ws/team-channels.js';
@@ -901,6 +902,385 @@ describe('THING answering with JSX', () => {
     await askThing(mkJsxManager([card]));
     const { messages } = await readMessages(root, 'general');
     expect(messages[messages.length - 1]!.blocks).toEqual([card]);
+  });
+});
+
+// ─── Ordering and idempotency ────────────────────────────────────────────────
+//
+// A channel is a log every member and every device has to read the same way, and
+// a composer that retries a timed-out send must not double-post. Neither was
+// expressible: the only time field was an ISO string stamped just before an
+// UNSERIALIZED append, reads returned raw file order with no tie-break, and the
+// server minted a fresh id per call so nothing could tell a retry from a second
+// send.
+
+describe('message ordering', () => {
+  const range = (n: number) => Array.from({ length: n }, (_, i) => i);
+
+  it('gives every message a position, even when a burst is written at once', async () => {
+    // Several members changing one thing at the same time is the ordinary case
+    // this has to survive, not the pathological one.
+    const written = await Promise.all(
+      range(24).map((i) =>
+        appendMessage(root, { channelId: 'general', kind: 'user', text: `m${i}`, userId: 'u1' }),
+      ),
+    );
+    const seqs = written.map((m) => m.seq);
+    expect(new Set(seqs).size, 'every message needs its own position').toBe(24);
+    expect([...seqs].sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual(range(24));
+
+    // The file agrees with it, so a reader that never sorts still gets it right.
+    const log = join(teamDir(root), 'channels', 'general.jsonl');
+    const onDisk = (await readFile(log, 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line).seq);
+    expect(onDisk).toEqual(range(24));
+
+    const { messages } = await readMessages(root, 'general', { limit: 200 });
+    expect(messages.map((m) => m.seq)).toEqual(range(24));
+  });
+
+  it('continues the numbering of a log it did not write', async () => {
+    // A channel that existed before positions did must not restart at 0 and
+    // collide with its own history.
+    const log = join(teamDir(root), 'channels', 'general.jsonl');
+    await mkdir(dirname(log), { recursive: true });
+    const legacy = [
+      { id: 'old-1', ts: '2026-01-01T00:00:01.000Z', channelId: 'general', kind: 'user', text: 'one' },
+      { id: 'old-2', ts: '2026-01-01T00:00:02.000Z', channelId: 'general', kind: 'user', text: 'two' },
+    ];
+    await writeFile(log, legacy.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8');
+
+    const next = await appendMessage(root, { channelId: 'general', kind: 'user', text: 'three' });
+    expect(next.seq).toBe(2);
+  });
+
+  it('reads a log back in message order even when its lines are not', async () => {
+    // Two appends that interleaved before they were serialized. File order is
+    // then a lie, and `ts` alone cannot always break the tie either.
+    const log = join(teamDir(root), 'channels', 'general.jsonl');
+    await mkdir(dirname(log), { recursive: true });
+    const rows = [
+      { id: 'b', ts: '2026-01-01T00:00:00.000Z', seq: 1, channelId: 'general', kind: 'user', text: 'second' },
+      { id: 'a', ts: '2026-01-01T00:00:00.000Z', seq: 0, channelId: 'general', kind: 'user', text: 'first' },
+    ];
+    await writeFile(log, rows.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8');
+
+    const { messages } = await readMessages(root, 'general');
+    expect(messages.map((m) => m.text)).toEqual(['first', 'second']);
+  });
+
+  it('leaves a log with no positions in exactly the order it has', async () => {
+    // Nothing may be re-ordered on the strength of a guess: same timestamp, no
+    // seq, so file order is the only order there is.
+    const log = join(teamDir(root), 'channels', 'general.jsonl');
+    await mkdir(dirname(log), { recursive: true });
+    const rows = ['c', 'a', 'b'].map((id) => ({
+      id, ts: '2026-01-01T00:00:00.000Z', channelId: 'general', kind: 'user', text: id,
+    }));
+    await writeFile(log, rows.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8');
+
+    const { messages } = await readMessages(root, 'general');
+    expect(messages.map((m) => m.id)).toEqual(['c', 'a', 'b']);
+  });
+
+  it('never lets a stamped time run backwards within a channel', async () => {
+    // `seq` is the ordering key, but a transcript whose visible clock goes
+    // backwards reads as broken.
+    const first = await appendMessage(root, {
+      channelId: 'general', kind: 'user', text: 'from the future',
+      ts: new Date(Date.now() + 60_000).toISOString(),
+    });
+    const second = await appendMessage(root, { channelId: 'general', kind: 'user', text: 'now' });
+    expect(second.ts >= first.ts).toBe(true);
+  });
+});
+
+describe('a retried send', () => {
+  it('stores one message, and announces it once', async () => {
+    const { manager } = mkManager();
+    const body = { text: 'said this once', clientId: 'composer-draft-7' };
+
+    const first = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', body),
+      first, { channelId: 'general' }, {} as any,
+    );
+    expect(first.statusCode).toBe(201);
+
+    // Watch from HERE, so anything the retry broadcasts is visible on its own.
+    const seen = watchEvents();
+    const retry = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', body),
+      retry, { channelId: 'general' }, {} as any,
+    );
+    await settle();
+
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json().deduplicated).toBe(true);
+    expect(retry.json().message.id).toBe(first.json().message.id);
+    expect((await readMessages(root, 'general')).messages).toHaveLength(1);
+    expect(
+      seen.filter((e: any) => e.type === 'message'),
+      'a retry must not put a second copy in every open transcript',
+    ).toHaveLength(0);
+  });
+
+  it('is only a retry when the client says it is the same send', async () => {
+    const { manager } = mkManager();
+    for (const clientId of ['a', 'b']) {
+      await handlePostMessage(manager, root)(
+        mkReq('POST', '/api/team/channels/general/messages', { text: 'twice', clientId }),
+        mkRes(), { channelId: 'general' }, {} as any,
+      );
+    }
+    await settle();
+    expect((await readMessages(root, 'general')).messages).toHaveLength(2);
+  });
+});
+
+// ─── A parked question ───────────────────────────────────────────────────────
+//
+// `ask()` parks the turn on a human. The row it wrote was an ordinary `thing`
+// message, the last frame a client had seen said `running`, and ANY next reply
+// in the thread was submitted as the answer with nothing admitting it. So a
+// client could not tell a question from an answer even in principle, the busy
+// indicator said "working" while the agent was blocked, and "brb" could become
+// the answer to "which project?".
+
+describe('THING asking the thread a question', () => {
+  /** Post `@thing …`, and return once the parked question is in the log. */
+  async function parkOnQuestion(manager: unknown): Promise<{
+    rootMsg: ChannelMessage;
+    question: ChannelMessage;
+  }> {
+    const opened = mkRes();
+    await handlePostMessage(manager as any, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing build me an app' }),
+      opened, { channelId: 'general' }, {} as any,
+    );
+    const rootMsg = opened.json().message as ChannelMessage;
+    // NOT settle() — the turn is parked on a human by design. Wait for the
+    // MESSAGE rather than for the registry: the ask registers synchronously and
+    // the question is appended on an un-awaited task after it.
+    let messages: ChannelMessage[] = [];
+    for (let i = 0; i < 400; i++) {
+      messages = (await readMessages(root, 'general')).messages;
+      if (messages.length >= 2) break;
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    return { rootMsg, question: messages[1]! };
+  }
+
+  /** A turn that asks once and answers with whatever it is told. */
+  function mkAskingManager(askId = 'ask-1') {
+    return {
+      runHeadlessThreaded: vi.fn(async (opts: any) => {
+        const answer = await opts.renderHost.ask(askId, {
+          type: 'Paragraph', props: {}, children: ['Which project?'],
+        });
+        return { ok: true, displays: [`building in ${answer}`], result: '', sessionId: 's1' };
+      }),
+    } as any;
+  }
+
+  const replyIn = async (manager: unknown, threadId: string, body: Record<string, unknown>) => {
+    const res = mkRes();
+    await handlePostMessage(manager as any, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { threadId, ...body }),
+      res, { channelId: 'general' }, {} as any,
+    );
+    return res;
+  };
+
+  it('marks the question AS a question, with an identity and a deadline', async () => {
+    const seen = watchEvents();
+    const manager = mkAskingManager();
+    const { rootMsg, question } = await parkOnQuestion(manager);
+
+    expect(question.ask?.id, 'a client cannot branch on a row that says nothing').toBe('ask-1');
+    expect(Date.parse(question.ask!.expiresAt)).toBeGreaterThan(Date.now());
+    expect(question.threadId).toBe(rootMsg.id);
+
+    const waiting = seen.filter((e: any) => e.type === 'thing_status' && e.status === 'waiting');
+    expect(waiting, 'the busy indicator was still saying it was working').toHaveLength(1);
+    expect(waiting[0].askId).toBe('ask-1');
+    expect(waiting[0].threadId).toBe(rootMsg.id);
+
+    // And it goes back to `running` when the question is answered, or a client
+    // that dimmed the thread stays dimmed for the rest of the turn.
+    await replyIn(manager, rootMsg.id, { text: 'the coworking one' });
+    await settle();
+    const statuses = seen
+      .filter((e: any) => e.type === 'thing_status')
+      .map((e: any) => e.status);
+    expect(statuses).toEqual(['running', 'waiting', 'running', 'done']);
+  });
+
+  it('refuses a reply that names a question the thread is not waiting on', async () => {
+    // A client with a stale picture of the thread must not have its words
+    // submitted to whatever question happens to be open instead.
+    const manager = mkAskingManager();
+    const { rootMsg } = await parkOnQuestion(manager);
+
+    const res = await replyIn(manager, rootMsg.id, {
+      text: 'the coworking one',
+      answersAskId: 'ask-that-closed',
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().pendingAskId).toBe('ask-1');
+    expect(hasPendingAsk('general', rootMsg.id), 'the question is still open').toBe(true);
+    expect((await readMessages(root, 'general')).messages).toHaveLength(2);
+
+    await replyIn(manager, rootMsg.id, { text: 'the coworking one', answersAskId: 'ask-1' });
+    await settle();
+  });
+
+  it('says so when an ordinary reply was taken as the answer', async () => {
+    const manager = mkAskingManager();
+    const { rootMsg } = await parkOnQuestion(manager);
+    await replyIn(manager, rootMsg.id, { text: 'brb' });
+    await settle();
+
+    const messages = (await readMessages(root, 'general')).messages;
+    const receipt = messages.find((m) => m.kind === 'system' && m.answersAsk === 'ask-1');
+    expect(receipt, 'the fallback has to admit it happened').toBeTruthy();
+    expect(receipt!.text).toContain('brb');
+    expect(receipt!.threadId).toBe(rootMsg.id);
+    // The receipt explains the answer, so it must come before it.
+    expect(messages.indexOf(receipt!)).toBeLessThan(messages.length - 1);
+    expect(messages[messages.length - 1]!.text).toBe('building in brb');
+  });
+
+  it('stamps the reply that answered a question with which question it answered', async () => {
+    const manager = mkAskingManager();
+    const { rootMsg } = await parkOnQuestion(manager);
+    const res = await replyIn(manager, rootMsg.id, { text: 'the coworking one' });
+    await settle();
+    expect(res.json().message.answersAsk).toBe('ask-1');
+  });
+
+  it('does not lecture a client that named the question it was answering', async () => {
+    const manager = mkAskingManager();
+    const { rootMsg } = await parkOnQuestion(manager);
+    const res = await replyIn(manager, rootMsg.id, {
+      text: 'the coworking one',
+      answersAskId: 'ask-1',
+    });
+    await settle();
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().message.answersAsk).toBe('ask-1');
+    const messages = (await readMessages(root, 'general')).messages;
+    expect(
+      messages.filter((m) => m.kind === 'system'),
+      'it already knew — telling it is noise',
+    ).toHaveLength(0);
+    expect(messages[messages.length - 1]!.text).toBe('building in the coworking one');
+  });
+
+  it('stops holding the thread for a question nobody answers', async () => {
+    // An open ask holds the thread's session lock, so every later message in it
+    // queues behind a question nobody is going to answer. The TURN is not killed
+    // — it resumes, is told nobody answered, and finishes normally.
+    process.env['LMTHING_TEAM_ASK_TIMEOUT_MS'] = '25';
+    try {
+      const manager = mkAskingManager();
+      const { rootMsg } = await parkOnQuestion(manager);
+      expect(hasPendingAsk('general', rootMsg.id)).toBe(true);
+
+      let messages: ChannelMessage[] = [];
+      for (let i = 0; i < 400; i++) {
+        messages = (await readMessages(root, 'general')).messages;
+        if (messages.some((m) => m.kind === 'system' && m.answersAsk === 'ask-1')) break;
+        await new Promise((r) => setTimeout(r, 5));
+      }
+      const note = messages.find((m) => m.kind === 'system' && m.answersAsk === 'ask-1');
+      expect(note, 'the thread has to say why it stopped waiting').toBeTruthy();
+      expect(note!.text).toContain('Nobody answered');
+      expect(hasPendingAsk('general', rootMsg.id)).toBe(false);
+
+      await settle();
+      // The turn carried on rather than being cancelled.
+      const final = (await readMessages(root, 'general')).messages;
+      expect(final[final.length - 1]!.text).toContain('building in');
+    } finally {
+      delete process.env['LMTHING_TEAM_ASK_TIMEOUT_MS'];
+    }
+  });
+});
+
+// ─── Joining a channel while a turn is running ───────────────────────────────
+
+describe('a member who arrives mid-turn', () => {
+  it('is told a turn is running, and what it is doing', async () => {
+    // `thing_status` is a socket frame and nothing else, so a member who opens
+    // the channel a minute into a seventeen-minute build received none of them
+    // and saw a thread that looked finished and empty.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    const manager = {
+      runHeadlessThreaded: vi.fn(async (opts: any) => {
+        opts.onActivity?.('writing the schema');
+        await gate;
+        return { ok: true, displays: ['done'], result: '', sessionId: 's1' };
+      }),
+    } as any;
+
+    const opened = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing build me an app' }),
+      opened, { channelId: 'general' }, {} as any,
+    );
+    const rootMsg = opened.json().message as ChannelMessage;
+
+    let body: any;
+    for (let i = 0; i < 400; i++) {
+      const res = mkRes();
+      await handleListMessages(root)(
+        mkReq('GET', '/api/team/channels/general/messages'),
+        res, { channelId: 'general' }, {} as any,
+      );
+      body = res.json();
+      if (body.turns?.[0]?.activity) break;
+      await new Promise((r) => setTimeout(r, 5));
+    }
+
+    expect(body.turns).toHaveLength(1);
+    expect(body.turns[0]).toMatchObject({
+      channelId: 'general',
+      threadId: rootMsg.id,
+      status: 'running',
+      activity: 'writing the schema',
+    });
+    expect(Date.parse(body.turns[0].startedAt)).toBeLessThanOrEqual(Date.now());
+
+    release();
+    await settle();
+
+    const after = mkRes();
+    await handleListMessages(root)(
+      mkReq('GET', '/api/team/channels/general/messages'),
+      after, { channelId: 'general' }, {} as any,
+    );
+    expect(after.json().turns, 'a finished turn is not a running one').toEqual([]);
+    expect(runningTurns('general')).toEqual([]);
+  });
+
+  it('can time the turn, because the frames say when it started', async () => {
+    const seen = watchEvents();
+    const { manager } = mkManager('42');
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing go' }),
+      mkRes(), { channelId: 'general' }, {} as any,
+    );
+    await settle();
+
+    const running = seen.find((e: any) => e.type === 'thing_status' && e.status === 'running');
+    expect(running.startedAt, 'a client could only time from the frame it happened to get').toBeTruthy();
+    expect(Date.parse(running.startedAt)).toBeLessThanOrEqual(Date.now());
   });
 });
 

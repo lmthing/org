@@ -9,7 +9,7 @@
  * of four being right is a leak.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -24,6 +24,7 @@ import {
   listChannels,
   patchChannel,
   readMessages,
+  teamDir,
 } from './team-channels.js';
 import {
   isValidHandle,
@@ -603,7 +604,12 @@ describe('read state', () => {
   const channelsFor = async (headers: typeof ANA) => {
     const res = mkRes()
     await handleListChannels(root)(mkReq('GET', '/api/team/channels', undefined, headers), res, {}, {} as any)
-    return res.json().unread as Array<{ channelId: string; hasUnread: boolean; mentions: number }>
+    return res.json().unread as Array<{
+      channelId: string
+      hasUnread: boolean
+      mentions: number
+      readMessageId?: string
+    }>
   }
   const unreadOf = async (headers: typeof ANA, channelId = 'general') =>
     (await channelsFor(headers)).find((u) => u.channelId === channelId)!
@@ -671,6 +677,63 @@ describe('read state', () => {
       {} as any,
     )
     expect(res.statusCode).toBe(404)
+  })
+
+  // ── Read state is a POSITION, not a file's clock ────────────────────────────
+  //
+  // Unread used to be `log mtime > readAt`. An mtime is not a message counter:
+  // it moves for anything that writes the file, it has a resolution the ISO
+  // timestamp it was compared against does not, and it cannot express "I have
+  // read up to HERE" at all. All three show up as a channel that is unread when
+  // nobody has said anything.
+
+  it('does not go unread because something touched the log file', async () => {
+    // A GitHub workspace restore rewrites these logs; a torn trailing line gets
+    // repaired; and the append that stamps `readAt` shares a millisecond with the
+    // mtime it is compared against often enough that the same assertion passed
+    // alone and failed under a full parallel run. None of those is a message
+    // anybody has to read, and none of them may raise a badge.
+    await post('morning')
+    expect(await unreadOf(ANA)).toMatchObject({ hasUnread: false })
+
+    const log = join(teamDir(root), 'channels', 'general.jsonl')
+    const later = new Date(Date.now() + 60_000)
+    await utimes(log, later, later)
+
+    expect(await unreadOf(ANA), 'the file moved; the conversation did not').toMatchObject({
+      hasUnread: false,
+    })
+  })
+
+  it('records WHERE a member read to, so a partial read stays partly unread', async () => {
+    // "I have read the first of three messages" is a thing a client knows and
+    // could never say: `markRead` recorded only a wall-clock instant, so reading
+    // one message marked the channel read to its end. That is also why there is
+    // no "new messages since" line anywhere — nothing stored the boundary.
+    await post('one')
+    const first = (await readMessages(root, 'general')).messages[0]!
+    await post('two')
+    await post('three')
+
+    await markRead(root, 'u-bo', 'general', { messageId: first.id })
+    const state = await unreadOf(BO)
+    expect(state.readMessageId, 'the divider needs a message id').toBe(first.id)
+    expect(state.hasUnread, 'two messages are still unread').toBe(true)
+  })
+
+  it('marking read at the end of the channel clears it', async () => {
+    await post('one')
+    await post('two')
+    await markRead(root, 'u-bo', 'general')
+    expect(await unreadOf(BO)).toMatchObject({ hasUnread: false })
+  })
+
+  it('a message posted AFTER a member read is unread again', async () => {
+    // The other half — the position has to be a real comparison, not a constant.
+    await post('one')
+    await markRead(root, 'u-bo', 'general')
+    await post('two')
+    expect(await unreadOf(BO)).toMatchObject({ hasUnread: true })
   })
 
   it('THING‘s answer is a mention of whoever asked', async () => {

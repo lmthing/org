@@ -42,6 +42,7 @@ import {
 import { pushPayload, sendPushRequest } from '../team-push.js';
 import {
   appendMessage,
+  appendMessageOnce,
   createCategory,
   createChannel,
   deleteCategory,
@@ -105,6 +106,42 @@ export async function settleChannelWork(): Promise<void> {
   while (inFlight.size > 0) {
     await Promise.allSettled([...inFlight]);
   }
+}
+
+/**
+ * A THING turn this pod is running right now, in a shape a client that just
+ * arrived can render.
+ *
+ * `thing_status` is a socket frame and nothing else: it is sent once when a turn
+ * starts, re-sent on each activity change, and then forgotten. A member who
+ * opens the channel one minute into a seventeen-minute build receives none of
+ * them and sees a thread that looks finished and empty — which is the COMMON
+ * case for a long build, not an edge one.
+ *
+ * So the live state is also readable. It is deliberately in memory and not on
+ * the message row: a turn in flight is a property of this process, it must not
+ * outlive a restart (a "running" turn recovered from disk after a crash is a
+ * lie), and appending a placeholder row to an append-only log would need a
+ * message-update frame that does not exist yet.
+ */
+export interface ThingTurn {
+  channelId: string;
+  threadId: string;
+  /** `waiting` = parked on an `ask()`; see {@link answerPendingAsk}. */
+  status: 'running' | 'waiting';
+  /** ISO — what makes an elapsed time renderable for somebody who just arrived. */
+  startedAt: string;
+  /** The last `setActivity()` label, so a joiner learns WHAT it is doing. */
+  activity?: string;
+  /** While `waiting`: the ask, matching the question row's `ask.id`. */
+  askId?: string;
+}
+
+const liveTurns = new Map<string, ThingTurn>();
+
+/** The turns in flight in one channel, for a client that has just opened it. */
+export function runningTurns(channelId: string): ThingTurn[] {
+  return [...liveTurns.values()].filter((t) => t.channelId === channelId);
 }
 
 function requireRoot(root: string | undefined, res: ServerResponse): root is string {
@@ -198,7 +235,15 @@ export function handleMarkRead(root: string | undefined): RouteHandler {
       return;
     }
     if (!(await requireVisibleChannel(root, channelId, caller, res))) return;
-    await markRead(root, caller.userId, channelId);
+    // A client that knows how far it has actually rendered says so; one that does
+    // not is read to the end of the channel, which is what opening it means.
+    const body = await parseJsonBody<{ messageId?: unknown }>(req, res);
+    if (!body) return;
+    await markRead(root, caller.userId, channelId, {
+      ...(typeof body.messageId === 'string' && body.messageId
+        ? { messageId: body.messageId }
+        : {}),
+    });
     sendJson(res, 200, { ok: true });
   };
 }
@@ -493,11 +538,19 @@ export function handleListMessages(root: string | undefined): RouteHandler {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const limitRaw = Number(url.searchParams.get('limit'));
     const before = url.searchParams.get('before') ?? undefined;
-    const { messages, hasMore } = await readMessages(root, channelId, {
+    const { messages, hasMore, staleCursor } = await readMessages(root, channelId, {
       ...(Number.isFinite(limitRaw) && limitRaw > 0 ? { limit: limitRaw } : {}),
       ...(before ? { before } : {}),
     });
-    sendJson(res, 200, { messages, hasMore });
+    // `turns` rides along for the same reason unread rides along with the channel
+    // list: it is needed to draw the transcript correctly the FIRST time. Without
+    // it a member who opens a channel mid-build sees a thread that looks finished.
+    sendJson(res, 200, {
+      messages,
+      hasMore,
+      ...(staleCursor ? { staleCursor } : {}),
+      turns: runningTurns(channelId),
+    });
   };
 }
 
@@ -517,13 +570,25 @@ export function handlePostMessage(
       return;
     }
 
-    const parsed = await parseJsonBody<{ text?: unknown; threadId?: unknown }>(req, res);
+    const parsed = await parseJsonBody<{
+      text?: unknown;
+      threadId?: unknown;
+      clientId?: unknown;
+      answersAskId?: unknown;
+    }>(req, res);
     if (!parsed) return;
     const text = typeof parsed.text === 'string' ? parsed.text.trim() : '';
     if (!text) {
       sendJson(res, 400, { error: 'text is required' });
       return;
     }
+    const threadId =
+      typeof parsed.threadId === 'string' && parsed.threadId ? parsed.threadId : undefined;
+    // Bounded: it is a key, not a payload, and it goes into every row of the log.
+    const clientId =
+      typeof parsed.clientId === 'string' && parsed.clientId
+        ? parsed.clientId.slice(0, 200)
+        : undefined;
 
     // A message must land in a channel that exists and that this member can see.
     // Without the existence half, a typo'd id silently created an invisible
@@ -533,19 +598,49 @@ export function handlePostMessage(
     const channel = await requireVisibleChannel(root, channelId, caller, res);
     if (!channel) return;
 
+    // Which question, if any, this message is about to resolve. Read BEFORE the
+    // append so the row itself can say so.
+    const pendingId = threadId ? pendingAskId(channelId, threadId) : null;
+
+    // A client that knows about the ask names it. If it names one that is not the
+    // one this thread is waiting on, its picture of the thread is stale — refuse
+    // rather than submitting the words to whatever question happens to be open
+    // now, and let it re-read. This is the whole difference between answering a
+    // question and having a sentence taken as an answer to a different one.
+    if (typeof parsed.answersAskId === 'string' && parsed.answersAskId) {
+      if (parsed.answersAskId !== pendingId) {
+        sendJson(res, 409, {
+          error: 'that question is no longer open',
+          ...(pendingId ? { pendingAskId: pendingId } : {}),
+        });
+        return;
+      }
+    }
+    const explicitAnswer = parsed.answersAskId === pendingId && !!pendingId;
+
     if (caller) await touchMember(root, caller.userId, caller.email);
     const mentioned = resolveMentions(text, await listMembers(root));
 
-    const message = await appendMessage(root, {
+    const { message, created } = await appendMessageOnce(root, {
       channelId,
       kind: 'user',
       text,
       ...(caller ? { userId: caller.userId, email: caller.email } : {}),
-      ...(typeof parsed.threadId === 'string' && parsed.threadId
-        ? { threadId: parsed.threadId }
-        : {}),
+      ...(threadId ? { threadId } : {}),
+      ...(clientId ? { clientId } : {}),
+      ...(pendingId ? { answersAsk: pendingId } : {}),
       ...(mentioned.length ? { mentions: mentioned.map((m) => m.userId) } : {}),
     });
+
+    // The same send, arriving twice. The row already exists, so everything that
+    // ANNOUNCES it has already happened: re-broadcasting would put a second copy
+    // in every open transcript, and re-delivering would badge and push twice for
+    // one message. Hand back the row the first attempt stored.
+    if (!created) {
+      sendJson(res, 200, { message, deduplicated: true });
+      return;
+    }
+
     broadcastChannelEvent({ type: 'message', message }, audienceFor(channel));
 
     // Answer now; THING (if addressed) replies onto the socket in its own time.
@@ -558,7 +653,22 @@ export function handlePostMessage(
     // A thread waiting on a question takes this message as the ANSWER: the turn
     // that asked is still suspended, so starting a second one would leave the
     // first pinned forever and run two conversations over one session.
-    if (message.threadId && answerPendingAsk(channelId, message.threadId, text)) return;
+    const claimed = message.threadId ? takePendingAsk(channelId, message.threadId) : null;
+    if (claimed) {
+      track(
+        (async () => {
+          // Say so, unless the sender said it first. Without a receipt the
+          // fallback is spooky: somebody types "brb" in a thread with an open
+          // question and it is submitted as the answer with nothing anywhere
+          // admitting it happened.
+          if (!explicitAnswer) {
+            await postAskReceipt(root, channel, message, claimed.askId).catch(() => {});
+          }
+          claimed.submit(text);
+        })(),
+      );
+      return;
+    }
 
     if (await addressesThing(root, message)) {
       // The caller travels with the turn as a VALUE. This is the only place it is
@@ -593,7 +703,29 @@ function beginThingReply(
 ): Promise<void> {
   let release!: () => void;
   const untilParkedOrDone = new Promise<void>((resolve) => (release = resolve));
-  void runThingReply(manager, root, message, channel, caller, release).finally(release);
+  let run: Promise<void> | undefined;
+  let parked = false;
+  run = runThingReply(
+    manager,
+    root,
+    message,
+    channel,
+    caller,
+    () => {
+      parked = true;
+      release();
+    },
+    // Answered. It is work in flight again — a shutdown, and a test's drain,
+    // must wait for it. Only the WAITING is untrackable; without this the rest
+    // of the turn (its answer, its app card, its badges) ran with nothing
+    // holding the door, which showed up as a teardown deleting the runtime root
+    // out from under a write.
+    () => {
+      if (!parked || !run) return;
+      parked = false;
+      track(run);
+    },
+  ).finally(release);
   return untilParkedOrDone;
 }
 
@@ -637,10 +769,15 @@ async function addressesThing(root: string, message: ChannelMessage): Promise<bo
 async function deliver(root: string, channel: Channel, message: ChannelMessage): Promise<void> {
   const named = mentionAudience(channel, message);
   await addMentions(root, channel.id, named, message.userId);
-  // Posting IS reading: without this, your own message leaves the channel it
-  // landed in looking unread to you, because unread is derived from the log's
-  // mtime and you just moved it.
-  if (message.userId) await markRead(root, message.userId, channel.id);
+  // Posting IS reading — up to your own message and no further. Reading to the
+  // END of the channel here would also mark the sender read on anything a
+  // colleague posted in the same instant, which they have not seen.
+  if (message.userId) {
+    await markRead(root, message.userId, channel.id, {
+      messageId: message.id,
+      ...(typeof message.seq === 'number' ? { seq: message.seq } : {}),
+    });
+  }
 
   const targets = await pushAudience(root, channel, message, connectedUserIds());
   if (!targets.length) return;
@@ -686,11 +823,17 @@ async function runThingReply(
   caller: TeamCaller | null,
   /** Called when this turn parks on a question — see {@link beginThingReply}. */
   onParked: () => void = () => {},
+  /** Called when that question is answered and the turn is running again. */
+  onResumed: () => void = () => {},
 ): Promise<void> {
   const threadId = threadRootOf(message);
   const to = audienceFor(channel);
+  const key = pendingKey(message.channelId, threadId);
+  const startedAt = new Date().toISOString();
+  const turn: ThingTurn = { channelId: message.channelId, threadId, status: 'running', startedAt };
+  liveTurns.set(key, turn);
   broadcastChannelEvent(
-    { type: 'thing_status', channelId: message.channelId, threadId, status: 'running' },
+    { type: 'thing_status', channelId: message.channelId, threadId, status: 'running', startedAt },
     to,
   );
 
@@ -703,18 +846,61 @@ async function runThingReply(
   // list a Studio edit could have moved while nobody was watching.
   const fingerprintsBefore = await appFingerprints(root);
 
-  const key = pendingKey(message.channelId, threadId);
   // The host is OURS, not a throwaway, so an `ask()` becomes a question in the
   // thread instead of a promise nobody can settle.
   const renderHost = new WebRenderHost();
   const stopWatching = renderHost.onEvent((event) => {
     if (event.type === 'ask_start') {
-      pendingAsks.set(key, { renderHost, askId: event.id });
-      track(postAsk(root, message, channel, threadId, event.descriptor).catch(() => {}));
+      const expiresAt = new Date(Date.now() + askTimeoutMs()).toISOString();
+      pendingAsks.set(key, {
+        renderHost,
+        askId: event.id,
+        expiresAt,
+        timer: startAskTimer(root, message.channelId, threadId, channel, to),
+      });
+      // The busy indicator was the last thing a client heard, and it says
+      // "working". It is not working — it is blocked on a person, and nothing
+      // told them so.
+      turn.status = 'waiting';
+      turn.askId = event.id;
+      delete turn.activity;
+      broadcastChannelEvent(
+        {
+          type: 'thing_status',
+          channelId: message.channelId,
+          threadId,
+          status: 'waiting',
+          startedAt,
+          askId: event.id,
+        },
+        to,
+      );
+      track(
+        postAsk(root, message, channel, threadId, event.descriptor, event.id, expiresAt).catch(
+          () => {},
+        ),
+      );
       // Parked on a human. Stop counting this run as work a drain should wait for.
       onParked();
     } else if (event.type === 'ask_end') {
-      pendingAsks.delete(key);
+      clearAsk(key);
+      onResumed();
+      // Answered: it is thinking again, and a client that dimmed the thread has
+      // to be told, or the thread stays "waiting" for the rest of the turn.
+      if (liveTurns.get(key) === turn) {
+        turn.status = 'running';
+        delete turn.askId;
+        broadcastChannelEvent(
+          {
+            type: 'thing_status',
+            channelId: message.channelId,
+            threadId,
+            status: 'running',
+            startedAt,
+          },
+          to,
+        );
+      }
     }
   });
 
@@ -762,11 +948,23 @@ async function runThingReply(
       renderHost,
       // A build can run for minutes. Without this the thread shows nothing at all
       // until it finishes, which a reader cannot tell apart from a hang.
-      onActivity: (activity) =>
+      onActivity: (activity) => {
+        // Kept on the turn as well as broadcast, so a member who opens the
+        // channel mid-build learns what it is doing rather than only that
+        // something is.
+        turn.activity = activity;
         broadcastChannelEvent(
-          { type: 'thing_status', channelId: message.channelId, threadId, status: 'running', activity },
+          {
+            type: 'thing_status',
+            channelId: message.channelId,
+            threadId,
+            status: 'running',
+            startedAt,
+            activity,
+          },
           to,
-        ),
+        );
+      },
     });
 
     const answer = result.ok
@@ -823,7 +1021,8 @@ async function runThingReply(
     // more. Leaving the entry behind would swallow the NEXT message in the thread
     // as an answer to a question nobody is waiting on.
     stopWatching();
-    if (pendingAsks.get(key)?.renderHost === renderHost) pendingAsks.delete(key);
+    if (pendingAsks.get(key)?.renderHost === renderHost) clearAsk(key);
+    if (liveTurns.get(key) === turn) liveTurns.delete(key);
   }
 }
 
@@ -842,6 +1041,10 @@ async function runThingReply(
 interface PendingAsk {
   renderHost: WebRenderHost;
   askId: string;
+  /** ISO — also stamped on the question row, so a client can show the deadline. */
+  expiresAt: string;
+  /** Fires {@link expireAsk}. Cleared on every path out of the ask. */
+  timer: NodeJS.Timeout;
 }
 
 /** channel+thread → the ask that thread is waiting on. */
@@ -849,6 +1052,113 @@ const pendingAsks = new Map<string, PendingAsk>();
 
 function pendingKey(channelId: string, threadId: string): string {
   return `${channelId}::${threadId}`;
+}
+
+/**
+ * How long a question stays open before the pod stops holding the thread for it.
+ *
+ * The TURN is still not killed — the owner's decision that a parked turn waits
+ * indefinitely stands, and nothing here cancels a run. What is bounded is the
+ * QUESTION: on expiry the ask is resolved with "nobody answered", the run
+ * resumes and finishes normally, and the thread says so. That is the difference
+ * between a turn that ends behind your back and one that stops waiting for you.
+ *
+ * Bounding it matters because an open ask is not passive: it holds the thread's
+ * session lock, so every later message in that thread queues behind a question
+ * nobody is going to answer — a thread that is not merely stuck but silently
+ * stuck. One hour, because a question in a work channel that nobody has answered
+ * in an hour has lost its moment, and because the alternative bound (a pod
+ * restart) is not one anybody can predict.
+ */
+const DEFAULT_ASK_TIMEOUT_MS = 60 * 60 * 1000;
+
+function askTimeoutMs(): number {
+  const raw = Number(process.env['LMTHING_TEAM_ASK_TIMEOUT_MS']);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_ASK_TIMEOUT_MS;
+}
+
+/** Drop a pending ask and its timer. Idempotent — several paths race to do it. */
+function clearAsk(key: string): void {
+  const pending = pendingAsks.get(key);
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  pendingAsks.delete(key);
+}
+
+function startAskTimer(
+  root: string,
+  channelId: string,
+  threadId: string,
+  channel: Channel,
+  to: ReturnType<typeof audienceFor>,
+): NodeJS.Timeout {
+  const timer = setTimeout(() => {
+    track(expireAsk(root, channelId, threadId, channel, to).catch(() => {}));
+  }, askTimeoutMs());
+  // A question waiting on a human must not be the reason a pod stays alive.
+  timer.unref?.();
+  return timer;
+}
+
+/**
+ * Give up waiting: tell the agent nobody answered, and tell the thread that is
+ * what happened.
+ *
+ * The value submitted is prose rather than an error, because `ask()`'s contract
+ * is a value and an agent that receives one can decide for itself whether to
+ * proceed or to stop and say what it still needs. Throwing into the turn would
+ * turn "nobody was around" into a crash report.
+ */
+async function expireAsk(
+  root: string,
+  channelId: string,
+  threadId: string,
+  channel: Channel,
+  to: ReturnType<typeof audienceFor>,
+): Promise<void> {
+  const key = pendingKey(channelId, threadId);
+  const pending = pendingAsks.get(key);
+  if (!pending) return;
+  clearAsk(key);
+  const minutes = Math.round(askTimeoutMs() / 60000);
+  const note = await appendMessage(root, {
+    channelId,
+    kind: 'system',
+    text: `Nobody answered THING’s question for ${minutes} minute${minutes === 1 ? '' : 's'}, so it has been told to carry on without an answer.`,
+    threadId,
+    answersAsk: pending.askId,
+  });
+  broadcastChannelEvent({ type: 'message', message: note }, to);
+  track(deliver(root, channel, note).catch(() => {}));
+  pending.renderHost.submitForm(
+    pending.askId,
+    'Nobody answered in the channel. Continue with your best judgement, or stop and say what you still need.',
+  );
+}
+
+/**
+ * Claim a thread's open question, so the caller can do something in between
+ * taking it and submitting the answer.
+ *
+ * Claiming and submitting are separate because the receipt has to be in the log
+ * BEFORE the agent is unblocked: the resumed turn posts its answer as soon as it
+ * can, so appending "that reply was taken as the answer" afterwards races it and
+ * the explanation lands under the thing it was explaining. Claiming is
+ * synchronous either way, so the next message in the thread cannot slip in and
+ * start a second turn while the receipt is being written.
+ */
+function takePendingAsk(
+  channelId: string,
+  threadId: string,
+): { askId: string; submit: (text: string) => void } | null {
+  const key = pendingKey(channelId, threadId);
+  const pending = pendingAsks.get(key);
+  if (!pending) return null;
+  clearAsk(key);
+  return {
+    askId: pending.askId,
+    submit: (text: string) => pending.renderHost.submitForm(pending.askId, text),
+  };
 }
 
 /**
@@ -860,12 +1170,15 @@ function pendingKey(channelId: string, threadId: string): string {
  * thing a person would say out loud.
  */
 export function answerPendingAsk(channelId: string, threadId: string, text: string): boolean {
-  const key = pendingKey(channelId, threadId);
-  const pending = pendingAsks.get(key);
+  const pending = takePendingAsk(channelId, threadId);
   if (!pending) return false;
-  pendingAsks.delete(key);
-  pending.renderHost.submitForm(pending.askId, text);
+  pending.submit(text);
   return true;
+}
+
+/** The id of the question this thread is waiting on, or `null`. */
+export function pendingAskId(channelId: string, threadId: string): string | null {
+  return pendingAsks.get(pendingKey(channelId, threadId))?.askId ?? null;
 }
 
 /** Whether this thread is waiting on an answer — exported for tests. */
@@ -880,6 +1193,12 @@ export function hasPendingAsk(channelId: string, threadId: string): boolean {
  * question, and a channel that stored its source could only ever render source.
  * `text` carries the flattened prose so a notification and a client that cannot
  * draw components both have something to read.
+ *
+ * `ask: {id, expiresAt}` is what makes it a QUESTION on the wire rather than
+ * another paragraph from the agent. Without it a client cannot tell a question
+ * from an answer even in principle — the row is byte-identical to a reply — so
+ * it cannot draw a form, cannot say "answer this", and cannot name the ask when
+ * it posts the answer back.
  */
 async function postAsk(
   root: string,
@@ -887,6 +1206,8 @@ async function postAsk(
   channel: Channel,
   threadId: string,
   descriptor: unknown,
+  askId: string,
+  expiresAt: string,
 ): Promise<void> {
   const rendered = renderResult({ ok: true, displays: [descriptor], sessionId: '' });
   const asked = await appendMessage(root, {
@@ -894,12 +1215,45 @@ async function postAsk(
     kind: 'thing',
     ...rendered,
     threadId,
+    ask: { id: askId, expiresAt },
     // The question is FOR whoever asked, and an agent turn can outlast their
     // attention — without the badge they never learn they are being waited on.
     ...(message.userId ? { mentions: [message.userId] } : {}),
   });
   broadcastChannelEvent({ type: 'message', message: asked }, audienceFor(channel));
   track(deliver(root, channel, asked).catch(() => {}));
+}
+
+/**
+ * Record that somebody's ordinary reply was taken as the answer to a question.
+ *
+ * Only for the IMPLICIT case. "Any reply in the thread answers the open
+ * question" is a deliberate fallback — it is the only way a client that knows
+ * nothing about asks can answer one at all — but it is spooky rather than
+ * helpful when it is silent: two people are in a thread, one of them types
+ * "brb", and those words are submitted to the agent with nothing anywhere
+ * admitting it. A client that named the ask in its POST is not told twice.
+ */
+async function postAskReceipt(
+  root: string,
+  channel: Channel,
+  answer: ChannelMessage,
+  askId: string,
+): Promise<void> {
+  const members = await listMembers(root);
+  const who = memberLabel(
+    members.find((m) => m.userId === answer.userId),
+    answer.email ?? 'Someone',
+  );
+  const said = answer.text.length > 120 ? `${answer.text.slice(0, 117)}…` : answer.text;
+  const receipt = await appendMessage(root, {
+    channelId: channel.id,
+    kind: 'system',
+    text: `${who}’s reply was taken as the answer to THING’s question: “${said}”`,
+    ...(answer.threadId ? { threadId: answer.threadId } : {}),
+    ...(askId ? { answersAsk: askId } : {}),
+  });
+  broadcastChannelEvent({ type: 'message', message: receipt }, audienceFor(channel));
 }
 
 // ─── Apps beside a channel ───────────────────────────────────────────────────

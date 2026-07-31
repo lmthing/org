@@ -81,6 +81,24 @@ export type MessageKind = 'user' | 'thing' | 'system';
 export interface ChannelMessage {
   id: string;
   ts: string;
+  /**
+   * The message's position in its channel: 0 for the first message ever posted
+   * there, +1 for every message after it. **This is the ordering key.**
+   *
+   * `ts` is not one. It is stamped from the wall clock just before an append, so
+   * two messages written in the same millisecond tie with nothing to break them,
+   * a clock adjustment can move it backwards, and until appends were serialized
+   * ({@link appendMessageOnce}) the order the lines landed in the file could
+   * differ from the order their timestamps claim. Two clients could therefore
+   * render two different transcripts of the same conversation and a reload a
+   * third.
+   *
+   * Minted under the same per-channel lock the append takes, so file order, seq
+   * order and (clamped) `ts` order all agree. Absent on rows written before this
+   * existed — {@link readMessages} falls back to `ts`, then to file order, so a
+   * pre-existing log keeps exactly the order it always had.
+   */
+  seq?: number;
   channelId: string;
   kind: MessageKind;
   /**
@@ -151,6 +169,39 @@ export interface ChannelMessage {
   app?: { projectId: string; name: string };
   /** For `thing` messages: the session the reply came from. */
   sessionId?: string;
+  /**
+   * The sender's own idempotency key for this message, echoed back so a client
+   * can match a row to the send that produced it.
+   *
+   * A composer that posts, times out, and retries used to store the message
+   * twice: the id was minted server-side per call, so nothing could tell a retry
+   * from a second send. The key is the CLIENT's because only the client knows
+   * which of its own attempts are the same intent.
+   */
+  clientId?: string;
+  /**
+   * For a `thing` message that is a QUESTION — `ask()` parked the turn on it.
+   *
+   * Without this a parked question is stored as an ordinary reply, so no client
+   * can tell "THING answered you" from "THING is waiting on you" even in
+   * principle, and the busy indicator keeps saying the agent is working while it
+   * is in fact blocked on a human.
+   *
+   * `expiresAt` is when the pod stops holding the thread for it — see the ask
+   * timeout in `routes/team-channels.ts`. It is on the ROW rather than only on
+   * the socket frame so a member who scrolls back, or joins after the frame went
+   * out, still sees a question rather than a statement.
+   */
+  ask?: { id: string; expiresAt: string };
+  /**
+   * The id of the {@link ask} this message resolved.
+   *
+   * Stamped on the reply that answered it and on the `system` receipt that
+   * records the resolution, so the log says which words were submitted as the
+   * answer. "Any reply in the thread is the answer" is a deliberate fallback; it
+   * is only honest if the transcript admits it happened.
+   */
+  answersAsk?: string;
 }
 
 export function teamDir(root: string): string {
@@ -435,19 +486,215 @@ export async function deleteCategory(root: string, categoryId: string): Promise<
 
 // ─── Messages ────────────────────────────────────────────────────────────────
 
+/**
+ * What this pod knows about one channel's log without re-reading it: where the
+ * log ends, and which sends it has already stored.
+ *
+ * Keyed by the log's PATH, not by channel id, so two runtime roots in one
+ * process (every test file) cannot share a counter.
+ *
+ * The pod is the only writer of these files, so in-process state is authoritative
+ * for as long as the pod lives — and `tail` makes it so, by serializing every
+ * append on a channel behind the one before it. Unserialized `appendFile` calls
+ * could interleave, which is what let file order and timestamp order disagree
+ * with nothing to reconcile them.
+ */
+interface ChannelState {
+  /** Highest `seq` in the log; -1 for a channel nobody has spoken in. */
+  lastSeq: number;
+  /** The id of the last message, for "have I read to the end of this channel". */
+  lastId: string | null;
+  /** The last `ts` written, so a clock that steps backwards cannot un-order a log. */
+  lastTs: string;
+  /** `clientId` → the row it produced. The dedupe window for retries. */
+  byClientId: Map<string, ChannelMessage>;
+  /** The append lock: every write on this channel chains onto the previous one. */
+  tail: Promise<unknown>;
+  loaded: boolean;
+}
+
+/**
+ * How many recent `clientId`s a channel remembers.
+ *
+ * A retry follows its timed-out send by seconds, so the window only has to
+ * outlive a request. Bounded because the map would otherwise grow with the
+ * channel forever, and an unbounded cache on a long-lived pod is a leak with a
+ * politer name.
+ */
+const DEDUPE_WINDOW = 500;
+
+const channelStates = new Map<string, ChannelState>();
+
+function stateFor(path: string): ChannelState {
+  let state = channelStates.get(path);
+  if (!state) {
+    state = {
+      lastSeq: -1,
+      lastId: null,
+      lastTs: '',
+      byClientId: new Map(),
+      tail: Promise.resolve(),
+      loaded: false,
+    };
+    channelStates.set(path, state);
+  }
+  return state;
+}
+
+function remember(state: ChannelState, clientId: string, message: ChannelMessage): void {
+  state.byClientId.set(clientId, message);
+  // Map iterates in insertion order, so the first key is the oldest.
+  while (state.byClientId.size > DEDUPE_WINDOW) {
+    const oldest = state.byClientId.keys().next();
+    if (oldest.done) break;
+    state.byClientId.delete(oldest.value);
+  }
+}
+
+/**
+ * Recover a channel's write state from its log, once per pod per channel.
+ *
+ * One streaming pass, taken lazily on the first append or read-to-the-end, not
+ * on every one: the alternative is a second file recording where each log ends,
+ * which is a thing that can disagree with the log.
+ *
+ * A row written before `seq` existed counts as its line INDEX, so numbering
+ * continues from the end of an existing log rather than restarting at 0 and
+ * colliding with history.
+ */
+async function loadChannelState(path: string, state: ChannelState): Promise<void> {
+  if (state.loaded) return;
+  state.loaded = true;
+  let stream: ReturnType<typeof createReadStream>;
+  try {
+    stream = createReadStream(path, { encoding: 'utf8' });
+  } catch {
+    return;
+  }
+  try {
+    const rl = createInterface({ input: stream, crlfDelay: Infinity });
+    let index = 0;
+    for await (const line of rl) {
+      const m = parseLine(line);
+      if (!m) continue;
+      state.lastSeq = Math.max(state.lastSeq, typeof m.seq === 'number' ? m.seq : index);
+      state.lastId = m.id;
+      if (m.ts > state.lastTs) state.lastTs = m.ts;
+      if (m.clientId) remember(state, m.clientId, m);
+      index++;
+    }
+  } catch {
+    // ENOENT — a channel nobody has spoken in yet. -1 is the right answer.
+  }
+}
+
+/**
+ * Append a message, or return the one an identical earlier send already stored.
+ *
+ * `created:false` means this exact `clientId` has been seen on this channel
+ * before, so the caller must NOT broadcast, badge or push again — a retry is one
+ * message, and announcing it twice is how a duplicate becomes visible even when
+ * the log holds one row.
+ */
+export async function appendMessageOnce(
+  root: string,
+  message: Omit<ChannelMessage, 'id' | 'ts' | 'seq'> & { id?: string; ts?: string },
+): Promise<{ message: ChannelMessage; created: boolean }> {
+  const path = channelLog(root, message.channelId);
+  const state = stateFor(path);
+  const run = state.tail.then(async () => {
+    await loadChannelState(path, state);
+    if (message.clientId) {
+      const existing = state.byClientId.get(message.clientId);
+      if (existing) return { message: existing, created: false };
+    }
+    const stamped = message.ts ?? new Date().toISOString();
+    const seq = state.lastSeq + 1;
+    const full: ChannelMessage = {
+      ...message,
+      id: message.id ?? randomUUID(),
+      // Never earlier than the message before it. `seq` is what reads sort on,
+      // but a transcript whose visible times run backwards reads as broken.
+      ts: stamped < state.lastTs ? state.lastTs : stamped,
+      seq,
+    };
+    await mkdir(join(teamDir(root), 'channels'), { recursive: true });
+    await appendFile(path, JSON.stringify(full) + '\n', 'utf8');
+    state.lastSeq = seq;
+    state.lastId = full.id;
+    state.lastTs = full.ts;
+    if (message.clientId) remember(state, message.clientId, full);
+    return { message: full, created: true };
+  });
+  // The next append waits for this one however it ends — a failed write must not
+  // wedge the channel's lock.
+  state.tail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 export async function appendMessage(
   root: string,
-  message: Omit<ChannelMessage, 'id' | 'ts'> & { id?: string; ts?: string },
+  message: Omit<ChannelMessage, 'id' | 'ts' | 'seq'> & { id?: string; ts?: string },
 ): Promise<ChannelMessage> {
-  const full: ChannelMessage = {
-    ...message,
-    id: message.id ?? randomUUID(),
-    ts: message.ts ?? new Date().toISOString(),
-  };
-  const path = channelLog(root, full.channelId);
-  await mkdir(join(teamDir(root), 'channels'), { recursive: true });
-  await appendFile(path, JSON.stringify(full) + '\n', 'utf8');
-  return full;
+  return (await appendMessageOnce(root, message)).message;
+}
+
+/**
+ * Where a channel's log currently ends — the message a member who has seen
+ * everything has seen.
+ *
+ * This is what makes read state a POSITION rather than a timestamp compared
+ * against a file's mtime. `null` for a channel nobody has spoken in.
+ */
+export async function lastMessageOf(
+  root: string,
+  channelId: string,
+): Promise<{ id: string; seq: number } | null> {
+  const path = channelLog(root, channelId);
+  const state = stateFor(path);
+  // Don't answer from the middle of an append that is already under way.
+  await state.tail;
+  await loadChannelState(path, state);
+  return state.lastId ? { id: state.lastId, seq: state.lastSeq } : null;
+}
+
+/**
+ * Find one message's position, for "I have read up to HERE" from a client that
+ * knows an id and not a sequence. `null` if the id is not in this channel.
+ */
+export async function messagePosition(
+  root: string,
+  channelId: string,
+  messageId: string,
+): Promise<{ id: string; seq: number } | null> {
+  const path = channelLog(root, channelId);
+  let stream: ReturnType<typeof createReadStream>;
+  try {
+    stream = createReadStream(path, { encoding: 'utf8' });
+  } catch {
+    return null;
+  }
+  try {
+    const rl = createInterface({ input: stream, crlfDelay: Infinity });
+    let index = 0;
+    for await (const line of rl) {
+      const m = parseLine(line);
+      if (!m) continue;
+      const seq = typeof m.seq === 'number' ? m.seq : index;
+      if (m.id === messageId) {
+        rl.close();
+        stream.destroy();
+        return { id: m.id, seq };
+      }
+      index++;
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function parseLine(line: string): ChannelMessage | null {
@@ -524,7 +771,31 @@ export async function readMessages(
   if (opts.before && !reachedBefore) {
     return { messages: [], hasMore: false, staleCursor: true };
   }
-  return { messages: kept, hasMore: truncatedBefore };
+  return { messages: sortByPosition(kept), hasMore: truncatedBefore };
+}
+
+/**
+ * Put a page in the one order every reader must agree on.
+ *
+ * Reads used to return raw file order, which is only the right order because
+ * appends are now serialized — it was not for anything written before they were,
+ * and the client compounded it by appending socket frames as they arrived and
+ * never sorting. Two clients could render two different transcripts of the same
+ * conversation, and a reload a third.
+ *
+ * `seq` first; `ts` for rows written before `seq` existed; and 0 — meaning
+ * "leave them as they lie", since `Array.sort` is stable — when neither can
+ * separate them. A log with no `seq` anywhere therefore keeps exactly the order
+ * it has always had.
+ */
+function sortByPosition(messages: ChannelMessage[]): ChannelMessage[] {
+  return messages.sort((a, b) => {
+    if (typeof a.seq === 'number' && typeof b.seq === 'number') return a.seq - b.seq;
+    const at = Date.parse(a.ts);
+    const bt = Date.parse(b.ts);
+    if (Number.isFinite(at) && Number.isFinite(bt) && at !== bt) return at - bt;
+    return 0;
+  });
 }
 
 // ─── THING in a thread ───────────────────────────────────────────────────────

@@ -30,10 +30,26 @@ export type ChannelEvent =
       type: 'thing_status';
       channelId: string;
       threadId: string;
-      status: 'running' | 'done' | 'error';
+      /**
+       * `waiting` means the turn is parked on an `ask()` — it is not thinking,
+       * it is blocked on a person. Without it the last frame a client ever saw
+       * was `running`, so the busy indicator span "THING is working" for as long
+       * as the question went unanswered, and the one thing a reader could have
+       * done about it was the one thing the screen never suggested.
+       */
+      status: 'running' | 'waiting' | 'done' | 'error';
       /** THING's live `setActivity()` text while `running`. A long turn is
        *  otherwise a blank wait, which a reader cannot tell from a hang. */
       activity?: string;
+      /**
+       * When this turn started, ISO. A client can only time a turn from the
+       * frame it happened to receive, which is nothing at all for a member who
+       * opened the channel mid-build — and a build runs for ten to seventeen
+       * minutes, so that is the common case rather than an edge one.
+       */
+      startedAt?: string;
+      /** While `waiting`: which ask, matching `ChannelMessage.ask.id`. */
+      askId?: string;
     }
   | { type: 'typing'; channelId: string; userId: string; email?: string }
   /** A channel was created, renamed, re-filed, or had its apps changed. */

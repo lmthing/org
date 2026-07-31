@@ -7,12 +7,23 @@
  *
  * Two numbers, deliberately different in kind:
  *
- *  - **unread** is a BOOLEAN, derived. "Is there anything here I have not seen"
- *    is `lastActivityAt(channel) > readAt`, and the last activity is the log
- *    file's mtime — free, exact (nothing else writes those files), and needs no
- *    bookkeeping on the hot path. An exact unread COUNT would mean scanning
- *    every channel's log on every sidebar render, which is the one thing a
- *    channel list must not do.
+ *  - **unread** is a BOOLEAN, derived — from a POSITION in the channel, not from
+ *    a clock. "Is there anything here I have not seen" is `readSeq < lastSeq`,
+ *    where `lastSeq` is where the log currently ends
+ *    ({@link import('./team-channels.js').lastMessageOf}).
+ *
+ *    It used to be `lastActivityAt(channel) > readAt` against the log file's
+ *    MTIME, and that is wrong in the ordinary case: a member marks a channel read
+ *    when they OPEN it, and every message that arrives while they sit there
+ *    watching moves the mtime past their `readAt`, so the channel is unread again
+ *    on their next visit and on every other device. Their own posts were exempt
+ *    only because posting marks read — which is exactly why it survived testing:
+ *    it needs somebody ELSE to be talking. Comparing positions also gives the
+ *    client a real "new messages since" mark ({@link ChannelUnread.readMessageId})
+ *    instead of a timestamp it has to guess a boundary from.
+ *
+ *    Still O(1) on the hot path: the position of the end of a channel is
+ *    in-process state the writer maintains, so this is not a scan.
  *
  *  - **mentions** is a COUNTER, maintained. It has to be exact — a badge that
  *    says "2" when three people asked you something is worse than no badge — and
@@ -31,13 +42,30 @@
 
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { teamDir, type Channel } from './team-channels.js';
+import {
+  lastMessageOf,
+  messagePosition,
+  teamDir,
+  type Channel,
+} from './team-channels.js';
 
 export interface ChannelReadState {
   /** ISO timestamp of the last time this member read this channel. */
   readAt: string;
   /** Messages naming this member since `readAt`. */
   mentions: number;
+  /**
+   * The position ({@link import('./team-channels.js').ChannelMessage.seq}) this
+   * member has read up to. Absent on state written before read position existed,
+   * which falls back to the old mtime comparison exactly once — until their next
+   * read records a position.
+   */
+  readSeq?: number;
+  /**
+   * The id of that message, so a client can draw the "new messages since" line
+   * in the right place rather than inferring it from a timestamp.
+   */
+  readMessageId?: string;
 }
 
 /** userId → channelId → state. */
@@ -47,6 +75,8 @@ export interface ChannelUnread {
   channelId: string;
   hasUnread: boolean;
   mentions: number;
+  /** The last message this member has read, if one is recorded — the divider. */
+  readMessageId?: string;
 }
 
 function readsFile(root: string): string {
@@ -77,8 +107,10 @@ async function saveReads(root: string, state: ReadState): Promise<void> {
 /**
  * When a channel last had a message appended, from its log's mtime.
  *
- * Epoch 0 for a channel nobody has spoken in — which reads as "no activity", so
- * an untouched channel is never unread.
+ * Retained only as the fallback for a member whose recorded read state predates
+ * {@link ChannelReadState.readSeq}; nothing new should reach for it. Epoch 0 for
+ * a channel nobody has spoken in — which reads as "no activity", so an untouched
+ * channel is never unread.
  */
 export async function lastActivityAt(root: string, channelId: string): Promise<number> {
   try {
@@ -89,17 +121,38 @@ export async function lastActivityAt(root: string, channelId: string): Promise<n
   }
 }
 
-/** Mark a channel read for a member: clears the badge and the mention counter. */
+/**
+ * Mark a channel read for a member: clears the badge and the mention counter,
+ * and records WHERE they read to.
+ *
+ * The position defaults to the end of the channel — "I opened it, I have seen
+ * everything in it" — but a caller that knows the exact message says so. The
+ * delivery path does, and must: marking the SENDER read to the end of the
+ * channel would also mark them read on messages other people posted in the same
+ * instant, which they have not seen.
+ */
 export async function markRead(
   root: string,
   userId: string,
   channelId: string,
-  at: Date = new Date(),
+  opts: { at?: Date; messageId?: string; seq?: number } = {},
 ): Promise<void> {
   if (!userId || !channelId) return;
+  const at = opts.at ?? new Date();
+  const upTo =
+    opts.messageId && typeof opts.seq === 'number'
+      ? { id: opts.messageId, seq: opts.seq }
+      : // An id the channel does not hold is not a position; read to the end
+        // rather than refusing, since the member did open the channel.
+        (opts.messageId ? await messagePosition(root, channelId, opts.messageId) : null) ??
+        (await lastMessageOf(root, channelId));
   const state = await loadReads(root);
   const forUser = state[userId] ?? (state[userId] = {});
-  forUser[channelId] = { readAt: at.toISOString(), mentions: 0 };
+  forUser[channelId] = {
+    readAt: at.toISOString(),
+    mentions: 0,
+    ...(upTo ? { readSeq: upTo.seq, readMessageId: upTo.id } : {}),
+  };
   await saveReads(root, state);
 }
 
@@ -162,12 +215,25 @@ export async function unreadFor(
   return Promise.all(
     channels.map(async (channel) => {
       const entry = forUser[channel.id];
-      const readAt = entry ? Date.parse(entry.readAt) : 0;
-      const activity = await lastActivityAt(root, channel.id);
+      const end = await lastMessageOf(root, channel.id);
+      let hasUnread: boolean;
+      if (!end) {
+        // Nobody has ever spoken here, so there is nothing to have missed.
+        hasUnread = false;
+      } else if (typeof entry?.readSeq === 'number') {
+        hasUnread = entry.readSeq < end.seq;
+      } else {
+        // No recorded position: either a member who has read nothing (unread, if
+        // anything is here) or state written before positions existed, which gets
+        // the old mtime reading one last time.
+        const readAt = entry ? Date.parse(entry.readAt) : 0;
+        hasUnread = (await lastActivityAt(root, channel.id)) > readAt;
+      }
       return {
         channelId: channel.id,
-        hasUnread: activity > 0 && activity > readAt,
+        hasUnread,
         mentions: entry?.mentions ?? 0,
+        ...(entry?.readMessageId ? { readMessageId: entry.readMessageId } : {}),
       };
     }),
   );
@@ -186,7 +252,7 @@ export async function unreadFor(
 export async function pushAudience(
   root: string,
   channel: Channel,
-  message: { mentions?: string[]; userId?: string; ts?: string },
+  message: { mentions?: string[]; userId?: string; ts?: string; seq?: number },
   connectedUserIds: ReadonlySet<string>,
 ): Promise<string[]> {
   const named = mentionAudience(channel, message).filter(
@@ -197,7 +263,13 @@ export async function pushAudience(
   const sentAt = message.ts ? Date.parse(message.ts) : Date.now();
   return named.filter((userId) => {
     const entry = state[userId]?.[channel.id];
-    // Read AFTER this message was written — they have seen it on another device.
-    return !entry || Date.parse(entry.readAt) < sentAt;
+    if (!entry) return true;
+    // Already read PAST this message — they have seen it on another device.
+    // By position where both sides have one; by clock only for state written
+    // before positions existed.
+    if (typeof entry.readSeq === 'number' && typeof message.seq === 'number') {
+      return entry.readSeq < message.seq;
+    }
+    return Date.parse(entry.readAt) < sentAt;
   });
 }
