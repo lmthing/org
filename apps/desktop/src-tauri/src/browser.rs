@@ -91,20 +91,39 @@ const MAC_PATHS: &[&str] = &[
 
 /// Is this binary a snap, directly or through Ubuntu's wrapper script?
 ///
-/// It matters because of what snap confinement does to `--user-data-dir`: it IGNORES it. The
-/// browser runs against the person's own everyday profile instead of the throwaway one this app
-/// creates — so the "its cookie jar is something you opted into and can throw away" guarantee at
-/// the top of this file is simply not true under a snap, and an agent would be driving a browser
-/// signed into everything they have ever signed into.
+/// It matters twice over, and the second one is what actually breaks:
 ///
-/// Ubuntu's `/usr/bin/chromium-browser` is a shell script that execs `/snap/bin/chromium`, so
-/// resolving symlinks is not enough on its own — the script has to be read.
+/// 1. Snap confinement's `home` interface grants the sandbox only NON-HIDDEN paths under `$HOME`.
+///    This app's profile lives in a dotted directory, so `--user-data-dir` is refused — Chromium
+///    says "cannot read and write to its data directory" and silently falls back to the snap's own
+///    shared profile. The "its cookie jar is something you opted into and can throw away" guarantee
+///    at the top of this file is then simply not true, and an agent is driving a browser signed
+///    into everything the person has ever signed into.
+/// 2. Because every snap Chromium shares that one profile, a second instance loses the race for the
+///    profile's `SingletonLock` and **aborts before printing anything at all** — so there is no
+///    `DevTools listening on …` line to read and no port file to find. That is exactly the
+///    "the browser started but never reported a debugging port" report this detector exists to
+///    prevent, and it needs nothing more exotic than the person already having Chromium open.
+///
+/// Three shapes have to be recognised, and missing any one of them silently hands over the snap:
+///
+/// - `/snap/bin/chromium` — the path itself says so, and it must be read BEFORE resolving, because
+///   it is a symlink to `/usr/bin/snap`: the launcher, which mentions no snap in its own path and
+///   is far too large to be read as a wrapper script. Canonicalizing first is what made this
+///   function answer `false` for the single most common case on Ubuntu.
+/// - a symlink resolving to the `snap` launcher itself.
+/// - `/usr/bin/chromium-browser` — a shell script that execs `/snap/bin/chromium`, so it looks like
+///   an ordinary binary until you read it.
 pub fn is_snap(path: &Path) -> bool {
-    if std::fs::canonicalize(path)
+    let raw = path.to_string_lossy().into_owned();
+    if raw.contains("/snap/") {
+        return true;
+    }
+    let real = std::fs::canonicalize(path)
         .unwrap_or_else(|_| path.to_path_buf())
         .to_string_lossy()
-        .contains("/snap/")
-    {
+        .into_owned();
+    if real.contains("/snap/") || real.ends_with("/snap") {
         return true;
     }
     // A wrapper is tiny; anything large is the real binary and not worth reading.
@@ -219,10 +238,23 @@ pub fn launch(profile_dir: PathBuf, headless: bool) -> Result<BrowserProcess, St
         .spawn()
         .map_err(|e| format!("could not start {}: {e}", bin.display()))?;
 
-    let stderr = child.stderr.take();
-    let (port, path) = match stderr.and_then(read_devtools_from_stderr) {
+    let mut tail = Vec::new();
+    let found = child
+        .stderr
+        .take()
+        .and_then(|e| read_devtools_from_stderr(e, &mut tail));
+    let (port, path) = match found {
         Some(found) => found,
-        None => read_devtools_endpoint(&profile_dir)?,
+        None => match read_devtools_endpoint(&profile_dir) {
+            Ok(found) => found,
+            Err(_) => {
+                // Without this the browser outlives the failure — every click on a menu item that
+                // reports an error leaves another Chromium running, and the next launch then fails
+                // for a NEW reason (the profile lock) that hides the original one.
+                let _ = child.kill();
+                return Err(describe_launch_failure(&bin, &mut child, &tail));
+            }
+        },
     };
     Ok(BrowserProcess {
         child,
@@ -239,14 +271,55 @@ pub fn launch(profile_dir: PathBuf, headless: bool) -> Result<BrowserProcess, St
 /// `DevTools listening on ws://127.0.0.1:41439/devtools/browser/<uuid>` — printed on stderr by
 /// every Chromium build, before it is ready for anything else. Returns `None` rather than blocking
 /// forever if the stream ends or the line never comes, so the caller can fall back to the file.
-fn read_devtools_from_stderr(stderr: ChildStderr) -> Option<(u16, String)> {
+///
+/// Everything that is NOT the line is kept in `tail`, bounded. When a launch fails, those lines are
+/// the whole diagnosis and Chromium writes them in plain words — "cannot read and write to its data
+/// directory", "Failed to create a ProcessSingleton". Discarding them is what left the failure
+/// reported as a timeout with no cause.
+fn read_devtools_from_stderr(stderr: ChildStderr, tail: &mut Vec<String>) -> Option<(u16, String)> {
+    const KEEP: usize = 12;
     let reader = BufReader::new(stderr);
     for line in reader.lines().map_while(Result::ok) {
         if let Some(found) = parse_devtools_stderr(&line) {
             return Some(found);
         }
+        if line.trim().is_empty() {
+            continue;
+        }
+        tail.push(line);
+        if tail.len() > KEEP {
+            tail.remove(0);
+        }
     }
     None
+}
+
+/// Say what actually went wrong, in the browser's own words.
+///
+/// The old message — "the browser started but never reported a debugging port" — was true and
+/// described the wrong thing every single time it appeared. It is a symptom of four unrelated
+/// causes, and the person reading it cannot tell them apart: a snap losing its profile lock, a
+/// browser too old for `--headless=new`, a sandbox denial, a binary that is not Chromium-family at
+/// all. Chromium names its own cause on stderr; this just passes it through.
+fn describe_launch_failure(bin: &Path, child: &mut Child, tail: &[String]) -> String {
+    let mut msg = format!("{} started but never reported a debugging port.", bin.display());
+    if let Ok(Some(status)) = child.try_wait() {
+        msg.push_str(&format!(" It exited immediately ({status})."));
+    }
+    if is_snap(bin) {
+        // Overwhelmingly the cause on Ubuntu, and unguessable from the symptom.
+        msg.push_str(
+            " It is a SNAP: confinement refuses this app's profile directory, so it falls back to \
+             the shared snap profile — and aborts if any other snap Chromium already holds that \
+             profile's lock. Install a non-snap browser (Chrome, Brave, Edge) or point \
+             LMTHING_BROWSER at one.",
+        );
+    }
+    if !tail.is_empty() {
+        msg.push_str("\n\nIt said:\n");
+        msg.push_str(&tail.join("\n"));
+    }
+    msg
 }
 
 /// Pull the port and browser path out of that line.
@@ -301,6 +374,66 @@ mod tests {
         let found = find_browser();
         assert!(found.is_none() || found.unwrap().as_path() != Path::new("/definitely/not/here"));
         std::env::remove_var("LMTHING_BROWSER");
+    }
+
+    #[test]
+    fn the_plainest_snap_path_of_all_is_recognised() {
+        // `/snap/bin/chromium` — what `chromium` resolves to on stock Ubuntu, and the case the
+        // first version of this function got WRONG: it canonicalized before looking, and that
+        // symlink resolves to `/usr/bin/snap`, the launcher, whose own path names no snap and
+        // whose size puts it past the wrapper-script check. So the snap was reported as a
+        // perfectly good browser, picked over Brave, and failed at launch with a message about a
+        // debugging port.
+        assert!(is_snap(Path::new("/snap/bin/chromium")));
+        assert!(is_snap(Path::new("/var/lib/snapd/snap/bin/chromium")));
+        assert!(!is_snap(Path::new("/opt/brave.com/brave/brave-browser")));
+        assert!(!is_snap(Path::new("/usr/bin/google-chrome-stable")));
+    }
+
+    #[test]
+    fn the_failure_names_the_cause_instead_of_the_symptom() {
+        // The whole point of the rewrite: "never reported a debugging port" is a symptom shared by
+        // four unrelated causes. What makes it actionable is Chromium's own stderr and, on Ubuntu,
+        // the one cause nobody would guess.
+        let mut child = Command::new("true").spawn().expect("`true` exists");
+        let _ = child.wait();
+        let msg = describe_launch_failure(
+            Path::new("/snap/bin/chromium"),
+            &mut child,
+            &["ERROR:... Failed to create a ProcessSingleton for your profile directory".into()],
+        );
+        assert!(msg.contains("SNAP"), "the snap caveat must be stated: {msg}");
+        assert!(msg.contains("LMTHING_BROWSER"), "and a way out of it: {msg}");
+        assert!(msg.contains("ProcessSingleton"), "and what it actually said: {msg}");
+
+        let mut other = Command::new("true").spawn().unwrap();
+        let _ = other.wait();
+        let plain = describe_launch_failure(Path::new("/usr/bin/brave-browser"), &mut other, &[]);
+        assert!(!plain.contains("SNAP"), "and NOT for a browser that is not one: {plain}");
+    }
+
+    #[test]
+    fn the_stderr_tail_is_bounded_and_drops_blank_lines() {
+        // Chromium is chatty; an unbounded tail would put a hundred lines of GPU warnings in a
+        // dialog and bury the one line that matters.
+        let mut tail = Vec::new();
+        let noise = (0..40)
+            .map(|i| format!("ERROR:noise {i}\n"))
+            .collect::<String>();
+        let child = Command::new("sh")
+            .arg("-c")
+            .arg(format!("printf '{noise}\n\n' >&2"))
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap()
+            .stderr
+            .take()
+            .unwrap();
+        assert_eq!(read_devtools_from_stderr(child, &mut tail), None);
+        assert!(tail.len() <= 12, "bounded, got {}", tail.len());
+        assert!(tail.iter().all(|l| !l.trim().is_empty()));
+        // The LAST lines, not the first — the cause is at the end.
+        assert_eq!(tail.last().map(String::as_str), Some("ERROR:noise 39"));
     }
 
     #[test]
