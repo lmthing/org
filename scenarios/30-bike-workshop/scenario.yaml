@@ -13,8 +13,8 @@ project: bike-workshop
 # than a comparison.
 #
 # Level 1 is deliberately moderate — ~4 tables, ~10 endpoints, 6 pages, one computed figure, one
-# toggle. If the two builders are equivalent anywhere, it is here; the ladder gets harder in 31 and
-# 32 to find where they stop being equivalent.
+# toggle. It is the level a builder should find easy, which is what makes it the useful floor: the
+# ladder gets harder in 31 and 32 to find where the vocabulary starts to bind.
 
 persona: >
   Not a persona. The brief is delivered the way THING's delegate would phrase it: outcomes and known
