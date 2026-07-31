@@ -35,11 +35,24 @@ export function HomeShell() {
   const [localOpen, setLocalOpen] = React.useState(false)
   const [browserOpen, setBrowserOpen] = React.useState(false)
 
-  // One bridge for the app's lifetime. Started explicitly rather than on mount — a cloud agent
-  // gaining access to somebody's disk is not something that should switch itself on because an
-  // app was launched.
+  // One bridge for the app's lifetime, connected as soon as somebody is signed in.
+  //
+  // It used to wait for the browser pane to be opened, on the reasoning that a cloud agent reaching
+  // this machine should follow from a deliberate act. That reasoning produced a dead end: an agent
+  // asked for a browser, the pod had no desktop attached, and it told the person to INSTALL the app
+  // they were already using — because the only thing that would have connected it was opening the
+  // pane by hand, which is the very thing they were asking the agent to do.
+  //
+  // The deliberate act is signing in. What the bridge can actually reach is bounded elsewhere and
+  // stays bounded: the grant list is the filesystem boundary and is empty until a folder is named,
+  // so a connected bridge with no grants reaches no files at all, and a browser request opens the
+  // pane VISIBLY rather than driving something nobody can see. Disconnect remains the kill switch
+  // and is remembered.
   const bridge = React.useMemo(() => new DesktopHostBridge(getAccessToken), [getAccessToken])
-  React.useEffect(() => () => bridge.stop(), [bridge])
+  React.useEffect(() => {
+    bridge.start({ implied: true })
+    return () => bridge.stop()
+  }, [bridge])
   const [bridgeStatus, setBridgeStatus] = React.useState<HostBridgeState['status']>('idle')
   React.useEffect(() => bridge.subscribe((s) => setBridgeStatus(s.status)), [bridge])
   const [teamMentions, setTeamMentions] = React.useState(0)
@@ -76,6 +89,24 @@ export function HomeShell() {
   // which only renders on Home — so this is the one control that can open the pane from anywhere.
   React.useEffect(() => onMenuToggleBrowser(() => setBrowserOpen((open) => !open)), [])
 
+  // The same shortcut, handled in the page as well as by the menu.
+  //
+  // Belt and braces, because the two paths fail in different places: the menu accelerator is a GTK
+  // window accelerator and depends on which widget holds the keyboard, while this one depends only
+  // on the app's document having focus. Between them, Ctrl-B works wherever a person is likely to
+  // press it — and the failure it fixes was one-directional and therefore easy to miss: the pane
+  // opened and then would not close.
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault()
+        setBrowserOpen((open) => !open)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   /**
    * Opening the browser attaches this desktop to the workspace.
    *
@@ -89,10 +120,6 @@ export function HomeShell() {
    * it is empty until the person points it at a folder; connecting with no grants reaches nothing.
    * And it is `implied`, so it cannot undo a deliberate Disconnect.
    */
-  React.useEffect(() => {
-    if (browserOpen) bridge.start({ implied: true })
-  }, [browserOpen, bridge])
-
   /**
    * An agent asked for the browser before the person opened it.
    *

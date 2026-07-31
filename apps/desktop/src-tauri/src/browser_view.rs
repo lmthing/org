@@ -85,11 +85,12 @@ pub fn open(app: &AppHandle, url: &str, rect: PaneRect) -> Result<ViewState, Str
         // Runs before any page script, on every navigation. This is what makes the pane
         // controllable at all — see `agent.js` for what it installs and why it is deliberately
         // tiny.
-        .initialization_script(include_str!("agent.js"))
-        // Without this the pane cannot be typed into on some platforms: a webview that never takes
-        // focus receives no key events, and the failure looks like a broken keyboard rather than a
-        // focus problem.
-        .focused(true);
+        .initialization_script(include_str!("agent.js"));
+
+    // NOT `.focused(true)`. Taking focus on open sounds helpful and breaks the control that opened
+    // it: the pane's own webview then owns the keyboard, so Ctrl-B goes to the PAGE and never
+    // reaches the app — the shortcut opens the browser and cannot close it again. A person clicks
+    // into a page to type in it, the same as any other pane.
 
     // NO `auto_resize()`. It sounds like exactly what a pane wants and is the opposite: it ties the
     // view to the WINDOW's size rather than to the rectangle it was given, so the page renders full
