@@ -17,6 +17,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogClose,
 } from '@lmthing/ui/elements/overlays/dialog'
 import {
@@ -48,6 +49,11 @@ function MembersPage() {
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<TeamRole>('viewer')
   const [addOpen, setAddOpen] = useState(false)
+  // Both "Remove" and "Leave" used to fire on one click of a dropdown row / button — the same
+  // kind of destructive, no-undo action `settings.tsx` already gates behind a `Dialog` for
+  // "Delete team". Routed through that same pattern rather than a second one for the same case.
+  const [removeTarget, setRemoveTarget] = useState<{ id: string; email: string } | null>(null)
+  const [leaveOpen, setLeaveOpen] = useState(false)
   const isEditor = team.role === 'editor'
 
   const load = useCallback(async () => {
@@ -191,20 +197,14 @@ function MembersPage() {
                     </DropdownItem>
                     <DropdownItem
                       style={{ color: 'var(--destructive)' }}
-                      onClick={() =>
-                        void run(() => teamApi.removeMember(authFetch, teamId, member.user_id))
-                      }
+                      onClick={() => setRemoveTarget({ id: member.user_id, email: member.email })}
                     >
                       Remove
                     </DropdownItem>
                   </DropdownContent>
                 </Dropdown>
               ) : member.user_id === session?.userId ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => void run(() => teamApi.removeMember(authFetch, teamId, member.user_id))}
-                >
+                <Button variant="ghost" size="sm" onClick={() => setLeaveOpen(true)}>
                   <UserMinus size={14} aria-hidden={true} />
                   Leave
                 </Button>
@@ -253,6 +253,67 @@ function MembersPage() {
           </Card>
         </Prim.Box>
       ) : null}
+
+      <Dialog open={removeTarget !== null} onOpenChange={(open) => !open && setRemoveTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle asChild>
+              <Heading level={3}>Remove {removeTarget?.email}?</Heading>
+            </DialogTitle>
+            <DialogDescription asChild>
+              <Caption>They lose access to this team's channels and pod immediately.</Caption>
+            </DialogDescription>
+          </DialogHeader>
+          <Prim.Row gap="$2" justifyContent="flex-end" marginTop="$3">
+            <DialogClose asChild>
+              <Button variant="ghost" size="sm">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                const target = removeTarget
+                setRemoveTarget(null)
+                if (target) void run(() => teamApi.removeMember(authFetch, teamId, target.id))
+              }}
+            >
+              Remove
+            </Button>
+          </Prim.Row>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle asChild>
+              <Heading level={3}>Leave this team?</Heading>
+            </DialogTitle>
+            <DialogDescription asChild>
+              <Caption>You lose access to its channels and pod immediately. Someone else has to add you back.</Caption>
+            </DialogDescription>
+          </DialogHeader>
+          <Prim.Row gap="$2" justifyContent="flex-end" marginTop="$3">
+            <DialogClose asChild>
+              <Button variant="ghost" size="sm">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setLeaveOpen(false)
+                if (session?.userId) void run(() => teamApi.removeMember(authFetch, teamId, session.userId))
+              }}
+            >
+              Leave
+            </Button>
+          </Prim.Row>
+        </DialogContent>
+      </Dialog>
     </Prim.Box>
   )
 }

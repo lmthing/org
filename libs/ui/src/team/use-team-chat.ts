@@ -29,6 +29,21 @@ const TYPING_TTL_MS = 4000
 /** At most one typing frame per this long, however fast someone types. */
 const TYPING_THROTTLE_MS = 2500
 
+/**
+ * How long "THING is working…" is believed with no follow-up frame.
+ *
+ * The server only clears `thinking`/`activity` by sending an explicit terminal `thing_status` — if
+ * the pod dies mid-turn (crash, restart, evicted) that frame never arrives, and without this the
+ * indicator hangs on screen for the rest of the session. Reset on every `running` frame, so a long
+ * but still-alive turn is never cut off early; it only fires when nothing has been heard for this
+ * long.
+ */
+const THING_STATUS_TTL_MS = 90_000
+
+/** The channel socket's own health, surfaced so the view can tell a member their connection
+ *  dropped rather than leaving them wondering why nothing arrives any more. */
+export type ConnectionState = 'connecting' | 'open' | 'reconnecting'
+
 export interface TeamChat {
   channels: Channel[]
   categories: Category[]
@@ -46,6 +61,12 @@ export interface TeamChat {
    */
   meId: string
   messages: ChannelMessage[]
+  /** True while the active channel's history is in flight — `messages` is stale (the previous
+   *  channel's, or empty) and should not be read as "this channel has nothing in it yet". */
+  loading: boolean
+  /** The channel socket's health. `reconnecting` is distinct from the initial `connecting`: it
+   *  means the surface WAS live and dropped, which is the case worth telling a member about. */
+  connection: ConnectionState
   error: string | null
   /** Thread root ids THING is currently working in. */
   thinking: Set<string>
@@ -82,7 +103,13 @@ export function useTeamChat(client: TeamClient, activeId: string | null): TeamCh
   const [directory, setDirectory] = useState<Directory>({ members: [], projects: [] })
   const [me, setMe] = useState<MemberProfile | null>(null)
   const [messages, setMessages] = useState<ChannelMessage[]>([])
+  // The channel `messages` currently holds history FOR, once the fetch below has settled
+  // (success or failure). Compared against `activeId` to derive `loading` below — a plain
+  // boolean flip in the effect would still leave one render where `activeId` has already moved
+  // on but the flag has not caught up yet, which is exactly the flash this exists to remove.
+  const [historyChannelId, setHistoryChannelId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [connection, setConnection] = useState<ConnectionState>('connecting')
   const [thinking, setThinking] = useState<Set<string>>(new Set())
   const [activity, setActivity] = useState<Map<string, string>>(new Map())
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map())
@@ -94,6 +121,7 @@ export function useTeamChat(client: TeamClient, activeId: string | null): TeamCh
   const activeIdRef = useRef<string | null>(activeId)
   activeIdRef.current = activeId
   const typingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const thingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const socket = useRef<WebSocket | null>(null)
   const lastTypingSent = useRef(0)
 
@@ -164,6 +192,11 @@ export function useTeamChat(client: TeamClient, activeId: string | null): TeamCh
         void client.markRead(activeId).catch(() => {})
       } catch (err) {
         if (!cancelled) fail(err)
+      } finally {
+        // Settled either way. On failure `messages` stays empty, but `loading` must still drop —
+        // otherwise the error banner (already rendered from `error` above) sits behind a
+        // "loading" state that never resolves.
+        if (!cancelled) setHistoryChannelId(activeId)
       }
     })()
     return () => {
@@ -214,20 +247,49 @@ export function useTeamChat(client: TeamClient, activeId: string | null): TeamCh
           return next
         })
       } else if (parsed.type === 'thing_status') {
+        const threadId = parsed.threadId
         setThinking((prev) => {
           const next = new Set(prev)
-          if (parsed.status === 'running') next.add(parsed.threadId)
-          else next.delete(parsed.threadId)
+          if (parsed.status === 'running') next.add(threadId)
+          else next.delete(threadId)
           return next
         })
         setActivity((prev) => {
           const next = new Map(prev)
           // Cleared on done/error as well as when a running frame carries no
           // label, so a finished turn never leaves its last step on screen.
-          if (parsed.status === 'running' && parsed.activity) next.set(parsed.threadId, parsed.activity)
-          else next.delete(parsed.threadId)
+          if (parsed.status === 'running' && parsed.activity) next.set(threadId, parsed.activity)
+          else next.delete(threadId)
           return next
         })
+        // Safety valve for a pod that dies mid-turn: it never gets to send the terminal frame
+        // that would otherwise clear `thinking`/`activity`, and without this "THING is working…"
+        // is on screen for good. Reset on every `running` frame, so a long but still-alive turn
+        // is never cut off — only silence for `THING_STATUS_TTL_MS` closes it out.
+        const existingThing = thingTimers.current.get(threadId)
+        if (existingThing) clearTimeout(existingThing)
+        if (parsed.status === 'running') {
+          thingTimers.current.set(
+            threadId,
+            setTimeout(() => {
+              setThinking((prev) => {
+                if (!prev.has(threadId)) return prev
+                const next = new Set(prev)
+                next.delete(threadId)
+                return next
+              })
+              setActivity((prev) => {
+                if (!prev.has(threadId)) return prev
+                const next = new Map(prev)
+                next.delete(threadId)
+                return next
+              })
+              thingTimers.current.delete(threadId)
+            }, THING_STATUS_TTL_MS),
+          )
+        } else {
+          thingTimers.current.delete(threadId)
+        }
       } else if (parsed.type === 'typing') {
         setTypingUsers((prev) => new Map(prev).set(parsed.userId, parsed.channelId))
         const existing = typingTimers.current.get(parsed.userId)
@@ -256,34 +318,81 @@ export function useTeamChat(client: TeamClient, activeId: string | null): TeamCh
         setCategories(parsed.categories)
       }
     }
-    void (async () => {
-      const url = await client.socketUrl()
-      if (closed) return
-      try {
-        ws = new WebSocket(url)
-      } catch {
-        return
-      }
-      socket.current = ws
-      ws.onmessage = onFrame
-    })()
+    // Reconnect with a capped exponential backoff — mirrors `chat/store/ws-client.ts`, which the
+    // trace socket already solved this for. Without it, any network blip, laptop sleep or pod
+    // restart left messages/typing/`thing_status` silently dead until a full page reload; on the
+    // mobile shell the team screen stays mounted-but-hidden behind other tabs specifically so
+    // this socket survives switching away, which only pays off if the socket can heal itself.
+    let backoff = 500
+    let everConnected = false
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+
+    const connect = () => {
+      setConnection(everConnected ? 'reconnecting' : 'connecting')
+      void (async () => {
+        const url = await client.socketUrl()
+        if (closed) return
+        let next: WebSocket
+        try {
+          next = new WebSocket(url)
+        } catch {
+          reconnectTimer = setTimeout(connect, (backoff = Math.min(backoff * 2, 8000)))
+          return
+        }
+        ws = next
+        socket.current = next
+        next.onmessage = onFrame
+        next.onopen = () => {
+          backoff = 500
+          everConnected = true
+          setConnection('open')
+        }
+        next.onclose = () => {
+          if (socket.current === next) socket.current = null
+          if (closed) return
+          setConnection(everConnected ? 'reconnecting' : 'connecting')
+          reconnectTimer = setTimeout(connect, (backoff = Math.min(backoff * 2, 8000)))
+        }
+        // No handler of its own: `onclose` always follows `onerror` for a WebSocket, and that is
+        // where the retry is scheduled — a second schedule here would just double it up.
+        next.onerror = () => {}
+      })()
+    }
+    connect()
 
     const timers = typingTimers.current
+    const thingTimersMap = thingTimers.current
     return () => {
       closed = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
       ws?.close()
       socket.current = null
       timers.forEach((t) => clearTimeout(t))
       timers.clear()
+      thingTimersMap.forEach((t) => clearTimeout(t))
+      thingTimersMap.clear()
     }
   }, [client])
 
   const send = useCallback(
     async (text: string, threadId?: string) => {
       if (!activeId) return
-      await client.postMessage(activeId, text, threadId)
+      try {
+        const { message } = await client.postMessage(activeId, text, threadId)
+        // Appended from the REST response rather than waiting for the socket to echo it back —
+        // on a slow or dropped connection that echo might never arrive, and the sender would
+        // never see their own message land. The socket handler above dedupes on `id`, so the
+        // later echo (if it comes) is a no-op against this.
+        setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]))
+      } catch (err) {
+        // Surfaced through the same `error` the rest of this hook uses, so a failed send is a
+        // visible banner rather than a draft that silently reappeared in the composer. Rethrown
+        // so the composer's own catch still restores what was typed.
+        fail(err)
+        throw err
+      }
     },
-    [activeId, client],
+    [activeId, client, fail],
   )
 
   const createChannel = useCallback(
@@ -412,6 +521,9 @@ export function useTeamChat(client: TeamClient, activeId: string | null): TeamCh
     me,
     meId,
     messages: visible,
+    // `null` activeId means there is nothing to load rather than something in flight.
+    loading: activeId !== null && historyChannelId !== activeId,
+    connection,
     error,
     thinking,
     activity,

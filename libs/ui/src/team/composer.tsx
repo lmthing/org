@@ -258,6 +258,11 @@ export function Composer({
           minHeight="$9"
           resize="none"
           onKeyDown={onKeyDown}
+          // Web only: opening a channel or thread otherwise needs a click on the box before typing
+          // — a real cost on a surface whose whole point is replying quickly. Not on native: an RN
+          // `TextInput`'s `autoFocus` pops the keyboard the instant the screen mounts, which on a
+          // phone is a surprise, not a convenience, the moment you are just reading a channel.
+          {...(isWeb ? { autoFocus: true } : {})}
         />
         <Button size="icon" onClick={() => void submit()} disabled={!draft.trim()}>
           <SendIcon size={14} />
@@ -293,7 +298,7 @@ function MentionPicker({
       borderRadius="$radius-md"
       backgroundColor="$popover"
       padding="$1"
-      shadowColor="rgba(0,0,0,0.12)"
+      shadowColor="color-mix(in srgb, var(--foreground) 12%, transparent)"
       shadowOffset={{ width: 0, height: 4 }}
       shadowRadius={10}
     >

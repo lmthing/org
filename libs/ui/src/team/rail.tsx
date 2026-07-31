@@ -28,14 +28,16 @@ import {
   MenuIcon,
   PlusIcon,
 } from './icons'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { Channel, DirectoryProject, Rail } from './types'
 import { AppView } from '../elements/content/app-view'
 
 /** The rail's width, in px, clamped so neither pane can be squeezed to nothing. */
 const RAIL_MIN = 320
 const RAIL_MAX = 900
-const RAIL_DEFAULT = 420
+/** Exported so the caller that OWNS the width state (see `RailPane`'s own note on why it must)
+ *  can seed it with the same default this file has always used. */
+export const RAIL_DEFAULT = 420
 
 export function ChannelHeader({
   channel,
@@ -129,8 +131,17 @@ export function ChannelHeader({
                   }}
                   display="flex"
                   alignItems="center"
+                  justifyContent="center"
                   opacity={0.6}
                   hoverStyle={{ opacity: 1 }}
+                  pressStyle={{ opacity: 1 }}
+                  // 44px is the smallest a control on this surface should be to hit reliably with a
+                  // thumb — this wrapped an 11px glyph with no size of its own, the smallest
+                  // destructive control here. The negative margin grows the invisible hit area
+                  // around the glyph rather than inflating the whole pill to 44px tall.
+                  width={44}
+                  height={44}
+                  margin="-$4"
                 >
                   <CloseIcon size={11} />
                 </Prim.Pressable>
@@ -167,8 +178,11 @@ export function ChannelHeader({
 /**
  * The rail itself: a resizable column with a drag handle on its left edge.
  *
- * Width is remembered for the session but not persisted to the pod — it is a
- * property of this screen, not of the team.
+ * Width is CONTROLLED, owned by `TeamChannelsView` rather than by this component — `RailPane`
+ * unmounts every time the rail closes (it is only rendered while `rail` is non-null) and remounts
+ * fresh when it reopens, so a `useState` here forgot the width on every close/reopen despite this
+ * comment once claiming otherwise. Lifting it to a parent that stays mounted for the channel's
+ * whole lifetime is what actually keeps the promise.
  */
 export function RailPane({
   title,
@@ -178,6 +192,8 @@ export function RailPane({
   headerExtra,
   compact,
   backLabel,
+  width,
+  onWidthChange,
 }: {
   title: string
   icon?: React.ReactNode
@@ -188,18 +204,23 @@ export function RailPane({
   compact?: boolean
   /** Where closing returns to — named, and shown as a back row when the rail covers the screen. */
   backLabel?: string
+  /** Current width in px — owned by the caller so it survives this component's own unmount. */
+  width: number
+  onWidthChange: (width: number) => void
 }) {
-  const [width, setWidth] = useState(RAIL_DEFAULT)
   const dragging = useRef(false)
 
-  const onMove = useCallback((e: MouseEvent) => {
-    if (!dragging.current) return
-    // The rail is anchored to the right edge, so its width is whatever is to the
-    // right of the pointer.
-    const viewport = globalThis.window?.innerWidth
-    if (viewport === undefined) return
-    setWidth(Math.min(RAIL_MAX, Math.max(RAIL_MIN, viewport - e.clientX)))
-  }, [])
+  const onMove = useCallback(
+    (e: MouseEvent) => {
+      if (!dragging.current) return
+      // The rail is anchored to the right edge, so its width is whatever is to the
+      // right of the pointer.
+      const viewport = globalThis.window?.innerWidth
+      if (viewport === undefined) return
+      onWidthChange(Math.min(RAIL_MAX, Math.max(RAIL_MIN, viewport - e.clientX)))
+    },
+    [onWidthChange],
+  )
 
   // Drag-to-resize is a MOUSE affordance, and the handle below only renders when the rail sits
   // beside the conversation (`!compact`) — which a phone never is. The listeners, though, were

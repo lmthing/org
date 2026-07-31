@@ -16,7 +16,7 @@ export { TeamChannelsView, type TeamChannelsViewProps } from './channels-view'
 export { createTeamClient, type TeamClient, type TeamTransport } from './client'
 export { useTeamChat, type TeamChat } from './use-team-chat'
 export { useTeamLayout, type TeamLayout } from './use-layout'
-export { channelTitle, dmPartner, initials, memberLabel, relativeTime } from './format'
+export { absoluteTime, channelTitle, dmPartner, initials, memberLabel, relativeTime } from './format'
 export type {
   Category,
   Channel,

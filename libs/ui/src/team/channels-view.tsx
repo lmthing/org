@@ -22,7 +22,7 @@ import { useTeamChat } from './use-team-chat'
 import { useTeamLayout } from './use-layout'
 import { ChannelSidebar } from './sidebar'
 import { Composer } from './composer'
-import { AppFrame, ChannelHeader, OpenAppExternally, RailPane } from './rail'
+import { AppFrame, ChannelHeader, OpenAppExternally, RailPane, RAIL_DEFAULT } from './rail'
 import {
   MessageGroupView,
   MessageRow,
@@ -35,6 +35,64 @@ import {
 import { channelTitle } from './format'
 import type { ChannelMessage, Directory, Rail } from './types'
 import type { TeamClient } from './client'
+
+/**
+ * Tracks whether a `Scroll` region is pinned to its live edge, and hands back the means to return
+ * to it.
+ *
+ * The transcript used to rely on `stickToEnd` alone, which only ever pins forward — a member who
+ * scrolls up to reread something gets swept back down by the very next message with no way back
+ * except scrolling by hand. `chat/app/ChatView.tsx` solved this once already for the `/chat`
+ * surface; this is the same shape, ported.
+ */
+function useScrollBottom() {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [atBottom, setAtBottom] = useState(true)
+  const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget
+    // DOM metrics — absent on a React Native host instance. Left `atBottom` at its default
+    // (`true`) rather than throwing, which just means the button never has reason to appear —
+    // the same degradation `ChatView` accepts on the same primitive.
+    if (typeof el?.scrollHeight !== 'number') return
+    setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 60)
+  }, [])
+  const jumpToBottom = useCallback(() => {
+    const el = ref.current
+    el?.scrollTo?.({ top: el.scrollHeight, behavior: 'smooth' })
+  }, [])
+  return { ref, atBottom, onScroll, jumpToBottom }
+}
+
+/** The floating "back to the live edge" control `useScrollBottom` exists to drive. */
+function JumpToBottomButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Prim.Pressable
+      onClick={onClick}
+      position="absolute"
+      bottom="$3"
+      right="$3"
+      // 44px on both axes — the smallest a control on this surface should be, not just the icon
+      // it draws (see `rail.tsx`'s unpin control for what happens when a control IS its glyph).
+      width={44}
+      height={44}
+      borderRadius="$radius-full"
+      backgroundColor="$card"
+      borderWidth={1}
+      borderColor="$border"
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
+      zIndex={10}
+      pressStyle={{ opacity: 0.7 }}
+      hoverStyle={{ backgroundColor: '$muted' }}
+      aria-label="Jump to latest messages"
+    >
+      <Prim.Text fontSize="$base" color="$muted-foreground">
+        ↓
+      </Prim.Text>
+    </Prim.Pressable>
+  )
+}
 
 export interface TeamChannelsViewProps {
   client: TeamClient
@@ -77,11 +135,31 @@ export function TeamChannelsView({
   const activeId = activeChannelId ?? fallbackId
   const chat = useTeamChat(client, activeId)
   const meId = chat.meId
+  // Read by the app-open effect below, off the REF rather than the closure — `profile()`
+  // resolving is a race against the socket, and a `[lastMessageId]`-keyed effect only runs once
+  // per arrival, so a stale closure value there never gets a second chance.
+  const meIdRef = useRef(meId)
+  meIdRef.current = meId
   const { compact } = useTeamLayout()
   const [drawerOpen, setDrawerOpen] = useState(false)
   // Text a suggestion elsewhere on the surface wants dropped into the composer, cleared as soon as
   // the composer has taken it.
   const [prefill, setPrefill] = useState<string | null>(null)
+  // Owned HERE, not inside `RailPane`: the rail unmounts every time it closes (only rendered
+  // while `rail` is non-null below), so a `useState` inside it forgot the width on every
+  // close/reopen. This component stays mounted for the channel's whole lifetime, which is what
+  // makes "remembered for the session" actually true.
+  const [railWidth, setRailWidth] = useState(RAIL_DEFAULT)
+  // `format.ts#relativeTime` is computed at render and never re-ticks on its own — "just now" was
+  // right the instant it rendered and then sat there, wrong, until some unrelated state change
+  // happened to re-render this tree. Forcing one every minute is cheap (a re-render cascading down
+  // to every message row, not a re-fetch of anything) and is the coarsest interval that keeps
+  // every label in the transcript honest, since the tightest bucket `relativeTime` has is minutes.
+  const [, forceTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => forceTick((t) => t + 1), 60_000)
+    return () => clearInterval(id)
+  }, [])
 
   // Land on a channel when the host names none — the first named one, since a
   // direct message is a poor thing to open somebody into by default.
@@ -136,7 +214,7 @@ export function TeamChannelsView({
     // The card is threaded under the message that asked for it, so the root of
     // its thread is who asked.
     const ask = chat.messages.find((m) => m.id === last.threadId)
-    if (ask?.userId === meId) onOpenApp(last.app.projectId)
+    if (ask?.userId === meIdRef.current) onOpenApp(last.app.projectId)
     // Keyed on the last message's id ALONE, deliberately: this must fire on the
     // ARRIVAL of a card, not on every re-render that happens to have one at the
     // end — which is what depending on `chat.messages` would do, reopening a
@@ -160,6 +238,8 @@ export function TeamChannelsView({
     (rootId: string) => chat.messages.filter((m) => m.threadId === rootId),
     [chat.messages],
   )
+
+  const transcriptScroll = useScrollBottom()
 
   const title = channelTitle(channel, chat.directory.members, meId)
   const closeRail = onCloseRail
@@ -202,7 +282,7 @@ export function TeamChannelsView({
           {sidebar}
           <Prim.Box
             flex={1}
-            backgroundColor="rgba(0,0,0,0.4)"
+            backgroundColor="color-mix(in srgb, var(--foreground) 40%, transparent)"
             onClick={() => setDrawerOpen(false)}
           />
         </Prim.Row>
@@ -231,6 +311,25 @@ export function TeamChannelsView({
           }}
         />
 
+        {/* Only for `reconnecting`, never the initial `connecting` — a fresh page load is
+            expected to take a moment, but a socket that WAS live and dropped (a network blip,
+            laptop sleep, a pod restart) is worth a member knowing about, since until it heals
+            messages/typing/`thing_status` are silently not arriving. */}
+        {chat.connection === 'reconnecting' ? (
+          <Prim.Row
+            alignItems="center"
+            gap="$2"
+            paddingHorizontal="$4"
+            paddingVertical="$1.5"
+            backgroundColor="color-mix(in srgb, var(--brand-2) 12%, transparent)"
+          >
+            <Prim.Text className="lm-pulse" color="$muted-foreground" fontSize="$xs">
+              ●
+            </Prim.Text>
+            <Caption>Reconnecting…</Caption>
+          </Prim.Row>
+        ) : null}
+
         {chat.error ? (
           <Prim.Row
             alignItems="center"
@@ -250,43 +349,75 @@ export function TeamChannelsView({
 
         {/* `Scroll`, not a `Col` with `overflow: auto` — the latter scrolls in a browser and
             CLIPS on a phone, so the conversation ended at the first screenful with no way to
-            reach the rest of it. */}
-        {/* `Scroll`, not a `Col` with `overflow: auto` — the latter scrolls in a browser and
-            CLIPS on a phone, so the conversation ended at the first screenful with no way to
             reach the rest of it. `stickToEnd` is the primitive's job because the two targets pin
-            to the bottom by different mechanisms and at different moments. */}
-        <Prim.Scroll stickToEnd flex={1} minHeight={0} padding="$4" gap="$4" flexDirection="column">
-          {roots.length === 0 ? (
-            <ChannelEmptyState
-              title={title}
-              isDm={channel?.kind === 'dm'}
-              onAskThing={() => setPrefill('@thing ')}
-            />
+            to the bottom by different mechanisms and at different moments — but only while the
+            reader is already there: pinned unconditionally, a member scrolled up to reread
+            something got swept back down by the very next message with no way back except
+            scrolling by hand, which is what `JumpToBottomButton` is for. */}
+        {/* `display="flex" flexDirection="column"` is load-bearing, not decoration: `Prim.Box`
+            computes to `display: block`, and inside a block container the `Scroll` child's own
+            `flex={1} minHeight={0}` means nothing — it sizes to its CONTENT instead of to this
+            wrapper, so the region never scrolled at all and the newest messages ran off the
+            bottom of the screen, unreachable. This wrapper has to pass the flex constraint
+            through, the same way every other height chain in this file does. */}
+        <Prim.Box position="relative" flex={1} minHeight={0} display="flex" flexDirection="column">
+          <Prim.Scroll
+            ref={transcriptScroll.ref}
+            onScroll={transcriptScroll.onScroll}
+            stickToEnd={transcriptScroll.atBottom}
+            flex={1}
+            minHeight={0}
+            padding="$4"
+            gap="$4"
+            flexDirection="column"
+          >
+            {/* `!chat.loading`, not just `roots.length === 0` — the history fetch clears
+                `messages` synchronously and resolves later, so without the loading guard every
+                channel switch flashed this "nothing here yet" state for the round trip. Nothing
+                renders in its place while loading rather than a spinner: one was tried and it
+                only ever flashed for the ~30ms a fetch usually takes, which read as a glitch
+                rather than as feedback. */}
+            {!chat.loading && roots.length === 0 ? (
+              <ChannelEmptyState
+                title={title}
+                isDm={channel?.kind === 'dm'}
+                onAskThing={() => setPrefill('@thing ')}
+              />
+            ) : null}
+            {roots.map((root, i) => {
+              const replies = repliesOf(root.id)
+              return (
+                <Prim.Col key={root.id} gap="$1">
+                  <MessageRow
+                    message={root}
+                    showHeader={showsHeader(roots[i - 1], root)}
+                    ctx={ctx}
+                    onReply={() => onOpenThread(root.id)}
+                  />
+                  <ThreadSummary
+                    replies={replies}
+                    busy={chat.thinking.has(root.id)}
+                    onOpen={() => onOpenThread(root.id)}
+                    ctx={ctx}
+                  />
+                </Prim.Col>
+              )
+            })}
+          </Prim.Scroll>
+          {!transcriptScroll.atBottom ? (
+            <JumpToBottomButton onClick={transcriptScroll.jumpToBottom} />
           ) : null}
-          {roots.map((root, i) => {
-            const replies = repliesOf(root.id)
-            return (
-              <Prim.Col key={root.id} gap="$1">
-                <MessageRow
-                  message={root}
-                  showHeader={showsHeader(roots[i - 1], root)}
-                  ctx={ctx}
-                  onReply={() => onOpenThread(root.id)}
-                />
-                <ThreadSummary
-                  replies={replies}
-                  busy={chat.thinking.has(root.id)}
-                  onOpen={() => onOpenThread(root.id)}
-                  ctx={ctx}
-                />
-              </Prim.Col>
-            )
-          })}
-        </Prim.Scroll>
+        </Prim.Box>
 
         {chat.typingHere.length > 0 ? <TypingStrip labels={chat.typingHere} /> : null}
 
         <Composer
+          // Keyed on the channel: with no key React reuses the same instance across a switch and
+          // its internal `draft`/`mention` state (see `composer.tsx`) came along with it — typing
+          // in #general and then clicking #random left #general's half-written message sitting in
+          // the box, one send away from going to the wrong channel. A new key forces a fresh
+          // instance (and an empty draft) per channel instead.
+          key={activeId ?? 'no-channel'}
           // The `@thing` hint does not fit a phone: the composer is two lines tall, so the
           // placeholder wrapped and the second line was clipped mid-word — the hint made the box
           // look broken instead of teaching anything. It is only dropped where it does not fit;
@@ -312,6 +443,10 @@ export function TeamChannelsView({
 
       {rail?.kind === 'thread' ? (
         <ThreadRail
+          // Keyed on the thread: without it, switching from one thread's rail to another reused
+          // the same mounted instance — and with it, the same composer instance and the draft
+          // sitting inside it. Same bug and same fix as the channel composer above.
+          key={rail.threadId}
           root={chat.messages.find((m) => m.id === rail.threadId)}
           replies={repliesOf(rail.threadId)}
           busy={chat.thinking.has(rail.threadId)}
@@ -324,6 +459,8 @@ export function TeamChannelsView({
           onClose={closeRail}
           onSend={(text) => chat.send(text, rail.threadId)}
           onTyping={() => activeId && chat.notifyTyping(activeId)}
+          width={railWidth}
+          onWidthChange={setRailWidth}
         />
       ) : null}
 
@@ -337,6 +474,8 @@ export function TeamChannelsView({
           compact={compact}
           backLabel={channel?.kind === 'dm' ? title : `#${title}`}
           onClose={closeRail}
+          width={railWidth}
+          onWidthChange={setRailWidth}
         >
           <AppFrame
             url={appUrl(rail.projectId)}
@@ -424,6 +563,8 @@ function ThreadRail({
   onClose,
   onSend,
   onTyping,
+  width,
+  onWidthChange,
 }: {
   root: ChannelMessage | undefined
   replies: ChannelMessage[]
@@ -438,8 +579,12 @@ function ThreadRail({
   onClose: () => void
   onSend: (text: string) => Promise<void>
   onTyping: () => void
+  /** Forwarded straight to `RailPane` — owned by `TeamChannelsView`, see its own note. */
+  width: number
+  onWidthChange: (width: number) => void
 }) {
   const groups = useMemo(() => groupMessages(replies), [replies])
+  const threadScroll = useScrollBottom()
   // Once THING has answered in a thread, every reply reaches it without `@thing`
   // — so stop telling people to type it. The server decides the same thing from
   // the thread's session; a `thing` message in the transcript is that decision
@@ -455,28 +600,47 @@ function ThreadRail({
       compact={compact}
       {...(backLabel ? { backLabel } : {})}
       onClose={onClose}
+      width={width}
+      onWidthChange={onWidthChange}
     >
       {/* `Scroll`, not a `Col` with `overflow: auto` — the same reason the channel transcript is
           one: `overflow` scrolls in a browser and CLIPS under Yoga, so on a phone a thread ended at
-          the first screenful and the newest reply was the one you could not reach. */}
-      <Prim.Scroll stickToEnd flex={1} minHeight={0} padding="$3" gap="$3" flexDirection="column">
-        {root ? <MessageRow message={root} showHeader={true} ctx={ctx} /> : null}
-        <Prim.Row alignItems="center" gap="$2">
-          <Prim.Box flex={1} height={1} backgroundColor="$border" />
-          <Caption>
-            {replies.length === 0
-              ? 'No replies yet'
-              : replies.length === 1
-                ? '1 reply'
-                : `${replies.length} replies`}
-          </Caption>
-          <Prim.Box flex={1} height={1} backgroundColor="$border" />
-        </Prim.Row>
-        {groups.map((group) => (
-          <MessageGroupView key={group.key} group={group} ctx={ctx} />
-        ))}
-        {busy ? <TypingStrip labels={[activity ? `THING — ${activity}` : 'THING']} /> : null}
-      </Prim.Scroll>
+          the first screenful and the newest reply was the one you could not reach. Same
+          jump-to-bottom reasoning as the channel transcript, too — a busy thread can run long.
+          `display="flex" flexDirection="column"` on this wrapper for the same reason as the
+          channel transcript's: `Prim.Box` is `display: block`, and inside a block container the
+          `Scroll` child's `flex={1} minHeight={0}` sizes it to its CONTENT, not to this wrapper —
+          the thread never scrolled and the newest reply ran off the bottom, unreachable. */}
+      <Prim.Box position="relative" flex={1} minHeight={0} display="flex" flexDirection="column">
+        <Prim.Scroll
+          ref={threadScroll.ref}
+          onScroll={threadScroll.onScroll}
+          stickToEnd={threadScroll.atBottom}
+          flex={1}
+          minHeight={0}
+          padding="$3"
+          gap="$3"
+          flexDirection="column"
+        >
+          {root ? <MessageRow message={root} showHeader={true} ctx={ctx} /> : null}
+          <Prim.Row alignItems="center" gap="$2">
+            <Prim.Box flex={1} height={1} backgroundColor="$border" />
+            <Caption>
+              {replies.length === 0
+                ? 'No replies yet'
+                : replies.length === 1
+                  ? '1 reply'
+                  : `${replies.length} replies`}
+            </Caption>
+            <Prim.Box flex={1} height={1} backgroundColor="$border" />
+          </Prim.Row>
+          {groups.map((group) => (
+            <MessageGroupView key={group.key} group={group} ctx={ctx} />
+          ))}
+          {busy ? <TypingStrip labels={[activity ? `THING — ${activity}` : 'THING']} /> : null}
+        </Prim.Scroll>
+        {!threadScroll.atBottom ? <JumpToBottomButton onClick={threadScroll.jumpToBottom} /> : null}
+      </Prim.Box>
       <Composer
         // Same reason as the channel composer: the rail is full-width on a phone but the box is
         // still two lines, and the hint is what pushed it over.

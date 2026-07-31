@@ -24,6 +24,22 @@ export function relativeTime(ms: number): string {
 }
 
 /**
+ * The exact moment `relativeTime` only ever approximates — "3h ago" does not say whether that was
+ * just before or after lunch. Used as a `title` (a mouse hover) on web and an `aria-label` (which
+ * `nativeSafeProps` maps to `accessibilityLabel`) on native, so the precise timestamp is reachable
+ * on both without adding a second visible line to every message.
+ */
+export function absoluteTime(ms: number): string {
+  return new Date(ms).toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+/**
  * What to call a member on screen, best first: the name they chose, the handle
  * others type, the email their token carried, then the raw id.
  *

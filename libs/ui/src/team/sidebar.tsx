@@ -21,6 +21,14 @@ import {
   DropdownTrigger,
 } from '../elements/overlays/dropdown'
 import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../elements/overlays/dialog'
+import {
   ChevronDownIcon,
   ChevronRightIcon,
   CloseIcon,
@@ -120,11 +128,13 @@ export function ChannelSidebar(props: SidebarProps) {
       channels: byCategory.get(category.id) ?? [],
     }))
     // The unfiled section is only worth a heading once there is something to
-    // contrast it with; with no categories at all it is just "the channels".
+    // contrast it with; with no categories at all it is just "the channels" — the two branches
+    // used to read the same either way, which said nothing distinct in the one case where a
+    // reader actually needs telling apart from a named category ("Marketing", "Support", …).
     if (loose.length || !categories.length) {
       out.push({
         key: '',
-        title: categories.length ? 'Channels' : 'Channels',
+        title: categories.length ? 'Uncategorized' : 'Channels',
         category: null as unknown as Category,
         channels: loose,
       })
@@ -160,7 +170,10 @@ export function ChannelSidebar(props: SidebarProps) {
       overflow="auto"
       height="100%"
       {...(compact
-        ? ({ backgroundColor: '$background', boxShadow: '0 0 40px rgba(0,0,0,0.18)' } as const)
+        ? ({
+            backgroundColor: '$background',
+            boxShadow: '0 0 40px color-mix(in srgb, var(--foreground) 18%, transparent)',
+          } as const)
         : {})}
     >
       <SidebarHeader
@@ -225,6 +238,7 @@ export function ChannelSidebar(props: SidebarProps) {
             {isEditor ? (
               <SectionMenu
                 categoryId={section.category?.id ?? null}
+                categoryName={section.title}
                 onAddChannel={() => {
                   setAdding(section.key)
                   setDraft('')
@@ -402,30 +416,76 @@ function SidebarHeader({
   )
 }
 
+/**
+ * One click of a 24px dropdown row used to delete a category outright — the smallest, easiest to
+ * mis-tap control on the surface, wired straight to a destructive call. Routed through the same
+ * `Dialog` confirmation `settings.tsx` already uses for "Delete team", rather than inventing a
+ * second pattern for the same kind of action.
+ */
 function SectionMenu({
   categoryId,
+  categoryName,
   onAddChannel,
   onDelete,
 }: {
   categoryId: string | null
+  categoryName: string
   onAddChannel: () => void
   onDelete: (() => void) | null
 }) {
   void categoryId
+  const [confirming, setConfirming] = useState(false)
   return (
-    <Dropdown>
-      <DropdownTrigger asChild>
-        <Button size="icon" variant="ghost" aria-label="Section actions">
-          <MoreVerticalIcon size={14} />
-        </Button>
-      </DropdownTrigger>
-      <DropdownContent>
-        <DropdownItem onClick={onAddChannel}>Add channel</DropdownItem>
-        {onDelete ? (
-          <DropdownItem onClick={onDelete}>Delete category</DropdownItem>
-        ) : null}
-      </DropdownContent>
-    </Dropdown>
+    <>
+      <Dropdown>
+        <DropdownTrigger asChild>
+          <Button size="icon" variant="ghost" aria-label="Section actions">
+            <MoreVerticalIcon size={14} />
+          </Button>
+        </DropdownTrigger>
+        <DropdownContent>
+          <DropdownItem onClick={onAddChannel}>Add channel</DropdownItem>
+          {onDelete ? (
+            <DropdownItem onClick={() => setConfirming(true)}>Delete category</DropdownItem>
+          ) : null}
+        </DropdownContent>
+      </Dropdown>
+      {onDelete ? (
+        <Dialog open={confirming} onOpenChange={setConfirming}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle asChild>
+                <Prim.Text fontSize="$base" fontWeight="$semibold">
+                  Delete "{categoryName}"?
+                </Prim.Text>
+              </DialogTitle>
+              <DialogDescription asChild>
+                <Caption>
+                  Its channels are not deleted — they move back to the uncategorized list.
+                </Caption>
+              </DialogDescription>
+            </DialogHeader>
+            <Prim.Row gap="$2" justifyContent="flex-end" marginTop="$3">
+              <DialogClose asChild>
+                <Button variant="ghost" size="sm">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setConfirming(false)
+                  onDelete()
+                }}
+              >
+                Delete category
+              </Button>
+            </Prim.Row>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </>
   )
 }
 

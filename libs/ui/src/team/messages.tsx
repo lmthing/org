@@ -17,7 +17,7 @@ import { Button } from '../elements/forms/button'
 import { Caption } from '../elements/typography/caption'
 import { AppIcon, ThreadIcon } from './icons'
 import type { ChannelMessage, MemberProfile } from './types'
-import { initials, memberLabel, relativeTime } from './format'
+import { absoluteTime, initials, memberLabel, relativeTime } from './format'
 
 /** Consecutive same-sender messages within this window collapse under one
  * avatar/name/timestamp header. */
@@ -106,16 +106,25 @@ function labelFor(members: MemberProfile[], userId?: string, email?: string): st
  * a project with an app. An `@` that names nothing is left exactly as typed,
  * because it is then just a character somebody wrote and restyling it would be
  * inventing a reference that is not there.
+ *
+ * The `@` must not be immediately preceded by a letter, digit or underscore — a lookbehind rather
+ * than the old "whitespace or start of string" requirement, which missed `(@ana, look)` entirely
+ * (a `(` is neither). Excluding identifier characters rather than requiring specific ones is what
+ * keeps an email address (`ann@example.com`, preceded by `n`) from being chipped: nobody writes an
+ * identifier character directly before the `@` of a real mention, but everybody's email has one.
+ *
+ * Takes a shared key counter rather than starting its own at 0: it is called once per plain-text
+ * span by `withLinksAndMentions` below, and two spans of the same message both starting at `m0`
+ * would hand React colliding keys.
  */
-function withMentions(text: string, ctx: MessageContext) {
+function withMentions(text: string, ctx: MessageContext, key: { n: number }): React.ReactNode[] {
   const byHandle = new Map(ctx.members.filter((m) => m.handle).map((m) => [m.handle!, m]))
   const parts: React.ReactNode[] = []
   let cursor = 0
-  let key = 0
 
-  for (const match of text.matchAll(/(^|\s)@([a-zA-Z0-9][a-zA-Z0-9._-]{1,63})/g)) {
-    const at = (match.index ?? 0) + match[1]!.length
-    const raw = match[2]!
+  for (const match of text.matchAll(/(?<![a-zA-Z0-9_])@([a-zA-Z0-9][a-zA-Z0-9._-]{1,63})/g)) {
+    const at = match.index ?? 0
+    const raw = match[1]!
     const lowered = raw.toLowerCase()
     const member = byHandle.get(lowered)
     const isThing = lowered === THING_HANDLE
@@ -126,7 +135,7 @@ function withMentions(text: string, ctx: MessageContext) {
     const label = member ? memberLabel(member, `@${raw}`) : isThing ? 'THING' : `@${raw}`
     parts.push(
       <Prim.Text
-        key={`m${key++}`}
+        key={`m${key.n++}`}
         fontSize="$sm"
         fontWeight="$medium"
         color="$primary"
@@ -142,8 +151,70 @@ function withMentions(text: string, ctx: MessageContext) {
     )
     cursor = at + raw.length + 1
   }
-  if (!parts.length) return text
   if (cursor < text.length) parts.push(text.slice(cursor))
+  return parts
+}
+
+/** A bare `http(s)` URL — the only scheme worth auto-linking a colleague's prose for. */
+const URL_RE = /https?:\/\/[^\s<>{}"']+/g
+
+/**
+ * Peels closing sentence punctuation (and an unmatched trailing paren) off a matched URL, so
+ * "see https://x.com." or "(https://x.com)" link only the address, never the character ending
+ * the sentence around it.
+ */
+function trimUrlPunctuation(raw: string): { url: string; trailing: string } {
+  let url = raw
+  let trailing = ''
+  for (;;) {
+    const last = url[url.length - 1]
+    if (last === undefined) break
+    if ('.,;:!?'.includes(last) || (last === ')' && !url.includes('('))) {
+      trailing = last + trailing
+      url = url.slice(0, -1)
+      continue
+    }
+    break
+  }
+  return { url, trailing }
+}
+
+/**
+ * Draw a bare URL as a real, tappable link, then hand every non-URL span on to `withMentions`.
+ *
+ * Links are found FIRST and over the whole message: a mention chip inside a URL (a query string
+ * happening to carry `@handle`) would be a reference to nothing, and running mention-detection
+ * first would have no way to know a span of text was about to become part of an `href`. `Prim.Link`
+ * rather than a raw `<a>` because this has to work on native too — see the primitive for why.
+ */
+function withLinksAndMentions(text: string, ctx: MessageContext): React.ReactNode[] {
+  const key = { n: 0 }
+  const parts: React.ReactNode[] = []
+  let cursor = 0
+  for (const match of text.matchAll(URL_RE)) {
+    const at = match.index ?? 0
+    const { url, trailing } = trimUrlPunctuation(match[0])
+    if (!url) continue
+    if (at > cursor) parts.push(...withMentions(text.slice(cursor, at), ctx, key))
+    parts.push(
+      <Prim.Link
+        key={`u${key.n++}`}
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        color="$primary"
+        textDecorationLine="underline"
+      >
+        {url}
+      </Prim.Link>,
+    )
+    cursor = at + url.length
+    if (trailing) {
+      parts.push(trailing)
+      cursor += trailing.length
+    }
+  }
+  if (cursor < text.length) parts.push(...withMentions(text.slice(cursor), ctx, key))
   return parts
 }
 
@@ -172,7 +243,7 @@ export function MessageBody({ message, ctx }: { message: ChannelMessage; ctx: Me
   if (message.kind === 'thing') return <Markdown source={message.text} preset="prose" />
   return (
     <Prim.Text fontSize="$sm" whiteSpace="pre-wrap">
-      {withMentions(message.text, ctx)}
+      {withLinksAndMentions(message.text, ctx)}
     </Prim.Text>
   )
 }
@@ -234,7 +305,12 @@ function MessageHeader({
       >
         {kind === 'thing' ? 'THING' : who}
       </Prim.Text>
-      <Caption>{relativeTime(new Date(ts).getTime())}</Caption>
+      {/* `title` (a web hover) and `aria-label` (which `nativeSafeProps` maps to
+          `accessibilityLabel` on native) both carry the exact moment — "3h ago" alone never says
+          whether that was before or after lunch, and nothing here shows a full date otherwise. */}
+      <Caption title={absoluteTime(new Date(ts).getTime())} aria-label={absoluteTime(new Date(ts).getTime())}>
+        {relativeTime(new Date(ts).getTime())}
+      </Caption>
     </Prim.Row>
   )
 }
@@ -362,6 +438,11 @@ function MessageActions({ onReply, children }: { onReply?: () => void; children:
       onMouseEnter={() => setShown(true)}
       onMouseLeave={() => setShown(false)}
       onLongPress={onReply}
+      // A long-press on a phone had no press feedback at all — nothing acknowledged the gesture
+      // between the touch and the toolbar appearing. `rail.tsx` and `sidebar.tsx` both already
+      // dim on press for exactly this reason; matching that here rather than inventing a second
+      // convention for the same kind of feedback.
+      pressStyle={{ opacity: 0.7 }}
     >
       {children}
       {shown ? (
@@ -474,7 +555,16 @@ export function ThreadSummary({
         <Prim.Text fontSize="$xs" fontWeight="$medium" color="$primary">
           {replies.length === 1 ? '1 reply' : `${replies.length} replies`}
         </Prim.Text>
-        <Caption>{busy ? 'THING is working…' : last ? relativeTime(new Date(last.ts).getTime()) : ''}</Caption>
+        <Caption
+          {...(!busy && last
+            ? {
+                title: absoluteTime(new Date(last.ts).getTime()),
+                'aria-label': absoluteTime(new Date(last.ts).getTime()),
+              }
+            : {})}
+        >
+          {busy ? 'THING is working…' : last ? relativeTime(new Date(last.ts).getTime()) : ''}
+        </Caption>
       </Prim.Row>
     </Prim.Pressable>
   )
