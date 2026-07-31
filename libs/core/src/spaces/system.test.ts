@@ -21,6 +21,8 @@ const ARCHITECT_DIR = join(SYSTEM_SPACES_ROOT, 'system-architect');
 /** THING's instruct body PLUS every `playbooks/*` knowledge file it can `loadKnowledge`.
  *  Doctrine that moved behind a load is asserted here; always-on rules stay on instructBody. */
 const thingCorpus = () => agentPromptCorpus(join(SYSTEM_SPACES_ROOT, 'user-thing'), 'thing');
+/** The automator's whole readable prompt — instruct body plus every `app_building/*` aspect. */
+const automatorCorpus = () => agentPromptCorpus(join(SYSTEM_SPACES_ROOT, 'system-appbuilder'), 'automator');
 
 describe('system spaces', () => {
   it('loads the system-global system space (no agents/ required)', async () => {
@@ -100,13 +102,20 @@ describe('system spaces', () => {
     expect(modeler, 'system-appbuilder must ship a "data-modeler"').toBeDefined();
 
     // A child table with no declared relation is a modeling bug — both authors are told so.
-    expect(automator!.instructBody).toMatch(/DECLARE THE RELATION when one table's rows belong/);
-    expect(automator!.instructBody).toMatch(/include: \['items'\]/);
+    // Behind `('app_building','authoring','tables-and-relations')` — loaded precisely when a table
+    // is being authored, which is the only moment this rule can be acted on.
+    expect(automatorCorpus()).toMatch(/DECLARE THE RELATION when one table's rows belong/);
+    expect(automatorCorpus()).toMatch(/include: \['items'\]/);
     expect(modeler!.instructBody).toMatch(/declare the relation/i);
 
-    // Repeated UI becomes a named component (the writer exists; it was never used).
-    expect(automator!.instructBody).toMatch(/appears on more than one page is a COMPONENT/);
-    expect(automator!.instructBody).toMatch(/writeProjectComponent\('<Name>'/);
+    // Repeated UI becomes a named component (the writer exists; it was never used). Behind
+    // `('app_building','authoring','pages-and-components')` — the aspect loaded when a page is
+    // being authored, which is the only moment a second copy of a card can be noticed.
+    expect(automatorCorpus()).toMatch(/appears on more than one page is a COMPONENT/);
+    expect(automatorCorpus()).toMatch(/writeProjectComponent\('<Name>'/);
+    // The writer itself stays advertised in the always-on body — you cannot decide to load the
+    // component aspect if you do not know the writer exists.
+    expect(automator!.instructBody).toMatch(/writeProjectComponent\(name, src\)/);
   });
 
   // ── No shipped prompt may carry a live scenario's fixture data ───────────────────

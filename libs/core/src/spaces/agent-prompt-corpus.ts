@@ -54,3 +54,34 @@ export function loadPointsIn(instructBody: string): Set<string> {
   for (const m of instructBody.matchAll(re)) found.add(`${m[1]}/${m[2]}/${m[3]}`);
   return found;
 }
+
+/**
+ * Every loadable aspect a split agent ships under `knowledge/<domain>/`, as `domain/field/aspect`
+ * strings — the exact shape {@link loadPointsIn} returns, so the two sets can be compared directly.
+ *
+ * `index.md` is a field's OVERVIEW, not an aspect: `spaces/load.ts` renders it inline in the
+ * `# Knowledge` menu and never offers it as a `loadKnowledge` option, so counting it here would
+ * report a permanent phantom orphan. `domains` limits the sweep to the domains a split actually
+ * uses, which is what keeps a space's OTHER, non-split knowledge (THING's `organizing`/`recording`
+ * heuristics, loaded by its tasklist nodes rather than by its instruct) out of the orphan check.
+ */
+export function splitAspectsOnDisk(spaceDir: string, domains: string[]): string[] {
+  const out: string[] = [];
+  for (const domain of domains) {
+    let fields: string[];
+    try {
+      fields = readdirSync(join(spaceDir, 'knowledge', domain), { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+    } catch {
+      continue;
+    }
+    for (const field of fields) {
+      for (const file of readdirSync(join(spaceDir, 'knowledge', domain, field))) {
+        if (!file.endsWith('.md') || file === 'index.md') continue;
+        out.push(`${domain}/${field}/${file.slice(0, -3)}`);
+      }
+    }
+  }
+  return out.sort();
+}

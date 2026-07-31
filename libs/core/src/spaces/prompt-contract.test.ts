@@ -13,6 +13,11 @@ const SYSTEM_SPACES = join(__dirname, '..', '..', 'system-spaces');
  *  `instruct.md` alone. See `agent-prompt-corpus.ts`. */
 const thingCorpus = () => agentPromptCorpus(join(SYSTEM_SPACES, 'user-thing'), 'thing');
 
+/** The automator's whole readable prompt — same split, same rule. Its body carries the four-job
+ *  decision and the rules that hold on every write; the per-job detail lives in
+ *  `app_building/{authoring,automation}/*` behind a `loadKnowledge`. */
+const automatorCorpus = () => agentPromptCorpus(join(SYSTEM_SPACES, 'system-appbuilder'), 'automator');
+
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir)) {
     const p = join(dir, e);
@@ -64,7 +69,9 @@ describe('system-appbuilder/automator — attribution survives the seed', () => 
    * is credited to, nor the near-miss of recording the envelope instead of the fact.
    */
   it('tells the builder to keep the attribution the material carries — and not to record the transport instead', () => {
-    const instruct = readFileSync(join(SYSTEM_SPACES, 'system-appbuilder', 'agents', 'automator', 'instruct.md'), 'utf8');
+    // Reachable-doctrine claim, not an always-on one: this fires while SEEDING, which is exactly
+    // when `('app_building','authoring','seeding-data')` is loaded — so it is asserted on the corpus.
+    const instruct = automatorCorpus();
 
     expect(
       instruct,
@@ -586,8 +593,10 @@ describe('system-appbuilder repair turns', () => {
       'utf8',
     );
 
+    // The one-liner is ALWAYS ON — a repair turn that never loads an aspect must still write.
     expect(automator).toMatch(/A repair request naming a missing page is a WRITE, not a diagnosis/i);
-    expect(automator).toMatch(/write the `index` page and its needed read API immediately/i);
+    // The concrete instruction rides with the grow-an-app detail, which such a turn does load.
+    expect(automatorCorpus()).toMatch(/write the `index` page and its needed read API immediately/i);
   });
 });
 

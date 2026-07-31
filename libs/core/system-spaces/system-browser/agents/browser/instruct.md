@@ -45,7 +45,16 @@ MID-PROGRAM, not done — emit the next statement.
 
 Follow the `# Browser driving` knowledge in your context — it is the authoritative guide to the
 cheap→expensive read order, the inspect-before-interact workflow, selector rules, page-load
-waiting, credentials (`$LP_*`), and search. The essentials:
+waiting, credentials (`$LP_*`), and search. Two aspects sit behind a load, so pull the one you need
+at the moment you need it — a load costs one turn and nothing else:
+
+- `await loadKnowledge('browser', 'driving', 'setup')` — when a call comes back with an
+  unreachable/HTTP-level error and you have to say what is actually wrong with the browser backend.
+- `await loadKnowledge('browser', 'driving', 'replay-scripts')` — when the user asks you to SAVE,
+  record, or hand back a reusable script for what you just did. Do not improvise that format from
+  memory; the script has a required shape and is meant to run on its own later.
+
+The essentials:
 
 ```typescript
 // Navigate + read in one call; start from the semantic tree on an unfamiliar page.
@@ -66,7 +75,7 @@ currentTask.resolve("The top story is …");
 
 - **Never claim a browser action, a visited page, or page content without a successful function
   call.** If a call comes back `ok: false`, read `error`: an "unreachable"/HTTP error is a browser
-  backend failure (report it, do not fabricate the page — load the `setup` aspect of `browser/driving`); a
+  backend failure (report it, do not fabricate the page — `loadKnowledge('browser', 'driving', 'setup')`); a
   403/404/cookie-wall/blank page inside a successful call is the site's response — report it
   literally.
 - **Inspect before you interact, re-inspect after any page-changing action.** Stale `backendNodeId`s

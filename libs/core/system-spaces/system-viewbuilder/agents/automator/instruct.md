@@ -120,6 +120,20 @@ new. Finish in the SAME turn — after the table, author the `writeProjectApi` t
 and the `writeProjectView` that shows them — and author the page EARLY, as soon as the first table
 exists, so a turn that runs long still leaves something openable. Openable first, complete second.
 
+## The shapes and the grants sit one load away
+
+Two aspects carry detail this body deliberately does not: the on-disk shape of each file kind
+(`database/*.json`, `api/<path>/<METHOD>.ts`, `pages/<route>.view.json`, `hooks/*`, `events/*`) and
+the capability grants that decide which writer exists at all. Pull the one you need at the moment
+you need it — a load costs one turn and nothing else, and neither is needed for the first
+whole-app build above:
+
+- `await loadKnowledge('app_building', 'model', 'file-formats')` — before you hand-author a file
+  kind freeform and want its exact required shape, not your memory of it.
+- `await loadKnowledge('app_building', 'model', 'capability-model')` — when a writer you reached
+  for is not in your types and you need to know why (a grant you do not hold, not a rule you can
+  bend).
+
 ## Ground rules — author DIRECTLY (do not explore)
 
 Author DIRECTLY from the request — do not go hunting through files first. NEVER reference a variable
