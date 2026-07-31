@@ -47,6 +47,7 @@ import {
   badProp,
   classifyBadBinding,
   deadComponent,
+  emptyForm,
   emptyRender,
   emptySection,
   expressionAttempt,
@@ -417,6 +418,11 @@ function declaredFields(src: string, typeName: 'Input' | 'Output'): string[] | u
   const m = new RegExp(`export\\s+(?:interface|type)\\s+${typeName}\\b[^{;\\n]*\\{`).exec(src);
   let body: string | null = null;
   if (m) {
+    // `interface Input extends Base {…}` / `type Input = Base & {…}` — the braces hold only the
+    // members declared HERE. Reading them as the whole set is the failure mode this function is
+    // built to avoid twice over: as a field menu it rejects a binding Base declares, and as an
+    // Input list it reports "no fields at all" for a form that derives several.
+    if (/\bextends\b|&/.test(m[0])) return undefined;
     body = braceBody(src, m.index + m[0].length - 1);
   } else {
     // `export type Output = Recipe[];` / `= Recipe;` — resolvable when the type is in this file.
@@ -643,6 +649,40 @@ function checkRoute(route: string, path: string, ctx: WalkCtx): void {
 
 function checkSectionId(id: string, path: string, ctx: WalkCtx): void {
   if (!ctx.sectionIds.has(id)) ctx.errors.push(unknownSection(path, id, [...ctx.sectionIds]));
+}
+
+/**
+ * **A `create` section must derive at least one form field.**
+ *
+ * The fields come from the mutation's Input schema minus the keys the page supplies through
+ * `create.input` (`libs/ui/src/view/form.tsx#deriveFields`, `sections/create.tsx`'s `hidden`), so
+ * "how many inputs will this form have?" is answered by the contract, not by the run. Zero means the
+ * renderer draws "Nothing to fill in." over a Save button.
+ *
+ * Route parameters count as nothing to fill in for the same reason `create.input` keys do: the page
+ * already holds the value, and asking a user to retype a parent id is not a form. (The renderer does
+ * NOT auto-inject them into a create — `useSectionSource`'s param defaulting is the read side — so
+ * this is about what the form is FOR, not about what the submit carries.)
+ *
+ * Silent whenever the answer is not knowable: an unresolved endpoint, a GET (already reported as a
+ * wrong method) or an Input the contract reader could not read (`inputKeys === undefined`, never
+ * `[]` — the {@link ViewEndpoint} invariant this depends on).
+ */
+function checkFormDerives(
+  section: Record<string, unknown>,
+  ep: ViewEndpoint | undefined,
+  path: string,
+  ctx: WalkCtx,
+): void {
+  if (!ep || ep.method === 'GET' || !ep.inputKeys) return;
+  const input = section['input'];
+  const supplied = input && typeof input === 'object' ? Object.keys(input as Record<string, unknown>) : [];
+  const derived = ep.inputKeys.filter((k) => !supplied.includes(k));
+  // `[].every(…)` is true, which is deliberate: no derived field at all is the primary case.
+  if (!derived.every((k) => ctx.routeParams.has(k))) return;
+  ctx.errors.push(
+    emptyForm(childPath(path, 'mutation'), ep.name, ep.inputKeys, supplied, [...ctx.routeParams].sort()),
+  );
 }
 
 /**
@@ -904,6 +944,7 @@ export function validateViewSpec(spec: unknown, contracts: ContractsLike | ViewC
     }
 
     if (String(rec['kind']) === 'create') {
+      checkFormDerives(rec, scope.ep, path, ctx);
       const prefill = rec['prefill'] as Record<string, unknown> | undefined;
       if (prefill && typeof prefill['endpoint'] === 'string') {
         const pep = checkEndpoint(prefill['endpoint'], `${path}.prefill.endpoint`, 'any', ctx);

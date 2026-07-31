@@ -242,6 +242,86 @@ describe('validateViewSpec — bindings', () => {
   });
 });
 
+describe('validateViewSpec — a create section must have something to fill in', () => {
+  /**
+   * The measured failure: a shipped app's create page rendered the literal string "Nothing to fill
+   * in." above a Save button, because the form derives from the mutation's Input and that Input
+   * derived nothing. Everything the derivation reads is on the contract, so save time is where it
+   * belongs.
+   */
+  const FORMLESS: ViewContracts = {
+    ...CONTRACTS,
+    endpoints: [
+      ...CONTRACTS.endpoints,
+      { name: 'startRun', method: 'POST', outputFields: ['id'], inputKeys: [] },
+      { name: 'addNote', method: 'POST', outputFields: ['id'], inputKeys: ['recipeId'] },
+      { name: 'ping', method: 'GET', outputFields: ['ok'], inputKeys: [] },
+    ],
+    routes: ['index', 'recipes', 'recipes/[recipeId]'],
+  };
+  const form = (section: unknown, route = 'recipes') =>
+    validateViewSpec({ route, sections: [section] }, FORMLESS);
+
+  it('rejects a mutation whose Input declares nothing, and offers the button instead', () => {
+    const res = form({ kind: 'create', mutation: 'startRun' });
+    expect(res.errors.map((e) => e.code)).toEqual(['empty-form']);
+    expect(res.errors[0].message).toBe(
+      'sections[0].mutation: a create section has no fields of its own — it renders "startRun"\'s ' +
+        'Input schema, and that derives NONE here: startRun\'s Input declares no properties at all. ' +
+        'The page would show "Nothing to fill in." above a Save button, so the app cannot take data. ' +
+        'Declare what the user fills in on startRun\'s Input (export interface Input { … } in its ' +
+        'handler) — or, if there is genuinely nothing to fill in, this is not a create section: use ' +
+        'a button with { action: { mutate: \'startRun\' } }.',
+    );
+    // The fix is at the endpoint, and the finding says so — pointing it at the view would have the
+    // model delete the section.
+    expect(res.errors[0].endpoint).toBe('startRun');
+  });
+
+  it('rejects a form whose every field the page already supplies', () => {
+    const res = form({ kind: 'create', mutation: 'addRecipe', input: { title: '$route.id', cuisine: 'thai' } });
+    expect(res.errors.map((e) => e.message)).toEqual([
+      'sections[0].mutation: a create section has no fields of its own — it renders "addRecipe"\'s ' +
+        'Input schema, and that derives NONE here: every property it declares (cuisine, title) is ' +
+        'already supplied by this section\'s input, so none is left for the user. The page would ' +
+        'show "Nothing to fill in." above a Save button, so the app cannot take data. Declare what ' +
+        'the user fills in on addRecipe\'s Input (export interface Input { … } in its handler) — or, ' +
+        'if there is genuinely nothing to fill in, this is not a create section: use a button with ' +
+        '{ action: { mutate: \'addRecipe\' } }.',
+    ]);
+  });
+
+  it('rejects a form whose only field is the route parameter the page already holds', () => {
+    const res = form({ kind: 'create', mutation: 'addNote' }, 'recipes/[recipeId]');
+    expect(res.errors.map((e) => e.message)).toEqual([
+      'sections[0].mutation: a create section has no fields of its own — it renders "addNote"\'s ' +
+        'Input schema, and that derives NONE here: the only property it declares (recipeId) is this ' +
+        'page\'s own route parameter (recipeId), which the page already knows. The page would show ' +
+        '"Nothing to fill in." above a Save button, so the app cannot take data. Declare what the ' +
+        'user fills in on addNote\'s Input (export interface Input { … } in its handler) — or, if ' +
+        'there is genuinely nothing to fill in, this is not a create section: use a button with ' +
+        '{ action: { mutate: \'addNote\' } }.',
+    ]);
+  });
+
+  it('accepts a form that leaves the user one field — the parent id bound, the rest derived', () => {
+    expect(form({ kind: 'create', mutation: 'addRecipe', input: { cuisine: '$route.recipeId' } }, 'recipes/[recipeId]').errors).toEqual([]);
+    expect(form({ kind: 'create', mutation: 'addRecipe' }).errors).toEqual([]);
+  });
+
+  it('says NOTHING when the Input could not be read — a skip, never a rejection', () => {
+    const unknown: ViewContracts = { endpoints: [{ name: 'addThing', method: 'POST' }] };
+    expect(validateViewSpec({ route: 'index', sections: [{ kind: 'create', mutation: 'addThing' }] }, unknown).errors).toEqual([]);
+  });
+
+  it('does not pile on when the endpoint is the wrong half of the api', () => {
+    // A GET in a `mutation` slot is already one clear finding; adding "and it has no fields" sends
+    // the model at the Input of an endpoint it should not be calling at all.
+    const res = form({ kind: 'create', mutation: 'ping' });
+    expect(res.errors.map((e) => e.code)).toEqual(['wrong-method']);
+  });
+});
+
 describe('validateViewSpec — components, sections and routes', () => {
   it('rejects a component the app does not define, and says how to make one', () => {
     const e = only(page({ kind: 'list', query: 'listRecipes', item: { use: 'RecipeCards', props: { recipe: '$' } } }));
@@ -652,9 +732,17 @@ describe('toViewContracts — idempotence (D-A)', () => {
         method: 'POST',
         routePath: '/suggestions/:id/dismiss',
         description: '',
-        inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+        // TWO Input properties on purpose: the page supplies `id` and the user fills in `reason`,
+        // so the create section below still derives a field. A one-property Input every one of
+        // which the page supplies is the `empty-form` defect, and this fixture is about a different
+        // bug entirely.
+        inputSchema: {
+          type: 'object',
+          properties: { id: { type: 'string' }, reason: { type: 'string' } },
+          required: ['id'],
+        },
         outputSchema: { type: 'object', properties: { ok: { type: 'boolean' } } },
-        inputTsType: '{ id: string }',
+        inputTsType: '{ id: string; reason?: string }',
         outputTsType: '{ ok: boolean }',
       },
     ],
@@ -671,8 +759,8 @@ describe('toViewContracts — idempotence (D-A)', () => {
     // again. The reduced form keeps `outputSchema` and drops `inputSchema`, so a second raw-branch
     // pass recomputed `inputKeys` from a schema that is no longer there and got `[]` — which made
     // EVERY `input` key on every section of every page report as undeclared.
-    expect(toViewContracts(RAW).endpoints[0].inputKeys).toEqual(['id']);
-    expect(toViewContracts(toViewContracts(RAW)).endpoints[0].inputKeys).toEqual(['id']);
+    expect(toViewContracts(RAW).endpoints[0].inputKeys).toEqual(['id', 'reason']);
+    expect(toViewContracts(toViewContracts(RAW)).endpoints[0].inputKeys).toEqual(['id', 'reason']);
   });
 
   it('accepts a declared input key after a double reduction', () => {
@@ -806,6 +894,38 @@ export default async function h() { return {} as Output; }
         route: 'index',
         sections: [{ kind: 'list', query: 'getTrip', from: '$.lines', item: { title: '$.ingredient' } }],
       },
+      { ...loadViewContracts(root), routes: ['index'] },
+    );
+    expect(res.errors).toEqual([]);
+  });
+});
+
+describe('empty form — the SAVE-TIME reader sees it too', () => {
+  it('rejects a create over a handler whose Input is empty, from the sync contract source', async () => {
+    const root = await project({
+      'api/runs/POST.ts': HANDLER('startRun', ' id: string; ', ''),
+    });
+    const res = validateViewSpec(
+      { route: 'index', sections: [{ kind: 'create', mutation: 'startRun' }] },
+      { ...loadViewContracts(root), routes: ['index'] },
+    );
+    expect(res.errors.map((e) => e.code)).toEqual(['empty-form']);
+  });
+
+  it('SKIPS an Input it can only read half of, rather than calling the form empty', async () => {
+    // `interface Input extends CreateBase {}` derives every field CreateBase declares. Reading the
+    // braces alone says "no properties at all" — a confident rejection of a form that works.
+    const root = await project({
+      'api/notes/POST.ts': `import type { CreateBase } from '../../types/x';
+export const name = 'addNote';
+export interface Input extends CreateBase {}
+export interface Output { id: string }
+export default async function h() { return {} as Output; }
+`,
+    });
+    expect(loadViewContracts(root).endpoints[0].inputKeys).toBeUndefined();
+    const res = validateViewSpec(
+      { route: 'index', sections: [{ kind: 'create', mutation: 'addNote' }] },
       { ...loadViewContracts(root), routes: ['index'] },
     );
     expect(res.errors).toEqual([]);

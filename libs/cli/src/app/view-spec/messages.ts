@@ -94,6 +94,8 @@ export type ViewErrorCode =
   | 'dead-component'
   /** A page with no data-bound section — it renders, and shows nothing real. */
   | 'no-data'
+  /** A `create` section whose mutation Input derives no form fields — "Nothing to fill in." */
+  | 'empty-form'
   /** A view artifact on disk that did not parse. */
   | 'malformed'
   /** The renderer threw while mounting the spec against live data. */
@@ -503,6 +505,54 @@ export function pageHasNoData(route: string, file: string, kinds: readonly strin
       `A page with no query/mutation renders chrome over nothing. Add a list, detail, stats, ` +
       `timeline or create section bound to an endpoint.`,
     { file },
+  );
+}
+
+/**
+ * A `create` section that renders a Save button over **no inputs at all**.
+ *
+ * A create section declares no fields on purpose — it renders the mutation's Input JSON Schema
+ * (`libs/ui/src/view/form.tsx#deriveFields`), minus the keys the page already supplies through
+ * `create.input`. When that derivation is empty the renderer draws the literal string
+ * "Nothing to fill in." above the submit button, and the app cannot take data — the one thing the
+ * page exists to do. Every input of that derivation is on the CONTRACT, so this is decidable the
+ * moment the spec is written.
+ *
+ * The fix is routed at the ENDPOINT (`endpoint` is set), because that is where the fields live. The
+ * second half of the menu matters just as much: a mutation that genuinely takes nothing from the
+ * user is a *button*, not a form, and naming that alternative is what stops the model deleting the
+ * section to make the rejection go away.
+ */
+export function emptyForm(
+  path: string,
+  endpoint: string,
+  declared: readonly string[],
+  supplied: readonly string[],
+  routeParams: readonly string[],
+): ViewError {
+  const list = (xs: readonly string[]): string => [...xs].sort().join(', ');
+  const plural = declared.length === 1;
+  const why =
+    declared.length === 0
+      ? `${endpoint}'s Input declares no properties at all`
+      : declared.every((k) => supplied.includes(k))
+        ? `every property it declares (${list(declared)}) is already supplied by this section's ` +
+          `input, so none is left for the user`
+        : `the only propert${plural ? 'y' : 'ies'} it declares (${list(declared)}) ` +
+          `${plural ? 'is' : 'are'} this page's own route parameter${plural ? '' : 's'} ` +
+          `(${list(routeParams)}), which the page already knows`;
+  return err(
+    'empty-form',
+    path,
+    at(
+      path,
+      `a create section has no fields of its own — it renders "${endpoint}"'s Input schema, and that ` +
+        `derives NONE here: ${why}. The page would show "Nothing to fill in." above a Save button, ` +
+        `so the app cannot take data. Declare what the user fills in on ${endpoint}'s Input ` +
+        `(export interface Input { … } in its handler) — or, if there is genuinely nothing to fill ` +
+        `in, this is not a create section: use a button with { action: { mutate: '${endpoint}' } }.`,
+    ),
+    { endpoint },
   );
 }
 
