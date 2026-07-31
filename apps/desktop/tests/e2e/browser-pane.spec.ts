@@ -1,7 +1,8 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, chromium, type Page } from '@playwright/test'
 import { spawn, type ChildProcess } from 'node:child_process'
+import { existsSync, readdirSync } from 'node:fs'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 /**
@@ -46,6 +47,42 @@ interface RealBrowser {
 }
 
 /**
+ * Find a Chromium to drive.
+ *
+ * Playwright's own answer first, which is right in CI where the workflow installs it. Locally the
+ * installed `@playwright/test` pins a build newer than the one on disk — the same mismatch
+ * `playwright.config.ts` and `tests/visual/playwright.config.ts` both carry a note about — so fall
+ * back to the newest already-downloaded one rather than a hardcoded version that goes stale.
+ */
+function resolveChromium(): string {
+  const candidates = [process.env.PW_CHROMIUM, safeExecutablePath()].filter(
+    (p): p is string => !!p && existsSync(p),
+  )
+  if (candidates[0]) return candidates[0]
+  const cache = join(homedir(), '.cache', 'ms-playwright')
+  const dirs = existsSync(cache)
+    ? readdirSync(cache)
+        .filter((d) => d.startsWith('chromium-'))
+        .sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]))
+    : []
+  for (const d of dirs) {
+    for (const layout of ['chrome-linux64/chrome', 'chrome-linux/chrome', 'chrome-mac/Chromium.app/Contents/MacOS/Chromium']) {
+      const p = join(cache, d, layout)
+      if (existsSync(p)) return p
+    }
+  }
+  throw new Error('no Chromium found — run `pnpm exec playwright install chromium` or set PW_CHROMIUM')
+}
+
+function safeExecutablePath(): string | undefined {
+  try {
+    return chromium.executablePath()
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Launch a Chromium exactly as `src-tauri/src/browser.rs` does.
  *
  * The flags are duplicated here rather than shared, deliberately: this is the *test's* browser, and
@@ -53,10 +90,8 @@ interface RealBrowser {
  * what should catch it. A test that imported the real flag list could not fail when they changed.
  */
 async function launchRealChromium(): Promise<RealBrowser> {
-  const bin =
-    process.env.PW_CHROMIUM ||
-    `${process.env.HOME}/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome`
   const profile = await mkdtemp(join(tmpdir(), 'lmthing-pane-'))
+  const bin = resolveChromium()
   const child = spawn(
     bin,
     [
