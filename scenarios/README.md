@@ -222,14 +222,16 @@ refused before a pod is booted.
 `crossChannelPosts` (THING posting where nobody addressed it — invisible in a per-thread view) and
 `denied` (a refusal recorded as the result it is, never thrown).
 
-> ⚠️ **A team channel turn is invisible to the pod's own session ledger.** `runHeadlessThreaded`
-> (`libs/cli/src/server/session-manager.ts:2068`) subscribes the tracer for displays and activity but
-> never calls `sessionLedger.trackTracer(...)` the way `runHeadless` does at `:1900`, and the session
-> is never registered in the manager so there is no `/events` stream either. So there are **no tokens,
-> no cost and no delegate record** for any team turn. Until that is fixed, `threadSessionFacts()`
-> recovers what a turn did from the statements it wrote (`<root>/user/sessions/<id>/snapshot.json`) —
-> the delegate targets, the globals, the `db.*` calls. That is evidence for the judge, never an
-> answer: what THING *said* is `lastText`, which comes from what it displayed.
+> **A team channel turn has no trace endpoint.** It runs headless-threaded, so it is never
+> registered in the session manager and `GET /api/sessions/:id/events` — the stream the personal
+> runner asserts on — does not exist for it. Two sources replace it: the pod-global ledger
+> (`GET /api/session-ledger`, matched by the reply's `sessionId`) gives tokens, cost and the delegate
+> tree; and `threadSessionFacts()` reads the statements the model WROTE
+> (`<root>/user/sessions/<id>/snapshot.json`) to answer what the ledger cannot — which globals a turn
+> called, including the team globals. A thread's snapshot is CUMULATIVE, so each turn is credited
+> only with the statements after the previous turn's mark. What the model wrote is evidence for the
+> judge, never an answer: what THING *said* is `lastText`, taken from the last `thing` message in the
+> thread (never a `system` card — `announceNewApps` appends one after the reply).
 
 **A parked turn is not in-flight work.** `beginThingReply` releases the drain the moment a turn parks,
 because `settleChannelWork` — the pod's graceful-shutdown drain — would otherwise wait forever on a

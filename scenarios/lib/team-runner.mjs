@@ -194,6 +194,15 @@ export function summarizeTeamTurn(turn, { who, role, channel, threadId, sent, dm
     activity: turn?.activity ?? [],
     apps: turn?.apps ?? [],
     replyCount: turn?.replies?.length ?? 0,
+    /** The id of the message this turn's `lastText` came from — so a reader can find it in the log. */
+    replyId: turn?.reply?.id ?? null,
+    /**
+     * The pod's own cards about this turn ("<project> is ready.", posted by `announceNewApps` AFTER
+     * the reply), kept SEPARATE from what THING said. Without them here, a step's evidence cannot
+     * distinguish "THING answered 'user is ready.'" from "the pod pinned an app called user" — which
+     * is exactly the misreading that produced a four-word answer for a nine-minute build.
+     */
+    systemCards: (turn?.systemCards ?? []).map((m) => ({ text: String(m.text ?? '').slice(0, 400), app: m.app ?? null })),
     durationMs: turn?.durationMs ?? 0,
     // Filled after the turn: from the session ledger when the pod recorded one, and from the
     // session's persisted statements when it did not (see `threadSessionFacts`).
@@ -230,25 +239,20 @@ export function attributeLedger(turns, ledgerSessions) {
 /**
  * What a channel turn's session actually DID, recovered from the session snapshot on disk.
  *
- * ⚠️ This exists because of a hole in the product, not by preference. `runHeadlessThreaded`
- * (`libs/cli/src/server/session-manager.ts:2068`) subscribes the session's tracer for displays and
- * activity (`:2140-2150`) but — unlike `runHeadless`, which does it at `:1900` — never calls
- * `this.sessionLedger.trackTracer(...)`. So a TEAM CHANNEL TURN IS INVISIBLE TO THE POD'S OWN
- * SESSION LEDGER: no tokens, no cost, and no record of which specialist it delegated to. There is
- * also no `/events` endpoint for it (the session is never registered in the manager). That leaves
- * `GET /api/session-ledger` — the personal runner's source for `delegates` — empty for every turn a
- * team scenario plays.
+ * Why this exists even though the pod now HAS a ledger for these turns: a channel turn is
+ * headless-threaded, so it is never registered in the session manager and there is NO `/events`
+ * endpoint to poll — the trace the personal runner asserts on does not exist for it. The pod-global
+ * ledger (`GET /api/session-ledger`) does record it (`session-manager.ts:2161` —
+ * `runHeadlessThreaded` calls `sessionLedger.trackTracer`, which is where tokens, cost and the
+ * delegate tree come from), but the ledger records DELEGATE TARGETS, not which globals a turn
+ * called. "Did it reach for `teamMembers`?" and "did it author anything?" are only answerable from
+ * what the model WROTE.
  *
- * The session's persisted history is the remaining ground truth: `runHeadlessThreaded` writes
- * `<root>/<project>/sessions/<sessionId>/snapshot.json` with the full history, and in this runtime
- * the model ANSWERS BY WRITING TYPESCRIPT — so the statements it wrote are a faithful record of the
- * calls it made. Reading them back is how a step can evidence "it routed the build to
- * system-viewbuilder" at all.
- *
+ * The session's persisted history is that record: `runHeadlessThreaded` writes
  * This is EVIDENCE, never an answer: the code is recorded for the judge to read, and is never
  * presented as what THING said (that is `lastText`, which comes from what it displayed).
  */
-export function threadSessionFacts(dataDir, projectId, sessionId) {
+export function threadSessionFacts(dataDir, projectId, sessionId, { since = 0 } = {}) {
   if (!sessionId) return null;
   const file = join(dataDir, '.lmthing', projectId, 'sessions', sessionId, 'snapshot.json');
   let snap;
@@ -258,9 +262,15 @@ export function threadSessionFacts(dataDir, projectId, sessionId) {
     return null;
   }
   const history = Array.isArray(snap.history) ? snap.history : [];
-  const written = history
+  const all = history
     .filter((h) => h && h.role === 'assistant' && typeof h.content === 'string')
     .map((h) => h.content);
+  // ⚠️ A THREAD'S SNAPSHOT IS CUMULATIVE. Every turn in the thread resumes the SAME session and
+  // rewrites the same file with the whole history, so reading it whole attributes turn 1's work to
+  // turn 5 as well — 20-studio run 2 reported steps 7 and 8 (six and four seconds each) as having
+  // delegated to system-appbuilder, which was step 6's seventeen-minute build. `since` is the
+  // statement count the thread had BEFORE this turn, so each turn is credited only with its own.
+  const written = all.slice(since);
   const code = written.join('\n');
   const delegates = new Set();
   // `delegate('space/agent', …)` and `delegate({ space: 'x', agent: 'y' })` are both in use.
@@ -270,15 +280,23 @@ export function threadSessionFacts(dataDir, projectId, sessionId) {
   }
   const GLOBALS = [
     'writeProjectTable', 'writeProjectPage', 'writeProjectApi', 'writeProjectHook', 'writeProjectView',
-    'writeTableSchema', 'writeApi', 'writePage', 'writeHook', 'writeSpaceFile', 'writeProjectFile',
-    'createProject', 'selectProject', 'installSpace', 'emitEvent', 'callConnection', 'tasklist',
-    'fork', 'ask', 'display', 'remember', 'recall', 'webSearch', 'webFetch',
+    'writeProjectComponent', 'writeTableSchema', 'writeApi', 'writePage', 'writeHook', 'writeSpaceFile',
+    'writeProjectFile', 'createProject', 'selectProject', 'installSpace', 'emitEvent', 'callConnection',
+    'tasklist', 'fork', 'ask', 'display', 'remember', 'recall', 'webSearch', 'webFetch',
+    // The TEAM workspace globals (`libs/core/src/eval/yield-router.ts:371-410`). These are the whole
+    // reason a team pod can answer "who should I chase" or post into a channel it was not called
+    // from — and a turn that never reaches for them, in a situation that calls for one, is a finding
+    // about THING's instructions rather than about the globals.
+    'teamContext', 'teamMembers', 'teamChannels', 'teamHistory', 'teamPost', 'teamPinApp',
   ];
   const globals = GLOBALS.filter((g) => new RegExp(`\\b${g}\\s*\\(`).test(code));
   const db = [...new Set([...code.matchAll(/\bdb\.(\w+)/g)].map((m) => `db.${m[1]}`))];
   return {
     sessionId,
     statements: written.length,
+    /** How many statements the thread already had — this turn's work is everything after it. */
+    since,
+    totalStatements: all.length,
     delegates: [...delegates],
     // Every system space the code so much as names — a coarser signal than `delegates`, and the one
     // that still fires when the routing happened inside a tasklist rather than a direct call.
@@ -392,6 +410,8 @@ export class TeamScenarioRunner {
     this.knownChannelIds = new Set();
     /** Set once the run exists: the growing server log, as a liveness probe for a silent build. */
     this.liveness = null;
+    /** sessionId → statements the thread had before the current turn (the snapshot is cumulative). */
+    this.wroteMark = new Map();
   }
 
   log(...a) {
@@ -687,11 +707,17 @@ export class TeamScenarioRunner {
         // is where `routes/team-channels.ts` runs them — not under the project THING then created.
         for (const t of rec.turns) {
           if (t.inApp) continue;
-          t.wrote = threadSessionFacts(run.dataDir, 'user', t.sessionId) ?? threadSessionFacts(run.dataDir, activeProject, t.sessionId);
+          // Credit this turn with ONLY the statements it added — the snapshot is cumulative per
+          // thread (see `threadSessionFacts`), and `this.wroteMark` holds the count before the turn.
+          const since = t.sessionId ? (this.wroteMark.get(t.sessionId) ?? 0) : 0;
+          t.wrote =
+            threadSessionFacts(run.dataDir, 'user', t.sessionId, { since }) ??
+            threadSessionFacts(run.dataDir, activeProject, t.sessionId, { since });
+          if (t.sessionId && t.wrote) this.wroteMark.set(t.sessionId, t.wrote.totalStatements);
         }
         if (rec.turns.some((t) => !t.inApp && t.sessionId && !t.ledgerTracked)) {
           rec.notes.push(
-            'channel turns are absent from GET /api/session-ledger (runHeadlessThreaded does not trackTracer — session-manager.ts:2068) — delegates/globals below are recovered from the session snapshot, and tokens are unavailable',
+            'a channel turn has no session-ledger record — its tokens/cost are unknown (the globals and delegates below still come from the session snapshot)',
           );
         }
         rec.channels = await this.channelSnapshot(pod, setup.editor);
@@ -741,10 +767,11 @@ export class TeamScenarioRunner {
         }),
         { in: 0, out: 0 },
       ),
+      // Coverage, not just a total: a turn the pod did not account for must not read as "0 tokens".
       tokenAccounting: {
         turnsWithLedgerRecord: results.reduce((a, r) => a + r.turns.filter((t) => t.ledgerTracked).length, 0),
         turnsWithout: results.reduce((a, r) => a + r.turns.filter((t) => !t.ledgerTracked).length, 0),
-        why: 'runHeadlessThreaded (libs/cli/src/server/session-manager.ts:2068) never calls sessionLedger.trackTracer, unlike runHeadless at :1900 — so team channel turns carry no token/cost/delegate record',
+        source: 'GET /api/session-ledger, matched by the reply message sessionId (runHeadlessThreaded registers it at session-manager.ts:2161)',
       },
       outDir,
       runDir: run.dir,

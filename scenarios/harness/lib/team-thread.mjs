@@ -350,10 +350,24 @@ export class ThreadSession {
       .catch(() => []);
     const after = logged.filter((m) => m.ts >= sent.ts && m.id !== sent.id && (m.kind === 'thing' || m.kind === 'system'));
     const answerMessages = after.length ? after : replies;
-    // The ANSWER is the last thing THING posted that is not the question it parked on.
     const askIds = new Set(asks.map((a) => a.message.id));
     const answers = answerMessages.filter((m) => !askIds.has(m.id));
-    const reply = answers[answers.length - 1] ?? null;
+    /**
+     * THE ANSWER IS THE LAST `thing` MESSAGE — NOT the last message in the thread.
+     *
+     * `announceNewApps` appends a `system` card ("<project> is ready.") AFTER the reply and after the
+     * terminal, so "the last thing in the thread" is frequently the card rather than the answer. That
+     * reported THING's reply to 20-studio step 2 as the four words `"user is ready."` when it had in
+     * fact answered with a full account of what it built. A `system` card is the POD talking about the
+     * turn; only a `thing` message is THING talking to the team.
+     *
+     * A failed turn is the exception: its explanation is posted as `system` (`runThingReply`'s catch),
+     * and there is no `thing` message at all — so fall back to the last non-ask message, which is that.
+     */
+    const thingAnswers = answers.filter((m) => m.kind === 'thing');
+    const reply = thingAnswers[thingAnswers.length - 1] ?? answers[answers.length - 1] ?? null;
+    /** The pod's own cards about this turn (a built app being pinned) — not part of the answer. */
+    const systemCards = answers.filter((m) => m.kind === 'system');
 
     const turn = {
       threadId,
@@ -369,6 +383,8 @@ export class ThreadSession {
       reply,
       /** Every `thing`/`system` message this turn put in the thread, in order. */
       replies: answerMessages,
+      /** The pod's cards about the turn (an app being pinned), kept apart from what THING SAID. */
+      systemCards,
       /** Questions THING posted into the thread, and what (if anything) answered them. */
       asks,
       answered,
