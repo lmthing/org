@@ -47,11 +47,14 @@ import {
   badProp,
   classifyBadBinding,
   deadComponent,
+  deadLink,
   emptyForm,
+  emptyReveals,
   emptyRender,
   emptySection,
   expressionAttempt,
   malformedArtifact,
+  navigateToSelf,
   orphanRoute,
   pageHasNoData,
   prettyPath,
@@ -66,6 +69,7 @@ import {
   unknownRoute,
   unknownSection,
   unknownSpace,
+  unfillableRoute,
   viewError,
   wrongArity,
   wrongMethod,
@@ -742,6 +746,8 @@ interface WalkCtx {
   /** See {@link ViewContracts.routesComplete}. `false` ⇒ an unknown route is a warning. */
   routesComplete: boolean;
   sectionIds: Set<string>;
+  /** The route of the page being validated. `undefined` inside a component def — see checkNavigation. */
+  pageRoute: string | undefined;
   routeParams: Set<string>;
   /** Declared prop names — set only while walking a component definition. */
   propNames: Set<string> | undefined;
@@ -984,6 +990,57 @@ function checkComponentRef(obj: Record<string, unknown>, path: string, ctx: Walk
   }
 }
 
+/**
+ * **A navigation must be able to GO somewhere.** Three failures, all decidable from the spec.
+ *
+ * The route itself resolves as before ({@link checkRoute}). Beyond that: a target that is the page's
+ * own route is a tap that repaints the same page, and a target whose `[param]`s nothing supplies
+ * resolves to a literal `"[id]"` in the URL — the router matches on segment count, so the user lands
+ * on the right page with an id that finds nothing.
+ *
+ * Both extra checks need the page's identity, so both are skipped inside a component definition
+ * (`ctx.pageRoute === undefined`): a component is written once and rendered on pages this write
+ * cannot see, so neither "is this the same route" nor "does the host page supply id" has an answer
+ * here. Silence, rather than a rejection built on a guess.
+ */
+function checkNavigation(
+  route: string,
+  params: unknown,
+  path: string,
+  ctx: WalkCtx,
+): void {
+  checkRoute(route, path, ctx);
+  if (!ctx.pageRoute) return;
+  const supplied = params && typeof params === 'object' ? Object.keys(params as Record<string, unknown>) : [];
+  if (route === ctx.pageRoute && (ctx.routeParams.size === 0 || supplied.length === 0)) {
+    ctx.errors.push(navigateToSelf(path, route, ctx.routes ?? [], [...ctx.routeParams].sort()));
+    return;
+  }
+  // The dispatcher seeds the target from the CURRENT route's params, then overlays the action's.
+  const missing = [...route.matchAll(/\[([A-Za-z][A-Za-z0-9]*)\]/g)]
+    .map((m) => m[1]!)
+    .filter((p) => !supplied.includes(p) && !ctx.routeParams.has(p));
+  if (missing.length) ctx.errors.push(unfillableRoute(path, route, missing, [...ctx.routeParams].sort()));
+}
+
+/**
+ * **An interactive element must resolve to an effect.**
+ *
+ * The schema already refuses a `button`/`actionItem` carrying neither `action` nor `reveals`. These
+ * are the two ways past that which cost a real app a control: a `link` with no destination at all
+ * (its only required property is `text`), and `reveals: []`, which satisfies `required` and reveals
+ * nothing. Both paint, both are reachable, both do nothing — the failure mode no gate downstream of
+ * the writer can see without a browser and a human.
+ */
+function checkControl(obj: Record<string, unknown>, path: string, ctx: WalkCtx): void {
+  if (obj['el'] === 'link' && typeof obj['to'] !== 'string' && typeof obj['href'] !== 'string') {
+    ctx.errors.push(deadLink(path, ctx.routes ?? []));
+  }
+  if (Array.isArray(obj['reveals']) && obj['reveals'].length === 0 && obj['action'] === undefined && 'label' in obj) {
+    ctx.errors.push(emptyReveals(childPath(path, 'reveals'), [...ctx.sectionIds]));
+  }
+}
+
 /** The generic descent. Elements, flat items, actions and slots all pass through here. */
 function walkNode(node: unknown, path: string, key: string, ctx: WalkCtx): void {
   if (typeof node === 'string') {
@@ -1006,7 +1063,15 @@ function walkNode(node: unknown, path: string, key: string, ctx: WalkCtx): void 
   if (typeof obj['download'] === 'string') {
     actionEndpoint = checkEndpoint(obj['download'], childPath(path, 'download'), 'any', ctx);
   }
-  if (typeof obj['navigate'] === 'string') checkRoute(obj['navigate'], childPath(path, 'navigate'), ctx);
+  checkControl(obj, path, ctx);
+  if (typeof obj['navigate'] === 'string') {
+    checkNavigation(obj['navigate'], obj['params'], childPath(path, 'navigate'), ctx);
+  }
+  // A link's `to` is a route like any other — and was resolved by nothing, so `to: 'recipies'` was
+  // a control that navigated into a NotFound with every gate green.
+  if (obj['el'] === 'link' && typeof obj['to'] === 'string') {
+    checkNavigation(obj['to'], obj['params'], childPath(path, 'to'), ctx);
+  }
   if (Array.isArray(obj['invalidates'])) {
     obj['invalidates'].forEach((n, i) => {
       if (typeof n === 'string') checkEndpoint(n, `${childPath(path, 'invalidates')}[${i}]`, 'any', ctx);
@@ -1092,6 +1157,7 @@ export function validateViewSpec(spec: unknown, contracts: ContractsLike | ViewC
 
   const view = spec as ViewSpec;
   const ctx = makeCtx(contracts);
+  ctx.pageRoute = view.route;
   ctx.routeParams = new Set([...view.route.matchAll(/\[([A-Za-z][A-Za-z0-9]*)\]/g)].map((m) => m[1]));
   for (const s of view.sections) if (s.id) ctx.sectionIds.add(s.id);
 
@@ -1241,6 +1307,7 @@ function makeCtx(input: ContractsLike | ViewContracts): WalkCtx {
     agents: contracts.agents,
     routesComplete: contracts.routesComplete !== false,
     sectionIds: new Set(),
+    pageRoute: undefined,
     routeParams: new Set(),
     propNames: undefined,
     fields: undefined,
@@ -1307,6 +1374,9 @@ function navigateTargets(node: unknown, out: Set<string> = new Set()): Set<strin
   if (!node || typeof node !== 'object') return out;
   const obj = node as Record<string, unknown>;
   if (typeof obj['navigate'] === 'string') out.add(obj['navigate']);
+  // A `link { to }` reaches a page exactly as a `navigate` does; counting only the latter reported
+  // a page linked from the home screen as an orphan.
+  if (obj['el'] === 'link' && typeof obj['to'] === 'string') out.add(obj['to']);
   for (const v of Object.values(obj)) navigateTargets(v, out);
   return out;
 }

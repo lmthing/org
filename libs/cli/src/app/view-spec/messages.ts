@@ -98,6 +98,8 @@ export type ViewErrorCode =
   | 'empty-form'
   /** A section bound to an Output of the wrong ARITY: rows where it draws a record, or the reverse. */
   | 'wrong-arity'
+  /** An interactive element that paints, is reachable, and resolves to no effect when tapped. */
+  | 'dead-control'
   /** A view artifact on disk that did not parse. */
   | 'malformed'
   /** The renderer threw while mounting the spec against live data. */
@@ -507,6 +509,99 @@ export function pageHasNoData(route: string, file: string, kinds: readonly strin
       `A page with no query/mutation renders chrome over nothing. Add a list, detail, stats, ` +
       `timeline or create section bound to an endpoint.`,
     { file },
+  );
+}
+
+// ── dead controls: it paints, it is reachable, and it does nothing ────────────
+//
+// The schema already refuses a `button`/`actionItem` with neither `action` nor `reveals`. These are
+// the four ways past it that a shipped app actually found — each one a control a user taps and
+// nothing happens, which is indistinguishable from a broken app and invisible to every other gate.
+
+/**
+ * A `link` with neither `to` nor `href`.
+ *
+ * `text` is the only required property, so this passes the shape. The renderer draws an underlined,
+ * pressable label whose handler falls through both branches and returns
+ * (`libs/ui/src/view/elements.tsx#LinkElement`). A shipped app's "Details" control was exactly this.
+ */
+export function deadLink(path: string, routes: readonly string[]): ViewError {
+  return err(
+    'dead-control',
+    path,
+    at(
+      path,
+      `a link with neither "to" nor "href" paints as a link and does nothing when it is tapped. ` +
+        `Give it to: '<route>' for a page of this app (${menu('Routes', routes)}), or href: '…' for ` +
+        `an external URL — or, if it should change data rather than the page, make it a button with ` +
+        `{ action: { mutate: … } }.`,
+    ),
+  );
+}
+
+/** `reveals: []` — the empty list satisfies the schema's "must act or reveal" and reveals nothing. */
+export function emptyReveals(path: string, ids: readonly string[]): ViewError {
+  return err(
+    'dead-control',
+    path,
+    at(
+      path,
+      `an empty reveals list is not an effect — this control paints and does nothing when it is ` +
+        `tapped. Name the sections it should show (${menu('Section ids', ids)}), or give it an ` +
+        `action instead.`,
+    ),
+  );
+}
+
+/**
+ * A `navigate` at the page it is already on.
+ *
+ * The dispatcher fills the target from the CURRENT route params first
+ * (`libs/ui/src/view/actions.tsx#useDispatch`), so with no `params` of its own this resolves to the
+ * URL the user is looking at: a control that repaints the same page.
+ */
+export function navigateToSelf(path: string, route: string, routes: readonly string[], params: readonly string[]): ViewError {
+  const others = routes.filter((r) => r !== route);
+  return err(
+    'dead-control',
+    path,
+    at(
+      path,
+      `"${route}" is the route this page already is, so tapping this control goes nowhere. ` +
+        `${menu('Other routes', others)}` +
+        (params.length
+          ? `. To open a different ${params[0]}, pass params: { ${params[0]}: '$.${params[0]}' }`
+          : '') +
+        `. If it should change the data rather than the page, use { mutate: … }.`,
+    ),
+  );
+}
+
+/**
+ * A route whose `[param]` nothing can fill.
+ *
+ * `fillRoute` leaves an unsupplied `[id]` in the path verbatim
+ * (`libs/ui/src/view/bind.ts#fillRoute`), and the router matches on segment COUNT — so the tap lands
+ * on the right page with the literal string "[id]" as its id, which finds nothing and reports
+ * nothing. The value can only come from the action's own `params` or from the page's own route.
+ */
+export function unfillableRoute(
+  path: string,
+  route: string,
+  missing: readonly string[],
+  pageParams: readonly string[],
+): ViewError {
+  const first = missing[0]!;
+  return err(
+    'dead-control',
+    path,
+    at(
+      path,
+      `"${route}" needs a value for [${missing.join('], [')}] and nothing supplies one: the control ` +
+        `navigates to a literal "[${first}]", which reaches the page and finds nothing. Pass it — ` +
+        `params: { ${first}: '$.${first}' } — or name a route with no [param]. Filled automatically ` +
+        `from this page's own route: ${pageParams.length ? pageParams.join(', ') : '(none — this page has no [param] segment)'}.`,
+    ),
   );
 }
 

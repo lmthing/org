@@ -243,6 +243,112 @@ describe('validateViewSpec — bindings', () => {
   });
 });
 
+describe('validateViewSpec — a control that paints and does nothing', () => {
+  /**
+   * The measured failure: a shipped app's "Details" control was reachable, drawn, and inert. The
+   * schema already refuses a button carrying neither `action` nor `reveals`; every case here is a
+   * way PAST that check, and each one is a tap in which nothing happens.
+   */
+  const body = (...children: unknown[]) =>
+    page({ kind: 'detail', query: 'getRecipe', body: { el: 'col', children } });
+
+  it('rejects a link with no destination at all — its only required property is text', () => {
+    const e = only(body({ el: 'link', text: 'Details' }));
+    expect(e.code).toBe('dead-control');
+    expect(e.message).toBe(
+      'sections[0].body.children[0]: a link with neither "to" nor "href" paints as a link and does ' +
+        'nothing when it is tapped. Give it to: \'<route>\' for a page of this app (Routes: index, ' +
+        'recipes, recipes/[id]), or href: \'…\' for an external URL — or, if it should change data ' +
+        'rather than the page, make it a button with { action: { mutate: … } }.',
+    );
+  });
+
+  it('resolves a link\'s `to` against the real routes — it was resolved by nothing', () => {
+    const e = only(body({ el: 'link', text: 'Details', to: 'recipies' }));
+    expect(e.code).toBe('unknown-route');
+    expect(e.path).toBe('sections[0].body.children[0].to');
+  });
+
+  it('rejects an empty reveals list — it satisfies the schema and reveals nothing', () => {
+    const res = check({
+      route: 'recipes',
+      sections: [
+        { kind: 'toolbar', actions: [{ label: 'Filters', reveals: [] }] },
+        { kind: 'list', id: 'results', query: 'listRecipes' },
+      ],
+    });
+    expect(res.errors.map((e) => e.message)).toEqual([
+      'sections[0].actions[0].reveals: an empty reveals list is not an effect — this control paints ' +
+        'and does nothing when it is tapped. Name the sections it should show (Section ids: results), ' +
+        'or give it an action instead.',
+    ]);
+  });
+
+  it('rejects a navigate at the page it is already on', () => {
+    const e = only(page({ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipes' } }));
+    expect(e.code).toBe('dead-control');
+    expect(e.message).toBe(
+      'sections[0].rowAction.navigate: "recipes" is the route this page already is, so tapping this ' +
+        'control goes nowhere. Other routes: index, recipes/[id]. If it should change the data ' +
+        'rather than the page, use { mutate: … }.',
+    );
+  });
+
+  it('rejects the same-route tap on a [param] page, and names the params fix', () => {
+    const e = only(
+      { route: 'recipes/[id]', sections: [{ kind: 'detail', query: 'getRecipe', actions: [{ label: 'Open', action: { navigate: 'recipes/[id]' } }] }] },
+    );
+    expect(e.message).toBe(
+      'sections[0].actions[0].action.navigate: "recipes/[id]" is the route this page already is, so ' +
+        'tapping this control goes nowhere. Other routes: index, recipes. To open a different id, ' +
+        'pass params: { id: \'$.id\' }. If it should change the data rather than the page, use ' +
+        '{ mutate: … }.',
+    );
+  });
+
+  it('rejects a navigate whose [param] nothing can fill — it lands on a literal "[id]"', () => {
+    const e = only(page({ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipes/[id]' } }));
+    expect(e.code).toBe('dead-control');
+    expect(e.message).toBe(
+      'sections[0].rowAction.navigate: "recipes/[id]" needs a value for [id] and nothing supplies ' +
+        'one: the control navigates to a literal "[id]", which reaches the page and finds nothing. ' +
+        'Pass it — params: { id: \'$.id\' } — or name a route with no [param]. Filled automatically ' +
+        'from this page\'s own route: (none — this page has no [param] segment).',
+    );
+  });
+
+  it('accepts every control that DOES resolve to an effect', () => {
+    // A param filled by the action, a param inherited from the page's own route, an external href,
+    // a reveals that names a section, and a plain mutation.
+    expect(check(page({ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipes/[id]', params: { id: '$.id' } } })).errors).toEqual([]);
+    expect(check({
+      route: 'recipes/[id]',
+      sections: [{ kind: 'detail', query: 'getRecipe', body: { el: 'link', text: 'Print', to: 'recipes/[id]', params: { id: '$.id' } } }],
+    }).errors).toEqual([]);
+    expect(check(body({ el: 'link', text: 'Source', href: 'https://example.com/x' })).errors).toEqual([]);
+    expect(check({
+      route: 'recipes',
+      sections: [
+        { kind: 'toolbar', actions: [{ label: 'Filters', reveals: ['results'] }] },
+        { kind: 'list', id: 'results', query: 'listRecipes' },
+      ],
+    }).errors).toEqual([]);
+  });
+
+  it('says nothing about route identity inside a COMPONENT — it has no page of its own', () => {
+    // A component is written once and rendered on pages this write cannot see, so neither "is this
+    // my own route" nor "does the host page supply id" has an answer here. The link with no
+    // destination is still dead, because that one needs no page.
+    const withNav = validateViewComponent(
+      { name: 'Row', props: {}, node: { el: 'button', label: 'Open', action: { navigate: 'recipes/[id]' } } },
+      CONTRACTS,
+    );
+    expect(withNav.errors).toEqual([]);
+    const dead = validateViewComponent({ name: 'Row', props: {}, node: { el: 'link', text: 'Open' } }, CONTRACTS);
+    expect(dead.errors.map((e) => e.code)).toEqual(['dead-control']);
+  });
+});
+
 describe('validateViewSpec — arity: a section that could only ever draw nothing', () => {
   /**
    * The measured failure: a dashboard shipped with its `stats` and `detail` sections drawing only
@@ -426,7 +532,8 @@ describe('validateViewSpec — components, sections and routes', () => {
   });
 
   it('rejects a navigate target that is not a route', () => {
-    const e = only(page({ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipe/[id]' } }));
+    // `params` supplied: a rowAction that leaves [id] unfilled is its own (dead-control) finding.
+    const e = only(page({ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipe/[id]', params: { id: '$.id' } } }));
     expect(e.code).toBe('unknown-route');
     expect(e.message).toBe(
       'sections[0].rowAction.navigate: "recipe/[id]" is not a route in this app. Did you mean recipes/[id]? ' +
@@ -649,7 +756,7 @@ describe('validateAppViews', () => {
     const root = await project({
       'pages/index.view.json': view({
         route: 'index',
-        sections: [{ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipes/[id]' } }],
+        sections: [{ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipes/[id]', params: { id: '$.id' } } }],
       }),
       'pages/recipes/[id].view.json': view({
         route: 'recipes/[id]',
@@ -1110,7 +1217,7 @@ describe('unknown route — a warning at save time, an error app-wide (D-3b)', (
     const res = validateViewSpec(
       {
         route: 'recipes',
-        sections: [{ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipes/[id]' } }],
+        sections: [{ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipes/[id]', params: { id: '$.id' } } }],
       },
       TWO_WAY,
     );
@@ -1124,7 +1231,7 @@ describe('unknown route — a warning at save time, an error app-wide (D-3b)', (
     const res = validateViewSpec(
       {
         route: 'recipes',
-        sections: [{ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipes/[id]' } }],
+        sections: [{ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipes/[id]', params: { id: '$.id' } } }],
       },
       { ...TWO_WAY, routesComplete: true },
     );
