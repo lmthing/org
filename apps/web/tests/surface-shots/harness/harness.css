@@ -1,0 +1,19 @@
+/*
+ * The harness's CSS entry — plain CSS since phase 4 of docs/tamagui-final-steps.md.
+ *
+ * It used to carry `@source` directives so Tailwind would scan the real source trees for the utility
+ * classNames the shipped components still had. There are none left (§1/§3 took the count to zero) and
+ * there is no Tailwind to scan, so the directives are gone with it.
+ *
+ * Mirrors `apps/web/src/index.css`: the theme (which now imports `preflight.css` itself, so the base
+ * resets are still present exactly as in production), then the keyframe layer, then the chat surface's
+ * own base stylesheet — which is still loaded by the `/chat` route and still owns the body type scale,
+ * the scrollbars, the focus ring and the `--lm-*` bridge.
+ */
+@import "@lmthing/css/theme.css";
+@import "@lmthing/css/animations.css";
+@import "../../../../../libs/ui/src/chat/app/styles.css";
+
+@layer base {
+  html, body, #root { height: 100%; }
+}

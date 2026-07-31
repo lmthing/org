@@ -137,7 +137,22 @@ function renderBlock(token: Token, p: MarkdownPreset, key: string): React.ReactN
     case 'list': {
       const list = token as Tokens.List
       return (
-        <Prim.List key={key} ordered={list.ordered} {...p.list}>
+        <Prim.List
+          key={key}
+          ordered={list.ordered}
+          // The web marker has to be asked for. `preflight.css:96` sets `list-style: none` on
+          // every `ol`/`ul`, so "leave the browser on its own native marker" (below) left EVERY
+          // markdown list in the web app with no bullet and no number at all — a numbered list
+          // read as four unlabelled indented lines. Nothing could see it: the descriptor renders,
+          // the text is all present in the DOM and in the a11y tree, and jsdom has no marker to
+          // assert on. It took a screenshot.
+          // Via `style`, not a style PROP: `list-style` has no React Native equivalent, so it is
+          // not in Tamagui's prop set and a `listStyleType` prop is dropped on the floor.
+          {...(isWeb
+            ? { style: { listStyleType: list.ordered ? 'decimal' : 'disc', listStylePosition: 'outside' as const } }
+            : null)}
+          {...p.list}
+        >
           {list.items.map((item, i) => (
             <Prim.ListItem key={`${key}-li${i}`} {...p.listItem}>
               {item.tokens.map((t, j) =>

@@ -49,7 +49,50 @@ const REGION_PROPS = new Set([
   'alignSelf',
 ])
 
-const Scroll = React.forwardRef<any, ScrollProps>(({ stickToEnd, children, ...props }, ref) => {
+/**
+ * Bottom-anchoring, the way this target can express it: the content view takes the region's free
+ * space and aligns its children to the end, so a conversation shorter than the screen sits against
+ * the composer instead of floating at the top. Once the content overflows there is no free space
+ * and this is inert — which is why it needs none of the web fork's spacer trick.
+ */
+const ANCHOR_END = { flexGrow: 1, justifyContent: 'flex-end' } as const
+
+/**
+ * Where the reader is, in the shape the web handler already reads.
+ *
+ * `onScroll` is a DOM event on web — callers ask `e.currentTarget.scrollTop/scrollHeight/
+ * clientHeight` to decide "is the reader at the bottom?", which is what lets a transcript follow
+ * new output WITHOUT yanking someone who has scrolled up to reread something. React Native reports
+ * the same three numbers under completely different names on `e.nativeEvent`, and
+ * `nativeSafeProps` drops any `on*` prop it does not know, so `onScroll` never arrived here at all:
+ * every such caller's `atBottom` stayed frozen at its initial value on a phone, and follow-mode
+ * degraded to "always pinned".
+ *
+ * Translating here rather than at each call site is the point of the fork — the caller writes the
+ * web idiom once and both targets honour it, which is the same bargain `stickToEnd` makes.
+ *
+ * Exported for the native suite: `ScrollView` substitutes its own internal handler on the host
+ * node, so driving the mapping through the rendered tree tests RN's plumbing rather than this
+ * translation. The suite asserts the wiring reaches the ScrollView and checks the mapping here.
+ */
+export function toWebScrollEvent(e: {
+  nativeEvent: {
+    contentOffset: { y: number }
+    layoutMeasurement: { height: number }
+    contentSize: { height: number }
+  }
+}) {
+  const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent
+  return {
+    currentTarget: {
+      scrollTop: contentOffset.y,
+      clientHeight: layoutMeasurement.height,
+      scrollHeight: contentSize.height,
+    },
+  }
+}
+
+const Scroll = React.forwardRef<any, ScrollProps>(({ stickToEnd, onScroll, children, ...props }, ref) => {
   const own = React.useRef<{ scrollToEnd?: (o?: object) => void } | null>(null)
 
   const region: Record<string, unknown> = {}
@@ -57,6 +100,7 @@ const Scroll = React.forwardRef<any, ScrollProps>(({ stickToEnd, children, ...pr
   for (const [key, value] of Object.entries(props)) {
     ;(REGION_PROPS.has(key) ? region : content)[key] = value
   }
+  const contentProps = nativeSafeProps(content, { flexDirectionDefault: 'column' })
 
   return (
     <NativeScrollView
@@ -70,8 +114,23 @@ const Scroll = React.forwardRef<any, ScrollProps>(({ stickToEnd, children, ...pr
       // dismiss gesture instead of reaching what was tapped.
       keyboardShouldPersistTaps="handled"
       onContentSizeChange={stickToEnd ? () => own.current?.scrollToEnd?.({ animated: false }) : undefined}
+      {...(onScroll
+        ? {
+            onScroll: (e: Parameters<typeof toWebScrollEvent>[0]) =>
+              (onScroll as (ev: ReturnType<typeof toWebScrollEvent>) => void)(toWebScrollEvent(e)),
+            // Without this a `ScrollView` fires onScroll ONCE per gesture, so "am I at the bottom?"
+            // would be answered from where the finger landed rather than where it stopped.
+            scrollEventThrottle: 16,
+          }
+        : null)}
     >
-      <NativeView {...nativeSafeProps(content, { flexDirectionDefault: 'column' })}>
+      <NativeView
+        {...contentProps}
+        // MERGED into whatever style the content props already resolved to, never assigned over
+        // it. A plain `style={...}` here replaced it — which on a transcript meant the padding and
+        // the gap between messages silently disappeared the moment bottom-anchoring was asked for.
+        style={[(contentProps as { style?: unknown }).style, stickToEnd ? ANCHOR_END : null]}
+      >
         {children}
       </NativeView>
     </NativeScrollView>

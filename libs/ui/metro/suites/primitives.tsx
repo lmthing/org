@@ -28,6 +28,7 @@ import {
   styleOf,
   flattenStyle,
   hostTypes,
+  findAll,
   NATIVE_VIEW,
   NATIVE_TEXT,
   NATIVE_IMAGE,
@@ -58,6 +59,9 @@ import {
   Path,
   IFrame,
 } from '../../src/elements/primitives'
+// The scroll-event translation, reached directly: `ScrollView` substitutes its own handler on the
+// host node, so driving it through the rendered tree would test RN's plumbing instead.
+import { toWebScrollEvent } from '../../src/elements/primitives/scroll/index.native'
 
 test('Box mounts a native view', () => {
   const { tree } = render(<Box />)
@@ -347,3 +351,82 @@ test('Scroll puts the region props on the SCROLLER and the content props inside'
 })
 
 
+
+test('Scroll translates a native scroll event into the shape the web caller already reads', () => {
+  // `onScroll` is a DOM event on web: callers ask `e.currentTarget.scrollTop/scrollHeight/
+  // clientHeight` to decide "is the reader at the bottom?", which is what lets a transcript follow
+  // new output WITHOUT yanking someone who scrolled up to reread something. React Native reports
+  // the same three numbers under different names on `e.nativeEvent`, and `nativeSafeProps` drops
+  // any `on*` prop it does not know — so `onScroll` never arrived here at all and every caller's
+  // `atBottom` stayed frozen at its initial value on a phone.
+  //
+  // Two halves, asserted separately on purpose: that the wiring REACHES the ScrollView, and that
+  // the mapping is right. The mapping is checked directly rather than by invoking the rendered
+  // node, because `ScrollView` substitutes its own internal handler on the host — driving it
+  // through the tree would test RN's plumbing, not this translation.
+  const { tree } = render(<Scroll flex={1} onScroll={() => {}} />)
+  const scroller = find(tree, (t) => /ScrollView/.test(t))
+  expect(typeof scroller?.props.onScroll, 'onScroll reaches the ScrollView at all').toBe('function')
+  expect(scroller?.props.scrollEventThrottle, 'and asks for more than one event per gesture').toBe(16)
+
+  const mapped = toWebScrollEvent({
+    nativeEvent: {
+      contentOffset: { y: 120 },
+      layoutMeasurement: { height: 400 },
+      contentSize: { height: 900 },
+    },
+  })
+  expect(mapped.currentTarget.scrollTop, 'contentOffset.y → scrollTop').toBe(120)
+  expect(mapped.currentTarget.clientHeight, 'layoutMeasurement.height → clientHeight').toBe(400)
+  expect(mapped.currentTarget.scrollHeight, 'contentSize.height → scrollHeight').toBe(900)
+})
+
+test('Scroll leaves onScroll wiring off entirely when the caller passed none', () => {
+  const { tree } = render(<Scroll flex={1} />)
+  const scroller = find(tree, (t) => /ScrollView/.test(t))
+  expect(scroller?.props.scrollEventThrottle, 'no throttle without a listener').toBe(undefined)
+})
+
+/**
+ * The style on every host View in the tree, flattened.
+ *
+ * Not `findByType(NATIVE_VIEW)`: on Android a `ScrollView` renders its OWN content-container View,
+ * so the first View in the tree is RN's, not this component's — which is why an assertion written
+ * against the first one passed on iOS and failed on Android for the same correct code.
+ */
+function viewStyles(tree: Parameters<typeof findAll>[0]): Record<string, unknown>[] {
+  return findAll(tree, (t) => t === NATIVE_VIEW).map(
+    (n) =>
+      Object.assign(
+        {},
+        ...(Array.isArray(n.props.style) ? n.props.style : [n.props.style]).filter(Boolean),
+      ) as Record<string, unknown>,
+  )
+}
+
+test('Scroll stickToEnd anchors short content to the BOTTOM, not the top', () => {
+  // `stickToEnd` could only ever scroll, and there is nothing to scroll when the conversation is
+  // shorter than the screen — so a quiet channel opened with its messages at the top and a void
+  // between the last one and the composer. On this target the answer is the content view growing
+  // to fill the region and aligning its children to the end; when the content overflows there is
+  // no free space and it is inert.
+  const styles = viewStyles(render(<Scroll flex={1} stickToEnd />).tree)
+  const anchored = styles.find((st) => st.justifyContent === 'flex-end')
+  expect(Boolean(anchored), `a content view aligns to the end (saw ${JSON.stringify(styles)})`).toBe(true)
+  expect(anchored?.flexGrow, 'and grows to fill the region first').toBe(1)
+})
+
+test('Scroll without stickToEnd leaves the content alignment alone', () => {
+  const styles = viewStyles(render(<Scroll flex={1} />).tree)
+  expect(styles.some((st) => st.justifyContent === 'flex-end'), 'nothing anchors').toBe(false)
+})
+
+test('Scroll stickToEnd MERGES its anchoring into the content style, never replaces it', () => {
+  // A plain `style={...}` here overwrote whatever the content props had resolved to — so asking a
+  // transcript to bottom-anchor silently deleted its padding and the gap between messages.
+  const styles = viewStyles(render(<Scroll flex={1} stickToEnd padding="$4" />).tree)
+  const anchored = styles.find((st) => st.justifyContent === 'flex-end')
+  expect(Boolean(anchored), 'still anchored').toBe(true)
+  const padded = Object.keys(anchored ?? {}).some((k) => /^padding/i.test(k))
+  expect(padded, `the caller's padding survives (saw ${Object.keys(anchored ?? {}).join()})`).toBe(true)
+})

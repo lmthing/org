@@ -184,7 +184,7 @@ export function UserDetailPanel({ user, roles, onUpdateRole, onRemoveUser, onCan
                             height="$6"
                             borderRadius="$radius-full"
                             backgroundColor="$agent"
-                            color="white"
+                            color="$agent-foreground"
                             display="flex"
                             alignItems="center"
                             justifyContent="center"

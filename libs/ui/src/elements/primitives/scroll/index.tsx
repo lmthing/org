@@ -48,8 +48,27 @@ const Scroll = React.forwardRef<any, ScrollProps>(({ stickToEnd, children, ...pr
         else if (ref) (ref as React.MutableRefObject<unknown>).current = node
       }}
       overflow="auto"
+      // A `stickToEnd` region is a column of content, and it has to SAY so. This box computes to
+      // `display: block` otherwise — which silently made both the spacer below and any `gap` the
+      // caller passed inert, since neither means anything outside a flex container. The team
+      // transcript was already passing `flexDirection="column" gap="$4"` and getting neither.
+      // Defaults, not overrides: they sit before the spread so a caller can still say otherwise.
+      {...(stickToEnd ? { display: 'flex' as const, flexDirection: 'column' as const } : null)}
       {...props}
     >
+      {/*
+       * A transcript that does not fill its container belongs at the BOTTOM, against the
+       * composer — not floating at the top with a void beneath it, which is how every one of
+       * these read on a quiet channel. `stickToEnd` could only ever SCROLL, and there is nothing
+       * to scroll when the content is shorter than the box.
+       *
+       * A growing spacer above the content, rather than `justify-content: flex-end` on the box:
+       * end-alignment in a SCROLL container makes the overflow unreachable in the start direction
+       * — the classic "cannot scroll back to the first message" bug. A flex spacer takes the free
+       * space when there is any and collapses to zero the moment the content overflows, so the
+       * long case behaves exactly as it did before.
+       */}
+      {stickToEnd ? <Box flexGrow={1} flexShrink={0} flexBasis={0} minHeight={0} /> : null}
       {children}
     </Box>
   )

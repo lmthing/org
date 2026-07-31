@@ -136,3 +136,55 @@ describe('lint-design-tokens — the escape hatches still work', () => {
     expect(lint('o.tsx', `// ds-lint-file-ok\nexport const a = '#ff0000'\n`)).toEqual([]);
   });
 });
+
+/**
+ * The bare CSS colour KEYWORD rule.
+ *
+ * The gate believed it covered raw colour and did not: it checked hex, `rgb()/hsl()` and the stock
+ * Tailwind palette, so `color="red"` sailed straight through and shipped in the chat surface's
+ * required-field asterisk. `pnpm lint:tokens` was green the whole time.
+ *
+ * The risk of a rule matching bare English words is false positives, so most of what follows is
+ * the NEGATIVE direction — a linter that cries wolf on the word "white" in prose gets escaped
+ * everywhere and then catches nothing.
+ */
+describe('lint-design-tokens — bare colour keywords', () => {
+  it('flags a colour prop set to a keyword', () => {
+    expect(lint('k1.tsx', `<Text color="red" />\n`)).toEqual(['1:7 raw-color-keyword']);
+  });
+
+  it('flags the object-literal form too', () => {
+    expect(lint('k2.tsx', `const s = { backgroundColor: 'white' }\n`)).toEqual(['1:13 raw-color-keyword']);
+  });
+
+  it('flags a React Native colour prop', () => {
+    expect(lint('k3.tsx', `<View shadowColor="black" />\n`)).toEqual(['1:7 raw-color-keyword']);
+  });
+
+  it('does NOT flag the same word in prose', () => {
+    expect(lint('k4.tsx', `// the red one is the destructive token\nexport const a = 1\n`)).toEqual([]);
+  });
+
+  it('does NOT flag a word that merely contains a colour name', () => {
+    // `white-space`, `isBlackListed`, `greenfield` — the reason this rule matches only the
+    // right-hand side of a colour-carrying prop rather than the words themselves.
+    expect(lint('k5.tsx', `const whiteSpace = 'nowrap'\nconst isBlackListed = true\n`)).toEqual([]);
+  });
+
+  it('does NOT flag a token whose NAME contains a colour', () => {
+    expect(lint('k6.tsx', `<Text color="$foreground" backgroundColor="var(--white-ish)" />\n`)).toEqual([]);
+  });
+
+  it('does NOT flag the legitimate non-colours', () => {
+    // `transparent`/`currentColor`/`inherit` are real answers, not slips.
+    expect(
+      lint('k7.tsx', `<Box backgroundColor="transparent" borderColor="currentColor" color="inherit" />\n`),
+    ).toEqual([]);
+  });
+
+  it('honours ds-lint-ok, for the cases that are deliberate', () => {
+    // e.g. the IDE preview iframe, which frames arbitrary user HTML that assumes a white page and
+    // must NOT follow the app into dark mode.
+    expect(lint('k8.tsx', `<iframe style={{ backgroundColor: 'white' }} /> // ds-lint-ok\n`)).toEqual([]);
+  });
+})

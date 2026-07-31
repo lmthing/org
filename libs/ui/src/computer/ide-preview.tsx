@@ -97,7 +97,7 @@ function IdePreview({ url }: IdePreviewProps) {
             borderWidth: 0,
             // Deliberately not a theme token: this frames arbitrary user HTML, which assumes a
             // white page, so it must NOT follow the app into dark mode.
-            backgroundColor: 'white',
+            backgroundColor: 'white', // ds-lint-ok — see above: NOT a theme colour
           }}
           title="Preview"
           sandbox="allow-scripts allow-same-origin allow-forms allow-modals"

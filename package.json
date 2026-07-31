@@ -21,7 +21,9 @@
     "test:surface:build": "node apps/web/node_modules/vite/bin/vite.js build --config apps/web/tests/visual-surface/vite.config.mts",
     "test:surface": "pnpm test:surface:build && node apps/web/tests/visual-surface/capture.mjs",
     "test:surface:update": "pnpm test:surface:build && node apps/web/tests/visual-surface/capture.mjs --update",
-    "test:native": "pnpm --filter @lmthing/ui test:native"
+    "test:native": "pnpm --filter @lmthing/ui test:native",
+    "shots:build": "node apps/web/node_modules/vite/bin/vite.js build --config apps/web/tests/surface-shots/vite.config.mts",
+    "shots": "pnpm shots:build && node apps/web/tests/surface-shots/shoot.mjs"
   },
   "devDependencies": {
     "@lmthing/config": "workspace:*",

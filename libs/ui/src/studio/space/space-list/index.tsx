@@ -226,7 +226,7 @@ export function SpaceList({
                         borderRadius="$radius-full"
                         borderWidth={2}
                         borderStyle="solid"
-                        borderColor="white"
+                        borderColor="$background"
                         backgroundColor={STATUS_DOT_BG[user.status]}
                       />
                     </Prim.Box>

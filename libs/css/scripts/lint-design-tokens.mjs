@@ -47,6 +47,23 @@ const STOCK_RE = new RegExp(`\\b(?:[a-z-]+:)*(?:bg|text|border|ring|from|via|to|
 const HEX_RE = /#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g;
 const FUNC_RE = /\b(rgba?|hsla?)\(([^)]*)\)/g;
 
+// A bare CSS colour KEYWORD in a colour prop — `color="red"`, `borderColor="white"`.
+//
+// This gate believed it covered raw colour and did not: it checks hex, `rgb()/hsl()` and the stock
+// Tailwind palette, so `color="red"` sailed through and shipped. Only a colour-carrying PROP is
+// matched, and only on the right-hand side of `=`, because the words themselves are ordinary
+// English and appear constantly in prose, in identifiers and in token names ("white-space",
+// `isBlackListed`, a comment about the colour red).
+//
+// The keyword list is the common ones rather than all 148 CSS names — enough that a real slip is
+// caught, short enough that it cannot start flagging things that are not colours. `transparent`,
+// `currentColor`, `inherit`/`initial`/`unset` and `none` are legitimate and deliberately absent.
+const KEYWORD = 'red|blue|green|black|white|yellow|orange|purple|gray|grey|pink|brown|cyan|magenta|silver|gold|navy|teal|lime|maroon|olive|aqua|fuchsia|violet|indigo|beige|tan|coral|crimson|khaki|salmon|turquoise';
+const KEYWORD_RE = new RegExp(
+  `\\b(?:color|backgroundColor|borderColor|borderTopColor|borderRightColor|borderBottomColor|borderLeftColor|shadowColor|textDecorationColor|placeholderTextColor|tintColor|fill|stroke|caretColor|outlineColor)\\s*[=:]\\s*['"\`](?:${KEYWORD})['"\`]`,
+  'gi',
+);
+
 // A color function is allowed if it's token-based (var(...)) or an achromatic
 // overlay/scrim/shadow (grey/black/white with alpha < 1 — no token exists for these).
 function funcAllowed(fn, args) {
@@ -159,6 +176,7 @@ for (const file of files) {
     };
     check(STOCK_RE, 'stock-tailwind-color');
     check(HEX_RE, 'raw-hex');
+    check(KEYWORD_RE, 'raw-color-keyword');
     // color functions: only flag non-token, non-achromatic-overlay uses
     FUNC_RE.lastIndex = 0;
     let m;

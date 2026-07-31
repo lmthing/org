@@ -35,6 +35,11 @@ export default defineConfig({
       // `Stack`, `JSON.stringify` for anything else) with three suites sitting next to it that
       // ran nowhere. They need only jsdom + react-dom, both already here.
       'src/chat/components/*.test.tsx',
+      // …and one level down. `components/ui/` holds the shared overlay pieces (the `Drawer` both
+      // the chat shell and the mobile app mount), and the single-level glob above meant a suite
+      // written next to one of them would never run — so `Drawer.test.tsx` had to be exiled to the
+      // parent directory to be executed at all.
+      'src/chat/components/**/*.test.tsx',
       // The chat SHELL's own components (`chat/app/*`). Same story one directory over: the
       // `.tsx` suites here ran nowhere, which is how the shell's no-session pane could ship a
       // dead end — a phone-sized screen holding one sentence about a sidebar that was not on
@@ -49,6 +54,13 @@ export default defineConfig({
       // and the mounting claims are proven by `metro/suites/view.tsx` instead.
       'src/view/**/*.test.ts',
       'src/view/**/*.test.tsx',
+      // The TEAM surface. Same story as `chat/` two entries up, one step worse: this include
+      // never named `team/`, so there was nowhere for a team test to run and — unsurprisingly —
+      // not one had ever been written. The whole surface (transcript, threads, composer, the
+      // `@` picker, sidebar, unread, rail) shipped with no suite at all, and a test added here
+      // would have passed silently by never running.
+      'src/team/**/*.test.ts',
+      'src/team/**/*.test.tsx',
     ],
     setupFiles: ['./vitest.setup.ts'],
     css: false,
