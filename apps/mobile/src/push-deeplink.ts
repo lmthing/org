@@ -39,3 +39,28 @@ export function parseTeamDeepLink(url: string): PushDeepLink | null {
     .find(([key]) => key === 'channel')?.[1]
   return { teamId, ...(channelParam ? { channelId: decodeURIComponent(channelParam) } : {}) }
 }
+
+/**
+ * Suppresses handling the SAME delivered notification twice, without ever suppressing a genuinely
+ * different one — `watchPushDeepLinks` (`./push.ts`) wires both a live listener and a one-shot
+ * `getLastNotificationResponseAsync` cold-start check, and Expo's own docs note the two can BOTH
+ * fire for the identical tap in the same launch. Undetected, that reads as two rapid notifications
+ * — exactly the case this app must also get right, since the fix for one must not become the bug
+ * in the other: this only ever compares the notification's own `request.identifier`, which is
+ * stable for one delivered notification and distinct for any other, including two that arrive
+ * moments apart.
+ *
+ * A pure factory (not a class) for the same reason `resolveFocusTeamId` in `./team-focus.ts` is a
+ * pure function: the decision is testable without `react-native` or `expo-notifications` in the
+ * import graph.
+ */
+export function createNotificationDeduper(): (requestId: string | null | undefined) => boolean {
+  let last: string | null = null
+  return (requestId) => {
+    // No identifier to compare against — nothing to dedupe, so never suppress.
+    if (!requestId) return true
+    if (requestId === last) return false
+    last = requestId
+    return true
+  }
+}

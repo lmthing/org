@@ -15,7 +15,7 @@
 import { Platform } from 'react-native'
 
 import { CLOUD_BASE_URL } from './hosts'
-import { parseTeamDeepLink, type PushDeepLink } from './push-deeplink'
+import { parseTeamDeepLink, createNotificationDeduper, type PushDeepLink } from './push-deeplink'
 
 export { parseTeamDeepLink, type PushDeepLink }
 
@@ -120,6 +120,13 @@ export async function unregisterPush(getAccessToken: () => Promise<string>): Pro
  * when the app happened to already be open, which is the one case a notification tap is
  * least likely to be in.
  *
+ * Wiring both paths risks handling the SAME tap twice — Expo's own docs note the cold-start
+ * check and the live listener can both fire for one delivered notification in the same launch —
+ * so every response is deduped by its own `request.identifier` first
+ * (`./push-deeplink.ts#createNotificationDeduper`). That guard only ever suppresses a REPEAT of
+ * the exact same id; two different notifications arriving moments apart both still open, which is
+ * the case a naive "ignore anything while one is in flight" debounce would have gotten wrong.
+ *
  * Never throws — same contract as `registerForPush`.
  */
 export async function watchPushDeepLinks(
@@ -127,8 +134,14 @@ export async function watchPushDeepLinks(
 ): Promise<() => void> {
   try {
     const Notifications = await import('expo-notifications')
+    const shouldHandle = createNotificationDeduper()
 
-    const handle = (response: { notification: { request: { content: { data?: Record<string, unknown> } } } } | null) => {
+    const handle = (
+      response: {
+        notification: { request: { identifier?: string; content: { data?: Record<string, unknown> } } }
+      } | null,
+    ) => {
+      if (!shouldHandle(response?.notification.request.identifier)) return
       const url = response?.notification.request.content.data?.['url']
       if (typeof url !== 'string') return
       const link = parseTeamDeepLink(url)

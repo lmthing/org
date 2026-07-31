@@ -183,7 +183,13 @@ function NativeApp({
         openExternal: (href) => {
           void Linking.openURL(href)
         },
-        copyToClipboard: (text) => Clipboard.setStringAsync(text).then(() => undefined),
+        // `.catch` matters here specifically: an unhandled rejection from a fire-and-forget
+        // clipboard write (permission denied, no clipboard service on this ROM) would otherwise
+        // surface as a red-screen crash unrelated to whatever the member was doing.
+        copyToClipboard: (text) =>
+          Clipboard.setStringAsync(text)
+            .then(() => undefined)
+            .catch(() => undefined),
         confirm: (message) =>
           new Promise<boolean>((resolve) => {
             Alert.alert('', message, [

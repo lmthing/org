@@ -8,6 +8,7 @@ import { registerForPush } from './push'
 import { AppScreen } from './AppScreen'
 import { fetchAppTarget, type AppTarget } from './app-views'
 import { resolveFocusTeamId } from './team-focus'
+import { hapticWarning, hapticLight } from './haptics'
 
 /**
  * The team surface on a phone.
@@ -56,12 +57,21 @@ export function TeamScreen({
   // Pulled out of the mount effect so a failed fetch has something for a Retry button to call —
   // previously there was none, and because this tab is mounted-but-hidden (never unmounted, see
   // `App.tsx#HomeShell`) rather than remounted, switching away and back could not retry it either.
+  //
+  // `hadErrorRef` fires the ONE haptic warning this failure gets, on the transition INTO the error
+  // state rather than on every call — this also runs from the silent `AppState` background refresh
+  // below, and a phone with no signal buzzing once a foreground cycle for as long as it stays
+  // offline is the "scary banner on every slow request" this pass was explicitly told not to build.
+  const hadErrorRef = React.useRef(false)
   const refresh = React.useCallback(async () => {
     try {
       const list = await listTeams(getAccessToken)
+      hadErrorRef.current = false
       setError(null)
       setTeams(list)
     } catch (err) {
+      if (!hadErrorRef.current) void hapticWarning()
+      hadErrorRef.current = true
       setError(err instanceof Error ? err.message : String(err))
     }
   }, [getAccessToken])
@@ -250,8 +260,15 @@ export function TeamScreen({
       }}
       onOpenThread={(threadId) => setRail({ kind: 'thread', threadId })}
       // Not a state change yet — the probe decides whether this app belongs on the rail
-      // or on the native screen. See `probing` above.
-      onOpenApp={(projectId) => setProbing(projectId)}
+      // or on the native screen. See `probing` above. There is no spinner for `probing` itself
+      // (adding one means restructuring `TeamChannelsView`'s own scroll container, a `libs/ui`
+      // change — see this fix's report), so the tap otherwise looks like it did nothing at all
+      // until the round trip resolves; the light haptic is the one thing this host CAN give
+      // immediately, on every target, with no risk to that surface's layout.
+      onOpenApp={(projectId) => {
+        void hapticLight()
+        setProbing(projectId)
+      }}
       onCloseRail={() => setRail(null)}
       appUrl={teamAppUrl}
       // The tab is mounted-but-hidden while somebody is on Home or Chat, so it is still receiving

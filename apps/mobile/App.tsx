@@ -15,6 +15,8 @@ import { ensureComputePod, waitForPodEdge } from './src/ensure-pod'
 import { TeamScreen } from './src/TeamScreen'
 import { AppScreen } from './src/AppScreen'
 import { unregisterPush, watchPushDeepLinks, type PushDeepLink } from './src/push'
+import { OfflineBanner } from './src/OfflineBanner'
+import { hapticWarning, hapticSuccess } from './src/haptics'
 
 /**
  * Root of the LMThing mobile app.
@@ -77,6 +79,12 @@ export default function App() {
         */}
         <SafeAreaView style={{ flex: 1 }}>
           {/*
+            A property of the DEVICE, not of whichever surface is open — as relevant on the login
+            screen (you cannot sign in offline) and the pod-boot screen (that IS a network call) as
+            once a conversation is open, so it sits above everything rather than inside `HomeShell`.
+          */}
+          <OfflineBanner />
+          {/*
             And the other thing a phone does that a browser does not: it puts a keyboard OVER the
             app. `android:windowSoftInputMode="adjustResize"` is set and is no longer enough on its
             own — React Native 0.86 draws edge-to-edge by default, so the window does not resize and
@@ -120,6 +128,10 @@ function AuthGate() {
   // in short of force-quitting: `startedRef` latched true on the FIRST attempt and never let a
   // second one start. Including it in the effect's deps is what makes a bump actually retry.
   const [attempt, setAttempt] = React.useState(0)
+  // Whether THIS boot attempt has already failed once — the success haptic below only fires on
+  // recovery (attempt N+1 succeeding after attempt N failed), never on an ordinary cold boot,
+  // which would otherwise buzz on literally every app open.
+  const recoveredRef = React.useRef(false)
 
   React.useEffect(() => {
     if (!isAuthenticated) return
@@ -130,11 +142,19 @@ function AuthGate() {
       try {
         await ensureComputePod(getAccessToken)
         await waitForPodEdge(getAccessToken)
-        if (!cancelled) setPod('ready')
+        if (!cancelled) {
+          setPod('ready')
+          if (recoveredRef.current) {
+            recoveredRef.current = false
+            void hapticSuccess()
+          }
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err))
           setPod('error')
+          recoveredRef.current = true
+          void hapticWarning()
         }
       }
     })()

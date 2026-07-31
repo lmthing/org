@@ -8,9 +8,21 @@
  */
 import { describe, it, expect } from 'vitest'
 
-import { parseTeamDeepLink } from './push-deeplink'
+import { parseTeamDeepLink, createNotificationDeduper } from './push-deeplink'
 
 describe('parseTeamDeepLink', () => {
+  it('is null for a full URL rather than the bare path the gateway actually sends — a malformed or foreign shape does not crash or half-match', () => {
+    expect(parseTeamDeepLink('https://lmthing.team/team/abc123/channels?channel=general')).toBeNull()
+    expect(parseTeamDeepLink('lmthing://team/abc123')).toBeNull()
+  })
+
+  it('takes the first channel when the query string is malformed with a repeated key', () => {
+    expect(parseTeamDeepLink('/team/abc123/channels?channel=a&channel=b')).toEqual({
+      teamId: 'abc123',
+      channelId: 'a',
+    })
+  })
+
   it('reads the team and channel out of the gateway’s deep-link shape', () => {
     expect(parseTeamDeepLink('/team/abc123/channels?channel=general')).toEqual({
       teamId: 'abc123',
@@ -39,5 +51,35 @@ describe('parseTeamDeepLink', () => {
     expect(parseTeamDeepLink('/')).toBeNull()
     expect(parseTeamDeepLink('/computer')).toBeNull()
     expect(parseTeamDeepLink('')).toBeNull()
+  })
+})
+
+describe('createNotificationDeduper', () => {
+  it('lets the first delivery of a notification through', () => {
+    const shouldHandle = createNotificationDeduper()
+    expect(shouldHandle('n1')).toBe(true)
+  })
+
+  it('suppresses the SAME notification id firing twice — the cold-start-plus-listener race', () => {
+    const shouldHandle = createNotificationDeduper()
+    expect(shouldHandle('n1')).toBe(true)
+    expect(shouldHandle('n1')).toBe(false)
+    expect(shouldHandle('n1')).toBe(false)
+  })
+
+  it('never suppresses a genuinely different notification — two rapid pushes both get through', () => {
+    const shouldHandle = createNotificationDeduper()
+    expect(shouldHandle('n1')).toBe(true)
+    expect(shouldHandle('n2')).toBe(true)
+    // n1 again, after n2 — still a real repeat of the most recent id only; this deduper is a
+    // last-seen guard, not a full history, which is enough for the race it exists to close.
+    expect(shouldHandle('n2')).toBe(false)
+  })
+
+  it('never suppresses when there is no id to compare — nothing to dedupe against', () => {
+    const shouldHandle = createNotificationDeduper()
+    expect(shouldHandle(undefined)).toBe(true)
+    expect(shouldHandle(undefined)).toBe(true)
+    expect(shouldHandle(null)).toBe(true)
   })
 })
