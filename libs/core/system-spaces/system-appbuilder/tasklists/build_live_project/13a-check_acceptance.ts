@@ -8,8 +8,22 @@
  * valid TypeScript, valid envelope, a dashboard reading €0 over a €2,707 trip (run 32 step 3, live).
  *
  * `plan_acceptance` distilled the user stories + the source figures into machine-checkable checks —
- * each names one endpoint and asserts, against the SEEDED data, either a row-count floor (`rows-min`)
- * or a numeric-field floor (`field-min`). This node CALLS each endpoint and evaluates them.
+ * each names one endpoint and asserts, against the SEEDED data, a row-count floor (`rows-min`), a
+ * numeric-field floor (`field-min`), or an EXACT computed value (`field-equals`). This node CALLS each
+ * endpoint and evaluates them.
+ *
+ * `field-equals` is the one that catches the failure nothing else in this pipeline can see: an
+ * arithmetic rule the brief STATES ("labour is £45/hour; a job's total is labour plus the parts fitted
+ * to it") whose handler computes only some of the terms. The shape is right, the type is right, every
+ * static gate is green, and the page renders a confident wrong number — the bike-workshop build
+ * (scenario 30, run 202) shipped a job total of £70.49 where the brief's own arithmetic over the
+ * seeded rows says 2.5h × £45 + £70.49 = £182.99. A floor cannot catch that; only the expected VALUE
+ * can, so the planner computes it and this node compares against it within a tolerance.
+ *
+ * **The contract with `plan_acceptance` is enforced, not assumed.** A check emitted in a shape this
+ * node cannot evaluate is WORSE than no check: the pipeline reads it as covered while it proves
+ * nothing. Every check is validated BEFORE anything is called; a malformed one lands in `malformed`,
+ * makes `ok` false, and `onFail` resumes the PLANNER with the reasons — it is never silently skipped.
  *
  * The load-bearing distinction — why this never sends the per-file `fix` fork chasing a bug it cannot
  * repair: a failed check is only a CODE fault when the backing data EXISTS but the endpoint reports
@@ -41,9 +55,22 @@ export const node = {
     offendingCount: 'number',
     dataGaps: 'array',
     dataGapCount: 'number',
+    malformed: 'array',
+    malformedCount: 'number',
     skipped: 'number',
     unavailable: 'boolean',
     reason: 'string',
+  },
+  // A check this node cannot evaluate is a PLANNER fault, and the only node that can repair it is the
+  // planner — so resume it, carrying the malformed entries as `feedback`. Nothing written is redone:
+  // nothing else depends on `plan_acceptance`, so `resumeSet` here is exactly
+  // {plan_acceptance, check_acceptance}. A genuine FAILED check must NEVER come here — that is a CODE
+  // fault and flows through `verify.offending` to the per-file `fix` fork.
+  onFail: {
+    goto: 'plan_acceptance',
+    when: 'check_acceptance.malformedCount > 0',
+    carry: 'malformed',
+    maxAttempts: 1,
   },
 };
 
@@ -65,22 +92,150 @@ interface Ctx {
   db?: { query: (table: string, opts?: unknown) => Promise<unknown[]> };
 }
 
-/** One acceptance check, as `plan_acceptance` emits it. */
+/**
+ * One acceptance check — THE CONTRACT with `plan_acceptance`. Every key here is validated by
+ * `contractError` below before a single endpoint is called, and the prompt documents exactly this
+ * shape. Change one side and you must change the other; `build-live-project-acceptance.test.ts`
+ * asserts the two agree.
+ */
 interface Check {
   id?: string;
   story?: string;
   endpoint?: string;
   input?: unknown;
+  /** `rows-min` | `field-min` | `field-equals` */
   kind?: string;
+  /** rows-min: the row-count floor. field-min: the numeric floor. */
   min?: number;
+  /** field-min / field-equals: the numeric key read off the selected row. */
   field?: string;
+  /** field-min / field-equals: select the ONE row to read `field` off. Omitted ⇒ `items[0]`. */
+  match?: { field?: string; value?: unknown };
+  /** field-equals: the EXACT value the brief's own arithmetic works out to over the seeded rows. */
+  equals?: number;
+  /** field-equals: absolute tolerance around `equals`. Default one penny. */
+  tolerance?: number;
   why?: string;
+}
+
+/** A check the gate cannot evaluate (or that would prove nothing) — reported, never skipped. */
+interface Malformed {
+  check: string;
+  endpoint: string;
+  kind: string;
+  reason: string;
+  message: string;
 }
 
 interface Finding {
   phase: string;
   probe: string;
   message: string;
+}
+
+const KINDS = ['rows-min', 'field-min', 'field-equals'];
+/** One penny — currency arithmetic is what these checks assert, and it rounds. */
+const DEFAULT_TOLERANCE = 0.01;
+
+const isNum = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v);
+
+/**
+ * Validate ONE check against the contract. Returns the reason it cannot be evaluated, or `null`.
+ *
+ * This runs BEFORE anything is called, and it is deliberately strict about checks that would
+ * "pass" while proving nothing (`rows-min` with `min: 0`, `field-min` with `min: 0`) — a vacuous
+ * check is the same defect as an unevaluable one: the pipeline reads the story as covered.
+ */
+function contractError(check: Check): string | null {
+  const kind = String(check.kind ?? '');
+  if (!String(check.endpoint ?? '').trim()) {
+    return 'no `endpoint` — every check must name exactly one `plan_endpoints` name';
+  }
+  if (KINDS.indexOf(kind) === -1) {
+    return `unknown kind ${JSON.stringify(check.kind)} — must be one of ${KINDS.join(' | ')}`;
+  }
+  if (kind === 'rows-min') {
+    if (check.match !== undefined) return '`match` is meaningless on rows-min — it counts rows and reads no field';
+    if (check.min !== undefined && !isNum(check.min)) return '`min` must be a finite number';
+    if (isNum(check.min) && (check.min as number) < 1) {
+      return `min ${check.min} proves nothing — a rows-min floor must be at least 1`;
+    }
+    return null;
+  }
+  // field-min / field-equals both read ONE numeric key off ONE row.
+  if (!String(check.field ?? '').trim()) return `${kind} needs a \`field\` — the numeric key it reads off the row`;
+  if (check.match !== undefined) {
+    const m = check.match as { field?: unknown; value?: unknown } | null;
+    if (typeof m !== 'object' || m === null || Array.isArray(m)) return '`match` must be `{ field, value }`';
+    if (!String(m.field ?? '').trim()) return '`match.field` must name the key that selects the row';
+    if (m.value === undefined || m.value === null || String(m.value).trim() === '') {
+      return '`match.value` must be the value that selects the row';
+    }
+  }
+  if (kind === 'field-min') {
+    if (!isNum(check.min)) return 'field-min needs a numeric `min` — the floor the value must clear';
+    if ((check.min as number) <= 0) {
+      return `min ${check.min} proves nothing — a field-min floor must be > 0 (use field-equals for an exact figure)`;
+    }
+    return null;
+  }
+  if (!isNum(check.equals)) {
+    return "field-equals needs a numeric `equals` — the value the brief's stated arithmetic works out to over the seeded rows";
+  }
+  if (check.tolerance !== undefined && (!isNum(check.tolerance) || (check.tolerance as number) < 0)) {
+    return '`tolerance` must be a non-negative number';
+  }
+  return null;
+}
+
+const norm = (v: unknown): string => String(v ?? '').trim().toLowerCase();
+
+/**
+ * Select the ONE row a `field-*` check reads.
+ *
+ * Row ORDER is the reason this exists: a list endpoint makes no ordering promise, so `items[0]` can
+ * only be trusted for a single-row aggregate. `match` addresses a row by a stable business value
+ * instead — and the planner declining to check a per-row figure "because order isn't guaranteed" is
+ * exactly how the £70.49 total shipped unchecked (run 202's own comment says so).
+ *
+ * Three outcomes, and the difference matters: an ambiguous selector is the PLANNER's fault
+ * (`malformed`), while "no row carries that value" is the APP's — the endpoint did not return the
+ * row the source promised, which is a real finding.
+ */
+type Picked = { row: Record<string, unknown> } | { fail: string } | { malformed: string };
+
+function pickRow(items: unknown[], match: { field?: string; value?: unknown } | undefined): Picked {
+  const rows = items.map((i) => (i && typeof i === 'object' && !Array.isArray(i) ? (i as Record<string, unknown>) : {}));
+  if (!match) {
+    if (rows.length === 0) return { fail: 'the endpoint returned no rows at all' };
+    return { row: rows[0] as Record<string, unknown> };
+  }
+  const key = String(match.field ?? '');
+  const want = norm(match.value);
+  const exact = rows.filter((r) => norm(r[key]) === want);
+  // Fall back to containment either way round: the source says "Allez", the row says
+  // "Specialized Allez". Exact wins outright when it matches, so this never loosens a clean hit.
+  const candidates =
+    exact.length > 0
+      ? exact
+      : rows.filter((r) => {
+          const got = norm(r[key]);
+          return got !== '' && want !== '' && (got.indexOf(want) !== -1 || want.indexOf(got) !== -1);
+        });
+  if (candidates.length === 1) return { row: candidates[0] as Record<string, unknown> };
+  if (candidates.length > 1) {
+    return {
+      malformed:
+        `\`match\` on ${key}=${JSON.stringify(match.value)} selected ${candidates.length} rows — a selector must ` +
+        'address exactly ONE row. Pick a value unique in the seeded data.',
+    };
+  }
+  const keys = rows.length > 0 ? Object.keys(rows[0] as Record<string, unknown>).join(', ') : '(none)';
+  return {
+    fail:
+      `no returned row has ${key}=${JSON.stringify(match.value)} ` +
+      `(${rows.length} row(s) came back; their keys are: ${keys})`,
+  };
 }
 
 async function walkFiles(ctx: Ctx, dir: string): Promise<string[]> {
@@ -144,14 +299,14 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
   // No checks is a legitimate, common outcome (an app whose stories are all "see the data on a page"
   // and whose source states no hard figures). Nothing to prove ⇒ clean, not unavailable.
   if (checks.length === 0) {
-    return { ok: true, checked: 0, offending: [], offendingCount: 0, dataGaps: [], dataGapCount: 0, skipped: 0, unavailable: false, reason: '' };
+    return { ok: true, checked: 0, offending: [], offendingCount: 0, dataGaps: [], dataGapCount: 0, malformed: [], malformedCount: 0, skipped: 0, unavailable: false, reason: '' };
   }
 
   if (typeof ctx.callProjectApi !== 'function') {
     // Fail LOUD, like smoke: an un-run gate reporting ok:true with no findings is indistinguishable
     // from a clean one. `offending` stays empty so `fix` is not pointed at a host wiring bug.
     return {
-      ok: false, checked: 0, offending: [], offendingCount: 0, dataGaps: [], dataGapCount: 0, skipped: 0,
+      ok: false, checked: 0, offending: [], offendingCount: 0, dataGaps: [], dataGapCount: 0, malformed: [], malformedCount: 0, skipped: 0,
       unavailable: true,
       reason:
         'check_acceptance could not run: the code-node ctx has no `callProjectApi`. It is wired via ' +
@@ -194,6 +349,7 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
   const byFile: Record<string, Finding[]> = {};
   const nameOf: Record<string, string> = {};
   const dataGaps: Array<{ check: string; endpoint: string; message: string }> = [];
+  const malformed: Malformed[] = [];
   let skipped = 0;
   const add = (file: string, name: string, f: Finding): void => {
     nameOf[file] = name;
@@ -201,14 +357,30 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     list.push(f);
     byFile[file] = list;
   };
+  const reject = (check: Check, reason: string): void => {
+    malformed.push({
+      check: String(check.id || check.endpoint || 'check'),
+      endpoint: String(check.endpoint ?? ''),
+      kind: String(check.kind ?? ''),
+      reason,
+      message:
+        `acceptance check "${String(check.id || check.endpoint || 'check')}" could not be evaluated: ${reason}. ` +
+        'It was NOT run, so nothing it claimed is proven — re-emit it in the documented shape ' +
+        '(rows-min: min>=1 · field-min: field + min>0 · field-equals: field + equals, optional match/tolerance), ' +
+        'or drop it if no source figure grounds it.',
+    });
+  };
 
   for (const check of checks) {
     const name = String(check.endpoint ?? '').trim();
     const label = String(check.id || name || 'check');
     const kind = String(check.kind ?? '');
-    const min = typeof check.min === 'number' ? check.min : kind === 'rows-min' ? 1 : 0;
-    if (!name || (kind !== 'rows-min' && kind !== 'field-min')) {
-      skipped++;
+    const min = typeof check.min === 'number' ? check.min : 1;
+    // THE SEAM. A check the contract does not admit is reported, never skipped: a silently-dropped
+    // check reads to every downstream node as a story that was verified.
+    const bad = contractError(check);
+    if (bad) {
+      reject(check, bad);
       continue;
     }
     const ref = endpoints.get(name);
@@ -233,18 +405,42 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
       continue;
     }
 
-    // Evaluate.
+    // Evaluate. `value` is the number actually read (NaN when there was none) — the fault
+    // discriminator below reads it, so it must survive out of this block.
     let passed: boolean;
     let observed: string;
+    let expected: string;
+    let value = NaN;
     if (kind === 'rows-min') {
       passed = items.length >= min;
       observed = `${items.length} row(s)`;
+      expected = `>= ${min} rows`;
     } else {
-      const first = (items[0] ?? {}) as Record<string, unknown>;
-      const raw = first[String(check.field ?? '')];
-      const v = typeof raw === 'number' ? raw : Number(raw);
-      passed = Number.isFinite(v) && v >= min;
-      observed = `${String(check.field)}=${Number.isFinite(v) ? v : JSON.stringify(raw)}`;
+      const field = String(check.field ?? '');
+      const picked = pickRow(items, check.match);
+      const where = check.match ? ` (row where ${String(check.match.field)}=${JSON.stringify(check.match.value)})` : '';
+      const tol = isNum(check.tolerance) ? (check.tolerance as number) : DEFAULT_TOLERANCE;
+      expected = kind === 'field-equals' ? `${field} == ${check.equals} (±${tol})${where}` : `${field} >= ${min}${where}`;
+      if ('malformed' in picked) {
+        reject(check, picked.malformed);
+        continue;
+      }
+      if ('fail' in picked) {
+        passed = false;
+        observed = picked.fail;
+      } else {
+        const raw = picked.row[field];
+        value = typeof raw === 'number' ? raw : Number(raw);
+        const present = Object.prototype.hasOwnProperty.call(picked.row, field);
+        passed = Number.isFinite(value)
+          ? kind === 'field-equals'
+            ? Math.abs(value - (check.equals as number)) <= tol
+            : value >= min
+          : false;
+        observed = present
+          ? `${field}=${Number.isFinite(value) ? value : JSON.stringify(raw)}`
+          : `${field} is ABSENT from the returned row (keys: ${Object.keys(picked.row).join(', ') || 'none'})`;
+      }
     }
     if (passed) continue;
 
@@ -253,29 +449,49 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     // field-min needs >= 1 (some data the aggregate should have reflected).
     const rows = await backingRows(ref);
     const need = kind === 'rows-min' ? min : 1;
-    const isCodeFault = rows !== null && rows >= need;
+    // An EXACT-arithmetic miss that came back as a real non-zero number is NEVER a data gap: the
+    // endpoint had enough data to produce a figure and produced the wrong one, so a TERM of the
+    // brief's arithmetic was dropped. Route it to the handler whatever the row counter can see —
+    // this is the £70.49-instead-of-£182.99 case, and letting it fall into `dataGaps` would report
+    // "the source was under-mined" about data that is sitting right there.
+    const wrongNotEmpty = kind === 'field-equals' && Number.isFinite(value) && value !== 0;
+    const isCodeFault = wrongNotEmpty || (rows !== null && rows >= need);
 
     const detail =
-      `acceptance check "${label}" FAILED: expected ${kind === 'rows-min' ? `>= ${min} rows` : `${check.field} >= ${min}`} ` +
+      `acceptance check "${label}" FAILED: expected ${expected} ` +
       `but got ${observed}. ${check.why ? `Source basis: ${check.why}.` : ''}`;
 
     if (isCodeFault && ref) {
+      const dataNote =
+        rows !== null
+          ? `The backing table(s) hold ${rows} row(s), so the DATA is there`
+          : `The endpoint answered with real data`;
+      const repair =
+        kind === 'field-equals'
+          ? `— the handler computed the WRONG FIGURE. The expected value is what the brief's own stated ` +
+            `arithmetic works out to over the seeded rows, so a TERM of it is missing (a rate never ` +
+            `applied, a joined table never summed, a component silently dropped). Recompute EVERY term ` +
+            `the source states and return the whole figure.`
+          : `— the handler reads the wrong table/column or filters on a value the rows never use. Query ` +
+            `the data that actually backs this and return it.`;
       add(ref.path, name, {
         phase: 'acceptance',
         probe: label,
-        message:
-          `${detail} The backing table(s) hold ${rows} row(s), so the DATA is there — the handler ` +
-          `reads the wrong table/column or filters on a value the rows never use. Query the data that ` +
-          `actually backs this and return it.`,
+        message: `${detail} ${dataNote} ${repair}`,
       });
     } else {
       dataGaps.push({
         check: label,
         endpoint: name,
-        message:
-          `${detail} The backing data itself is short (${rows === null ? 'row count unknown' : `${rows} row(s)`}), ` +
-          `so this is an EXTRACTION gap — the source was under-mined upstream, not a handler bug. Report it; ` +
-          `do not send it to the per-file fixer.`,
+        message: isCodeFault
+          ? // A wrong figure with nowhere to send it: the runtime answered but no `api/` module
+            // exports this name, so the per-file fixer has no file. Still reported LOUDLY.
+            `${detail} The endpoint answered with real data, so this is a computation fault — but no api/ ` +
+            `module exports the name "${name}", so it could not be routed to a file. Find the handler ` +
+            `serving "${name}" and recompute every term the source states.`
+          : `${detail} The backing data itself is short (${rows === null ? 'row count unknown' : `${rows} row(s)`}), ` +
+            `so this is an EXTRACTION gap — the source was under-mined upstream, not a handler bug. Report it; ` +
+            `do not send it to the per-file fixer.`,
       });
     }
   }
@@ -287,13 +503,17 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     errors: byFile[path],
   }));
 
+  // `ok` is COMPUTED, never claimed: a malformed check counts against it exactly like a code fault.
+  // A gate that ran half its checks and reports clean is the failure this node exists to prevent.
   return {
-    ok: offending.length === 0,
+    ok: offending.length === 0 && malformed.length === 0,
     checked: checks.length,
     offending,
     offendingCount: offending.length,
     dataGaps,
     dataGapCount: dataGaps.length,
+    malformed,
+    malformedCount: malformed.length,
     skipped,
     unavailable: false,
     reason: '',

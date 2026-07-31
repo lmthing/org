@@ -54,8 +54,13 @@ file, not the page.
   exist (check `plan_tables`). `envelope` → a read endpoint must resolve `{ items: [...] }`.
   `undefined` param → validate the param and return an error instead of matching everything.
 - **`phase: 'acceptance'` — the endpoint answered a valid shape with WRONG numbers** over seeded data.
-  Never a page fix and never a seeding fix: the handler reads the wrong table/column or filters on a
-  value the rows never use. Re-point the query at the column that actually holds the numbers.
+  Never a page fix and never a seeding fix. Two sub-cases, and the message says which. A row count or
+  a floor that came back short: the handler reads the wrong table/column or filters on a value the rows
+  never use — re-point the query at the column that actually holds the numbers. An `expected X == <n>`
+  miss: the brief DEFINES that figure arithmetically and the handler dropped a TERM of it (a rate never
+  applied, a joined table never summed). The `Source basis:` in the message spells the arithmetic out —
+  compute every term of it, in this handler, and return the whole figure. Do not adjust the number to
+  match; compute it.
 - **`phase: 'gate'` naming a TABLE that does not exist in `database/`** → decide which side is wrong
   against `plan_tables.tables` and `listProjectDir('database').entries`: re-point the query at the
   real (drifted-spelling) name, or, if nothing holds this record, create the table with

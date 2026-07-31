@@ -681,6 +681,17 @@ describe('shipped system spaces load + validate', () => {
     expect(live['plan_acceptance']!.forEach).toBeUndefined();
     expect(live['check_acceptance']!.kind).toBe('code');
     expect(live['check_acceptance']!.dependsOn).toEqual(['plan_acceptance', 'implement_endpoints', 'implement_tables']);
+    // A check the gate cannot EVALUATE is a planner fault, and the planner is the only node that can
+    // repair it — so it resumes `plan_acceptance` carrying the reasons, scoped by `when` to the
+    // malformed case ONLY (a genuine failed check is a CODE fault and belongs to verify → fix). The
+    // resume is cheap by construction: nothing else depends on `plan_acceptance`, so `resumeSet` here
+    // is exactly {plan_acceptance, check_acceptance} and no written artifact is redone.
+    expect(live['check_acceptance']!.onFail).toEqual({
+      goto: 'plan_acceptance',
+      when: 'check_acceptance.malformedCount > 0',
+      carry: 'malformed',
+      maxAttempts: 1,
+    });
     // GATE-AND-RETRY: after every artifact is written, `verify` — a HOST-RUN code node — merges the
     // real build (buildProjectApp = typecheck → esbuild over the generated wrappers) with the two
     // app-wide view gates (`validateAppViews`, `renderSmokeViews`) and the endpoint probes. It routes

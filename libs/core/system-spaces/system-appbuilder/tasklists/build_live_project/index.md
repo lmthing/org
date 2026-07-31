@@ -63,7 +63,12 @@ is to read the menu and edit one field.
 
 Beyond SHAPE, two gates prove the app is RIGHT. `plan_acceptance` + `check_acceptance` (host-run) call
 each endpoint against the seeded data and evaluate source-grounded checks, catching a handler that
-answers a valid shape with meaningless numbers. Then `verify` (host-run) merges THREE ground truths:
+answers a valid shape with meaningless numbers. Every arithmetic rule the brief STATES becomes a check
+carrying its WORKED-OUT expected value ("labour is £45/hour, a total is labour plus parts" + a 2.5-hour
+job with £70.49 of parts ⇒ that job's total is 182.99), because a dropped term is the one defect every
+static gate passes: right shape, right type, confident wrong number. A miss routes to the ENDPOINT that
+computed it, and a check the gate cannot EVALUATE is reported and resumes the planner rather than
+silently reading as covered. Then `verify` (host-run) merges THREE ground truths:
 the real `buildProjectApp` typecheck+bundle over the generated wrappers, `validateAppViews` (the
 app-wide checks a per-page save cannot make — an orphan route, a dangling nav target, a dead
 component, a page with no data-bound section), and `renderSmokeViews`, which MOUNTS every view against

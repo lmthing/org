@@ -40,7 +40,10 @@ so a `false` on either is a FAILURE to report, never a pass. `verify.unavailable
 flowed through `verify.offending` → `fix`; its `dataGaps` are a DIFFERENT class the fixer cannot touch
 — a check that failed because the backing data was short (the source was under-mined upstream). Each
 is a real shortfall between what the source promised and what the app can show, so add it to
-`missing`. An EMPTY `dataGaps` list is the healthy norm.
+`missing`. Its `malformed` list is a THIRD class: a check the gate could not evaluate at all, so what
+that check claimed is UNPROVEN — not proven false, but not proven either, which reads as covered and is
+worse than no check. The planner already got one resume to repair the shape; anything still here is
+unproven at ship time, so it goes in `missing` too. Both lists EMPTY is the healthy norm.
 
 **Carry the vocabulary gaps forward, do not bury them.** `plan_views` (in scope) may carry a
 `cannotExpress` entry on a page — a surface the eight section kinds genuinely cannot express, named
@@ -75,11 +78,13 @@ const diskPages = (listProjectDir('pages').entries || [])
   .filter((e: string) => e.endsWith('.view.json') && !e.startsWith('_'))
   .map((e: string) => e.replace(/\.view\.json$/, ''));
 const gaps = (Array.isArray(check_acceptance?.dataGaps) ? check_acceptance.dataGaps : []) as unknown[];
+const unproven = (Array.isArray(check_acceptance?.malformed) ? check_acceptance.malformed : []) as unknown[];
 const missing = [
   ...pageResults.filter((x: { ok: boolean }) => !x.ok).map((x: { route: string; error: string }) => ({ kind: 'page', route: x.route, error: x.error })),
   ...(Array.isArray(implement_tables) ? implement_tables : []).filter((x: { ok: boolean }) => !x.ok).map((x: { name: string; error?: string }) => ({ kind: 'table', name: x.name, error: x.error || 'planned table failed to write' })),
   ...automationResults.filter((x: { ok: boolean }) => !x.ok).map((x: { slug: string }) => ({ kind: 'automation', slug: x.slug, error: 'planned automation failed to write' })),
   ...gaps.map((g) => ({ kind: 'data', detail: g })),
+  ...unproven.map((m) => ({ kind: 'unproven', detail: m })),
 ];
 // Surfaces the vocabulary genuinely could not express — honest, and the user must hear them.
 const cannotExpress = (Array.isArray(plan_views) ? plan_views : [])
