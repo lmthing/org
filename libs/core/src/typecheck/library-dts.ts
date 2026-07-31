@@ -48,6 +48,15 @@ export const REGISTER_SPACE_DTS = `declare function registerSpace(dir: string): 
  * whose injection is gated belongs in its own fragment, gated the same way.
  */
 export const COMMON_DTS = `
+// console IS injected in every VM (host substrate). Declared here because the
+// checker runs with types:[] — nothing may lean on an ambient @types/node.
+declare const console: {
+  log(...args: unknown[]): void;
+  error(...args: unknown[]): void;
+  warn(...args: unknown[]): void;
+  info(...args: unknown[]): void;
+  debug(...args: unknown[]): void;
+};
 declare function display(descriptor: unknown): void;
 /** Set the live "currently doing" status shown in the UI while you work. Fire-and-forget — does NOT end the turn, so call it inline as you progress. Pass '' to clear. */
 declare function setActivity(text: string): void;

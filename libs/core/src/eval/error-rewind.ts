@@ -1,4 +1,9 @@
-import { extractScopeNamesFromContext } from '../context/variables.js';
+import { extractScopeNamesFromContext, boundAlreadyExecuted } from '../context/variables.js';
+
+// boundAlreadyExecuted moved to context/variables.js (the VARIABLES hot path
+// needs it too, and this module already imports from there). Re-exported so
+// existing importers/tests keep working.
+export { boundAlreadyExecuted };
 
 /**
  * Every statement in a session shares ONE persistent scope, so a name bound many turns
@@ -38,13 +43,23 @@ export function sandboxApiHint(message: string): string {
   ) {
     return 'HINT: Node/Bun/Deno modules are NOT available, and there is no generic shell here. Running code/subprocesses is only possible inside the engineer\'s scratch sandbox (`execShell` there, after `createScratch()`). If you are not the engineer, delegate the code to it and persist what it returns with your typed writer.';
   }
-  // HTTP — point at the fetch global.
+  // HTTP — raw fetch is deliberately absent from every model DTS (see
+  // NET_FETCH_DTS in typecheck/library-dts.ts); pointing the model back at it
+  // was a guaranteed identical-retry loop. Point at the granted research path.
   if (/cannot find name 'fetch'|cannot find name "fetch"|\baxios\b|node-fetch|\bgot\b\b/.test(m)) {
-    return 'HINT: Use the host global `await fetch(url, opts?)` → `Promise<{ ok, status, text(), json() }>`. Do not import http libraries.';
+    return 'HINT: raw `fetch` is NOT available to you. For the web use your granted research functions — `await webSearch(query)` / `await webFetch(url)` — and if you have neither, you are not meant to reach the network from this context. Do not import http libraries or retry `fetch`.';
   }
-  // File system — point at readFileRaw/writeFileRaw / fs space functions.
+  // File system — there is NO generic fs on the model surface (readFile/
+  // readFileRaw/writeFileRaw are internal host primitives absent from every
+  // agent DTS; only the engineer holds scratch fs). Prescribing them here was
+  // a guaranteed identical-retry loop — point at the typed read/write surface.
   if (/node:fs|'fs'|"fs"|readfilesync|writefilesync|\bfs\.|mkdirsync/.test(m)) {
-    return 'HINT: Node `fs` is NOT available. Use `readFile(path)` / `writeFile(path, content)` / `editFile(...)` (space functions), or the host globals `readFileRaw(path)` / `writeFileRaw(path, content)`. Relative paths resolve against the space dir.';
+    return 'HINT: there is NO filesystem here. Read with `listProjectDir`/`readProjectFile` (project) or `listSpaceDir`/`readSpaceFile` (space); persist ONLY through your typed writers (`writeProject*`, builder functions). Only the engineer has a scratch fs (after `createScratch()`). Do not retry fs calls this context does not declare.';
+  }
+  // TS2591 — with `types: []` the checker suggests installing @types/node for
+  // any node-ish global; "npm i @types/node" is actively harmful advice here.
+  if (/install type definitions for node|@types\/node/.test(m)) {
+    return 'HINT: this is NOT a missing-types problem — Node builtins do not exist in this sandbox and installing @types/node is impossible here. Use the injected globals your context declares instead.';
   }
   // Text encoding helpers.
   if (/textdecoder|textencoder|\bbuffer\b/.test(m)) {
@@ -55,41 +70,6 @@ export function sandboxApiHint(message: string): string {
     return 'HINT: `process` is a minimal read-only env shim — only `process.env` is available (incl. LMTHING_SPACE_DIR). There is no process.cwd(); relative file paths already resolve against the space dir.';
   }
   return '';
-}
-
-/** Rolling window (chars) for the ALREADY-EXECUTED echo in {@link buildErrorBlock}. The
- *  full accumulated context is re-embedded on EVERY retry so the model can see what ran;
- *  on a long turn that is thousands of statements re-sent each attempt — a quadratic driver
- *  of the runaway-turn history blow-up ("Invalid string length"). The model only needs the
- *  RECENT tail to "continue from there"; the complete set of live bindings is already
- *  advertised on the "Still in scope" line (derived from the FULL context), and typecheck
- *  still runs against the full accumulatedContext host-side (turn-loop.ts) — so bounding
- *  this echo is purely a prompt-size cap with ZERO typecheck-correctness cost. */
-const ALREADY_EXECUTED_WINDOW_CHARS = 8_000;
-
-/**
- * Bound the re-embedded ALREADY-EXECUTED context to the last {@link ALREADY_EXECUTED_WINDOW_CHARS}
- * characters, cut on a statement (newline) boundary, prefixed with an "N earlier statements
- * omitted" marker. The omitted statements are NOT lost to the model: their bound names are
- * listed on the "Still in scope" line above (computed from the full context), and the VM +
- * host typecheck context still hold them. Always keeps at least the final statement even if
- * it alone exceeds the window. Exported for direct testing.
- */
-export function boundAlreadyExecuted(scopeContext: string, windowChars = ALREADY_EXECUTED_WINDOW_CHARS): string {
-  if (scopeContext.length <= windowChars) return scopeContext;
-  const stmts = scopeContext.split('\n');
-  const kept: string[] = [];
-  let total = 0;
-  for (let i = stmts.length - 1; i >= 0; i--) {
-    const cost = stmts[i]!.length + 1; // + the joining newline
-    if (kept.length > 0 && total + cost > windowChars) break;
-    kept.unshift(stmts[i]!);
-    total += cost;
-  }
-  const omitted = stmts.length - kept.length;
-  if (omitted <= 0) return kept.join('\n');
-  const marker = `// … ${omitted} earlier statement${omitted === 1 ? '' : 's'} omitted (still in scope — see the names listed above) …`;
-  return marker + '\n' + kept.join('\n');
 }
 
 /**

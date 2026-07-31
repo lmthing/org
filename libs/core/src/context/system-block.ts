@@ -352,7 +352,7 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
   // 5. Direct dependency agents — metadata + description + ONLY the allowed
   // actions (allowedActions undefined ⇒ all actions are allowed).
   if (directDeps.length > 0) {
-    const depParts = directDeps.map(({ agent: depAgent, target, allowedActions }) => {
+    const depParts = directDeps.map(({ space: depSpace, agent: depAgent, target, allowedActions }) => {
       const slash = target.lastIndexOf('/');
       const pkgName = slash >= 0 ? target.slice(0, slash) : target;
       const agentName = slash >= 0 ? target.slice(slash + 1) : target;
@@ -367,7 +367,15 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
         ? `delegate("${pkgName}", "${agentName}", "${visibleActions[0].id}", { query, context })`
         : `delegate("${pkgName}", "${agentName}", actionId)`;
       const refForm = slash >= 0 ? target : agentName;
-      return `## \`${refForm}\` — ${depAgent.title}${restrictionNote}\n${depAgent.instructBody ? `${depAgent.instructBody}\n\n` : ''}${actionLines}\n\n  Example: \`${callExample}\``;
+      // A self-dep (an agent delegating to its own actions, e.g. THING's
+      // `thing#organize_material`) must NOT re-embed the instruct body this
+      // prompt already carries in # Agent Instructions — that doubled THING's
+      // system block. Non-self deps get the ≤1KB charter, not the full
+      // instruct: the delegate boundary loads the target's own instruct at
+      // call time, so the caller's prompt only needs identity + actions.
+      const isSelf = depSpace.dir === space.dir && depAgent === agent;
+      const depBody = isSelf ? '' : (depAgent.charterBody ?? '');
+      return `## \`${refForm}\` — ${depAgent.title}${restrictionNote}\n${depBody ? `${depBody}\n\n` : ''}${actionLines}\n\n  Example: \`${callExample}\``;
     });
     sections.push(`# Delegatable Agents\n\n${depParts.join('\n\n')}`);
   }

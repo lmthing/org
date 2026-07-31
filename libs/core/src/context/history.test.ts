@@ -50,3 +50,28 @@ describe('MessageHistory.summarize (size-triggered compaction contract)', () => 
     expect(h.messages[0]!.content).toBe('only'); // untouched — no summary head inserted
   });
 });
+
+describe('getPromptMessages — single ALREADY-EXECUTED echo (dedupe at prompt-build time)', () => {
+  it('renders the echo on ONLY the latest variables block; stored messages stay untouched', () => {
+    // Each snapshot supersedes the previous one — re-sending every copy each
+    // request made history quadratic in program size.
+    const h = new MessageHistory();
+    h.append({ role: 'user', content: 'VARIABLES\na: 1', blockType: 'variables', alreadyExecuted: 'const a = 1;' });
+    h.append({ role: 'assistant', content: 'const b = 2;', blockType: 'normal' });
+    h.append({ role: 'user', content: 'VARIABLES\nb: 2', blockType: 'variables', alreadyExecuted: 'const a = 1;\nconst b = 2;' });
+
+    const msgs = h.getPromptMessages();
+    expect(msgs[0]!.content).not.toContain('ALREADY EXECUTED'); // superseded — echo gone
+    expect(msgs[2]!.content).toContain('ALREADY EXECUTED');
+    expect(msgs[2]!.content).toContain('const b = 2;');
+    // Prompt-build-time only: stored history (and thus snapshots) unchanged.
+    expect(h.messages[0]!.content).not.toContain('ALREADY EXECUTED');
+    expect(h.messages[2]!.content).not.toContain('ALREADY EXECUTED');
+  });
+
+  it('a variables block without a snapshot renders as-is', () => {
+    const h = new MessageHistory();
+    h.append({ role: 'user', content: 'VARIABLES\nx: 1', blockType: 'variables' });
+    expect(h.getPromptMessages()[0]!.content).toBe('VARIABLES\nx: 1');
+  });
+});

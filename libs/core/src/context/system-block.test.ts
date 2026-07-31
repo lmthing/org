@@ -77,3 +77,50 @@ describe('buildSystemBlock — Available Functions section', () => {
     expect(block).not.toContain('# Available Functions');
   });
 });
+
+describe('buildSystemBlock — Delegatable Agents bodies', () => {
+  it('never re-embeds a self-dep instruct body (it is already in # Agent Instructions)', () => {
+    // Regression: THING's canDelegateTo includes its own `thing#organize_material`,
+    // and the dep renderer embedded depAgent.instructBody verbatim — duplicating the
+    // entire 38KB instruct inside its own prompt (~39% of THING's system block).
+    const space = makeSpace({});
+    const agent: AgentDef = {
+      ...makeAgent([]),
+      instructBody: 'SELF_INSTRUCT_TOKEN — the one true body.',
+      actions: [{ id: 'organize', label: 'Organize', description: 'Organize material', tasklist: 'organize' }],
+    };
+    space.agents['main'] = agent;
+    const block = buildSystemBlock({
+      space,
+      agent,
+      directDeps: [{ space, agent, target: 'main', allowedActions: ['organize'] }],
+    });
+    // Exactly once: the # Agent Instructions copy. The dep entry keeps only
+    // identity + actions.
+    expect(block.split('SELF_INSTRUCT_TOKEN').length - 1).toBe(1);
+    expect(block).toContain('# Delegatable Agents');
+    expect(block).toContain('`organize`');
+  });
+
+  it('renders a non-self dep with its charter, never its full instruct body', () => {
+    const space = makeSpace({});
+    const agent = makeAgent([]);
+    const depSpace: Space = { ...makeSpace({}), dir: '/tmp/other' };
+    const depAgent: AgentDef = {
+      ...makeAgent([]),
+      slug: 'helper',
+      title: 'Helper',
+      instructBody: 'DEP_INSTRUCT_TOKEN — full operating manual.',
+      charterBody: 'DEP_CHARTER_TOKEN — who I am in one line.',
+      actions: [{ id: 'help', label: 'Help', description: 'Help out', tasklist: 'help' }],
+    };
+    depSpace.agents['helper'] = depAgent;
+    const block = buildSystemBlock({
+      space,
+      agent,
+      directDeps: [{ space: depSpace, agent: depAgent, target: 'other/helper' }],
+    });
+    expect(block).toContain('DEP_CHARTER_TOKEN');
+    expect(block).not.toContain('DEP_INSTRUCT_TOKEN');
+  });
+});

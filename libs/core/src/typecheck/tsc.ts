@@ -63,6 +63,12 @@ export function runTsc(opts: TscOpts): TscResult {
     skipLibCheck: true,
     noEmit: true,
     lib: ['lib.es2022.d.ts'],
+    // NEVER auto-include node_modules/@types/*. Without this, any dev checkout
+    // with @types/node installed silently re-declares fetch/setTimeout/Buffer/
+    // require on the model surface — voiding the deliberate DTS absences that
+    // gate those calls (the whole "not granted ⇒ absent from the DTS" model)
+    // and making the gate behave differently on a pod vs. a dev tree.
+    types: [],
   };
 
   const host = createInMemoryHost(fileMap, compilerOptions);

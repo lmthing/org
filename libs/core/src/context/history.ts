@@ -1,4 +1,5 @@
 import type { MediaPart } from '../eval/stream-types.js';
+import { formatAlreadyExecuted } from './variables.js';
 
 export type MessageRole = 'user' | 'assistant';
 
@@ -8,6 +9,12 @@ export interface Message {
   /** Multimodal attachments (images/files) carried by this user message. */
   attachments?: MediaPart[];
   blockType?: 'normal' | 'variables' | 'error' | 'system';
+  /** Raw accumulated-context snapshot for a 'variables' block. NOT part of
+   *  `content`: the prompt builder renders it (bounded) onto the LATEST
+   *  variables block only — every earlier block's echo is superseded by the
+   *  next one, so re-sending each copy every request made history quadratic
+   *  in program size. Stored raw so the newest snapshot always wins. */
+  alreadyExecuted?: string;
 }
 
 export class MessageHistory {
@@ -18,9 +25,22 @@ export class MessageHistory {
   }
 
   getPromptMessages(): Array<{ role: MessageRole; content: string; attachments?: MediaPart[] }> {
-    return this.messages.map((m) => ({
+    // Only the LAST variables block carrying a context snapshot renders its
+    // ALREADY-EXECUTED echo (bounded); earlier snapshots are dead weight.
+    let lastEchoIdx = -1;
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const m = this.messages[i]!;
+      if (m.blockType === 'variables' && m.alreadyExecuted) {
+        lastEchoIdx = i;
+        break;
+      }
+    }
+    return this.messages.map((m, i) => ({
       role: m.role,
-      content: m.content,
+      content:
+        i === lastEchoIdx && m.alreadyExecuted
+          ? `${m.content}\n\n${formatAlreadyExecuted(m.alreadyExecuted)}`
+          : m.content,
       ...(m.attachments && m.attachments.length ? { attachments: m.attachments } : {}),
     }));
   }

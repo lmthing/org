@@ -107,3 +107,26 @@ describe('emitVariables', () => {
     expect(result).toContain('VARIABLES');
   });
 });
+
+describe('emitVariables — ALREADY-EXECUTED bounding & omission (small-model context cap)', () => {
+  const bigContext = Array.from({ length: 600 }, (_, i) => `const v${i} = ${i};`).join('\n'); // ~9.6KB > 8k window
+
+  it('bounds a huge echo on the SUCCESS path exactly like the error path', () => {
+    // Regression: the error path capped this echo long ago; the far more frequent
+    // yield-resume path never did — the quadratic driver of runaway-turn history.
+    const out = emitVariables({ x: 1 }, bigContext);
+    expect(out).toMatch(/earlier statements omitted/);
+    expect(out).toContain('const v599 = 599;'); // recent tail kept verbatim
+    expect(out).not.toContain('const v0 = 0;'); // early statement dropped from the echo
+    // SCOPE line (from the FULL context) still advertises every binding.
+    const scopeLine = out.split('\n').find((l) => l.startsWith('SCOPE')) ?? '';
+    expect(scopeLine).toContain('v0');
+    expect(scopeLine).toContain('v599');
+  });
+
+  it('omitExecuted leaves the echo out entirely but keeps the SCOPE line', () => {
+    const out = emitVariables({ x: 1 }, bigContext, { omitExecuted: true });
+    expect(out).not.toContain('ALREADY EXECUTED');
+    expect(out).toContain('SCOPE');
+  });
+});

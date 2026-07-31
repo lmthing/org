@@ -49,9 +49,30 @@ describe('sandboxApiHint', () => {
     expect(sandboxApiHint('execSync is not defined')).toContain('execShell');
   });
 
-  it('redirects fs attempts to the file primitives', () => {
-    expect(sandboxApiHint("Cannot find module 'fs'")).toMatch(/readFile|writeFileRaw/);
-    expect(sandboxApiHint('readFileSync is not a function')).toMatch(/readFile|writeFileRaw/);
+  it('redirects fs attempts to the typed read/write surface — NEVER to the internal raw primitives', () => {
+    // Regression: the old hint prescribed readFile/readFileRaw/writeFileRaw, which are
+    // absent from every agent DTS — following it reproduced the identical typecheck
+    // error and burned the whole retry budget.
+    const hint = sandboxApiHint("Cannot find module 'fs'");
+    expect(hint).toMatch(/readProjectFile|readSpaceFile/);
+    expect(hint).not.toContain('readFileRaw');
+    expect(hint).not.toContain('writeFileRaw');
+    expect(sandboxApiHint('readFileSync is not a function')).toMatch(/readProjectFile|readSpaceFile/);
+  });
+
+  it('redirects fetch/http attempts to the granted research functions — NEVER back to raw fetch', () => {
+    // Regression: the old hint said "use the host global fetch" — but fetch is
+    // deliberately absent from every model DTS (NET_FETCH_DTS), so the hint was a
+    // guaranteed identical-retry loop.
+    const hint = sandboxApiHint("Cannot find name 'fetch'.");
+    expect(hint).toMatch(/webSearch|webFetch/);
+    expect(hint).not.toMatch(/use.*`await fetch/i);
+  });
+
+  it('rewrites the @types/node install suggestion (reachable now that tsc runs with types:[])', () => {
+    const hint = sandboxApiHint("Cannot find name 'setImmediate'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.");
+    expect(hint).toContain('sandbox');
+    expect(hint).not.toBe('');
   });
 
   it('redirects TextDecoder/Buffer use', () => {

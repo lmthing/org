@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { runTsc } from './tsc.js';
-import { LIBRARY_DTS } from './library-dts.js';
+import { LIBRARY_DTS, COMMON_DTS } from './library-dts.js';
 
 describe('runTsc', () => {
   it('passes valid TypeScript', () => {
@@ -142,5 +142,27 @@ describe('runTsc', () => {
       expect(result.ok).toBe(false);
       expect(result.diagnostics[0]!.line).toBe(1); // 2nd line OF THE STATEMENT, not of the file
     });
+  });
+});
+
+describe('runTsc — types:[] keeps @types/node off the model surface', () => {
+  // Regression: without `types: []`, a dev checkout with node_modules/@types/node
+  // silently re-declared fetch/setTimeout/Buffer/require on the model surface,
+  // voiding the deliberate DTS absences (and the fetch secrets gate). COMMON_DTS
+  // is the model-surface base — NET_FETCH_DTS is internal-only by design.
+
+  it.each([
+    'const r = fetch("https://x.test");',
+    'setTimeout(() => {}, 10);',
+    'const b = Buffer.from("x");',
+    'const cp = require("child_process");',
+  ])('fails %s even when @types/node is installed in the tree', (stmt) => {
+    const result = runTsc({ ambientDts: COMMON_DTS, sessionContext: '', statement: stmt });
+    expect(result.ok).toBe(false);
+  });
+
+  it('console still typechecks — injected in every VM, now declared in COMMON_DTS', () => {
+    const result = runTsc({ ambientDts: COMMON_DTS, sessionContext: '', statement: 'console.log("hi", 42);' });
+    expect(result.ok).toBe(true);
   });
 });
