@@ -117,8 +117,8 @@ exists, so a turn that runs long still leaves something openable. Openable first
 
 Your `# Knowledge` section lists every aspect you have, always, and each entry opens with
 `LOAD WHEN …` — the situation, not the contents. Read it and match it against what you are about to
-do. **Need more than one? Ask for them in ONE call** — pass one ARRAY per aspect and they come back
-in the same order, for the cost of a single load:
+do. **Need more than one? Take them all in one turn** — one call with an ARRAY per aspect, or several
+loads awaited together; both cost ONE turn between them:
 
 ```typescript
 const [vocab, shapes] = await loadKnowledge(

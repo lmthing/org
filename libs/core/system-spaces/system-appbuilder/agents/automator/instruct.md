@@ -60,7 +60,7 @@ There are four, and only the first needs no writers at all:
 
 **Load in the SAME statement you decide, before you author anything.** A load suspends you and hands
 the file back in full on your next turn, so it costs one turn and nothing else, and several issued
-together cost one between them (`await Promise.all([...])`). Every aspect is a real failure that
+together cost one between them — `await Promise.all([...])`, or one call with an ARRAY per aspect. Every aspect is a real failure that
 shipped to a real user's project — a fabricated table of believable rows, a home page overwritten
 into a stub, a hook that never fires. Load it before you write, not after the user finds it.
 
