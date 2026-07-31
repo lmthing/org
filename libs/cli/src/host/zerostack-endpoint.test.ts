@@ -179,11 +179,38 @@ describe('the loopback zerostack endpoint', () => {
     expect(String(status['error'])).toMatch(/no OpenAI-compatible endpoint/);
   });
 
-  it('writes the primer zerostack reads, on EVERY boot', async () => {
-    // Rewritten each boot because a pod volume outlives the image: a primer from an older runtime
-    // would otherwise persist unnoticed across an upgrade.
+  /**
+   * The data root is the person's OWN directory — their projects sit in it and they look at it.
+   * Most pods never call zerostack, and a feature nobody used has no business dropping two files
+   * at the top of it on every boot.
+   */
+  it('touches NOTHING in the data directory until the first turn', async () => {
+    process.env['LMTHING_ZEROSTACK_BIN'] = fakeZerostack(dataDir, RECORDER);
+    process.env['ZS_ARGV_LOG'] = join(dataDir, 'argv.log');
+    endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:m' });
+
+    expect(existsSync(join(dataDir, 'AGENTS.md')), 'AGENTS.md at boot').toBe(false);
+    expect(existsSync(join(dataDir, 'ARCHITECTURE.md')), 'ARCHITECTURE.md at boot').toBe(false);
+    expect(existsSync(join(dataDir, '.zerostack')), '.zerostack at boot').toBe(false);
+    // `status` must stay a pure read — asking whether zerostack works cannot be what creates it.
+    await post(endpoint.url, { op: 'status' });
+    expect(existsSync(join(dataDir, 'AGENTS.md')), 'AGENTS.md after status').toBe(false);
+
+    await runOp(endpoint.url, { op: 'ask', message: 'go' });
+    expect(existsSync(join(dataDir, 'AGENTS.md')), 'AGENTS.md after a turn').toBe(true);
+    expect(existsSync(join(dataDir, 'ARCHITECTURE.md')), 'ARCHITECTURE.md after a turn').toBe(true);
+    expect(existsSync(join(dataDir, '.zerostack', 'config', 'config.toml'))).toBe(true);
+  });
+
+  it('rewrites the primers on the first turn after a boot, never trusting a stale one', async () => {
+    // A pod volume outlives the image, so "write only if absent" would let a primer from an older
+    // runtime survive an upgrade — describing formats that have since changed.
+    process.env['LMTHING_ZEROSTACK_BIN'] = fakeZerostack(dataDir, RECORDER);
+    process.env['ZS_ARGV_LOG'] = join(dataDir, 'argv.log');
     writeFileSync(join(dataDir, 'AGENTS.md'), 'stale from an older image', 'utf8');
     endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:m' });
+    await runOp(endpoint.url, { op: 'ask', message: 'go' });
+
     const md = readFileSync(join(dataDir, 'AGENTS.md'), 'utf8');
     expect(md).not.toMatch(/stale from an older image/);
     // The two rules a fix silently reverts without: generated files, and the re-materialized tree.
@@ -198,7 +225,10 @@ describe('the loopback zerostack endpoint', () => {
    * `-p`. Nothing can answer it here, so the file has to exist before the first turn.
    */
   it('writes ARCHITECTURE.md too, so zerostack never asks to create one', async () => {
+    process.env['LMTHING_ZEROSTACK_BIN'] = fakeZerostack(dataDir, RECORDER);
+    process.env['ZS_ARGV_LOG'] = join(dataDir, 'argv.log');
     endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:m' });
+    await runOp(endpoint.url, { op: 'ask', message: 'go' });
     const md = readFileSync(join(dataDir, 'ARCHITECTURE.md'), 'utf8');
     expect(md).toMatch(/LMThing data root/);
     expect(md).toMatch(/AGENTS\.md/);
@@ -209,7 +239,10 @@ describe('the loopback zerostack endpoint', () => {
    * badly. Each of these is a rule a competent engineer would otherwise get wrong by default.
    */
   it('teaches ARCHITECTURE.md the facts that are not guessable from the files', async () => {
+    process.env['LMTHING_ZEROSTACK_BIN'] = fakeZerostack(dataDir, RECORDER);
+    process.env['ZS_ARGV_LOG'] = join(dataDir, 'argv.log');
     endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:m' });
+    await runOp(endpoint.url, { op: 'ask', message: 'go' });
     const md = readFileSync(join(dataDir, 'ARCHITECTURE.md'), 'utf8');
     expect(md, 'what LMThing is').toMatch(/compute pod/);
     expect(md, 'api filenames ARE the method').toMatch(/GET\.ts/);
@@ -224,7 +257,10 @@ describe('the loopback zerostack endpoint', () => {
   });
 
   it('writes config.toml under the data dir so sessions survive a scale-to-zero wake', async () => {
+    process.env['LMTHING_ZEROSTACK_BIN'] = fakeZerostack(dataDir, RECORDER);
+    process.env['ZS_ARGV_LOG'] = join(dataDir, 'argv.log');
     endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'lmthingcloud:DeepSeek-V4-Pro' });
+    await runOp(endpoint.url, { op: 'ask', message: 'go' });
     const cfg = readFileSync(join(dataDir, '.zerostack', 'config', 'config.toml'), 'utf8');
     expect(cfg).toContain('model = "DeepSeek-V4-Pro"');
   });

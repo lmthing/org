@@ -268,26 +268,39 @@ export async function startZerostackEndpoint(opts: ZerostackEndpointOpts): Promi
   const zsRoot = join(opts.dataDir, '.zerostack');
   const configDir = join(zsRoot, 'config');
   const sessionsRoot = join(zsRoot, 'agents');
-  mkdirSync(configDir, { recursive: true });
-  mkdirSync(sessionsRoot, { recursive: true });
-
   const mapped = mapProvider(opts.modelSpec);
-  if (mapped.ok) {
-    writeFileSync(
-      join(configDir, 'config.toml'),
-      renderConfigToml({ ...mapped, dataDir: opts.dataDir }),
-      'utf8',
-    );
-  }
 
-  // Rewritten every boot: a pod volume outlives the image, so a primer written by an older
-  // runtime would otherwise persist unnoticed after an upgrade.
-  writeFileSync(join(opts.dataDir, 'AGENTS.md'), ZEROSTACK_AGENTS_MD, 'utf8');
-  // ARCHITECTURE.md must exist too. When it is absent zerostack ASKS — "No ARCHITECTURE.md found …
-  // Create one? [y/N]" — and it asks even under `-p`. Nothing here can answer a prompt: stdin is
-  // `ignore`, so the read EOFs and it moves on, but that is the prompt failing safe rather than
-  // not happening. Providing the file removes the question instead of relying on the recovery.
-  writeFileSync(join(opts.dataDir, 'ARCHITECTURE.md'), ZEROSTACK_ARCHITECTURE_MD, 'utf8');
+  let workspaceReady = false;
+
+  /**
+   * Materialize everything zerostack needs in the data directory — on the FIRST TURN, not at boot.
+   *
+   * The data root is the person's own directory: their projects sit in it, and they see it. Most
+   * pods will never call zerostack at all, and a feature nobody used has no business dropping
+   * `AGENTS.md` and `ARCHITECTURE.md` at the top of it on every single boot. So nothing is written
+   * until the moment it is actually needed.
+   *
+   * Once per PROCESS rather than once per directory, and always overwriting: a pod volume outlives
+   * the image, so "write only if absent" would let a primer authored by an older runtime survive an
+   * upgrade unnoticed — describing formats that have since changed, which is worse than none at
+   * all. First call after a boot rewrites; later calls in the same boot cost nothing.
+   *
+   * `ARCHITECTURE.md` in particular must exist BEFORE the first child starts: when it is absent
+   * zerostack asks "No ARCHITECTURE.md found … Create one? [y/N]", and it asks even under `-p`.
+   * The child gets no stdin so the read EOFs and it continues, but that is the prompt failing safe
+   * rather than not happening.
+   */
+  function ensureWorkspace(): void {
+    if (workspaceReady) return;
+    mkdirSync(configDir, { recursive: true });
+    mkdirSync(sessionsRoot, { recursive: true });
+    if (mapped.ok) {
+      writeFileSync(join(configDir, 'config.toml'), renderConfigToml({ ...mapped, dataDir: opts.dataDir }), 'utf8');
+    }
+    writeFileSync(join(opts.dataDir, 'AGENTS.md'), ZEROSTACK_AGENTS_MD, 'utf8');
+    writeFileSync(join(opts.dataDir, 'ARCHITECTURE.md'), ZEROSTACK_ARCHITECTURE_MD, 'utf8');
+    workspaceReady = true;
+  }
 
   const running = new Map<string, RunningTurn>();
   /** In-flight turn per session — awaited by `wait`, which may be called many times for one turn. */
@@ -456,6 +469,7 @@ export async function startZerostackEndpoint(opts: ZerostackEndpointOpts): Promi
    * inside the sandbox's limit.
    */
   function startTurn(args: Parameters<typeof runTurn>[0]): { sessionId: string; immediate?: ZerostackTurnResult } {
+    ensureWorkspace();
     const id = args.sessionId ?? randomUUID();
     if (pending.has(id)) {
       return { sessionId: id, immediate: { ok: false, sessionId: id, text: '', exitCode: null, timedOut: false, error: `session "${id}" already has a turn in flight — wait for it, or cancel it first` } };
