@@ -96,6 +96,8 @@ export type ViewErrorCode =
   | 'no-data'
   /** A `create` section whose mutation Input derives no form fields — "Nothing to fill in." */
   | 'empty-form'
+  /** A section bound to an Output of the wrong ARITY: rows where it draws a record, or the reverse. */
+  | 'wrong-arity'
   /** A view artifact on disk that did not parse. */
   | 'malformed'
   /** The renderer threw while mounting the spec against live data. */
@@ -506,6 +508,40 @@ export function pageHasNoData(route: string, file: string, kinds: readonly strin
       `timeline or create section bound to an endpoint.`,
     { file },
   );
+}
+
+/**
+ * A section whose kind and whose endpoint's Output disagree about **arity**.
+ *
+ * The renderer has one split and it is not negotiable: `list`/`timeline` read `extractRows`, every
+ * other kind reads `extractRecord` (`libs/ui/src/view/sections/common.tsx`). So a `list` over an
+ * Output with no array in it draws its empty state forever, and a `detail`/`stats` over an array
+ * silently binds element **0** — an arbitrary row where the page wanted an aggregate, and nothing at
+ * all when the list is empty. A real dashboard shipped with its `stats` and `detail` sections
+ * drawing only their headings.
+ *
+ * The menu is the endpoints that DO have the needed shape, which is the whole answer in one line;
+ * the last sentence is the other valid answer, so the model can move the section rather than delete
+ * it.
+ */
+export function wrongArity(
+  path: string,
+  kind: string,
+  endpoint: string,
+  wanted: 'record' | 'rows',
+  candidates: readonly string[],
+): ViewError {
+  const detail =
+    wanted === 'record'
+      ? `a ${kind} section binds ONE record, and "${endpoint}" returns an ARRAY. The section would ` +
+        `bind the array's first element — an arbitrary row where this page wants one record, and ` +
+        `nothing at all when the array is empty. ${menu('Queries returning one record', candidates)}. ` +
+        `If the first row IS what you meant, this is a list section with limit: 1.`
+      : `a ${kind} section draws ROWS, and "${endpoint}" returns a single record — its Output has no ` +
+        `array property, so this section can only ever draw its empty state. ` +
+        `${menu('Queries returning a list', candidates)}. If ${endpoint} is the right endpoint, ` +
+        `then this is a stats or detail section, not a ${kind}.`;
+  return err('wrong-arity', path, at(path, detail), { endpoint });
 }
 
 /**

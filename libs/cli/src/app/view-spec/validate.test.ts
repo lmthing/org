@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import {
   loadViewContracts,
   outputFieldUniverse,
+  outputShapeOf,
   renderSmokeViews,
   toViewContracts,
   validateAppViews,
@@ -239,6 +240,76 @@ describe('validateViewSpec — bindings', () => {
       'sections[1].input.cuisine: "curent" is not a section id on this page. Did you mean current? ' +
         'Section ids: current. Give the target section an `id` — it has none unless you write one.',
     );
+  });
+});
+
+describe('validateViewSpec — arity: a section that could only ever draw nothing', () => {
+  /**
+   * The measured failure: a dashboard shipped with its `stats` and `detail` sections drawing only
+   * their headings. The renderer's split is `list`/`timeline` → rows, everything else → one record,
+   * and the contract already says which the endpoint returns.
+   */
+  const SHAPED: ViewContracts = {
+    endpoints: [
+      { name: 'listJobs', method: 'GET', outputShape: 'array', outputFields: ['id', 'title'] },
+      { name: 'jobPage', method: 'GET', outputShape: 'envelope', outputFields: ['items', 'id', 'title'] },
+      { name: 'jobStats', method: 'GET', outputShape: 'record', outputFields: ['total', 'open'] },
+      { name: 'getJob', method: 'GET', outputShape: 'record', outputFields: ['id', 'title'] },
+      { name: 'looseQuery', method: 'GET' },
+    ],
+    routes: ['index'],
+  };
+  const shaped = (section: unknown) => validateViewSpec({ route: 'index', sections: [section] }, SHAPED);
+
+  it('rejects a stats section bound to a list endpoint, and names the ones that fit', () => {
+    const res = shaped({ kind: 'stats', query: 'listJobs', cards: [{ label: 'Total', value: '$.title' }] });
+    expect(res.errors.map((e) => e.code)).toEqual(['wrong-arity']);
+    expect(res.errors[0].message).toBe(
+      'sections[0].query: a stats section binds ONE record, and "listJobs" returns an ARRAY. The ' +
+        'section would bind the array\'s first element — an arbitrary row where this page wants one ' +
+        'record, and nothing at all when the array is empty. Queries returning one record: getJob, ' +
+        'jobPage, jobStats. If the first row IS what you meant, this is a list section with limit: 1.',
+    );
+    expect(res.errors[0].endpoint).toBe('listJobs');
+  });
+
+  it('rejects a detail section bound to a list endpoint', () => {
+    const res = shaped({ kind: 'detail', query: 'listJobs', fields: [{ label: 'Title', value: '$.title' }] });
+    expect(res.errors.map((e) => e.code)).toEqual(['wrong-arity']);
+    expect(res.errors[0].message.startsWith('sections[0].query: a detail section binds ONE record')).toBe(true);
+  });
+
+  it('rejects a list section bound to a record endpoint, and offers the two kinds that fit', () => {
+    const res = shaped({ kind: 'list', query: 'jobStats' });
+    expect(res.errors.map((e) => e.message)).toEqual([
+      'sections[0].query: a list section draws ROWS, and "jobStats" returns a single record — its ' +
+        'Output has no array property, so this section can only ever draw its empty state. ' +
+        'Queries returning a list: jobPage, listJobs. If jobStats is the right endpoint, then this ' +
+        'is a stats or detail section, not a list.',
+    ]);
+  });
+
+  it('accepts the `{ items: T[] }` envelope on BOTH halves — it is rows and it is a record', () => {
+    expect(shaped({ kind: 'list', query: 'jobPage' }).errors).toEqual([]);
+    expect(shaped({ kind: 'stats', query: 'jobPage', cards: [{ label: 'T', value: '$.title' }] }).errors).toEqual([]);
+  });
+
+  it('accepts every section over an endpoint whose shape could not be read', () => {
+    expect(shaped({ kind: 'list', query: 'looseQuery' }).errors).toEqual([]);
+    expect(shaped({ kind: 'detail', query: 'looseQuery' }).errors).toEqual([]);
+  });
+
+  it('says nothing about a `from`-sourced list — `from` re-roots the rows inside the Output', () => {
+    // `{ trip, days: Day[] }` is record-rooted and `from: '$.days'` is a correct list over it.
+    const contracts: ViewContracts = {
+      endpoints: [{ name: 'getTrip', method: 'GET', outputShape: 'record', outputFields: ['days'] }],
+      routes: ['index'],
+    };
+    const res = validateViewSpec(
+      { route: 'index', sections: [{ kind: 'list', query: 'getTrip', from: '$.days' }] },
+      contracts,
+    );
+    expect(res.errors).toEqual([]);
   });
 });
 
@@ -897,6 +968,100 @@ export default async function h() { return {} as Output; }
       { ...loadViewContracts(root), routes: ['index'] },
     );
     expect(res.errors).toEqual([]);
+  });
+});
+
+describe('outputShapeOf — the JSON-Schema half of arity', () => {
+  it('reads the three shapes, through a $ref', () => {
+    expect(outputShapeOf({ type: 'array', items: { $ref: '#/definitions/Job' }, definitions: { Job: { type: 'object', properties: { id: { type: 'string' } } } } })).toBe('array');
+    expect(outputShapeOf({ type: 'object', properties: { items: { type: 'array', items: {} }, total: { type: 'number' } } })).toBe('envelope');
+    expect(outputShapeOf({ type: 'object', properties: { total: { type: 'number' }, open: { type: 'number' } } })).toBe('record');
+    expect(outputShapeOf({ $ref: '#/definitions/JobList', definitions: { JobList: { type: 'array', items: {} } } })).toBe('array');
+  });
+
+  it('answers undefined — never "record" — for anything it cannot decide', () => {
+    expect(outputShapeOf({})).toBeUndefined(); // the "no Output declared / could not read" schema
+    expect(outputShapeOf(undefined)).toBeUndefined();
+    expect(outputShapeOf({ type: 'object' })).toBeUndefined(); // no enumerable properties
+    expect(outputShapeOf({ type: 'object', properties: { rows: {} } })).toBeUndefined(); // an `unknown` member may be an array
+    expect(outputShapeOf({ anyOf: [{ type: 'array', items: {} }, { type: 'object', properties: { id: {} } }] })).toBeUndefined();
+    expect(outputShapeOf({ type: 'object', properties: { id: { type: 'string' } }, additionalProperties: true })).toBeUndefined();
+  });
+});
+
+describe('arity — the SAVE-TIME reader sees it too', () => {
+  it('reads `export type Output = Job[]` off the handler and rejects a stats section over it', async () => {
+    const root = await project({
+      'api/jobs/GET.ts': `export const name = 'listJobs';
+export interface Job { id: string; title: string }
+export type Output = Job[];
+export default async function h() { return [] as Output; }
+`,
+      'api/jobs/stats/GET.ts': `export const name = 'jobStats';
+export interface Output { total: number; open: number }
+export default async function h() { return {} as Output; }
+`,
+    });
+    const contracts = loadViewContracts(root);
+    expect(contracts.endpoints.map((e) => `${e.name}:${e.outputShape}`).sort()).toEqual([
+      'jobStats:record',
+      'listJobs:array',
+    ]);
+    const res = validateViewSpec(
+      {
+        route: 'index',
+        sections: [{ kind: 'stats', query: 'listJobs', cards: [{ label: 'Total', value: '$.title' }] }],
+      },
+      { ...contracts, routes: ['index'] },
+    );
+    expect(res.errors.map((e) => e.code)).toEqual(['wrong-arity']);
+    expect(res.errors[0].message).toContain('Queries returning one record: jobStats');
+  });
+
+  it('reads an envelope, and accepts it as both rows and a record', async () => {
+    const root = await project({
+      'api/jobs/GET.ts': `export const name = 'listJobs';
+export interface Job { id: string; title: string }
+export interface Output { items: Job[]; total: number }
+export default async function h() { return {} as Output; }
+`,
+    });
+    const contracts = { ...loadViewContracts(root), routes: ['index'] };
+    expect(contracts.endpoints[0].outputShape).toBe('envelope');
+    expect(validateViewSpec({ route: 'index', sections: [{ kind: 'list', query: 'listJobs' }] }, contracts).errors).toEqual([]);
+    expect(
+      validateViewSpec(
+        { route: 'index', sections: [{ kind: 'detail', query: 'listJobs', fields: [{ label: 'T', value: '$.title' }] }] },
+        contracts,
+      ).errors,
+    ).toEqual([]);
+  });
+
+  it('SKIPS a record whose members it cannot type — an imported one may be an array', async () => {
+    const root = await project({
+      'api/plan/GET.ts': `import type { Day } from '../../types/x';
+export const name = 'getPlan';
+export interface Output { days: Day; adherence: number }
+export default async function h() { return {} as Output; }
+`,
+    });
+    const contracts = loadViewContracts(root);
+    expect(contracts.endpoints[0].outputShape).toBeUndefined();
+    expect(
+      validateViewSpec({ route: 'index', sections: [{ kind: 'list', query: 'getPlan' }] }, { ...contracts, routes: ['index'] }).errors,
+    ).toEqual([]);
+  });
+
+  it('sees an array through a type alias declared beside the handler', async () => {
+    const root = await project({
+      'api/jobs/GET.ts': `export const name = 'listJobs';
+export interface Job { id: string }
+export type JobList = Job[];
+export type Output = JobList;
+export default async function h() { return [] as Output; }
+`,
+    });
+    expect(loadViewContracts(root).endpoints[0].outputShape).toBe('array');
   });
 });
 

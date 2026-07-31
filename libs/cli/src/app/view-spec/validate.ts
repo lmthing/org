@@ -67,6 +67,7 @@ import {
   unknownSection,
   unknownSpace,
   viewError,
+  wrongArity,
   wrongMethod,
   type ViewError,
   type ViewValidationResult,
@@ -108,6 +109,15 @@ export interface ViewEndpoint {
   /** The full Output JSON Schema, when available — lets a `from` path resolve exactly. */
   outputSchema?: JsonSchema;
   /**
+   * Rows or a record? See {@link OutputShape}. `undefined` ⇒ unknown, and nothing is checked.
+   *
+   * Carried as a FIELD rather than derived from `outputSchema` on demand, because the writers' sync
+   * contract source has no schema at all and reads this from the handler's TypeScript instead — and
+   * a rule that fired only where a schema exists would make the writer and `validateAppViews`
+   * disagree about the same page.
+   */
+  outputShape?: OutputShape;
+  /**
    * The handler's route pattern (`/plan/:id/trip`), when known.
    *
    * Only {@link renderSmokeViews} reads it, and it needs it for one thing: an `:id` in a path
@@ -116,6 +126,24 @@ export interface ViewEndpoint {
    */
   routePath?: string;
 }
+
+/**
+ * The SHAPE of an endpoint's Output, as far as it could be read — the fact a section's kind has to
+ * agree with.
+ *
+ * The renderer splits on exactly this (`libs/ui/src/view/sections/index.tsx`): `list`/`timeline` go
+ * to the collection half and read `extractRows`, every other kind reads `extractRecord`. So:
+ *
+ * | shape | `Output` | rows | one record |
+ * |---|---|---|---|
+ * | `array` | `Recipe[]` | the array | element **0**, whichever row that is |
+ * | `envelope` | `{ items: Recipe[] }`, `{ plan, days: Day[] }` | the array property | the object, or its sole wrapped element |
+ * | `record` | `{ total: number; spent: number }` | **nothing, ever** | the object |
+ *
+ * `undefined` is the fourth answer and the common one: a union Output, a `Record<string, …>`, a
+ * member this reader cannot type. It means "say nothing", never "record".
+ */
+export type OutputShape = 'array' | 'envelope' | 'record';
 
 /** Everything outside a single spec that the spec is allowed to name. */
 export interface ViewContracts {
@@ -232,6 +260,51 @@ export function outputFieldUniverse(schema: unknown): string[] | undefined {
   return out.size ? [...out].sort() : undefined;
 }
 
+/**
+ * Read an Output JSON Schema's {@link OutputShape}, or `undefined` when it is not decidable.
+ *
+ * Deliberately timid at every branch. A union root, a property this cannot resolve to a typed node,
+ * an object with no readable properties: all `undefined`, because the only finding built on this is
+ * a REJECTION, and the cost of guessing "record" about something that is really an envelope is a
+ * working list section refused at save.
+ */
+export function outputShapeOf(schema: unknown): OutputShape | undefined {
+  const isArrayNode = (n: unknown): boolean => {
+    const d = derefSchema(n, schema) as Record<string, unknown> | undefined;
+    if (!d || typeof d !== 'object') return false;
+    const t = d['type'];
+    if (t === 'array' || (Array.isArray(t) && t.includes('array')) || d['items'] !== undefined) return true;
+    for (const key of ['anyOf', 'oneOf', 'allOf'] as const) {
+      const branches = d[key];
+      if (Array.isArray(branches) && branches.some(isArrayNode)) return true;
+    }
+    return false;
+  };
+
+  const root = derefSchema(schema, schema);
+  if (!root || typeof root !== 'object') return undefined;
+  const rec = root as Record<string, unknown>;
+  // A union root is two shapes at once — the renderer picks per response, and so cannot this.
+  // Asked FIRST: `Job[] | JobPage` has an array branch, and reading that as "an array" would reject
+  // a record section over an Output that is a record half the time.
+  if (rec['anyOf'] || rec['oneOf'] || rec['allOf']) return undefined;
+  if (isArrayNode(root)) return 'array';
+  const props = schemaProps(root, schema);
+  const keys = Object.keys(props);
+  // `{}` (unread), `{ type: 'object' }`, `Record<string, X>` — an object whose properties are not
+  // enumerable could hold an array under any key.
+  if (!keys.length || rec['additionalProperties'] === true) return undefined;
+  for (const key of keys) {
+    if (isArrayNode(props[key])) return 'envelope';
+    const node = derefSchema(props[key], schema) as Record<string, unknown> | undefined;
+    if (!node || typeof node !== 'object') return undefined;
+    // A property with no type at all is `unknown`/`any` in the handler — it may hold an array.
+    const typed = ['type', 'properties', 'enum', 'const', 'anyOf', 'oneOf'].some((k) => node[k] !== undefined);
+    if (!typed) return undefined;
+  }
+  return 'record';
+}
+
 /** Walk a dotted path (`citations.author`) into a schema, seeing through arrays and `$ref`s. */
 function schemaAtPath(schema: unknown, segments: string[]): JsonSchema | undefined {
   let cur: unknown = schema;
@@ -282,6 +355,7 @@ export function toViewContracts(input: ContractsLike | ViewContracts): ViewContr
       routePath: full.routePath,
       outputSchema: full.outputSchema,
       outputFields: outputFieldUniverse(full.outputSchema),
+      outputShape: outputShapeOf(full.outputSchema),
       inputKeys,
     };
   });
@@ -501,6 +575,77 @@ function interfaceMembers(body: string): InterfaceMember[] {
   return members;
 }
 
+/** Every `type X = <text>;` alias in a source file — the half {@link namedTypeBodies} cannot hold. */
+function namedTypeAliases(src: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const re = /(?:^|\n)\s*(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*=\s*([^;{\n][^;\n]*);?/g;
+  for (let m = re.exec(src); m; m = re.exec(src)) {
+    if (!out.has(m[1]!)) out.set(m[1]!, m[2]!.trim());
+  }
+  return out;
+}
+
+/** Scalar member types — the only ones that provably are not an array. */
+const SCALAR_TYPE = /^(string|number|boolean|bigint|Date|null|undefined)(\s*\|\s*(string|number|boolean|bigint|Date|null|undefined))*$/;
+
+/** Strip comments and an optional-null suffix, so a type reads as its bare text. */
+function bareType(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '').trim();
+}
+
+/**
+ * The textual twin of {@link outputShapeOf} — the shape a handler's `Output` declares, read from its
+ * TypeScript, for the SYNCHRONOUS contract source the writers use.
+ *
+ * `export type Output = Job[]` is the whole point: it is the commonest list-endpoint declaration in
+ * the catalogue, it takes one regex to read, and it is what makes a `stats` section bound to a list
+ * endpoint a save-time rejection rather than a dashboard of bare headings.
+ *
+ * Everything else is timid in the same way the JSON-Schema reader is: a union, a member whose type
+ * is a name this file does not declare, an empty body — all `undefined`. A record is claimed ONLY
+ * when every member is provably scalar, because "no array anywhere" is the half that rejects a
+ * `list`.
+ */
+function declaredOutputShape(src: string): OutputShape | undefined {
+  const objects = namedTypeBodies(src);
+  const aliases = namedTypeAliases(src);
+
+  const ofBody = (body: string | null, seen: Set<string>): OutputShape | undefined => {
+    if (body === null) return undefined;
+    const members = interfaceMembers(body);
+    if (!members.length) return undefined;
+    for (const member of members) {
+      const type = bareType(member.type);
+      if (ofText(type, new Set(seen)) === 'array') return 'envelope';
+      if (!SCALAR_TYPE.test(type) && !type.startsWith('{')) return undefined;
+    }
+    return 'record';
+  };
+
+  const ofText = (raw: string, seen: Set<string>): OutputShape | undefined => {
+    const text = bareType(raw);
+    if (!text) return undefined;
+    if (/\[\s*\]$/.test(text) || /^(Readonly)?Array\s*</.test(text)) return 'array';
+    if (/[|&<>]/.test(text)) return undefined; // a union, an intersection, a generic — undecidable
+    if (text.startsWith('{')) return ofBody(braceBody(text, 0), seen);
+    const named = /^[A-Za-z_$][\w$]*$/.exec(text)?.[0];
+    if (!named || seen.has(named) || PRIMITIVE_TYPES.has(named)) return undefined;
+    seen.add(named);
+    const body = objects.get(named);
+    if (body !== undefined) return ofBody(body, seen);
+    const alias = aliases.get(named);
+    return alias === undefined ? undefined : ofText(alias, seen);
+  };
+
+  const m = /export\s+(?:interface|type)\s+Output\b([^{;\n]*)\{/.exec(src);
+  if (m) {
+    if (/\bextends\b|&/.test(m[1]!)) return undefined; // members live somewhere this cannot see
+    return ofBody(braceBody(src, m.index + m[0].length - 1), new Set());
+  }
+  const alias = /export\s+type\s+Output\s*=\s*([^;\n]+)/.exec(src)?.[1];
+  return alias === undefined ? undefined : ofText(alias, new Set());
+}
+
 /** Recursively collect `api/**\/<METHOD>.ts`. */
 function walkApi(dir: string, out: string[]): void {
   let entries: string[];
@@ -552,6 +697,7 @@ export function loadViewContracts(projectRoot: string): ViewContracts {
       // An Output that reads as zero fields is either "declares nothing" or "we failed to read it",
       // and nothing here can tell those apart — so it becomes `undefined` (skip), never `[]` (reject).
       outputFields: outputFields?.length ? outputFields : undefined,
+      outputShape: declaredOutputShape(src),
       inputKeys: declaredFields(src, 'Input'),
       routePath: `/${relative(apiDir, file).split(sep).slice(0, -1).map((s) => s.replace(/^\[(.+)\]$/, ':$1')).join('/')}`,
     });
@@ -585,6 +731,10 @@ interface WalkCtx {
   queries: string[];
   mutations: string[];
   allNames: string[];
+  /** GET endpoints whose Output is a record or an envelope — what a `detail`/`stats` may bind. */
+  recordQueries: string[];
+  /** GET endpoints whose Output holds an array — what a `list`/`timeline` may bind. */
+  rowQueries: string[];
   components: Map<string, ViewComponentSpec> | undefined;
   routes: string[] | undefined;
   /** `space` → agent slugs. `undefined` ⇒ do not resolve `chat.agent`. */
@@ -649,6 +799,33 @@ function checkRoute(route: string, path: string, ctx: WalkCtx): void {
 
 function checkSectionId(id: string, path: string, ctx: WalkCtx): void {
   if (!ctx.sectionIds.has(id)) ctx.errors.push(unknownSection(path, id, [...ctx.sectionIds]));
+}
+
+/**
+ * **A section's kind and its endpoint's Output must agree about arity.**
+ *
+ * `list`/`timeline` draw rows; `detail`/`stats` draw one record. The contract states which the
+ * endpoint returns, and the renderer's own split reads it (see {@link OutputShape}), so a section
+ * that can only ever draw nothing is knowable before it is written to disk.
+ *
+ * Skipped for a `from`-sourced section: `from` re-roots the rows at a path INSIDE the Output, so the
+ * root's shape governs nothing (`{ trip, days: Day[] }` + `from: '$.days'` is a correct list over a
+ * record-rooted Output). Skipped, as always, when the shape could not be read.
+ */
+function checkSectionArity(
+  section: Record<string, unknown>,
+  ep: ViewEndpoint | undefined,
+  path: string,
+  ctx: WalkCtx,
+): void {
+  if (!ep?.outputShape || typeof section['from'] === 'string' || typeof section['query'] !== 'string') return;
+  const kind = String(section['kind']);
+  const where = childPath(path, 'query');
+  if ((kind === 'list' || kind === 'timeline') && ep.outputShape === 'record') {
+    ctx.errors.push(wrongArity(where, kind, ep.name, 'rows', ctx.rowQueries));
+  } else if ((kind === 'detail' || kind === 'stats') && ep.outputShape === 'array') {
+    ctx.errors.push(wrongArity(where, kind, ep.name, 'record', ctx.recordQueries));
+  }
 }
 
 /**
@@ -937,6 +1114,7 @@ export function validateViewSpec(spec: unknown, contracts: ContractsLike | ViewC
     ctx.fieldsFrom = scope.ep?.name;
     ctx.formFields = undefined;
 
+    checkSectionArity(rec, scope.ep, path, ctx);
     if (rec['input']) checkInputKeys(rec['input'], scope.ep, childPath(path, 'input'), ctx);
 
     if (String(rec['kind']) === 'chat' && typeof rec['agent'] === 'string') {
@@ -1046,6 +1224,16 @@ function makeCtx(input: ContractsLike | ViewContracts): WalkCtx {
     errors: [],
     byName,
     queries: contracts.endpoints.filter((e) => e.method === 'GET').map((e) => e.name).sort(),
+    // Only the endpoints whose shape is KNOWN to fit. A menu is a promise, so an endpoint this
+    // could not read does not go on it — being a strict subset of the valid answers is the point.
+    recordQueries: contracts.endpoints
+      .filter((e) => e.method === 'GET' && (e.outputShape === 'record' || e.outputShape === 'envelope'))
+      .map((e) => e.name)
+      .sort(),
+    rowQueries: contracts.endpoints
+      .filter((e) => e.method === 'GET' && (e.outputShape === 'array' || e.outputShape === 'envelope'))
+      .map((e) => e.name)
+      .sort(),
     mutations: contracts.endpoints.filter((e) => e.method !== 'GET').map((e) => e.name).sort(),
     allNames: contracts.endpoints.map((e) => e.name).sort(),
     components: contracts.components ? new Map(contracts.components.map((c) => [c.name, c])) : undefined,
