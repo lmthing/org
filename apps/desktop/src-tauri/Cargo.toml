@@ -26,6 +26,8 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["unstable"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Only for the oneshot that carries a page's eval result back to an async command.
+tokio = { version = "1", features = ["sync"] }
 
 # Opens a URL in the SYSTEM browser. Load-bearing rather than a convenience: every
 # outbound link in this app must leave the window, because navigating the single
@@ -59,3 +61,8 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 [features]
 # Used by `tauri dev`; do not remove.
 custom-protocol = ["tauri/custom-protocol"]
+
+[target.'cfg(unix)'.dependencies]
+# `kill(pid, 0)` — asks whether a pid exists without signalling it. Used to tell a Chromium
+# SingletonLock left by a crashed browser from one that is doing its job.
+libc = "0.2"

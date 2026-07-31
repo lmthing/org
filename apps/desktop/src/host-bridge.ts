@@ -1,8 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
 import { wsUrl } from '@lmthing/ui/platform'
-import type { CdpClient } from './cdp'
-import { callTool } from './browser-tools'
-import { browserSession } from './browser-session'
+import { callTool } from './page-tools'
+import { ensurePaneOpen, panePage } from './page-driver'
+import { cdpViaEval } from './cdp-over-eval'
 
 /**
  * The desktop half of the host bridge: dial the pod, answer its requests.
@@ -124,9 +124,9 @@ export class DesktopHostBridge {
     this.timer = null
     this.socket?.close()
     this.socket = null
-    // The browser goes with it. Leaving a signed-in browser running after the person said "stop
-    // reaching my computer" would answer a narrower question than the one they asked.
-    void browserSession.stop().catch(() => {})
+    // The pane is left alone. It is a webview showing a page the PERSON opened and is looking at,
+    // not a browser this bridge started — disconnecting says "stop reaching my computer", not
+    // "close what I was reading".
     this.set({ status: 'idle' })
   }
 
@@ -251,20 +251,6 @@ export class DesktopHostBridge {
   }
 
   /**
-   * Ensure the browser is running and attached.
-   *
-   * Started on FIRST USE rather than at connect: a browser signed into somebody's accounts should
-   * appear because an agent needed one, at a moment the person can see in the activity log — not
-   * quietly, at launch, forever.
-   *
-   * The session is SHARED with the pane, so an agent that navigates is navigating the tab the
-   * person is watching. That is the design, not a coincidence: see `browser-session.ts`.
-   */
-  private async ensureCdp(): Promise<CdpClient> {
-    return browserSession.ensure()
-  }
-
-  /**
    * A `tools/call` from one of the 27 `system-browser` functions.
    *
    * The reply is a JSON-RPC envelope because that is exactly what those wrappers parse — they were
@@ -275,10 +261,12 @@ export class DesktopHostBridge {
     const name = rpc?.params?.name ?? ''
     // Told to the pane BEFORE the call, not after: the point of the indicator is that a person
     // watching sees the agent take the wheel as it happens, not once the page has already changed.
-    browserSession.noteAgentActivity(name)
     try {
-      const client = await this.ensureCdp()
-      const result = await callTool(client, name, rpc?.params?.arguments ?? {})
+      // Opened on FIRST USE rather than at connect, and opened VISIBLY. An agent may reach for the
+      // browser when the person never opened one; giving them a page is right, doing it where they
+      // cannot see it is not.
+      await ensurePaneOpen()
+      const result = await callTool(panePage, name, rpc?.params?.arguments ?? {})
       this.log({ at: Date.now(), op: `browser.${name}`, ok: result.isError !== true })
       this.send({ type: 'result', id, ok: true, value: { jsonrpc: '2.0', id: rpc?.id ?? 1, result } })
     } catch (err) {
@@ -295,24 +283,20 @@ export class DesktopHostBridge {
     }
   }
 
-  /** A raw protocol command from the desktop-only devtools agent. Consent already granted. */
+  /**
+   * A raw protocol command from the desktop-only devtools agent.
+   *
+   * The interface is KEPT and answered with JavaScript — see `cdp-over-eval.ts` for which methods
+   * translate and which are refused by name. Refusing the whole surface would have been easier and
+   * would have taken the devtools agent, its knowledge and its capability down with it, for the
+   * sake of methods most callers never send.
+   */
   private async handleCdp(id: string, method: string, params?: Record<string, unknown>): Promise<void> {
-    browserSession.noteAgentActivity(method)
     try {
-      const client = await this.ensureCdp()
-      if (method === 'subscribe') {
-        await client.subscribe(String(params?.['domain'] ?? ''))
-        this.log({ at: Date.now(), op: `cdp.subscribe ${String(params?.['domain'] ?? '')}`, ok: true })
-        this.send({ type: 'result', id, ok: true, value: { ok: true } })
-        return
-      }
-      if (method === 'events') {
-        this.send({ type: 'result', id, ok: true, value: { ok: true, events: client.drainEvents() } })
-        return
-      }
-      const result = await client.send(method, params ?? {})
-      this.log({ at: Date.now(), op: `cdp ${method}`, ok: true })
-      this.send({ type: 'result', id, ok: true, value: { ok: true, result } })
+      await ensurePaneOpen()
+      const answer = await cdpViaEval(panePage, method, params ?? {})
+      this.log({ at: Date.now(), op: `cdp ${method}`, ok: answer.ok, ...(answer.error ? { error: answer.error } : {}) })
+      this.send({ type: 'result', id, ok: true, value: answer })
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err)
       this.log({ at: Date.now(), op: `cdp ${method}`, ok: false, error })

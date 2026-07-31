@@ -8,7 +8,6 @@
 //! jail — and that one IS the security boundary. Nothing else here is load-bearing
 //! for safety, which is the point: the surface that has to be right is one function.
 
-mod browser;
 mod browser_view;
 mod commands;
 mod config;
@@ -57,10 +56,6 @@ pub fn run() {
             commands::grant_add,
             commands::grant_remove,
             commands::fs_op,
-            commands::browser_start,
-            commands::browser_relaunch,
-            commands::browser_stop,
-            commands::browser_status,
             commands::browserview_open,
             commands::browserview_bounds,
             commands::browserview_navigate,
@@ -88,7 +83,6 @@ pub fn run() {
             //
             // Registering them together, right here, is what makes the omission visible: a new
             // command with state has one obvious place to appear, next to the others.
-            app.manage(commands::BrowserState::default());
             app.manage(commands::SidecarState::default());
 
             // Without an Edit menu, macOS ⌘C/⌘V/⌘A do nothing at all — AppKit routes them through

@@ -17,7 +17,6 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
-use crate::browser::{self, BrowserEndpoint};
 use crate::browser_view;
 use crate::fsops;
 use crate::grants::{Grant, Grants, Mode};
@@ -46,91 +45,6 @@ pub struct PublicGrant {
 
 #[derive(Default)]
 pub struct GrantState(pub Mutex<Vec<StoredGrant>>);
-
-/// The launched browser, if any. Held so it can be killed with the app rather than outliving it —
-/// a browser the person did not open and cannot see is exactly the wrong thing to leave behind.
-#[derive(Default)]
-pub struct BrowserState(pub Mutex<Option<browser::BrowserProcess>>);
-
-/// Its OWN profile directory, never the person's everyday one: the cookie jar an agent can reach
-/// should be something they opted into and can throw away. Stable across relaunches, so popping
-/// out to a window and coming back keeps every session the person signed into.
-fn browser_profile_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
-    Ok(app
-        .path()
-        .app_local_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("agent-browser"))
-}
-
-/// Start the browser (or return the running one's endpoint).
-///
-/// Explicit, like connecting the bridge: a browser signed into somebody's accounts, reachable by a
-/// cloud agent, must not appear because an app was launched.
-#[tauri::command]
-pub fn browser_start(
-    app: AppHandle,
-    state: State<'_, BrowserState>,
-) -> Result<BrowserEndpoint, String> {
-    let mut slot = state.0.lock().map_err(|_| "browser state is poisoned")?;
-    if let Some(p) = slot.as_ref() {
-        return Ok(p.endpoint.clone());
-    }
-    let proc = browser::launch(browser_profile_dir(&app)?, true)?;
-    let endpoint = proc.endpoint.clone();
-    *slot = Some(proc);
-    Ok(endpoint)
-}
-
-/// Move the browser between the pane and a window of its own.
-///
-/// A relaunch rather than a mode switch, because Chromium has no way to grow a window at runtime.
-/// The profile is the same directory, so cookies, logins and history survive — what is lost is the
-/// open tabs, which is why the caller passes the current URL back in.
-///
-/// This exists because a streamed pane is genuinely the wrong tool for some things: an OS file
-/// picker, a camera prompt, a video call. Refusing to admit that would leave the person stuck.
-///
-/// Restoring the page is the RENDERER's job — it owns the CDP connection, and a second client
-/// opened here just to send one `Page.navigate` would give two parties a claim on which target is
-/// current.
-#[tauri::command]
-pub fn browser_relaunch(
-    app: AppHandle,
-    state: State<'_, BrowserState>,
-    headless: bool,
-) -> Result<BrowserEndpoint, String> {
-    let mut slot = state.0.lock().map_err(|_| "browser state is poisoned")?;
-    if let Some(mut p) = slot.take() {
-        let _ = p.child.kill();
-        // Chromium holds a lock on the profile directory; starting the replacement before the old
-        // process has actually gone yields "profile is already in use" and a browser that never
-        // reports a port.
-        let _ = p.child.wait();
-    }
-    let proc = browser::launch(browser_profile_dir(&app)?, headless)?;
-    let endpoint = proc.endpoint.clone();
-    *slot = Some(proc);
-    Ok(endpoint)
-}
-
-#[tauri::command]
-pub fn browser_stop(state: State<'_, BrowserState>) -> Result<(), String> {
-    let mut slot = state.0.lock().map_err(|_| "browser state is poisoned")?;
-    if let Some(mut p) = slot.take() {
-        let _ = p.child.kill();
-    }
-    Ok(())
-}
-
-#[tauri::command]
-pub fn browser_status(state: State<'_, BrowserState>) -> Option<BrowserEndpoint> {
-    state
-        .0
-        .lock()
-        .ok()
-        .and_then(|s| s.as_ref().map(|p| p.endpoint.clone()))
-}
 
 /// The running local pod, if any.
 #[derive(Default)]

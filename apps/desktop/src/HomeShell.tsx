@@ -8,7 +8,7 @@ import { onDismiss } from '@lmthing/ui/platform'
 import { TeamScreen } from './TeamScreen'
 import { AppScreen } from './AppScreen'
 import { LocalAccess } from './LocalAccess'
-import { BrowserPane } from './BrowserPane'
+import { WebviewPane } from './WebviewPane'
 import { SplitPane } from './SplitPane'
 import { DesktopHostBridge, type HostBridgeState } from './host-bridge'
 import { onMenuToggleBrowser } from './desktop'
@@ -93,6 +93,20 @@ export function HomeShell() {
     if (browserOpen) bridge.start({ implied: true })
   }, [browserOpen, bridge])
 
+  /**
+   * An agent asked for the browser before the person opened it.
+   *
+   * The pane opens, visibly. Giving an agent a page it was asked for is right; giving it one in a
+   * view nobody can see is the single thing this whole design exists to prevent — so the request
+   * comes through the shell, which owns the split, rather than an offscreen webview being created
+   * behind everyone's back.
+   */
+  React.useEffect(() => {
+    const open = () => setBrowserOpen(true)
+    window.addEventListener('lmthing://open-browser', open)
+    return () => window.removeEventListener('lmthing://open-browser', open)
+  }, [])
+
   React.useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') setHomeKey((k) => k + 1)
@@ -172,13 +186,7 @@ export function HomeShell() {
       )}
 
       <SplitPane splitOpen={browserOpen} right={
-        <BrowserPane
-          visible={browserOpen}
-          agentReach={
-            bridgeStatus === 'connected' ? 'connected' : bridgeStatus === 'connecting' ? 'connecting' : 'off'
-          }
-          onConnect={() => bridge.start()}
-        />
+        <WebviewPane visible={browserOpen && !navOpen} />
       } left={<>
       <Prim.Box flex={1} flexDirection="column" minHeight={0} display={tab === 'home' ? 'flex' : 'none'}>
         <DashboardHome
