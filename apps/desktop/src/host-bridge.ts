@@ -81,6 +81,8 @@ export class DesktopHostBridge {
   private timer: ReturnType<typeof setTimeout> | null = null
   private state: HostBridgeState = { status: 'idle', activity: [] }
   private listeners = new Set<(s: HostBridgeState) => void>()
+  /** Set by `stop()`, cleared only by a deliberate `start()`. See `start`. */
+  private userDisconnected = false
 
   constructor(private getAccessToken: () => Promise<string>) {}
 
@@ -90,8 +92,18 @@ export class DesktopHostBridge {
     return () => this.listeners.delete(fn)
   }
 
-  /** Open the socket and keep it open. Safe to call twice. */
-  start(): void {
+  /**
+   * Open the socket and keep it open. Safe to call twice.
+   *
+   * `implied: true` marks a start that follows from something the person did which REQUIRES the
+   * bridge — opening the browser pane — rather than an instruction to connect. The distinction
+   * exists for one reason: "Disconnect" is the kill switch, and a kill switch that a side effect
+   * can undo is not one. So an implied start is ignored while a deliberate disconnect stands, and
+   * only pressing Connect clears it.
+   */
+  start(opts: { implied?: boolean } = {}): void {
+    if (opts.implied && this.userDisconnected) return
+    if (!opts.implied) this.userDisconnected = false
     this.closed = false
     if (this.socket) return
     void this.connect()
@@ -106,6 +118,7 @@ export class DesktopHostBridge {
    * socket drops, so nothing is left half-done.
    */
   stop(): void {
+    this.userDisconnected = true
     this.closed = true
     if (this.timer) clearTimeout(this.timer)
     this.timer = null

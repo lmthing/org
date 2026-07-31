@@ -31,7 +31,16 @@ import { addressBarUrl, cdpKeyEvent, modifiersOf, paneToPage, wheelDeltas } from
  */
 
 /** Repainting a hidden pane costs the same as repainting a visible one, so it is stopped instead. */
-export function BrowserPane({ visible }: { visible: boolean }) {
+export function BrowserPane({
+  visible,
+  agentReach,
+  onConnect,
+}: {
+  visible: boolean
+  /** Whether an agent in this workspace can reach this browser — i.e. the host bridge is attached. */
+  agentReach: 'connected' | 'connecting' | 'off'
+  onConnect: () => void
+}) {
   const [state, setState] = React.useState<BrowserState>(browserSession.current())
   const [frame, setFrame] = React.useState<Frame | null>(null)
   const [address, setAddress] = React.useState('')
@@ -233,6 +242,43 @@ export function BrowserPane({ visible }: { visible: boolean }) {
           }}
         />
       </Prim.Row>
+
+      {/* Whether the agent can reach this browser is not something to leave a person to infer from
+          an agent's apology. The pane opening attaches the bridge on its own, so this is normally
+          only ever seen for the moment it takes to connect — or when the person has deliberately
+          disconnected, which is exactly when they need telling that this browser is theirs alone. */}
+      {agentReach !== 'connected' && (
+        <Prim.Row
+          flexShrink={0}
+          alignItems="center"
+          gap="$2"
+          paddingHorizontal="$3"
+          paddingVertical="$2"
+          backgroundColor="$muted"
+        >
+          <Prim.Text fontSize="$sm" color="$muted-foreground" flex={1}>
+            {agentReach === 'connecting'
+              ? 'Connecting this browser to your workspace…'
+              : 'Agents cannot see this browser — this desktop is disconnected from your workspace.'}
+          </Prim.Text>
+          {agentReach === 'off' && (
+            <Prim.Pressable
+              onClick={onConnect}
+              minHeight="$8"
+              paddingHorizontal="$3"
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              borderRadius="$radius-md"
+              aria-label="Connect this desktop"
+            >
+              <Prim.Text fontSize="$sm" color="$primary" fontWeight="$medium">
+                Connect
+              </Prim.Text>
+            </Prim.Pressable>
+          )}
+        </Prim.Row>
+      )}
 
       {(error || state.detail) && (
         <Prim.Box flexShrink={0} paddingHorizontal="$3" paddingVertical="$2" backgroundColor="$muted">

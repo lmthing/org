@@ -10,7 +10,7 @@ import { AppScreen } from './AppScreen'
 import { LocalAccess } from './LocalAccess'
 import { BrowserPane } from './BrowserPane'
 import { SplitPane } from './SplitPane'
-import { DesktopHostBridge } from './host-bridge'
+import { DesktopHostBridge, type HostBridgeState } from './host-bridge'
 import { onMenuToggleBrowser } from './desktop'
 
 /**
@@ -40,6 +40,8 @@ export function HomeShell() {
   // app was launched.
   const bridge = React.useMemo(() => new DesktopHostBridge(getAccessToken), [getAccessToken])
   React.useEffect(() => () => bridge.stop(), [bridge])
+  const [bridgeStatus, setBridgeStatus] = React.useState<HostBridgeState['status']>('idle')
+  React.useEffect(() => bridge.subscribe((s) => setBridgeStatus(s.status)), [bridge])
   const [teamMentions, setTeamMentions] = React.useState(0)
   // Which project's app is open, if any. State rather than a route: this shell has no router, for
   // the same reason `TeamScreen` owns its rail.
@@ -73,6 +75,23 @@ export function HomeShell() {
   // View → Browser (⌘/Ctrl-B). The menu bar is present on every surface, unlike the ☰ button,
   // which only renders on Home — so this is the one control that can open the pane from anywhere.
   React.useEffect(() => onMenuToggleBrowser(() => setBrowserOpen((open) => !open)), [])
+
+  /**
+   * Opening the browser attaches this desktop to the workspace.
+   *
+   * Without it the browser runs and the person watches it, and the agent cannot reach it at all —
+   * the pod has nowhere to send a browser operation, so it answers "no LMThing desktop is connected
+   * to this workspace" and the model then explains, reasonably and uselessly, how to start a
+   * headless browser on a server. The two halves of the feature looked independent and are not:
+   * a browser an agent cannot see is not what the pane is for.
+   *
+   * This does NOT widen what can be read from disk. The grant list is the filesystem boundary and
+   * it is empty until the person points it at a folder; connecting with no grants reaches nothing.
+   * And it is `implied`, so it cannot undo a deliberate Disconnect.
+   */
+  React.useEffect(() => {
+    if (browserOpen) bridge.start({ implied: true })
+  }, [browserOpen, bridge])
 
   React.useEffect(() => {
     const onVisible = () => {
@@ -152,7 +171,15 @@ export function HomeShell() {
         </Prim.Row>
       )}
 
-      <SplitPane splitOpen={browserOpen} right={<BrowserPane visible={browserOpen} />} left={<>
+      <SplitPane splitOpen={browserOpen} right={
+        <BrowserPane
+          visible={browserOpen}
+          agentReach={
+            bridgeStatus === 'connected' ? 'connected' : bridgeStatus === 'connecting' ? 'connecting' : 'off'
+          }
+          onConnect={() => bridge.start()}
+        />
+      } left={<>
       <Prim.Box flex={1} flexDirection="column" minHeight={0} display={tab === 'home' ? 'flex' : 'none'}>
         <DashboardHome
           key={homeKey}

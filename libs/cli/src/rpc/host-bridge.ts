@@ -41,6 +41,24 @@ export interface HostSocket {
 /** `ws`'s OPEN. Named here so the check reads as intent rather than as a magic number. */
 const OPEN = 1;
 
+/**
+ * What an agent is told when it reaches for a desktop that is not there.
+ *
+ * This string is read by a MODEL and relayed to a person, so a bare statement of fact is not
+ * enough — a model handed a problem with no remedy supplies one, and the remedy it supplied was
+ * three paragraphs of instructions for starting a Lightpanda server. That was a reasonable
+ * inference: the 27 browser functions describe themselves as Lightpanda wrappers, and on a
+ * desktop-attached pod `LIGHTPANDA_MCP_URL` points at the loopback bridge, so the agent has every
+ * reason to believe a server is missing. Nothing is missing; a person has to open a window.
+ *
+ * Hence both halves: what to do, and what NOT to say.
+ */
+export const NOT_ATTACHED =
+  'No LMThing desktop is connected to this workspace. The browser lives on the person\'s own ' +
+  'computer, so nothing here can start it: ask them to open the LMThing desktop app and show the ' +
+  'browser (View → Browser, or Cmd/Ctrl-B), which connects it. Do NOT tell them to start ' +
+  'Lightpanda or any server — there is no server-side browser involved and no operator to act.';
+
 export interface HostBridgeOptions {
   /** Identifies this pod in `hello`, so a desktop can notice it reconnected somewhere else. */
   podId?: string;
@@ -144,9 +162,7 @@ export class HostBridge {
   request<T = unknown>(event: HostRequestInit, opts: { timeoutMs?: number } = {}): Promise<T> {
     const socket = this.socket;
     if (!socket || socket.readyState !== OPEN) {
-      return Promise.reject(
-        new Error('No LMThing desktop is connected to this workspace.'),
-      );
+      return Promise.reject(new Error(NOT_ATTACHED));
     }
 
     const id = event.id ?? randomUUID();

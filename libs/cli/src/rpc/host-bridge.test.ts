@@ -127,6 +127,22 @@ describe('HostBridge', () => {
       );
     });
 
+    it('tells the agent what to do, and what not to say', async () => {
+      // This message is read by a MODEL and relayed to a person. A bare "no desktop is connected"
+      // left it to invent a remedy, and it invented a good one for the wrong product: three
+      // paragraphs on starting a Lightpanda server, complete with a command line. That inference
+      // was fair — the browser functions describe themselves as Lightpanda wrappers, and on a
+      // desktop-attached pod LIGHTPANDA_MCP_URL really does point at a local endpoint. So the
+      // remedy has to be stated, and the wrong one ruled out by name.
+      const bridge = new HostBridge();
+      const err = await bridge.request({ type: 'fs.request', op: 'roots' }).catch((e: Error) => e);
+      const msg = String((err as Error).message);
+      expect(msg).toMatch(/desktop app/i);
+      expect(msg).toMatch(/View → Browser/);
+      expect(msg).toMatch(/Lightpanda/);
+      expect(msg).toMatch(/no server-side browser/i);
+    });
+
     it('fails every in-flight request the moment the desktop detaches', async () => {
       const bridge = new HostBridge();
       const sock = fakeSocket();
