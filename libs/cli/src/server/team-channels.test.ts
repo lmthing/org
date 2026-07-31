@@ -557,6 +557,40 @@ describe('THING in a thread', () => {
     expect(stale.staleCursor).toBe(true);
   });
 
+  it('a VIEWER\'s turn runs without the write capabilities at all', async () => {
+    // Not "THING declines" — THING is never granted them. The role reaches the
+    // turn as data, and data is advice: live, the same request got a proper
+    // role-based refusal in one run and was silently ignored in another, where
+    // the turn read the role, ran display(db.tables()) and settled done.
+    //
+    // Withheld grants are structural: not granted means not injected AND absent
+    // from the DTS, so a write is a typecheck error the model sees.
+    const seen: Array<boolean | undefined> = [];
+    const manager = {
+      runHeadlessThreaded: vi.fn(async (opts: any) => {
+        seen.push(opts.readOnly);
+        return { ok: true, result: 'noted', sessionId: opts.sessionId };
+      }),
+    } as any;
+
+    // VIEWER is the default header set in this suite.
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing mark it invoiced' }),
+      mkRes(), { channelId: 'general' }, {} as any,
+    );
+    await settle();
+    expect(seen).toEqual([true]);
+
+    // An editor is unaffected — the gate must not make the product read-only.
+    const EDITOR = { ...VIEWER, 'x-lmthing-role': 'editor' };
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing mark it invoiced' }, EDITOR),
+      mkRes(), { channelId: 'general' }, {} as any,
+    );
+    await settle();
+    expect(seen[1]).toBe(false);
+  });
+
   it('a CRASHED turn still reaches the person who asked', async () => {
     // The success path stamps `mentions: [asker]` and calls `deliver` (badge +
     // push). The crash path did neither, so the one outcome you most need to be

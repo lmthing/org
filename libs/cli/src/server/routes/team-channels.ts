@@ -918,6 +918,15 @@ async function runThingReply(
       // asking for it, so it is the one kind of run a member cannot see the cost
       // of anywhere else — and on a team pod the tokens are the TEAM's.
       origin: { source: 'team-channel' },
+      // A viewer may talk to THING and may not change the workspace. Passing the
+      // role withholds every write grant for this turn, so a write is a typecheck
+      // error the model sees rather than a rule it may or may not follow — which
+      // is what it was: the same request got a proper refusal in one live run and
+      // was silently ignored in another.
+      // `caller` is null only when no verified identity reached us, which the
+      // guard should already have refused. Fail CLOSED on it rather than treating
+      // "we don't know who this is" as permission to write.
+      readOnly: caller?.role !== 'editor',
       // The team surface (`team:read`/`team:post`). Built here, per turn, closed
       // over THIS caller and channel — which is what makes "who asked?" answerable
       // inside a headless run without an ambient current-user. A post THING makes
