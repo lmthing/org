@@ -12,6 +12,7 @@
       "comment": "Opening a URL in the SYSTEM browser is the only outbound navigation this app performs, and it is required rather than convenient: navigating the single webview away from the bundle destroys the app until the user force-quits. Scoped to http/https so a page cannot ask the host to launch an arbitrary local handler.",
       "allow": [{ "url": "https://*" }, { "url": "http://*" }]
     },
-    "deep-link:default"
+    "deep-link:default",
+    "window-state:default"
   ]
 }

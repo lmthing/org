@@ -15,6 +15,7 @@ const BRIDGE = {
   apiBase: 'https://lmthing.chat',
   cloudBase: 'https://lmthing.cloud',
   teamBase: 'https://lmthing.team',
+  comBase: 'https://lmthing.com',
 }
 
 const g = globalThis as unknown as Record<string, unknown>

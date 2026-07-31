@@ -33,6 +33,11 @@ tauri-plugin-opener = "2"
 # already documents and relies on).
 tauri-plugin-deep-link = "2"
 
+# Size and position across launches. A window that reopens at the default size in the
+# middle of the screen every time is the clearest tell that something is a web page in a
+# frame rather than an application.
+tauri-plugin-window-state = "2"
+
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 # NOT optional on these two platforms, and the reason is the deep link.
 #

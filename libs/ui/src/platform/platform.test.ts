@@ -84,6 +84,7 @@ describe('platform (desktop shell)', () => {
     apiBase: 'https://lmthing.chat',
     cloudBase: 'https://lmthing.cloud',
     teamBase: 'https://lmthing.team',
+    comBase: 'https://lmthing.com',
   }
 
   it('apiUrl becomes ABSOLUTE — the identity above would address the tauri:// origin', () => {

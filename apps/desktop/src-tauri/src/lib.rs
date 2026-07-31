@@ -9,9 +9,12 @@
 //! for safety, which is the point: the surface that has to be right is one function.
 
 mod config;
+mod menu;
+mod navigation;
 
 use config::{DesktopBridge, Tokens};
 use tauri::{Manager, Theme, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_opener::OpenerExt;
 
 pub fn run() {
     let bridge = DesktopBridge::load();
@@ -37,7 +40,15 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
+        // Size and position across launches. A window that reopens at the default 1100×760 in the
+        // middle of the screen every time is the clearest signal that something is a web page in a
+        // frame rather than an application.
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(move |app| {
+            // Without an Edit menu, macOS ⌘C/⌘V/⌘A do nothing at all — AppKit routes them through
+            // menu items, not the webview. See `menu.rs`.
+            menu::install(app.handle())?;
+
             // Development only, and only where the OS has no installer to do it. A packaged
             // build gets its scheme from the bundle manifest; runtime registration exists so
             // `tauri dev` can exercise the real login path instead of leaving it untested
@@ -58,6 +69,25 @@ pub fn run() {
                 // `@lmthing/auth` read the bridge synchronously during module init rather
                 // than having to wait for an event.
                 .initialization_script(bridge.initialization_script())
+                // The app has one document and leaving it is fatal — no back button, no address
+                // bar, and the pod socket and everything typed goes with it. So: allow-list the
+                // bundle's own origin and hand every other URL to the system browser, which is
+                // where the person's sessions and password manager already are.
+                //
+                // This sits BELOW the DOM deliberately. A JS click handler only sees clicks;
+                // `location =`, a form POST, `target="_blank"` and `<meta refresh>` all bypass it.
+                .on_navigation({
+                    let handle = app.handle().clone();
+                    move |url| {
+                        if navigation::allow_navigation(url) {
+                            return true;
+                        }
+                        // Best-effort: a URL the OS cannot open is not a reason to let the
+                        // navigation through, which is the one outcome that loses the app.
+                        let _ = handle.opener().open_url(url.as_str(), None::<&str>);
+                        false
+                    }
+                })
                 .build()?;
 
             // The colour the OS paints between the window appearing and the webview's first

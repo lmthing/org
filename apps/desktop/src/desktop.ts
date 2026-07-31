@@ -18,20 +18,25 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 export const SSO_REDIRECT_URI = 'lmthing://auth/callback'
 
 /**
- * Fail loudly rather than fall back to a browser default.
+ * The injected bridge, or null.
  *
- * Every "sensible default" available here is wrong in a way that presents as something else: an
- * empty `apiBase` makes `fetch` address `tauri://localhost` and read as a network outage, and
- * guessing production would silently ignore whatever the shell was configured with. A missing
- * bridge means the Rust side did not run its initialization script, which is a broken build, not a
- * runtime condition to paper over.
+ * This deliberately does NOT throw, and the reason is a bug this cost: it used to, and it was
+ * called from `boot()` BEFORE `createRoot().render()`. So on a page with no bridge the exception
+ * escaped, React never mounted, and the window was **blank with nothing in it** — the loudest
+ * failure in the code producing the quietest one a person could see. "Fail loudly" has to mean
+ * loudly *to the user*, not loudly into a console nobody has open in a packaged app.
+ *
+ * A missing bridge still means the Rust initialization script did not run, which is a broken build
+ * rather than a runtime condition to paper over. So it is reported and the app still mounts, where
+ * the normal auth path can render something a person can act on.
  */
-export function requireBridge(): DesktopBridge {
+export function optionalBridge(): DesktopBridge | null {
   const bridge = getDesktopBridge()
   if (!bridge) {
-    throw new Error(
-      'No __LMTHING_DESKTOP__ bridge on the page. The Tauri initialization script did not run — ' +
-        'this build is broken, not misconfigured.',
+    console.error(
+      '[desktop] No __LMTHING_DESKTOP__ bridge on the page. The Tauri initialization script did ' +
+        'not run — this build is broken, not misconfigured. Sign-in and every pod call will be ' +
+        'addressed to the wrong origin.',
     )
   }
   return bridge
@@ -49,7 +54,12 @@ export function requireBridge(): DesktopBridge {
  * Must be called BEFORE the tree mounts.
  */
 export function installSsoHandler(): void {
-  const bridge = requireBridge()
+  const bridge = optionalBridge()
+  // No bridge means no shell to open a system browser with, so there is nothing to install. The
+  // app still mounts; `startLogin` falls back to its web branch, which is the correct behaviour for
+  // the only context that can legitimately reach here — the E2E harness driving this bundle in
+  // Chromium.
+  if (!bridge) return
   bridge.ssoRedirectUri = SSO_REDIRECT_URI
   bridge.startSso = (url: string) =>
     new Promise<string>((resolve, reject) => {

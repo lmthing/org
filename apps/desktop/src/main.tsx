@@ -30,4 +30,25 @@ async function boot(): Promise<void> {
   )
 }
 
-void boot()
+/**
+ * A boot failure must never be a blank window.
+ *
+ * There is no address bar here, no reload button and no devtools in a packaged build, so an
+ * exception escaping `boot()` leaves a person staring at an empty frame with no way to learn
+ * anything or do anything. This is the last line of defence: whatever went wrong, say so on screen.
+ *
+ * Deliberately plain DOM and not a component — if the React tree were healthy enough to render, we
+ * would not be here.
+ */
+void boot().catch((err: unknown) => {
+  const message = err instanceof Error ? err.message : String(err)
+  console.error('[desktop] boot failed', err)
+  const el = document.getElementById('root')
+  if (!el) return
+  const pre = document.createElement('pre')
+  pre.textContent = `lmthing could not start.\n\n${message}`
+  // No design tokens: the stylesheet is part of what may have failed to load, and `lint:tokens`
+  // permits an achromatic value. Legibility in both themes matters more than theming here.
+  pre.setAttribute('style', 'padding:24px;font:14px/1.5 monospace;white-space:pre-wrap')
+  el.appendChild(pre)
+})

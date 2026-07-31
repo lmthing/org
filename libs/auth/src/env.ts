@@ -59,6 +59,15 @@ export interface DesktopBridge {
   /** Absolute origin of the team surface, no trailing slash. */
   teamBase: string
   /**
+   * Absolute origin of `lmthing.com`, which hosts the SSO page, no trailing slash.
+   *
+   * Present for the same reason as the others and not as a completeness exercise: `AuthProvider`
+   * resolves `comUrl`/`cloudUrl` from `import.meta.env` with a PRODUCTION fallback, so without
+   * these a shell pointed at a dev gateway would still sign in against production — the two halves
+   * of one build disagreeing about which gateway they are talking to.
+   */
+  comBase: string
+  /**
    * The custom-scheme URL the SSO callback comes back to, e.g. `lmthing://auth/callback`.
    * Present whenever {@link startSso} is.
    */

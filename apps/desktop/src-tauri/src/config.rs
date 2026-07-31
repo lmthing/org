@@ -23,6 +23,7 @@ const PROTOCOL_VERSION: u32 = 1;
 const DEFAULT_API_BASE: &str = "https://lmthing.chat";
 const DEFAULT_CLOUD_BASE: &str = "https://lmthing.cloud";
 const DEFAULT_TEAM_BASE: &str = "https://lmthing.team";
+const DEFAULT_COM_BASE: &str = "https://lmthing.com";
 
 /// The DATA half of `window.__LMTHING_DESKTOP__`.
 ///
@@ -39,6 +40,7 @@ pub struct DesktopBridge {
     pub api_base: String,
     pub cloud_base: String,
     pub team_base: String,
+    pub com_base: String,
 }
 
 impl DesktopBridge {
@@ -53,6 +55,7 @@ impl DesktopBridge {
             api_base: env_or("LMTHING_API_BASE", DEFAULT_API_BASE),
             cloud_base: env_or("LMTHING_CLOUD_BASE", DEFAULT_CLOUD_BASE),
             team_base: env_or("LMTHING_TEAM_BASE", DEFAULT_TEAM_BASE),
+            com_base: env_or("LMTHING_COM_BASE", DEFAULT_COM_BASE),
         }
     }
 
@@ -168,5 +171,7 @@ mod tests {
         assert!(script.contains("\"apiBase\""));
         assert!(script.contains("\"cloudBase\""));
         assert!(script.contains("\"teamBase\""));
+        // Without this the shell signs in against production no matter where it is pointed.
+        assert!(script.contains("\"comBase\""));
     }
 }

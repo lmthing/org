@@ -2,3 +2,6 @@
 src-tauri/target/
 # Tauri's generated permission/capability schemas. Derived from capabilities/*.json at build time.
 src-tauri/gen/
+# Playwright artifacts from a failed E2E run (traces, screenshots, error context).
+test-results/
+playwright-report/

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import type { AuthSession, AuthConfig, AuthContextValue } from './types'
+import { getDesktopBridge } from './env'
 import { requestEmailCode, verifyEmailCode } from './email-login'
 import { getSession, clearSession, storeSession, redirectToLogin, handleAuthCallback, refreshSession, ensureValidToken, authFetch, isSessionExpired, onSessionChange, isPinSet, verifyPin, derivePinKey, getPodInjectedToken, isLocalRun, isWeb } from './client'
 
@@ -27,10 +28,20 @@ function resolveConfig(appName: string, callbackPath: string): AuthConfig {
   const isDev = Boolean(env.DEV)
   const protocol = isWeb() ? window.location.protocol : 'https:'
 
+  // The desktop shell wins over the build-time fallbacks, and this is load-bearing rather than
+  // tidy. A Tauri renderer has no meaningful origin and no `import.meta.env` of its own, so
+  // without it BOTH values below fall through to the production constants — meaning a shell
+  // pointed at a dev gateway would still mail its sign-in code from production and refresh its
+  // token there. That is the two-halves-of-one-build-disagreeing bug, in the one place where it
+  // would hand someone a session against the wrong environment.
+  const desktop = getDesktopBridge()
+
   return {
-    comUrl: (env.VITE_COM_URL as string | undefined)
+    comUrl: desktop?.comBase
+      || (env.VITE_COM_URL as string | undefined)
       || (isDev ? `${protocol}//com.test` : 'https://lmthing.com'),
-    cloudUrl: (env.VITE_CLOUD_URL as string | undefined)
+    cloudUrl: desktop?.cloudBase
+      || (env.VITE_CLOUD_URL as string | undefined)
       || (isDev ? `${protocol}//cloud.test` : 'https://lmthing.cloud'),
     appName,
     callbackPath,
