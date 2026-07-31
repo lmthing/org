@@ -315,6 +315,10 @@ export interface TurnLoopDeps {
    *  Session tracks it via its onDisplay hook). Combined with an `ask` yield this turn,
    *  it tells the no-visible-output guard whether the user saw anything. */
   hadVisibleOutput?: () => boolean;
+  /** Whether any display() this turn carried prose a person can read, as opposed to the
+   *  working material the agent used to get there (`ui/readability.ts`). Absent ⇒ the
+   *  working-material guard is off, so hosts that do not track it are unaffected. */
+  hadReadableOutput?: () => boolean;
 }
 
 /** Re-prompt sent when the model ends its response immediately after awaiting a
@@ -343,6 +347,17 @@ const DROPPED_PROSE_NUDGE =
  *  blank `done`. (Distinct from DROPPED_PROSE, which fires when NOTHING ran.) */
 const NO_OUTPUT_NUDGE =
   'You did the work but showed the user nothing — this turn ran statements yet called neither display() nor ask(), so the user sees a blank reply. Surface the result now: display(...) the answer/outcome the user asked for (or ask(...) if you genuinely need input before you can). Do not stop until the user can see the result.';
+
+/** Re-prompt sent when an INTERACTIVE turn displayed something, but that something is the
+ *  WORKING MATERIAL rather than an answer — a table list, a directory listing, a JSON dump,
+ *  a module of generated source. `display()` fired, so NO_OUTPUT_NUDGE cannot see it, yet the
+ *  person who asked cannot read the reply. See `ui/readability.ts` for the specimens.
+ *
+ *  Unlike its two neighbours this NEVER escalates to a loud failure: readability is a
+ *  heuristic, and `display(someTable)` ending a `/chat` turn is legal and must stay legal. One
+ *  nudge, then the turn is accepted whatever comes back. */
+const WORKING_MATERIAL_NUDGE =
+  'What you displayed is the working material, not the answer — a table list, a directory listing, a raw JSON value or source code means nothing to someone who did not just look it up. That is what you used to FIND the answer. Now answer the person: display(...) a reply in their words, saying what you found or what you changed. If your last display was the real answer and it only looks like data, say it again in a sentence.';
 
 /** Outcome of running the shared per-statement pipeline (typecheck → transpile →
  *  eval → pending-yield check). Callers own the parts that legitimately differ
@@ -455,6 +470,22 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       !(deps.hadVisibleOutput?.() ?? false);
     if (!silent) return null;
     return noOutputNudges < 1 ? 'nudge' : 'fail';
+  };
+
+  // Re-prompt budget for the working-material guard. One nudge, then silence — never a failure.
+  let workingMaterialNudges = 0;
+
+  // Anti-silent-turn guard (working-material case) — see WORKING_MATERIAL_NUDGE. Disjoint from
+  // the verdict above by construction: that one requires NO display, this one requires a display
+  // that carried no readable prose. Returns 'nudge' at most once per turn and `null` thereafter,
+  // so a turn that answers in data twice is ACCEPTED rather than failed — the reading is a
+  // heuristic and must never cost a user a working turn.
+  const workingMaterialVerdict = (): 'nudge' | null => {
+    if (deps.interactive !== true || !everRanStatement || didAsk) return null;
+    if (!(deps.hadVisibleOutput?.() ?? false)) return null; // that is the other guard's case
+    if (deps.hadReadableOutput === undefined) return null; // host does not track it
+    if (deps.hadReadableOutput()) return null;
+    return workingMaterialNudges < 1 ? 'nudge' : null;
   };
 
   while (attempt < maxRetries) {
@@ -969,6 +1000,14 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'no_output_error' });
         return 'error';
       }
+      if (workingMaterialVerdict() === 'nudge') {
+        workingMaterialNudges++;
+        renderHost.log(`[turn ${attempt}] displayed working material rather than an answer — nudging`);
+        tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'working_material_nudge' });
+        history.append({ role: 'user', content: WORKING_MATERIAL_NUDGE, blockType: 'normal' });
+        attempt = 0;
+        continue;
+      }
       renderHost.log(`[turn ${attempt}] model produced no statements — done`);
       tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'no_statements' });
       return 'done';
@@ -1005,6 +1044,14 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       renderHost.log(`[turn ${attempt}] did work but produced no user-visible output after a nudge — failing loud`);
       tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'no_output_error' });
       return 'error';
+    }
+    if (workingMaterialVerdict() === 'nudge') {
+      workingMaterialNudges++;
+      renderHost.log(`[turn ${attempt}] displayed working material rather than an answer — nudging`);
+      tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'working_material_nudge' });
+      history.append({ role: 'user', content: WORKING_MATERIAL_NUDGE, blockType: 'normal' });
+      attempt = 0;
+      continue;
     }
 
     renderHost.log(`[turn ${attempt}] done`);

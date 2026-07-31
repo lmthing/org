@@ -36,6 +36,7 @@ import { createChildVM, buildAmbientDts } from '../exec/bootstrap.js';
 import type { DbTableSchema } from '../typecheck/library-dts.js';
 import type { AppGlobalImpls } from '../exec/app-globals.js';
 import { forkEngineOptsFrom } from '../exec/fork-config.js';
+import { hasReadableProse } from '../ui/readability.js';
 import {
   evaluateDelegatePolicy,
   isDelegateAllowed,
@@ -201,6 +202,14 @@ export class Session {
    *  that did work yet showed the user nothing re-prompts once, then fails loud. */
   private displayedThisTurn = false;
 
+  /** Whether any display() this turn carried prose a person can READ, as opposed to the
+   *  working material the agent used to get there — a table list, a directory listing, a
+   *  JSON dump, a module of generated source. Read by the turn loop via
+   *  `hadReadableOutput`. See `ui/readability.ts` for why this is separate from
+   *  `displayedThisTurn`: a debug-print `display()` satisfies that flag while leaving the
+   *  person who asked with nothing to read. */
+  private readableDisplayThisTurn = false;
+
   /**
    * How the LAST turn ended — the turn loop's own verdict, not an inference.
    *
@@ -294,6 +303,8 @@ export class Session {
     const runScope = this.mintRunScope();
     try {
       this.displayedThisTurn = false; // fresh turn — reset the no-visible-output tracking
+
+      this.readableDisplayThisTurn = false;
       this.lastTurnOutcome = await runTurnLoop({
         vm: this.vm,
         history: this.history,
@@ -317,6 +328,8 @@ export class Session {
         // report whether this turn has shown the user anything (display()).
         interactive: this.opts.interactive === true,
         hadVisibleOutput: () => this.displayedThisTurn,
+
+        hadReadableOutput: () => this.readableDisplayThisTurn,
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -472,6 +485,8 @@ export class Session {
 
     try {
       this.displayedThisTurn = false; // fresh turn — reset the no-visible-output tracking
+
+      this.readableDisplayThisTurn = false;
       this.lastTurnOutcome = await runTurnLoop({
         vm: this.vm,
         history: this.history,
@@ -495,6 +510,8 @@ export class Session {
         // report whether this turn has shown the user anything (display()).
         interactive: this.opts.interactive === true,
         hadVisibleOutput: () => this.displayedThisTurn,
+
+        hadReadableOutput: () => this.readableDisplayThisTurn,
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -640,6 +657,8 @@ export class Session {
     const runScope = this.mintRunScope();
     try {
       this.displayedThisTurn = false; // fresh turn — reset the no-visible-output tracking
+
+      this.readableDisplayThisTurn = false;
       this.lastTurnOutcome = await runTurnLoop({
         vm: this.vm,
         history: this.history,
@@ -663,6 +682,8 @@ export class Session {
         // report whether this turn has shown the user anything (display()).
         interactive: this.opts.interactive === true,
         hadVisibleOutput: () => this.displayedThisTurn,
+
+        hadReadableOutput: () => this.readableDisplayThisTurn,
       });
       this.tracer.end(runScope, 'done');
     } catch (err) {
@@ -874,6 +895,9 @@ export class Session {
         // A top-level display — the session VM's hook only (forks/delegates have their own).
         // Record it so the turn loop's no-visible-output guard knows the user saw something.
         this.displayedThisTurn = true;
+        // …and separately, whether the user can READ it. Sticky across the turn: one readable
+        // display is enough, so an answer preceded by a data dump still counts as answered.
+        if (!this.readableDisplayThisTurn && hasReadableProse(value)) this.readableDisplayThisTurn = true;
         const scope = this.currentScope;
         this.tracer.write({ ts: Date.now(), type: 'display', context: scope?.label ?? 'session', ...(scope ? { nodeId: scope.nodeId } : {}), descriptor: value });
       },

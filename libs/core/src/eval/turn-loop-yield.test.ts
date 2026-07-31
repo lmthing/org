@@ -734,6 +734,116 @@ describe('turn loop — anti-silent no-visible-output guard (interactive turns)'
     expect(nudged).toBe(false);
     vm.dispose();
   });
+
+  // The working-material branch. Its whole reason to exist is that a debug-print display()
+  // satisfies hadVisibleOutput while leaving the asker with nothing to read — see
+  // ui/readability.ts for the live specimen (a team channel receiving db.tables() as the answer).
+  const workingMaterialNudged = (history: MessageHistory) =>
+    history.messages.some((m) => m.content.includes('the working material, not the answer'));
+
+  it('displayed working material → nudged once', async () => {
+    const vm = await createVM();
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    const result = await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: LIBRARY_DTS,
+      renderHost: silentHost,
+      streamFn: oneStatementThenIdle(),
+      processYield: async () => undefined,
+      maxRetries: 3,
+      interactive: true,
+      hadVisibleOutput: () => true, // display() DID fire …
+      hadReadableOutput: () => false, // … but nothing readable came out
+    });
+
+    expect(workingMaterialNudged(history)).toBe(true);
+    // The no-output nudge must NOT also fire — the two branches are disjoint.
+    expect(history.messages.some((m) => m.content.includes('showed the user nothing'))).toBe(false);
+    expect(result).toBe('done');
+    vm.dispose();
+  });
+
+  it('still working material after the nudge → ACCEPTED, never failed loud', async () => {
+    // The asymmetry that protects /chat: readability is a heuristic, so a second data-only
+    // display costs the user nothing. Contrast the displayed-NOTHING case above, which is
+    // certain and does fail loud.
+    const vm = await createVM();
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    const result = await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: LIBRARY_DTS,
+      renderHost: silentHost,
+      streamFn: oneStatementThenIdle(),
+      processYield: async () => undefined,
+      maxRetries: 3,
+      interactive: true,
+      hadVisibleOutput: () => true,
+      hadReadableOutput: () => false, // never becomes readable
+    });
+
+    expect(result).toBe('done');
+    // Exactly one nudge, however many settle points were crossed.
+    expect(history.messages.filter((m) => m.content.includes('the working material, not the answer'))).toHaveLength(1);
+    vm.dispose();
+  });
+
+  it('a readable display is a clean done, and a host that does not track readability is unaffected', async () => {
+    for (const hadReadableOutput of [() => true, undefined]) {
+      const vm = await createVM();
+      const history = new MessageHistory();
+      history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+      const result = await runTurnLoop({
+        vm,
+        history,
+        systemBlock: 'test',
+        ambientDts: LIBRARY_DTS,
+        renderHost: silentHost,
+        streamFn: oneStatementThenIdle(),
+        processYield: async () => undefined,
+        maxRetries: 3,
+        interactive: true,
+        hadVisibleOutput: () => true,
+        ...(hadReadableOutput ? { hadReadableOutput } : {}),
+      });
+
+      expect(result).toBe('done');
+      expect(workingMaterialNudged(history)).toBe(false);
+      vm.dispose();
+    }
+  });
+
+  it('a fork/delegate turn (interactive unset) never triggers the working-material guard', async () => {
+    const vm = await createVM();
+    const history = new MessageHistory();
+    history.append({ role: 'user', content: 'go', blockType: 'normal' });
+
+    const result = await runTurnLoop({
+      vm,
+      history,
+      systemBlock: 'test',
+      ambientDts: LIBRARY_DTS,
+      renderHost: silentHost,
+      streamFn: oneStatementThenIdle(),
+      processYield: async () => undefined,
+      maxRetries: 3,
+      // interactive omitted: a delegate returning a raw value to its caller is correct.
+      hadVisibleOutput: () => true,
+      hadReadableOutput: () => false,
+    });
+
+    expect(result).toBe('done');
+    expect(workingMaterialNudged(history)).toBe(false);
+    vm.dispose();
+  });
 });
 
 describe('turn loop — VM disposed mid-yield (ITEM 5b: attributable error, not a raw crash)', () => {

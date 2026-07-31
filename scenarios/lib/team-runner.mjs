@@ -426,6 +426,11 @@ const JARGON = [
   'hook', 'hooks', 'webhook', 'emitter', 'integration', 'install', 'installed', 'database',
   'schema', 'endpoint', 'endpoints', 'api', 'deploy', 'deployed', 'capability', 'consent',
   'delegate', 'delegated', 'tasklist', 'workflow', 'session', 'sessions', 'runtime', 'sandbox',
+  // The personas ban these too ("they will never say … database, table, schema, row …"), and they
+  // are the ones that actually reach a channel: "Bright Penny isn't in the boats TABLE yet"
+  // (22-crossfire run 2 step 4). Kept in the same reported-never-auto-failed bucket, because a
+  // boatyard legitimately has tables and rows of a different kind.
+  'table', 'tables', 'row', 'rows', 'column', 'columns',
 ];
 
 /** Machine words in one message, with the sentence each appeared in. */

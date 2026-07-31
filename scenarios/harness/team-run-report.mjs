@@ -22,6 +22,7 @@ import { threadSessionFacts, jargonHits } from '../lib/team-runner.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const [scenarioId = '20-studio', runId = 'latest'] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const showExpect = process.argv.includes('--expect');
+const showMessages = process.argv.includes('--messages');
 
 const runDir = join(HERE, '..', scenarioId, 'runs', String(runId));
 if (!existsSync(runDir)) {
@@ -208,6 +209,38 @@ for (const s of [...steps].reverse()) {
   if (vf) console.log(`    viewFacts: ${JSON.stringify(vf).slice(0, 600)}`);
   else console.log('    viewFacts: none recorded (no *.view.json in the project → NOT a spec app)');
   break;
+}
+
+/**
+ * Every message THING posted, in FULL, grouped by step.
+ *
+ * The table truncates, and truncation is exactly what hid two runs' worth of defects: a reply that
+ * opens "I see the yard tracker has four boats…" reads fine at 100 characters and is a 1800-character
+ * dump of generated TypeScript at full length. A judge scoring "could a member act on this?" needs
+ * the whole thing, from the log, not the runner's summary line.
+ */
+if (showMessages) {
+  console.log(`\n## Every THING message, in full (from the channel logs)`);
+  for (const s of steps) {
+    for (const t of s.turns ?? []) {
+      if (!t.threadId || !t.channel || t.inApp) continue;
+      const log = join(runDir, 'data', '.lmthing', '.team', 'channels', `${t.channel}.jsonl`);
+      if (!existsSync(log)) continue;
+      let msgs = [];
+      try {
+        msgs = readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+      } catch {
+        continue;
+      }
+      const inThread = msgs.filter((m) => (m.threadId === t.threadId || m.id === t.threadId) && m.kind !== 'user');
+      for (const m of inThread) {
+        console.log(`\n### step ${s.step} · ${t.who}<${t.role}> in ${t.dm ? 'a DM' : '#' + t.channel} · ${m.kind}${m.ask ? ` · ASK ${m.ask.id.slice(0, 8)}` : ''}${m.answersAsk ? ` · ANSWERS ${m.answersAsk.slice(0, 8)}` : ''} · ${m.text.length} chars`);
+        console.log('```');
+        console.log(m.text);
+        console.log('```');
+      }
+    }
+  }
 }
 
 if (showExpect) {
