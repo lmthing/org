@@ -265,3 +265,95 @@ test.describe('the signed-in app', () => {
     expect(session).toBeNull()
   })
 })
+
+test.describe('the host bridge', () => {
+  /**
+   * A genuine protocol round trip: the page dials the pod, pushes its grant list, receives an
+   * `fs.request`, routes it through the (stubbed) Tauri command, and answers.
+   *
+   * Tauri's `invoke` does not exist in Chromium, so it is stubbed at `__TAURI_INTERNALS__` — the
+   * layer Tauri's own JS calls through. What is NOT stubbed is anything that matters here: the
+   * socket, the framing, the grant push, the correlation id and the reply are all the real
+   * `DesktopHostBridge`. The Rust it stands in for has its own 30 tests, `grants.rs` foremost.
+   */
+  async function installTauriStub(page: Page) {
+    await page.addInitScript(() => {
+      const grants = [{ id: 'root-1', label: 'code', mode: 'rw' }]
+      const calls: Array<{ cmd: string; args: unknown }> = []
+      ;(window as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {
+        invoke: (cmd: string, args: unknown) => {
+          calls.push({ cmd, args })
+          if (cmd === 'grant_list') return Promise.resolve(grants)
+          if (cmd === 'grant_list_detailed') return Promise.resolve([])
+          if (cmd === 'fs_op') {
+            return Promise.resolve({ ok: true, entries: [{ path: 'README.md', kind: 'file', size: 5 }], truncated: false })
+          }
+          return Promise.resolve(null)
+        },
+      }
+      ;(window as unknown as Record<string, unknown>)['__tauriCalls'] = calls
+    })
+  }
+
+  test('dials the pod, pushes grants, and answers a filesystem request', async ({ page }) => {
+    await installTauriStub(page)
+    await installBridge(page)
+    await page.goto('/')
+
+    // Sign in, then open the pane and connect. Connecting is EXPLICIT by design: a cloud agent
+    // gaining access to somebody's disk must not switch itself on because an app was launched.
+    await page.getByPlaceholder('you@example.com').fill('someone@example.test')
+    await page.getByRole('button', { name: /continue with email/i }).click()
+    await page.getByPlaceholder('123456').fill(DEV_CODE)
+    await page.getByRole('button', { name: /sign in|continue/i }).first().click()
+    await expect(page.getByText(/good (morning|afternoon|evening)/i)).toBeVisible({ timeout: 20_000 })
+
+    await page.getByRole('button', { name: 'Open navigation' }).click()
+    await page.getByRole('button', { name: 'Local access' }).click()
+    await expect(page.getByText(/Not connected/i)).toBeVisible()
+    await page.getByRole('button', { name: 'Connect' }).click()
+
+    // The pod saw the grant list — ids and labels only, never a path.
+    await expect
+      .poll(async () => (await page.request.get(`${STUB}/__bridge`)).json().then((b) => b.grants), {
+        timeout: 15_000,
+      })
+      .toEqual([{ id: 'root-1', label: 'code', mode: 'rw' }])
+
+    // …and got its `fs.request` answered, correlated by id.
+    await expect
+      .poll(async () => (await page.request.get(`${STUB}/__bridge`)).json().then((b) => b.results), {
+        timeout: 15_000,
+      })
+      .toEqual([
+        expect.objectContaining({
+          type: 'result',
+          id: 'req-1',
+          ok: true,
+          value: expect.objectContaining({ ok: true }),
+        }),
+      ])
+
+    // The operation is on screen. Without the activity log the honest answer to "what did it
+    // read?" is "no idea", which is not acceptable for a feature that reads someone's disk.
+    await expect(page.getByText('tree').first()).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('disconnect is instant, and the pane says so', async ({ page }) => {
+    await installTauriStub(page)
+    await installBridge(page)
+    await page.goto('/')
+    await page.getByPlaceholder('you@example.com').fill('someone@example.test')
+    await page.getByRole('button', { name: /continue with email/i }).click()
+    await page.getByPlaceholder('123456').fill(DEV_CODE)
+    await page.getByRole('button', { name: /sign in|continue/i }).first().click()
+    await expect(page.getByText(/good (morning|afternoon|evening)/i)).toBeVisible({ timeout: 20_000 })
+    await page.getByRole('button', { name: 'Open navigation' }).click()
+    await page.getByRole('button', { name: 'Local access' }).click()
+    await page.getByRole('button', { name: 'Connect' }).click()
+    await expect(page.getByText(/Connected — your workspace/i)).toBeVisible({ timeout: 15_000 })
+
+    await page.getByRole('button', { name: 'Disconnect' }).click()
+    await expect(page.getByText(/cannot reach this computer/i)).toBeVisible({ timeout: 10_000 })
+  })
+})

@@ -38,6 +38,9 @@ tauri-plugin-deep-link = "2"
 # frame rather than an application.
 tauri-plugin-window-state = "2"
 
+# The folder picker. A grant can only ever come from the person choosing a directory.
+tauri-plugin-dialog = "2"
+
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 # NOT optional on these two platforms, and the reason is the deep link.
 #

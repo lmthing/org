@@ -53,7 +53,6 @@ pub enum Mode {
 pub struct Grant {
     pub id: String,
     pub path: PathBuf,
-    pub label: String,
     pub mode: Mode,
 }
 
@@ -136,10 +135,6 @@ pub struct Grants {
 impl Grants {
     pub fn new(list: Vec<Grant>) -> Self {
         Self { list }
-    }
-
-    pub fn roots(&self) -> &[Grant] {
-        &self.list
     }
 
     pub fn get(&self, id: &str) -> Option<&Grant> {
@@ -262,7 +257,6 @@ mod tests {
             Grants::new(vec![Grant {
                 id: "r1".into(),
                 path: fs::canonicalize(self.root.join("granted")).unwrap(),
-                label: "granted".into(),
                 mode,
             }])
         }
@@ -334,7 +328,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn a_symlink_ESCAPING_the_grant_is_refused_only_by_canonicalisation() {
+    fn a_symlink_escaping_the_grant_is_refused_only_by_canonicalisation() {
         // THE test this module exists for. Every string check above passes: the relative path is
         // plain, has no `..`, and joins to something under the grant. Only resolving it reveals
         // that the file is somewhere else entirely.
@@ -349,7 +343,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn a_symlink_INSIDE_the_grant_still_works() {
+    fn a_symlink_inside_the_grant_still_works() {
         // The jail must not break ordinary use: symlinks within a project are commonplace.
         let f = Fixture::new("symlink-inside");
         std::os::unix::fs::symlink(f.root.join("granted/src"), f.root.join("granted/link"))
@@ -441,7 +435,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn a_new_file_under_an_ESCAPING_parent_is_still_refused() {
+    fn a_new_file_under_an_escaping_parent_is_still_refused() {
         // The parent-canonicalisation path must not become a way around the jail.
         let f = Fixture::new("new-file-escape");
         std::os::unix::fs::symlink(f.root.join("secret"), f.root.join("granted/out")).unwrap();

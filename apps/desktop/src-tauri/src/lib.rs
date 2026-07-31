@@ -8,7 +8,9 @@
 //! jail — and that one IS the security boundary. Nothing else here is load-bearing
 //! for safety, which is the point: the surface that has to be right is one function.
 
+mod commands;
 mod config;
+mod fsops;
 mod grants;
 mod menu;
 mod navigation;
@@ -45,7 +47,22 @@ pub fn run() {
         // middle of the screen every time is the clearest signal that something is a web page in a
         // frame rather than an application.
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        // The folder picker for adding a grant. The person chooses; nothing else may.
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![
+            commands::grant_list,
+            commands::grant_list_detailed,
+            commands::grant_add,
+            commands::grant_remove,
+            commands::fs_op,
+        ])
         .setup(move |app| {
+            // The grant list, restored from disk. Empty on a fresh install: the bridge can reach
+            // nothing at all until the person points it at something.
+            app.manage(commands::GrantState(std::sync::Mutex::new(
+                commands::load_grants(app.handle()),
+            )));
+
             // Without an Edit menu, macOS ⌘C/⌘V/⌘A do nothing at all — AppKit routes them through
             // menu items, not the webview. See `menu.rs`.
             menu::install(app.handle())?;

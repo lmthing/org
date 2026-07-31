@@ -14,6 +14,7 @@
  * appeared on screen.
  */
 import { createServer } from 'node:http'
+import { WebSocketServer } from 'ws'
 
 const PORT = Number(process.env.STUB_PORT || 4411)
 
@@ -74,8 +75,11 @@ const server = createServer(async (req, res) => {
 
   // ── the harness's own introspection ────────────────────────────────────────
   if (path === '/__calls') return json(res, 200, { calls }, { origin })
+  if (path === '/__bridge') return json(res, 200, bridge, { origin })
   if (path === '/__reset') {
     calls.length = 0
+    bridge.grants = null
+    bridge.results.length = 0
     return json(res, 200, { ok: true }, { origin })
   }
 
@@ -140,6 +144,45 @@ const server = createServer(async (req, res) => {
   if (path.startsWith('/api/')) return json(res, 200, {}, { origin })
 
   json(res, 404, { error: 'not found' }, { origin })
+})
+
+/**
+ * `/api/host/ws` — the pod half of the desktop bridge.
+ *
+ * Plays the pod for real: greets with `hello`, waits for the desktop's `grants` push, then issues
+ * an `fs.request` and records the answer. That makes the E2E a genuine protocol round trip rather
+ * than a check that a socket opened.
+ */
+const wss = new WebSocketServer({ noServer: true })
+/** What the desktop told us, and what it answered — read back by the test via `/__bridge`. */
+const bridge = { grants: null, results: [] }
+
+server.on('upgrade', (req, socket, head) => {
+  const { pathname } = new URL(req.url ?? '/', 'http://x')
+  if (pathname !== '/api/host/ws') {
+    socket.destroy()
+    return
+  }
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    calls.push({ method: 'WS', path: pathname, body: null })
+    ws.send(JSON.stringify({ type: 'hello', protocolVersion: 1, podId: 'stub-pod' }))
+    ws.on('message', (data) => {
+      let msg
+      try {
+        msg = JSON.parse(data.toString())
+      } catch {
+        return
+      }
+      if (msg.type === 'grants') {
+        bridge.grants = msg.roots
+        // The pod asks for something the moment it knows what exists — which is what the test
+        // needs in order to observe a full request/response cycle.
+        ws.send(JSON.stringify({ type: 'fs.request', id: 'req-1', op: 'tree', rootId: msg.roots?.[0]?.id ?? 'none' }))
+        return
+      }
+      if (msg.type === 'result') bridge.results.push(msg)
+    })
+  })
 })
 
 server.listen(PORT, '127.0.0.1', () => {

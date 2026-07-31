@@ -1,0 +1,259 @@
+import { invoke } from '@tauri-apps/api/core'
+import { wsUrl } from '@lmthing/ui/platform'
+
+/**
+ * The desktop half of the host bridge: dial the pod, answer its requests.
+ *
+ * ## Why the desktop dials
+ *
+ * A cloud pod cannot reach this machine. It is behind NAT, has no stable address, and is asleep
+ * half the time. So the direction is fixed — and it is free, because it reuses the same TLS, the
+ * same Envoy JWT-`sub` routing and the same `?access_token=` convention the chat socket already
+ * uses.
+ *
+ * ## Why this lives in the webview rather than in Rust
+ *
+ * The security boundary is not the socket. It is `src-tauri/src/grants.rs`, which every operation
+ * below routes through via the `fs_op` command. Given that, putting the transport here costs
+ * nothing and buys two things: a socket, a JWT and a reconnect loop are trivial in a renderer and
+ * would be an async runtime plus a token-plumbing problem in Rust; and the bridge runs only while
+ * the window is open, which is the honest behaviour — a person can see that their machine is
+ * reachable, and closing the app ends it.
+ */
+
+/** Must match `HOST_PROTOCOL_VERSION` in `libs/cli/src/rpc/host-events.ts`. */
+const HOST_PROTOCOL_VERSION = 1
+
+interface FsRequestFrame {
+  type: 'fs.request'
+  id: string
+  op: string
+  rootId?: string
+  path?: string
+  query?: string
+  content?: string
+  offset?: number
+  limit?: number
+}
+
+type ServerFrame =
+  | { type: 'hello'; protocolVersion: number; podId: string }
+  | { type: 'evicted'; reason: string }
+  | { type: 'error'; message: string }
+  | FsRequestFrame
+  | { type: 'browser.request'; id: string; body: unknown }
+  | { type: 'cdp.request'; id: string; method: string; params?: Record<string, unknown> }
+
+export interface Grant {
+  id: string
+  label: string
+  mode: 'ro' | 'rw'
+}
+
+/** One line for the activity log — part of the security design, not decoration. */
+export interface HostActivity {
+  at: number
+  op: string
+  rootId?: string
+  path?: string
+  ok: boolean
+  error?: string
+}
+
+export interface HostBridgeState {
+  status: 'idle' | 'connecting' | 'connected' | 'evicted' | 'error'
+  detail?: string
+  activity: HostActivity[]
+}
+
+const RECONNECT_BASE_MS = 1_000
+const RECONNECT_MAX_MS = 30_000
+/** Keep the last N operations. Enough to answer "what did it just do?", bounded so it cannot grow. */
+const ACTIVITY_LIMIT = 200
+
+export class DesktopHostBridge {
+  private socket: WebSocket | null = null
+  private closed = false
+  private attempt = 0
+  private timer: ReturnType<typeof setTimeout> | null = null
+  private state: HostBridgeState = { status: 'idle', activity: [] }
+  private listeners = new Set<(s: HostBridgeState) => void>()
+
+  constructor(private getAccessToken: () => Promise<string>) {}
+
+  subscribe(fn: (s: HostBridgeState) => void): () => void {
+    this.listeners.add(fn)
+    fn(this.state)
+    return () => this.listeners.delete(fn)
+  }
+
+  /** Open the socket and keep it open. Safe to call twice. */
+  start(): void {
+    this.closed = false
+    if (this.socket) return
+    void this.connect()
+  }
+
+  /**
+   * Disconnect, and stay disconnected.
+   *
+   * The kill switch. It has to be instant and total: the person clicking "disconnect" is saying
+   * "stop reaching my files NOW", and anything that keeps a socket alive for a few more seconds is
+   * answering a different question. The pod side fails every in-flight request the moment the
+   * socket drops, so nothing is left half-done.
+   */
+  stop(): void {
+    this.closed = true
+    if (this.timer) clearTimeout(this.timer)
+    this.timer = null
+    this.socket?.close()
+    this.socket = null
+    this.set({ status: 'idle' })
+  }
+
+  private set(patch: Partial<HostBridgeState>): void {
+    this.state = { ...this.state, ...patch }
+    for (const l of this.listeners) l(this.state)
+  }
+
+  private log(entry: HostActivity): void {
+    const activity = [entry, ...this.state.activity].slice(0, ACTIVITY_LIMIT)
+    this.set({ activity })
+  }
+
+  private async connect(): Promise<void> {
+    if (this.closed) return
+    this.set({ status: 'connecting' })
+    let token: string
+    try {
+      token = await this.getAccessToken()
+    } catch (err) {
+      this.set({ status: 'error', detail: err instanceof Error ? err.message : String(err) })
+      return this.scheduleReconnect()
+    }
+
+    // The token rides in the query string because a browser cannot set a header on a WebSocket
+    // handshake — the same reason every other socket in this product does it.
+    const url = wsUrl(`/api/host/ws?access_token=${encodeURIComponent(token)}`)
+    const ws = new WebSocket(url)
+    this.socket = ws
+
+    ws.onopen = () => {
+      this.attempt = 0
+      this.set({ status: 'connected', detail: undefined })
+      void this.pushGrants()
+    }
+
+    ws.onmessage = (ev) => void this.onFrame(String(ev.data))
+
+    ws.onclose = () => {
+      this.socket = null
+      if (this.state.status !== 'evicted' && !this.closed) this.set({ status: 'connecting' })
+      this.scheduleReconnect()
+    }
+
+    ws.onerror = () => {
+      // `onclose` always follows, and it owns the reconnect — doing it here as well would double
+      // every backoff.
+      this.set({ detail: 'connection failed' })
+    }
+  }
+
+  private scheduleReconnect(): void {
+    // An evicted shell must NOT reconnect: the workspace is deliberately attached somewhere else,
+    // and racing to steal it back would leave two machines fighting over one bridge.
+    if (this.closed || this.state.status === 'evicted') return
+    if (this.timer) clearTimeout(this.timer)
+    const delay = Math.min(RECONNECT_BASE_MS * 2 ** this.attempt++, RECONNECT_MAX_MS)
+    this.timer = setTimeout(() => void this.connect(), delay)
+  }
+
+  /** Tell the pod which folders exist. Ids and labels only — never a path. */
+  private async pushGrants(): Promise<void> {
+    try {
+      const roots = await invoke<Grant[]>('grant_list')
+      this.send({ type: 'grants', roots })
+    } catch {
+      this.send({ type: 'grants', roots: [] })
+    }
+  }
+
+  /** Call after the person adds or removes a grant, so the pod never acts on a stale list. */
+  async refreshGrants(): Promise<void> {
+    if (this.state.status === 'connected') await this.pushGrants()
+  }
+
+  private send(msg: unknown): void {
+    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(msg))
+  }
+
+  private async onFrame(raw: string): Promise<void> {
+    let frame: ServerFrame
+    try {
+      frame = JSON.parse(raw) as ServerFrame
+    } catch {
+      return
+    }
+
+    switch (frame.type) {
+      case 'hello': {
+        if (frame.protocolVersion !== HOST_PROTOCOL_VERSION) {
+          // Refuse rather than guess. A pod speaking a protocol this build does not understand
+          // would be answered with frames it may read as something else entirely.
+          this.set({ status: 'error', detail: 'This workspace expects a newer desktop app.' })
+          this.closed = true
+          this.socket?.close()
+        }
+        return
+      }
+      case 'evicted': {
+        // Deliberate, and not an error: the person opened the app on another computer. Say so and
+        // stay down — see `scheduleReconnect`.
+        this.set({ status: 'evicted', detail: frame.reason })
+        this.socket?.close()
+        return
+      }
+      case 'fs.request': {
+        await this.handleFs(frame)
+        return
+      }
+      default:
+        // `browser.request` / `cdp.request` arrive with the browser work; ignoring an unknown
+        // frame is always safe, and answering one we do not understand is not.
+        return
+    }
+  }
+
+  private async handleFs(frame: FsRequestFrame): Promise<void> {
+    try {
+      // EVERY operation goes through the Rust command, which resolves the path against the grant
+      // jail before touching the disk. Nothing here inspects a path, and nothing here may.
+      const value = await invoke<Record<string, unknown>>('fs_op', {
+        req: {
+          op: frame.op,
+          rootId: frame.rootId ?? '',
+          path: frame.path,
+          query: frame.query,
+          content: frame.content,
+          offset: frame.offset,
+          limit: frame.limit,
+        },
+      })
+      this.log({
+        at: Date.now(),
+        op: frame.op,
+        ...(frame.rootId ? { rootId: frame.rootId } : {}),
+        ...(frame.path ? { path: frame.path } : {}),
+        ok: value?.['ok'] !== false,
+        ...(typeof value?.['error'] === 'string' ? { error: value['error'] as string } : {}),
+      })
+      this.send({ type: 'result', id: frame.id, ok: true, value })
+    } catch (err) {
+      // The command itself failed — distinct from a REFUSAL, which comes back inside `value` as
+      // `{ ok: false, error }` because it is a normal outcome the agent must be able to act on.
+      const error = err instanceof Error ? err.message : String(err)
+      this.log({ at: Date.now(), op: frame.op, ok: false, error })
+      this.send({ type: 'result', id: frame.id, ok: false, error })
+    }
+  }
+}

@@ -7,6 +7,8 @@ import * as Prim from '@lmthing/ui/elements/primitives'
 import { onDismiss } from '@lmthing/ui/platform'
 import { TeamScreen } from './TeamScreen'
 import { AppScreen } from './AppScreen'
+import { LocalAccess } from './LocalAccess'
+import { DesktopHostBridge } from './host-bridge'
 
 /**
  * The signed-in app: a Home dashboard, the chat surface and the team workspace.
@@ -22,7 +24,18 @@ import { AppScreen } from './AppScreen'
  * navigation idiom is a third thing to keep in sync with two that already agree.
  */
 export function HomeShell() {
+  const { getAccessToken } = useAuth()
   const [tab, setTab] = React.useState<NavTab>('home')
+  // The desktop's own pane, outside `SurfaceSwitcher`'s three: it is a property of THIS COMPUTER
+  // rather than a surface of the product, and the shared switcher must not learn about a target
+  // the other two hosts do not have.
+  const [localOpen, setLocalOpen] = React.useState(false)
+
+  // One bridge for the app's lifetime. Started explicitly rather than on mount — a cloud agent
+  // gaining access to somebody's disk is not something that should switch itself on because an
+  // app was launched.
+  const bridge = React.useMemo(() => new DesktopHostBridge(getAccessToken), [getAccessToken])
+  React.useEffect(() => () => bridge.stop(), [bridge])
   const [teamMentions, setTeamMentions] = React.useState(0)
   // Which project's app is open, if any. State rather than a route: this shell has no router, for
   // the same reason `TeamScreen` owns its rail.
@@ -70,6 +83,28 @@ export function HomeShell() {
 
   if (openApp) {
     return <AppScreen projectId={openApp.id} name={openApp.name} onClose={() => setOpenApp(null)} />
+  }
+
+  if (localOpen) {
+    return (
+      <Prim.Col flex={1} minHeight={0}>
+        <Prim.Row flexShrink={0} alignItems="center" paddingHorizontal="$3" paddingVertical="$2" borderBottomWidth={1} borderColor="$border">
+          <Prim.Pressable
+            onClick={() => setLocalOpen(false)}
+            minHeight="$8"
+            paddingHorizontal="$3"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            borderRadius="$radius-md"
+            aria-label="Close local access"
+          >
+            <Prim.Text color="$primary">← Back</Prim.Text>
+          </Prim.Pressable>
+        </Prim.Row>
+        <LocalAccess bridge={bridge} />
+      </Prim.Col>
+    )
   }
 
   return (
@@ -126,10 +161,37 @@ export function HomeShell() {
           <Prim.Box flex={1}>
             <SurfaceSwitcher current={tab} onSwitch={switchTo} {...(badges ? { badges } : {})} />
           </Prim.Box>
+          <DrawerRow
+            label="Local access"
+            onPress={() => {
+              setLocalOpen(true)
+              setNavOpen(false)
+            }}
+          />
           <SignOutRow />
         </Prim.Col>
       </Drawer>
     </Prim.Box>
+  )
+}
+
+/** A drawer entry for something that is NOT one of the three shared surfaces. */
+function DrawerRow({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Prim.Pressable
+      onClick={onPress}
+      minHeight="$10"
+      paddingHorizontal="$4"
+      display="flex"
+      flexDirection="row"
+      alignItems="center"
+      borderTopWidth={1}
+      borderColor="$border"
+      hoverStyle={{ opacity: 0.7 }}
+      aria-label={label}
+    >
+      <Prim.Text fontWeight="$medium">{label}</Prim.Text>
+    </Prim.Pressable>
   )
 }
 
