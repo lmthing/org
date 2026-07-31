@@ -26,24 +26,52 @@
  */
 
 import type { Format, Formatted, Tone, Toned } from './types'
-import { resolveBinding, type Scope } from './bind'
+import { isBinding, lastSegment, resolveBinding, type Scope } from './bind'
 
 // ── formatting ───────────────────────────────────────────────────────────────
 
 const MS = { minute: 60_000, hour: 3_600_000, day: 86_400_000 } as const
 
-/** Parse anything date-ish. Returns `null` rather than an Invalid Date. */
-function toDate(value: unknown): Date | null {
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value
+/** `2026-07-08` — a calendar day, with no time of day in it at all. */
+const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/
+/** `2026-07-08T14:30`, with optional seconds, fraction and zone. */
+const ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/
+/** A timestamp that lands exactly on UTC midnight — a DATE that was stored as an instant. */
+const UTC_MIDNIGHT_RE = /^\d{4}-\d{2}-\d{2}[T ]00:00(:00)?(\.0+)?(Z|[+-]00:?00)?$/
+
+/**
+ * A parsed date, plus the one fact the caller cannot recover afterwards: whether the
+ * source named a CALENDAR DAY or an instant.
+ *
+ * It matters because `new Date('2026-07-08')` is UTC midnight, and formatting that in a
+ * negative-offset zone renders **the 7th** — the app was told to show one day and a person
+ * reads another. A date-only source is therefore formatted in UTC, so the day that comes
+ * out is the day that went in.
+ */
+interface DateValue {
+  date: Date
+  /** The source carried no time of day: `2026-07-08`, or an exact-UTC-midnight instant. */
+  dateOnly: boolean
+}
+
+function toDateValue(value: unknown): DateValue | null {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : { date: value, dateOnly: false }
   if (typeof value === 'number') {
     const d = new Date(value)
-    return Number.isNaN(d.getTime()) ? null : d
+    return Number.isNaN(d.getTime()) ? null : { date: d, dateOnly: false }
   }
   if (typeof value === 'string' && value.trim() !== '') {
-    const d = new Date(value)
-    return Number.isNaN(d.getTime()) ? null : d
+    const s = value.trim()
+    const d = new Date(ISO_DATE_RE.test(s) ? `${s}T00:00:00Z` : s)
+    if (Number.isNaN(d.getTime())) return null
+    return { date: d, dateOnly: ISO_DATE_RE.test(s) || UTC_MIDNIGHT_RE.test(s) }
   }
   return null
+}
+
+/** Parse anything date-ish. Returns `null` rather than an Invalid Date. */
+function toDate(value: unknown): Date | null {
+  return toDateValue(value)?.date ?? null
 }
 
 function toNumber(value: unknown): number | null {
@@ -121,6 +149,11 @@ export function relativeTime(value: unknown, now: number = Date.now()): string {
   return phrase(Math.round(abs / (365 * MS.day)), 'year')
 }
 
+/** A date-only value is rendered in UTC, so the calendar day survives the trip. */
+function zoneOf(dv: DateValue): Intl.DateTimeFormatOptions {
+  return dv.dateOnly ? { timeZone: 'UTC' } : {}
+}
+
 function intlDate(d: Date, options: Intl.DateTimeFormatOptions, fallback: string): string {
   try {
     return new Intl.DateTimeFormat(undefined, options).format(d)
@@ -188,22 +221,43 @@ export function applyFormat(value: unknown, format?: Format, currencyCode?: stri
       return intlNumber(ratio, { style: 'percent', maximumFractionDigits: 1 }, `${(ratio * 100).toFixed(1)}%`)
     }
     case 'date': {
-      const d = toDate(value)
-      return d ? intlDate(d, { year: 'numeric', month: 'short', day: 'numeric' }, d.toDateString()) : stringify(value)
+      const dv = toDateValue(value)
+      if (!dv) return stringify(value)
+      // `zoneOf` is what keeps a calendar day a calendar day — see {@link DateValue}. The
+      // degrade path holds the same line: `toDateString()` is LOCAL, so a reduced `Intl`
+      // must not be the reason the 8th reads as the 7th.
+      return intlDate(
+        dv.date,
+        { year: 'numeric', month: 'short', day: 'numeric', ...zoneOf(dv) },
+        dv.dateOnly ? dv.date.toISOString().slice(0, 10) : dv.date.toDateString(),
+      )
     }
     case 'datetime': {
-      const d = toDate(value)
-      return d
+      const dv = toDateValue(value)
+      return dv
         ? intlDate(
-            d,
-            { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' },
-            d.toISOString(),
+            dv.date,
+            {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+              ...zoneOf(dv),
+            },
+            dv.date.toISOString(),
           )
         : stringify(value)
     }
     case 'time': {
-      const d = toDate(value)
-      return d ? intlDate(d, { hour: 'numeric', minute: '2-digit' }, d.toISOString().slice(11, 16)) : stringify(value)
+      const dv = toDateValue(value)
+      return dv
+        ? intlDate(
+            dv.date,
+            { hour: 'numeric', minute: '2-digit', ...zoneOf(dv) },
+            dv.date.toISOString().slice(11, 16),
+          )
+        : stringify(value)
     }
     case 'relative-time':
       return relativeTime(value)
@@ -230,31 +284,154 @@ export function stringify(value: unknown): string {
   }
 }
 
+// ── inferred formats — what a page reads like when the model declared nothing ─
+
+/**
+ * The ISO-4217 codes recognised as a FIELD-NAME suffix (`price_gbp` ⇒ GBP).
+ *
+ * A closed list rather than `/[a-z]{3}$/`: a loose rule reads `total_net` as the currency
+ * "NET", which `Intl` rejects and the degrade path then prints verbatim — a made-up code
+ * beside every figure. The list is the codes a generated app is plausibly denominated in;
+ * an unlisted one simply falls through to {@link DEFAULT_CURRENCY}, which is the same
+ * place a name with no code at all lands.
+ */
+const ISO_CURRENCY_CODES = new Set([
+  'USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'NZD', 'SEK', 'NOK', 'DKK', 'PLN', 'CZK',
+  'HUF', 'RON', 'BGN', 'ISK', 'RUB', 'UAH', 'INR', 'CNY', 'HKD', 'SGD', 'KRW', 'TWD', 'THB',
+  'IDR', 'MYR', 'PHP', 'VND', 'ZAR', 'NGN', 'KES', 'GHS', 'EGP', 'MAD', 'AED', 'SAR', 'QAR',
+  'ILS', 'BRL', 'MXN', 'ARS', 'CLP', 'COP', 'PEN',
+])
+
+/**
+ * Field-name words that mean MONEY.
+ *
+ * Money-ness is not in the type: a column is `number` and an Output property is `number`
+ * whether it holds pounds or bicycles, so nothing but the name distinguishes them. The
+ * same evidence `deriveItem`'s key lists run on (`sections/common.tsx`), used for the same
+ * reason — a name is what the app already told us.
+ */
+const MONEY_TOKENS = new Set([
+  'price', 'prices', 'cost', 'costs', 'amount', 'amounts', 'total', 'totals', 'subtotal',
+  'balance', 'fee', 'fees', 'charge', 'charges', 'revenue', 'spend', 'spending', 'budget',
+  'salary', 'wage', 'wages', 'deposit', 'refund', 'discount', 'tax', 'payment', 'payments',
+  'paid', 'due', 'income', 'expense', 'expenses', 'profit', 'earnings', 'invoice', 'fare',
+  'rent', 'commission', 'premium', 'payout', 'gross', 'net',
+])
+
+/**
+ * Words that VETO money inference even beside a money word.
+ *
+ * `total_count` and `days_due` are the shapes this exists for: guessing currency there
+ * would print "$12.00" over a count of 12 — a default that changes what the figure MEANS,
+ * which is worse than the bare number it replaced. A veto costs only the formatting.
+ *
+ * `cents`/`pence` are vetoes for the opposite reason: a minor-unit column is money the
+ * renderer would render a hundredfold wrong, and it has no way to know the scale.
+ */
+const NOT_MONEY_TOKENS = new Set([
+  'count', 'counts', 'qty', 'quantity', 'quantities', 'num', 'number', 'items', 'days',
+  'hours', 'minutes', 'seconds', 'weeks', 'months', 'years', 'percent', 'percentage', 'pct',
+  'ratio', 'rate', 'score', 'rating', 'stars', 'age', 'index', 'rank', 'position', 'id',
+  'ids', 'version', 'cents', 'pence', 'weight', 'distance', 'length', 'width', 'height',
+  'lat', 'lng', 'latitude', 'longitude',
+])
+
+/** `parts_total`, `partsTotal`, `total-parts` ⇒ `['parts','total']`. */
+export function fieldTokens(name: string): string[] {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[^A-Za-z0-9]+/)
+    .filter((t) => t !== '')
+    .map((t) => t.toLowerCase())
+}
+
+/** True when a binding's field name says the number it holds is money. */
+function isMoneyField(binding: string | undefined): boolean {
+  if (!binding || !isBinding(binding)) return false
+  const tokens = fieldTokens(lastSegment(binding))
+  if (tokens.some((t) => NOT_MONEY_TOKENS.has(t))) return false
+  return tokens.some((t) => MONEY_TOKENS.has(t) || ISO_CURRENCY_CODES.has(t.toUpperCase()))
+}
+
+/** The ISO code a field NAMES (`price_gbp` ⇒ `GBP`), if any. */
+function currencyCodeFromField(binding: string | undefined): string | undefined {
+  if (!binding || !isBinding(binding)) return undefined
+  const tokens = fieldTokens(lastSegment(binding))
+  const last = tokens[tokens.length - 1]?.toUpperCase()
+  return last && ISO_CURRENCY_CODES.has(last) ? last : undefined
+}
+
+/**
+ * The format a value gets when the spec declared NONE.
+ *
+ * The renderer's defaults have to carry a page on their own — a model that did not think
+ * to write `format: 'currency'` must still ship a readable app, because there is no
+ * browser in the compute image for it to check its work in. Scenario 30's job list is the
+ * whole case: `value: '$.parts_total'` printed `70.49` over `78` over `24`, and
+ * `meta: '$.collected_date'` printed `2026-07-08`.
+ *
+ * Two rules, and both are about a TYPE rather than about a value's contents:
+ *
+ *  - an **ISO-8601-shaped string** is a date. The shape is a full match against a strict
+ *    pattern plus a real parse, so this is reading a type off the wire, not sniffing text:
+ *    nothing else in an app is spelled `2026-07-08`. A time component makes it `datetime`;
+ *    a bare day, or an instant sitting exactly on UTC midnight (a date column that took a
+ *    round trip through `toISOString`), stays `date` rather than fabricating "12:00 AM".
+ *  - a **number in a money-named field** is currency ({@link isMoneyField}). Nothing in a
+ *    JSON Schema or a column type separates money from any other number, so the name is
+ *    the only evidence there is — and a veto list keeps it off counters and durations.
+ *
+ * A boolean needs no entry: {@link applyFormat} labels it before any format applies.
+ * Everything else is left alone — rounding an un-named float would round a coordinate.
+ */
+export function inferFormat(value: unknown, binding?: string): Format | undefined {
+  if (typeof value === 'string') {
+    const s = value.trim()
+    if (!toDateValue(s)) return undefined
+    if (ISO_DATE_RE.test(s) || UTC_MIDNIGHT_RE.test(s)) return 'date'
+    return ISO_DATETIME_RE.test(s) ? 'datetime' : undefined
+  }
+  if (typeof value === 'number' && Number.isFinite(value) && isMoneyField(binding)) return 'currency'
+  return undefined
+}
+
 /**
  * The ISO code for a bound value: the declared {@link Formatted.currencyField} first, then
- * the row's own conventional field ({@link CURRENCY_FIELDS}), then nothing.
+ * the row's own conventional field ({@link CURRENCY_FIELDS}), then the code the FIELD NAME
+ * carries (`total_parts_gbp`), then nothing.
  *
  * The convention step is what stops a multi-currency app having to repeat
  * `currencyField: '$.currency'` on every one of its money values; it only ever reads a
- * field the row already carries, so a single-currency app is unaffected.
+ * field the row already carries, so a single-currency app is unaffected. The name step is
+ * the same idea one level down: an app that spelled the currency into its column names has
+ * already said which one it means, and reading it there beats defaulting to dollars.
  */
-function currencyCodeFor(fmt: Formatted | undefined, scope: Scope): string | undefined {
+function currencyCodeFor(fmt: Formatted | undefined, scope: Scope, binding?: string): string | undefined {
   if (fmt?.currencyField) {
     const declared = resolveBinding(fmt.currencyField, scope)
     return typeof declared === 'string' ? declared : undefined
   }
   const row = scope.self
-  if (!row || typeof row !== 'object') return undefined
-  for (const field of CURRENCY_FIELDS) {
-    const candidate = (row as Record<string, unknown>)[field]
-    if (typeof candidate === 'string' && /^[A-Za-z]{3}$/.test(candidate)) return candidate
+  if (row && typeof row === 'object') {
+    for (const field of CURRENCY_FIELDS) {
+      const candidate = (row as Record<string, unknown>)[field]
+      if (typeof candidate === 'string' && /^[A-Za-z]{3}$/.test(candidate)) return candidate
+    }
   }
-  return undefined
+  return currencyCodeFromField(binding)
 }
 
-/** Resolve {@link Formatted.currencyField} against a scope and apply the format. */
-export function formatBound(value: unknown, fmt: Formatted | undefined, scope: Scope): string {
-  return applyFormat(value, fmt?.format, currencyCodeFor(fmt, scope))
+/**
+ * Resolve {@link Formatted.currencyField} against a scope and apply the format.
+ *
+ * `binding` is the expression the value came FROM — `'$.parts_total'`, not `70.49`. It is
+ * passed rather than derived because only the call site still holds it, and without it the
+ * two things a bare number needs (is it money, and in which currency) are both unknowable.
+ * A declared `format` always wins; inference only fills a hole.
+ */
+export function formatBound(value: unknown, fmt: Formatted | undefined, scope: Scope, binding?: string): string {
+  const format = fmt?.format ?? inferFormat(value, binding)
+  return applyFormat(value, format, currencyCodeFor(fmt, scope, binding))
 }
 
 // ── tone ─────────────────────────────────────────────────────────────────────

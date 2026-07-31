@@ -43,6 +43,9 @@ const MANIFEST: EndpointManifest = {
   // The bike-workshop dashboard: ONE computed record, returned in the `{ items: [...] }`
   // envelope every generated handler uses. Two sections read it — see the suite below.
   shopDashboard: { method: 'GET', routePath: '/shop-dashboard' },
+  // The same app's job list — the page whose screenshot is the defaults suite's evidence.
+  jobsList: { method: 'GET', routePath: '/jobs' },
+  jobToggleCollected: { method: 'PATCH', routePath: '/jobs/:id/toggle-collected' },
 }
 
 /** A client whose every endpoint is a stub, recording what was called. */
@@ -73,6 +76,20 @@ function stubClient(
 }
 
 const page = (sections: ViewSpec['sections']): ViewSpec => ({ route: 'index', sections })
+
+/**
+ * A calendar day as the renderer draws it, computed the way the renderer computes it, so
+ * the assertion says "formatted as a date" rather than pinning one machine's locale.
+ * `timeZone: 'UTC'` is part of the claim: a day must not slide to its neighbour.
+ */
+function isoDay(iso: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${iso}T00:00:00Z`))
+}
 
 describe('renderer defaults — never authored, always there', () => {
   it('shows a loading state while the first fetch is in flight', () => {
@@ -350,7 +367,9 @@ describe('a record section against an `{ items: [record] }` envelope (bike-works
         client={client as never}
       />,
     )
-    await waitFor(() => expect(screen.getByText('2026-07-27')).toBeInTheDocument())
+    // The card draws the week start — as a DATE, because an ISO-shaped string with no
+    // declared `format` is inferred rather than printed raw (see the defaults suite).
+    await waitFor(() => expect(screen.getByText(isoDay('2026-07-27'))).toBeInTheDocument())
   })
 })
 
@@ -741,5 +760,158 @@ describe('the Wave-2 amendments', () => {
     )
     // The destination is mounted and reachable — the drill-in is no longer an orphan.
     expect(screen.getAllByText('Shop').length).toBeGreaterThan(0)
+  })
+})
+
+/**
+ * The three defaults a page depends on when the model declared no presentation at all.
+ *
+ * The evidence is `scenarios/30-bike-workshop/runs/202/shots/step-02/desktop__jobs.png`:
+ * every row carried a pill reading literally `false`, the money column read `70.49` over
+ * `78` over `24`, and the collection date read `2026-07-08`. The spec below is that page's
+ * `item` verbatim — one binding per slot, no `format`, no `toneMap`, which is exactly what
+ * a model writes when nothing tells it otherwise. There is no browser in the compute image,
+ * so a default that reads wrong ships.
+ */
+describe('value defaults — a page reads correctly with nothing declared (bike-workshop, run 202)', () => {
+  /** `pages/jobs.view.json`'s item, verbatim from the run's snapshot. */
+  const JOBS: ViewSpec = {
+    route: 'jobs',
+    title: 'Jobs',
+    sections: [
+      {
+        kind: 'list',
+        id: 'allJobs',
+        query: 'jobsList',
+        layout: 'rows',
+        item: {
+          title: '$.bike_label',
+          subtitle: '$.customer_name',
+          caption: '$.work_description',
+          value: '$.parts_total',
+          badge: '$.is_collected',
+          meta: '$.collected_date',
+        },
+      },
+    ],
+  }
+
+  /** The endpoint's real rows, with the three figures the screenshot shows. */
+  const ROWS = [
+    {
+      id: 'j1',
+      bike_label: 'Specialized Allez',
+      customer_name: 'Aoife Brennan',
+      work_description: 'full service',
+      parts_total: 70.49,
+      is_collected: false,
+      collected_date: null,
+    },
+    {
+      id: 'j2',
+      bike_label: 'Giant Escape',
+      customer_name: 'Tomasz Nowak',
+      work_description: 'rear wheel rebuild',
+      parts_total: 78,
+      is_collected: false,
+      collected_date: null,
+    },
+    {
+      id: 'j4',
+      bike_label: 'Trek Marlin',
+      customer_name: 'Tomasz Nowak',
+      work_description: 'fork service',
+      parts_total: 24,
+      is_collected: true,
+      collected_date: '2026-07-08',
+    },
+  ]
+
+  it('a BOOLEAN in a badge reads as a yes/no fact, never as the JS literal', async () => {
+    const { client } = stubClient({ jobsList: ROWS })
+    render(<ViewRenderer spec={JOBS} client={client as never} />)
+
+    await waitFor(() => expect(screen.getByText('Specialized Allez')).toBeInTheDocument())
+    expect(screen.getAllByText('No')).toHaveLength(2)
+    expect(screen.getAllByText('Yes')).toHaveLength(1)
+    // The literals the screenshot showed are gone — and nothing was dropped to achieve it.
+    expect(screen.queryByText('false')).toBeNull()
+    expect(screen.queryByText('true')).toBeNull()
+  })
+
+  it('the two states of that badge are TONED apart, without a toneMap', async () => {
+    const { client } = stubClient({ jobsList: ROWS })
+    render(<ViewRenderer spec={JOBS} client={client as never} />)
+
+    await waitFor(() => expect(screen.getByText('Yes')).toBeInTheDocument())
+    // A boolean has exactly two states the renderer can read without guessing, so it gets
+    // `auto` (true ⇒ success, false ⇒ neutral). The classes are the design system's own —
+    // the assertion is only that the two differ, never what colour either one is.
+    expect(screen.getByText('Yes').getAttribute('class')).not.toEqual(
+      screen.getAllByText('No')[0].getAttribute('class'),
+    )
+  })
+
+  it('a MONEY field renders with a symbol and consistent minor units', async () => {
+    const { client } = stubClient({ jobsList: ROWS })
+    render(<ViewRenderer spec={JOBS} client={client as never} />)
+
+    // `parts_total` is a `number` column: nothing but the NAME says it holds money, and
+    // 78 beside 70.49 is the defect. All three now carry the same two digits.
+    await waitFor(() => expect(screen.getByText(/70[.,]49$/)).toBeInTheDocument())
+    expect(screen.getByText(/78[.,]00$/)).toBeInTheDocument()
+    expect(screen.getByText(/24[.,]00$/)).toBeInTheDocument()
+    // …and a currency symbol, rather than a bare figure.
+    expect(screen.getByText(/78[.,]00$/).textContent).toMatch(/^[^0-9]+78/)
+    expect(screen.queryByText('78')).toBeNull()
+  })
+
+  it('an ISO DATE reads as a date, not as a raw column value', async () => {
+    const { client } = stubClient({ jobsList: ROWS })
+    render(<ViewRenderer spec={JOBS} client={client as never} />)
+
+    await waitFor(() => expect(screen.getByText(isoDay('2026-07-08'))).toBeInTheDocument())
+    expect(screen.queryByText('2026-07-08')).toBeNull()
+  })
+
+  it('a COUNT is left alone — a default must not change what a figure means', async () => {
+    const { client } = stubClient({ shopDashboard: { items: [{ in_shop_count: 3, longest_waiting_days: 17 }] } })
+    render(
+      <ViewRenderer
+        spec={page([
+          {
+            kind: 'stats',
+            query: 'shopDashboard',
+            cards: [
+              { label: 'Bikes in shop', value: '$.in_shop_count' },
+              { label: 'Days waiting', value: '$.longest_waiting_days' },
+            ],
+          },
+        ])}
+        client={client as never}
+      />,
+    )
+    // `count` and `days` veto the money guess: "$17.00" over a 17-day wait would be a
+    // default that says something the app never said.
+    await waitFor(() => expect(screen.getByText('3')).toBeInTheDocument())
+    expect(screen.getByText('17')).toBeInTheDocument()
+  })
+
+  it('a declared format still WINS over the inferred one', async () => {
+    const { client } = stubClient({ jobsList: [{ id: 'j1', bike_label: 'Trek', parts_total: 24 }] })
+    render(
+      <ViewRenderer
+        spec={page([
+          {
+            kind: 'list',
+            query: 'jobsList',
+            item: { title: '$.bike_label', value: { value: '$.parts_total', format: 'number' } },
+          },
+        ])}
+        client={client as never}
+      />,
+    )
+    // Inference fills a hole; it never overrides the model.
+    await waitFor(() => expect(screen.getByText('24')).toBeInTheDocument())
   })
 })

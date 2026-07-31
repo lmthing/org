@@ -59,7 +59,7 @@ import {
   lastSegment,
   type Scope,
 } from './bind'
-import { applyFormat, formatBound, resolveTone, stringify, toneTokens } from './format'
+import { formatBound, resolveTone, stringify, toneTokens } from './format'
 import { ViewIcon, StarGlyph } from './icons'
 import { HScroll } from './hscroll'
 import { ActionButton, ActionRow, useDispatch } from './actions'
@@ -139,7 +139,9 @@ function flatText(fv: FlatValue | undefined, scope: Scope): { text: string; mods
   const { value, mods } = flatParts(fv)
   const r = resolveValue(value, scope)
   if (!r.present) return undefined
-  const text = formatBound(r.value, mods, scope)
+  // The BINDING goes with the value: `formatBound` infers money from the field name, which
+  // is the only place a `number` column says it holds pounds rather than bicycles.
+  const text = formatBound(r.value, mods, scope, value)
   const unit = mods.suffix === undefined ? undefined : resolveOptional(mods.suffix, scope)
   // `raw` rides along because TONE must be keyed on the value, not on its rendering: a
   // boolean `true` formatted to "Yes" is unrecognisable to `autoTone`, and keying the map
@@ -320,7 +322,7 @@ function KeyValueRows({
       // it, rather than leaving "Paid by · " hanging.
       if (!r.present) return null
       const label = stringify(resolveOptional(pair.label, scope) ?? pair.label)
-      return { key: i, label, value: formatBound(r.value, pair, scope) }
+      return { key: i, label, value: formatBound(r.value, pair, scope, pair.value) }
     })
     .filter((r): r is { key: number; label: string; value: string } => r !== null)
 
@@ -486,7 +488,7 @@ export function renderElement(node: ElementNode, scope: Scope, key?: React.Key):
           {...(node.strike ? { textDecorationLine: 'line-through' as const } : {})}
           {...(node.maxLines ? clampProps(node.maxLines) : {})}
         >
-          {formatBound(r.value, node, scope)}
+          {formatBound(r.value, node, scope, node.text)}
         </Prim.Text>
       )
     }
@@ -502,7 +504,7 @@ export function renderElement(node: ElementNode, scope: Scope, key?: React.Key):
           color={tone ? toneTokens(tone).fg : '$muted-foreground'}
           {...(node.maxLines ? clampProps(node.maxLines) : {})}
         >
-          {formatBound(r.value, node, scope)}
+          {formatBound(r.value, node, scope, node.text)}
         </Prim.Text>
       )
     }
@@ -519,9 +521,10 @@ export function renderElement(node: ElementNode, scope: Scope, key?: React.Key):
     case 'badge': {
       const r = resolveValue(node.text, scope)
       if (!r.present) return null
-      // `applyFormat` with no format, so a boolean pill reads "Yes"/"No" rather than
-      // "true"/"false"; `BadgeEl` carries no `format` of its own to declare instead.
-      const text = applyFormat(r.value)
+      // `formatBound` with no declared format, so a boolean pill reads "Yes"/"No" rather
+      // than "true"/"false" and a date pill reads as a date; `BadgeEl` carries no `format`
+      // of its own to declare instead, which is exactly why the DEFAULT has to be right.
+      const text = formatBound(r.value, undefined, scope, node.text)
       const toned = typeof r.value === 'boolean' && !node.tone && !node.toneMap ? { ...node, tone: 'auto' as const } : node
       return <Pill key={key} text={text} tone={resolveTone(toned, r.value, scope)} shape={node.shape} icon={node.icon} />
     }
@@ -560,7 +563,7 @@ export function renderElement(node: ElementNode, scope: Scope, key?: React.Key):
                   ) : null}
                   {time.present ? (
                     <Prim.Text fontSize="$xs" color="$muted-foreground">
-                      {formatBound(time.value, node, s)}
+                      {formatBound(time.value, node, s, node.time)}
                     </Prim.Text>
                   ) : null}
                 </Prim.Row>
@@ -725,7 +728,7 @@ function StatcardElement({ node, scope }: { node: Extract<ElementNode, { el: 'st
         </Prim.Text>
       </Prim.Row>
       <Prim.Text fontSize="$2xl" fontWeight="$semibold" color={tone ? toneTokens(tone).fg : '$card-foreground'}>
-        {formatBound(v.value, node, scope)}
+        {formatBound(v.value, node, scope, node.value)}
       </Prim.Text>
       {delta.present ? (
         <Prim.Text fontSize="$xs" color="$muted-foreground">
@@ -875,7 +878,7 @@ function TableBody({ columns, rows, scope }: { columns: TableColumn[]; rows: unk
                   >
                     {/* Never a bare string: a cell's text is dropped on native without this. */}
                     <Prim.Text fontSize="$xs" color="$foreground">
-                      {r.present ? formatBound(r.value, col, s) : ''}
+                      {r.present ? formatBound(r.value, col, s, col.value) : ''}
                     </Prim.Text>
                   </Prim.Td>
                 )

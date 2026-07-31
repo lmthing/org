@@ -34,7 +34,7 @@ import * as React from 'react'
 import * as Prim from '../../elements/primitives/index'
 import type { Facet, ListSection, Slot, SortOption, TimelineSection } from '../types'
 import { itemScope, resolveBinding, resolveValue, lastSegment, type Scope } from '../bind'
-import { applyFormat, stringify } from '../format'
+import { applyFormat, inferFormat, stringify } from '../format'
 import { renderSlot } from '../elements'
 import { ActionItemButton, ActionRow, useDispatch } from '../actions'
 import { useSelection, useViewRuntime, usePublish } from '../runtime'
@@ -318,7 +318,9 @@ function TimelineRows({
     }
     return [...map.entries()].map(([key, groupRows]) => ({
       key,
-      label: applyFormat(key, section.groupFormat),
+      // A timeline grouped by a date column and no `groupFormat` used to head every group
+      // with a raw ISO string; inference reads the shape and the heading reads as a day.
+      label: applyFormat(key, section.groupFormat ?? inferFormat(key, section.group)),
       rows: groupRows,
     }))
   }, [rows, section.group, section.groupFormat, scope])

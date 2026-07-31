@@ -84,7 +84,7 @@ export function StatsSectionView({ section, scope }: { section: StatsSection; sc
                 </Prim.Text>
               </Prim.Row>
               <Prim.Text fontSize="$2xl" fontWeight="$semibold" color={tone ? toneTokens(tone).fg : '$card-foreground'}>
-                {formatBound(v.value, card, inner)}
+                {formatBound(v.value, card, inner, card.value)}
               </Prim.Text>
               {delta.present ? (
                 <Prim.Text fontSize="$xs" color="$muted-foreground">

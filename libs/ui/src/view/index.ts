@@ -85,7 +85,19 @@ export {
 } from './bind'
 export type { Scope, Resolved } from './bind'
 
-export { applyFormat, formatBound, humanize, relativeTime, stringify, resolveTone, autoTone, toneTokens, TONE_TOKENS } from './format'
+export {
+  applyFormat,
+  booleanLabel,
+  formatBound,
+  humanize,
+  inferFormat,
+  relativeTime,
+  stringify,
+  resolveTone,
+  autoTone,
+  toneTokens,
+  TONE_TOKENS,
+} from './format'
 export type { ToneTokens } from './format'
 
 // ── runtime + parts ──────────────────────────────────────────────────────────
