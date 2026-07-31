@@ -1,21 +1,16 @@
 /**
- * Reaching a team from the phone — the control-plane half.
+ * Reaching a team — the control-plane half, shared by every host that mounts the team surface.
  *
- * Not a screen: this is the native equivalent of what `apps/web`'s
- * `team-auth.tsx` does before the surface can be mounted. Which teams am I on,
- * and what is the team-scoped token for this one?
+ * Not a screen. Two questions have to be answered before `TeamChannelsView` can be mounted: which
+ * teams am I on, and what is the team-scoped token for this one?
  *
- * A browser on lmthing.team cannot use a personal token against a team's pod
- * (the edge routes by the token's `team` claim, and a personal one resolves to
- * the member's OWN pod), and neither can the app. `POST /api/teams/:id/token`
- * mints the narrower one after checking membership, and it is short-lived, so
- * this re-mints rather than caching to disk — a token in the keystore that
- * outlives a role change is worse than a round trip.
+ * A personal token cannot be used against a team's pod — the edge routes by the token's `team`
+ * claim, and a personal one resolves to the member's OWN pod. `POST /api/teams/:id/token` mints the
+ * narrower one after checking membership. It is short-lived, and this deliberately re-mints rather
+ * than persisting it: a token in a keystore that outlives a role change is worse than a round trip.
  */
-
-import { CLOUD_BASE_URL, TEAM_BASE_URL } from './hosts'
-
-export { TEAM_BASE_URL }
+import { dataPlaneOrigin } from '../lib/app-urls'
+import { teamBase } from '../platform/api-base'
 
 export interface TeamSummary {
   id: string
@@ -26,7 +21,7 @@ export interface TeamSummary {
 
 export async function listTeams(getAccessToken: () => Promise<string>): Promise<TeamSummary[]> {
   const token = await getAccessToken()
-  const res = await fetch(`${CLOUD_BASE_URL}/api/teams`, {
+  const res = await fetch(`${dataPlaneOrigin('cloud')}/api/teams`, {
     headers: { authorization: `Bearer ${token}` },
   })
   if (!res.ok) throw new Error(`Could not list teams (${res.status})`)
@@ -46,9 +41,9 @@ const REFRESH_BUFFER_MS = 60_000
 /**
  * A `getToken` for `createTeamClient`, holding the minted token in memory only.
  *
- * Concurrent callers share one request: the surface asks for a token from
- * several places at once on mount (channels, directory, profile, the socket),
- * and four simultaneous mints would be four round trips for one credential.
+ * Concurrent callers share one request: the surface asks for a token from several places at once on
+ * mount (channels, directory, profile, the socket), and four simultaneous mints would be four round
+ * trips for one credential.
  */
 export function teamTokenGetter(
   teamId: string,
@@ -65,7 +60,7 @@ export function teamTokenGetter(
     if (!pending) {
       pending = (async () => {
         const token = await getAccessToken()
-        const res = await fetch(`${CLOUD_BASE_URL}/api/teams/${teamId}/token`, {
+        const res = await fetch(`${dataPlaneOrigin('cloud')}/api/teams/${teamId}/token`, {
           method: 'POST',
           headers: { authorization: `Bearer ${token}` },
         })
@@ -87,12 +82,13 @@ export function teamTokenGetter(
 }
 
 /**
- * Where a project's app pages are served for a team pod.
+ * Where a project's app pages are served for a TEAM pod.
  *
- * The reserved `/app/` prefix, matching every non-`lmthing.app` context —
- * mirrors `APP_PATH_PREFIX` in the web app's config, which is the same decision
- * made once per target because native has no `window.location` to derive it from.
+ * The reserved `/app/` prefix, matching every non-`lmthing.app` context — mirrors `APP_PATH_PREFIX`
+ * in the web app's config. The origin comes from the `teamBase()` seam rather than a literal,
+ * because native and the desktop shell each have their own answer and a second literal is how the
+ * two halves of a build start disagreeing.
  */
 export function teamAppUrl(projectId: string): string {
-  return `${TEAM_BASE_URL}/app/${projectId}/`
+  return `${teamBase()}/app/${projectId}/`
 }

@@ -1,5 +1,5 @@
 import { isWeb } from '@lmthing/auth'
-import { cloudBaseOverride } from '../platform/api-base'
+import { apiBase, cloudBaseOverride } from '../platform/api-base'
 
 /**
  * Cross-app links for the lmthing product suite (studio / chat / computer).
@@ -96,10 +96,16 @@ export function dataPlaneOrigin(role: ApiRole): string {
       : env.VITE_COMPUTER_BASE_URL
   if (override) return override.replace(/\/$/, '')
 
-  // Native has no `window.location` to derive an answer from, so without this it fell through to
-  // the production constant below and a locally-pointed device build still asked production.
-  const nativeCloud = role === 'cloud' ? cloudBaseOverride() : ''
-  if (nativeCloud) return nativeCloud
+  // Neither native nor the desktop shell has a `window.location` worth deriving an answer from —
+  // native has none at all, and a Tauri renderer's is `tauri://localhost`. Both hosts state their
+  // two origins instead, so ask them before falling through to the location-derived answers below.
+  //
+  // The `computer` arm matters as much as the `cloud` one and used to be missing: without it this
+  // returned `window.location.origin` for a pod, which on native was `''` and on desktop was the
+  // `tauri://` scheme — a value that reaches `fetch` and fails as a network error rather than as a
+  // configuration one.
+  const hostOrigin = role === 'cloud' ? cloudBaseOverride() : apiBase()
+  if (hostOrigin) return hostOrigin
 
   const hostname = isWeb() ? window.location.hostname : ''
   const origin = isWeb() ? window.location.origin : ''

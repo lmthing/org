@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      No early-wake beacon here, unlike `apps/web/index.html`.
+
+      That script reads `location.hostname` to decide which gateway to call, and inside a Tauri
+      webview the hostname is `localhost` — which its own logic reads as "localhost IS the pod, no
+      gateway to call" and skips. It would be dead code that looks live. The desktop shell learns
+      the gateway from the injected bridge instead, which does not exist until the module graph
+      runs, so the wake is fired from `AuthGate` where it can be done correctly.
+    -->
+    <title>lmthing</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

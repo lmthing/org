@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { storage } from './storage'
 import { clipboard } from './clipboard'
 import { getWindowSize, subscribeWindowSize } from './dimensions'
-import { apiBase, apiUrl, wsUrl } from './api-base'
+import { apiBase, apiUrl, wsUrl, cloudBaseOverride } from './api-base'
+import { dataPlaneOrigin } from '../lib/app-urls'
 
 /**
  * Runtime verification of the WEB platform shims (jsdom). The native mirrors (`*.native.ts`) are
@@ -59,6 +60,68 @@ describe('platform (web)', () => {
     off()
     globalThis.window?.dispatchEvent(new Event('resize'))
     expect(calls).toBe(1)
+  })
+})
+
+/**
+ * The DESKTOP shell resolves this same web fork — a Tauri renderer is a browser — but its origin is
+ * `tauri://localhost`, which is not the pod. These pin the branch that reads the host-injected
+ * bridge instead, and (above all) that an ordinary browser is untouched by its presence in the code.
+ */
+describe('platform (desktop shell)', () => {
+  const install = (bridge: Record<string, unknown>) => {
+    ;(window as unknown as Record<string, unknown>)['__LMTHING_DESKTOP__'] = bridge
+  }
+
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>)['__LMTHING_DESKTOP__']
+  })
+
+  const BRIDGE = {
+    protocolVersion: 1,
+    platform: 'linux',
+    mode: 'cloud',
+    apiBase: 'https://lmthing.chat',
+    cloudBase: 'https://lmthing.cloud',
+    teamBase: 'https://lmthing.team',
+  }
+
+  it('apiUrl becomes ABSOLUTE — the identity above would address the tauri:// origin', () => {
+    install(BRIDGE)
+    expect(apiBase()).toBe('https://lmthing.chat')
+    expect(apiUrl('/api/env')).toBe('https://lmthing.chat/api/env')
+  })
+
+  it('wsUrl is derived from the bridge, not from location.protocol', () => {
+    // Load-bearing: under `tauri://localhost` the protocol test is not `https:`, so the web
+    // fallthrough would build `ws://localhost/api/ws` — valid syntax pointing at nothing.
+    install(BRIDGE)
+    expect(wsUrl('/api/ws?sessionId=abc')).toBe('wss://lmthing.chat/api/ws?sessionId=abc')
+  })
+
+  it('a trailing slash on the injected origin does not produce a double slash', () => {
+    install({ ...BRIDGE, apiBase: 'https://lmthing.chat/' })
+    expect(apiUrl('/api/env')).toBe('https://lmthing.chat/api/env')
+  })
+
+  it('dataPlaneOrigin answers for BOTH roles — the computer arm was the missing one', () => {
+    install(BRIDGE)
+    expect(dataPlaneOrigin('cloud')).toBe('https://lmthing.cloud')
+    expect(dataPlaneOrigin('computer')).toBe('https://lmthing.chat')
+  })
+
+  it('a bridge announcing an unknown protocol version is ignored WHOLESALE', () => {
+    // Degrading to "not desktop" is the designed failure: a half-understood object would have the
+    // app addressing fields that may have changed meaning.
+    install({ ...BRIDGE, protocolVersion: 99 })
+    expect(apiBase()).toBe('')
+    expect(cloudBaseOverride()).toBe('')
+  })
+
+  it('an ordinary browser is completely unaffected', () => {
+    expect(apiBase()).toBe('')
+    expect(apiUrl('/api/env')).toBe('/api/env')
+    expect(cloudBaseOverride()).toBe('')
   })
 })
 

@@ -1,0 +1,45 @@
+{
+  "name": "@lmthing/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev",
+    "build": "vp build",
+    "preview": "vp preview",
+    "tauri": "tauri",
+    "generate:tauri-conf": "node scripts/generate-tauri-conf.mjs",
+    "pretauri:dev": "pnpm generate:tauri-conf",
+    "tauri:dev": "tauri dev",
+    "pretauri:build": "pnpm generate:tauri-conf",
+    "tauri:build": "tauri build",
+    "typecheck": "tsc --noEmit",
+    "lint:tokens": "lmthing-lint-tokens src",
+    "lint": "lmthing-lint-tokens src && node scripts/lint-barrel-imports.mjs",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@lmthing/auth": "workspace:*",
+    "@lmthing/css": "workspace:*",
+    "@lmthing/ui": "workspace:*",
+    "@tamagui/core": "2.5.1",
+    "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/plugin-deep-link": "^2.4.4",
+    "@tauri-apps/plugin-opener": "^2.5.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@lmthing/config": "workspace:*",
+    "@lmthing/utils": "workspace:*",
+    "@tamagui/web": "2.5.1",
+    "@tauri-apps/cli": "^2.9.2",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.0",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.0",
+    "vite-plus": "latest"
+  }
+}

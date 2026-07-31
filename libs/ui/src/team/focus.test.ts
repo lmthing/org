@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { resolveFocusTeamId } from './team-focus'
+import { resolveFocusTeamId } from './focus'
 
 const TEAMS = [{ id: 'a' }, { id: 'b' }]
 

@@ -1,13 +1,21 @@
 import * as React from 'react'
 import { ActivityIndicator, AppState, Linking } from 'react-native'
 import * as Prim from '@lmthing/ui/elements/primitives'
-import { TeamChannelsView, createTeamClient, type Rail } from '@lmthing/ui/team'
+import {
+  TeamChannelsView,
+  createTeamClient,
+  listTeams,
+  teamAppUrl,
+  teamTokenGetter,
+  resolveFocusTeamId,
+  type Rail,
+  type TeamSummary,
+} from '@lmthing/ui/team'
 import { useAuth } from '@lmthing/auth'
-import { listTeams, teamAppUrl, teamTokenGetter, TEAM_BASE_URL, type TeamSummary } from './team'
+import { teamBase } from '@lmthing/ui/platform'
 import { registerForPush } from './push'
 import { AppScreen } from './AppScreen'
 import { fetchAppTarget, type AppTarget } from './app-views'
-import { resolveFocusTeamId } from './team-focus'
 import { hapticWarning, hapticLight } from './haptics'
 
 /**
@@ -138,7 +146,7 @@ export function TeamScreen({
       getTeamToken
         ? createTeamClient({
             // Absolute, unlike web: native has no origin to be same-origin with.
-            baseUrl: TEAM_BASE_URL,
+            baseUrl: teamBase(),
             getToken: getTeamToken,
           })
         : null,
@@ -149,7 +157,7 @@ export function TeamScreen({
     if (!probing || !getTeamToken) return
     let cancelled = false
     const projectId = probing
-    void fetchAppTarget(TEAM_BASE_URL, getTeamToken, projectId).then((target) => {
+    void fetchAppTarget(teamBase(), getTeamToken, projectId).then((target) => {
       if (cancelled) return
       // Native apps take the whole screen; the WebView kind keeps the rail it has always
       // had, byte for byte. On a phone the rail is full-width anyway, so what actually
@@ -204,7 +212,7 @@ export function TeamScreen({
         </Prim.Text>
         <RetryButton onPress={() => void refresh()} />
         <Prim.Pressable
-          onClick={() => void Linking.openURL(TEAM_BASE_URL)}
+          onClick={() => void Linking.openURL(teamBase())}
           minHeight="$12"
           paddingHorizontal="$4"
           display="flex"
@@ -240,7 +248,7 @@ export function TeamScreen({
         projectId={nativeApp.id}
         name={nativeApp.id}
         onClose={() => setNativeApp(null)}
-        baseUrl={TEAM_BASE_URL}
+        baseUrl={teamBase()}
         getToken={getTeamToken}
         appUrl={teamAppUrl}
         target={nativeApp.target}

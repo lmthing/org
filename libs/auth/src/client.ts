@@ -1,8 +1,14 @@
 import type { AuthConfig, AuthSession } from './types'
+import { isWeb, isDesktopRun } from './env'
 import { readItem, writeItem, removeItem, hydrate, isHydrated } from './platform/session-store'
 import { getRandomValues } from './platform/crypto'
 import { startLogin, completeRedirect } from './platform/sso'
 import { stateFromBytes } from './sso-exchange'
+
+/** Re-exported so `isWeb` keeps its long-standing import path; the implementation lives in
+ *  `./env` beside `isDesktopRun`, which needs the same DOM check and must not import this file
+ *  back (a cycle). */
+export { isWeb }
 
 const SESSION_KEY = 'lmthing_session'
 const PIN_HASH_KEY = 'lmthing_pin_hash'
@@ -218,17 +224,6 @@ export function getSession(): AuthSession | null {
   }
 }
 
-/**
- * True only in a real browser. React Native's own bootstrap (`setUpGlobals.js`) sets
- * `global.window = global` for npm-package compatibility, so `typeof window !== 'undefined'` is
- * true on native too — every other DOM-only property (`location`, `document`, `history`) is
- * NOT shimmed, so reading through them unconditionally throws instead of falling through the
- * `undefined` branch. `window.document` is a real signal RN never sets.
- */
-export function isWeb(): boolean {
-  return typeof window !== 'undefined' && typeof window.document !== 'undefined'
-}
-
 /** Token injected by the pod bootstrap (window.__LM_ACCESS_TOKEN__), or null. */
 export function getPodInjectedToken(): string | null {
   if (!isWeb()) return null
@@ -247,8 +242,20 @@ export function isPodEmbedded(): boolean {
  * pod-ensure gate: the local pod doesn't enforce auth and is already the
  * server serving this app. Production hostnames (lmthing.*) return false, so
  * real gateway auth is unaffected.
+ *
+ * The desktop shell is excluded FIRST and unconditionally. A Tauri webview serves the app from
+ * `tauri://localhost` on macOS/Linux — hostname `localhost` — so without this branch the hostname
+ * test below fires, `AuthProvider` sets `isDemo`, and the app boots straight into `DEMO_SESSION`
+ * with `accessToken: 'demo'`: the login screen never appears and every pod call 401s. Windows
+ * serves from `http://tauri.localhost` and does not match, so the bug was OS-divergent and silent.
+ *
+ * The test is `isDesktopRun()` — the explicit injected global — and NOT a `tauri:` scheme sniff,
+ * because in local mode the shell points the same webview at a real loopback sidecar. Keying on
+ * the scheme would put that back into demo mode; keying on the global says what is actually
+ * being asked: "is a host telling us where the pod is?"
  */
 export function isLocalRun(): boolean {
+  if (isDesktopRun()) return false
   if (!isWeb()) return false
   const host = window.location.hostname
   return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host.endsWith('.test')

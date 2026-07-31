@@ -25,7 +25,11 @@
       "./src/elements/*.ts"
     ],
     "./elements/primitives": "./src/elements/primitives/index.ts",
-    "./lib/*": "./src/lib/*",
+    "./lib/*": [
+      "./src/lib/*.ts",
+      "./src/lib/*.tsx",
+      "./src/lib/*"
+    ],
     "./platform": "./src/platform/index.ts",
     "./theme": "./src/theme/index.ts",
     "./theme/tamagui.config": "./src/theme/tamagui.config.ts"

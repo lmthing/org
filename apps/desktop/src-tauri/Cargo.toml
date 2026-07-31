@@ -1,0 +1,48 @@
+[package]
+name = "lmthing-desktop"
+version = "0.1.0"
+description = "LMThing desktop"
+authors = ["LMThing"]
+edition = "2021"
+# Pinned so a toolchain bump is a decision someone makes, not something a fresh
+# machine does silently. Tauri 2 itself requires 1.77+.
+rust-version = "1.77"
+
+[lib]
+# Tauri's own convention: the binary is a two-line shim over this library, so the
+# same code can be built for mobile targets later without moving anything.
+name = "lmthing_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Opens a URL in the SYSTEM browser. Load-bearing rather than a convenience: every
+# outbound link in this app must leave the window, because navigating the single
+# webview away from the bundle destroys the app until the user force-quits.
+tauri-plugin-opener = "2"
+
+# The `lmthing://` SSO callback. Needs no gateway change — `/sso/create` stores
+# `redirect_uri` verbatim and requires an exact match with no allowlist, so a
+# custom scheme round-trips byte-identically (the property `sso.native.ts`
+# already documents and relies on).
+tauri-plugin-deep-link = "2"
+
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+# NOT optional on these two platforms, and the reason is the deep link.
+#
+# On macOS the OS delivers a custom-scheme URL to the already-running app. On
+# Linux and Windows it instead LAUNCHES A SECOND COPY with the URL in argv — so
+# without this the SSO callback arrives in a brand-new process that has no pending
+# login to resolve, while the window the user is actually looking at waits forever.
+# Single-instance forwards that argv to the first instance and exits.
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+
+[features]
+# Used by `tauri dev`; do not remove.
+custom-protocol = ["tauri/custom-protocol"]

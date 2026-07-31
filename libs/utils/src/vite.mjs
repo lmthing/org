@@ -220,7 +220,7 @@ function tamaguiConfigGuardPlugin() {
  *   does not need the peer dependency installed.
  */
 export function createViteConfig(dirname, overrides, opts = {}) {
-  const { tailwind = true } = opts
+  const { tailwind = true, router = true } = opts
   const orgRoot = findOrgRoot(dirname)
   const libsDir = path.resolve(orgRoot, 'libs')
   const faviconDir = path.resolve(orgRoot, 'common/favicon.ico')
@@ -230,10 +230,22 @@ export function createViteConfig(dirname, overrides, opts = {}) {
       ghPages404Plugin(),
       tamaguiConfigGuardPlugin(),
       sharedFaviconPlugin(faviconDir),
-      tanstackRouter({
-        routesDirectory: './src/routes',
-        generatedRouteTree: './src/routeTree.gen.ts',
-      }),
+      // File-based route codegen, unless the caller opts out.
+      //
+      // `apps/desktop` has no router at all — its panes are a window's state, exactly as they are
+      // on the phone, because a desktop window has no browser history to be the source of truth.
+      // With no `src/routes` directory the generator does not quietly no-op as you might expect: it
+      // throws `ENOENT: scandir …/src/routes` from an async hook, which surfaces as a stack trace
+      // on every build and dev boot while the build itself still succeeds. An error that is printed
+      // but not fatal is the worst of both, so the plugin is omitted rather than left to fail.
+      ...(router
+        ? [
+            tanstackRouter({
+              routesDirectory: './src/routes',
+              generatedRouteTree: './src/routeTree.gen.ts',
+            }),
+          ]
+        : []),
       react(),
       // Tailwind, unless the caller opted out. `sdk/org`'s `apps/web` has no Tailwind directive left
       // after phase 4, so the plugin there is dead weight; the product SPAs are NOT migrated and would
@@ -339,6 +351,16 @@ export function createViteConfig(dirname, overrides, opts = {}) {
       ...viteEnvDefines(dirname, mode),
       ...overrides?.define,
     },
+    // `base` and `build` are passed through only when a caller actually sets them, so every
+    // existing app's emitted config is byte-for-byte what it was.
+    //
+    // `apps/desktop` needs both, and neither is cosmetic. Tauri serves the bundle from a custom
+    // protocol (`tauri://localhost`), where Vite's default absolute `/assets/…` URLs do not
+    // resolve — that app sets `base: './'`. And its renderer is the OS webview (WKWebView on
+    // macOS, WebKitGTK on Linux), NOT Chrome, so it pins an explicit `build.target`; the factory
+    // sets none, and the default assumes a browser baseline those webviews do not meet.
+    ...(overrides?.base !== undefined ? { base: overrides.base } : {}),
+    ...(overrides?.build !== undefined ? { build: overrides.build } : {}),
   }))
 }
 

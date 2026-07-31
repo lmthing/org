@@ -14,6 +14,8 @@
 
 export { TeamChannelsView, type TeamChannelsViewProps } from './channels-view'
 export { createTeamClient, type TeamClient, type TeamTransport } from './client'
+export { listTeams, teamTokenGetter, teamAppUrl, type TeamSummary } from './teams'
+export { resolveFocusTeamId, type FocusableTeam } from './focus'
 export { useTeamChat, type TeamChat } from './use-team-chat'
 export { useTeamLayout, type TeamLayout } from './use-layout'
 export { absoluteTime, channelTitle, dmPartner, initials, memberLabel, relativeTime } from './format'

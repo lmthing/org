@@ -1,5 +1,7 @@
 export { AuthProvider, useAuth } from './AuthProvider'
 export { redirectToLogin, handleAuthCallback, refreshSession, ensureValidToken, authFetch, isSessionExpired, getAuthHeaders, clearSession, storeSession, onSessionChange, getSession, hydrateAuth, isAuthHydrated, isPinSet, verifyPin, derivePinKey, hashPin, getPodInjectedToken, isPodEmbedded, isLocalRun, isWeb } from './client'
+export { isDesktopRun, getDesktopBridge, DESKTOP_PROTOCOL_VERSION } from './env'
+export type { DesktopBridge } from './env'
 export { requestEmailCode, verifyEmailCode } from './email-login'
 export type { EmailCodeSent } from './email-login'
 export { useRepoSync } from './useRepoSync'

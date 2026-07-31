@@ -43,3 +43,15 @@ export function cloudBaseOverride(): string {
   const configured = process.env.EXPO_PUBLIC_CLOUD_BASE
   return configured ? configured.replace(/\/+$/, '') : ''
 }
+
+/**
+ * Where a TEAM's pod is reached — overridable with `EXPO_PUBLIC_TEAM_BASE`.
+ *
+ * The edge routes by the `team` claim in the token, so the host only selects the route and the
+ * token selects the pod; there is no per-team hostname to construct. Same variable the app's own
+ * `src/hosts.ts` read before this moved into the seam, so a build cannot end up with two answers.
+ */
+export function teamBase(): string {
+  const configured = process.env.EXPO_PUBLIC_TEAM_BASE
+  return configured ? configured.replace(/\/+$/, '') : 'https://lmthing.team'
+}

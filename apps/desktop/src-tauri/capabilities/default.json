@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the renderer is allowed to ask the host for. Deliberately minimal: this is a capability list, so anything not named here is refused, and Phase 2's filesystem and browser access must be added DELIBERATELY rather than inherited.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-title",
+    "core:window:allow-set-focus",
+    {
+      "identifier": "opener:allow-open-url",
+      "comment": "Opening a URL in the SYSTEM browser is the only outbound navigation this app performs, and it is required rather than convenient: navigating the single webview away from the bundle destroys the app until the user force-quits. Scoped to http/https so a page cannot ask the host to launch an arbitrary local handler.",
+      "allow": [{ "url": "https://*" }, { "url": "http://*" }]
+    },
+    "deep-link:default"
+  ]
+}

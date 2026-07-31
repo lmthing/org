@@ -24,12 +24,11 @@ function host(configured: string | undefined, fallback: string): string {
 /** The gateway: auth, `/api/teams/*` (plural), `/api/compute/*`, `/api/push/*`. */
 export const CLOUD_BASE_URL = host(process.env.EXPO_PUBLIC_CLOUD_BASE, 'https://lmthing.cloud')
 
-/**
- * Where a TEAM's pod is reached. The edge routes by the team claim in the token, so the host is the
- * team surface's own domain and the pod is whichever one that token names — there is no per-team
- * hostname to construct.
- */
-export const TEAM_BASE_URL = host(process.env.EXPO_PUBLIC_TEAM_BASE, 'https://lmthing.team')
+// `TEAM_BASE_URL` used to live here too. It moved into the platform seam as
+// `@lmthing/ui/platform#teamBase`, because the team control-plane helpers that read it are now
+// shared code (`@lmthing/ui/team`) serving three hosts. Keeping a copy here would have meant two
+// readers of one `EXPO_PUBLIC_TEAM_BASE` that could drift — which is the exact failure this file's
+// header was written to prevent.
 
 /**
  * Where a PERSONAL project's app pages are served.
