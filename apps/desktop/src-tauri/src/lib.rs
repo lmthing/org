@@ -57,6 +57,7 @@ pub fn run() {
             commands::grant_remove,
             commands::fs_op,
             commands::browser_start,
+            commands::browser_relaunch,
             commands::browser_stop,
             commands::browser_status,
             commands::local_mode_enable,

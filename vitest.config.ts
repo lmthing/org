@@ -53,6 +53,13 @@ export default defineConfig({
       // That is the whole point of the viewbuilder pipeline, so it gets a node-safe suite
       // rather than resting on `pnpm test:native`, which proves resolution, not policy.
       'apps/mobile/src/**/*.test.ts',
+      // apps/desktop is a Tauri shell, but the browser pane's arithmetic is pure and node-safe:
+      // where a click in a streamed frame lands on the page, and how a DOM key event becomes a CDP
+      // one. Both are places where being wrong produces NO error — the wrong thing is simply
+      // clicked, or a character is typed that nobody pressed — so they are tested rather than
+      // trusted. Without this line the suites would run nowhere at all, which is how
+      // `libs/ui/src/team/**` went untested for its whole life.
+      'apps/desktop/src/**/*.test.ts',
       // The live-scenario harness is plain Node ESM (zero-dep, no build step). It had NO
       // coverage at all, so a transport regression in it only ever surfaced as a dead
       // multi-hour prod run. Its pure units (retry/backoff policy) are node-safe.

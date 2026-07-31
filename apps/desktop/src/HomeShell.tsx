@@ -8,6 +8,7 @@ import { onDismiss } from '@lmthing/ui/platform'
 import { TeamScreen } from './TeamScreen'
 import { AppScreen } from './AppScreen'
 import { LocalAccess } from './LocalAccess'
+import { BrowserPane } from './BrowserPane'
 import { DesktopHostBridge } from './host-bridge'
 
 /**
@@ -26,10 +27,11 @@ import { DesktopHostBridge } from './host-bridge'
 export function HomeShell() {
   const { getAccessToken } = useAuth()
   const [tab, setTab] = React.useState<NavTab>('home')
-  // The desktop's own pane, outside `SurfaceSwitcher`'s three: it is a property of THIS COMPUTER
-  // rather than a surface of the product, and the shared switcher must not learn about a target
-  // the other two hosts do not have.
+  // The desktop's own panes, outside `SurfaceSwitcher`'s three: they are properties of THIS
+  // COMPUTER rather than surfaces of the product, and the shared switcher must not learn about
+  // targets the other two hosts do not have.
   const [localOpen, setLocalOpen] = React.useState(false)
+  const [browserOpen, setBrowserOpen] = React.useState(false)
 
   // One bridge for the app's lifetime. Started explicitly rather than on mount — a cloud agent
   // gaining access to somebody's disk is not something that should switch itself on because an
@@ -54,6 +56,7 @@ export function HomeShell() {
 
   const switchTo = React.useCallback((surface: NavTab) => {
     setTab(surface)
+    setBrowserOpen(false)
     setNavOpen(false)
   }, [])
 
@@ -77,9 +80,11 @@ export function HomeShell() {
   // ordering to sort out three at once. (`onDismiss` is the same seam the phone's hardware back
   // button uses — one shared idea, two hosts.)
   React.useEffect(() => {
-    if (openApp || navOpen || tab === 'home') return undefined
+    if (openApp || navOpen) return undefined
+    if (browserOpen) return onDismiss(() => setBrowserOpen(false))
+    if (tab === 'home') return undefined
     return onDismiss(() => setTab('home'))
-  }, [openApp, navOpen, tab])
+  }, [openApp, navOpen, tab, browserOpen])
 
   if (openApp) {
     return <AppScreen projectId={openApp.id} name={openApp.name} onClose={() => setOpenApp(null)} />
@@ -108,13 +113,19 @@ export function HomeShell() {
   }
 
   return (
-    <Prim.Box flex={1} flexDirection="column" minHeight={0}>
+    // `display` and `height` are both load-bearing. `Box` renders `display: block` by default, so
+    // without them `flexDirection` styles nothing, every child's `flex: 1` resolves against a
+    // zero-height parent, and the shell collapses. The three shared surfaces did not show it
+    // because each carries its own height internally — the browser pane, which is a raw element
+    // sized by its container, does. See `reference-layout-collapse-invisible-to-gates`: nothing in
+    // the gate set can see a zero-height container.
+    <Prim.Box flex={1} display="flex" height="100%" flexDirection="column" minHeight={0}>
       {/* The hamburger for the pane that has no sidebar of its own to hang one off. Chat is
           excluded because `AppShell` draws its own, and two would be a duplicate; Teams gets its
           nav from `TeamChannelsView`. A row of its own rather than absolutely positioned, because
           `DashboardHome`'s first element is the greeting at display size, starting hard against the
           top edge — an overlaid button lands on top of the words. */}
-      {tab === 'home' && (
+      {tab === 'home' && !browserOpen && (
         <Prim.Row flexShrink={0} alignItems="center" paddingHorizontal="$2" paddingTop="$2">
           <Prim.Pressable
             onClick={() => setNavOpen(true)}
@@ -133,7 +144,7 @@ export function HomeShell() {
         </Prim.Row>
       )}
 
-      <Prim.Box flex={1} flexDirection="column" minHeight={0} display={tab === 'home' ? 'flex' : 'none'}>
+      <Prim.Box flex={1} flexDirection="column" minHeight={0} display={tab === 'home' && !browserOpen ? 'flex' : 'none'}>
         <DashboardHome
           key={homeKey}
           onNewChat={() => setTab('chat')}
@@ -144,10 +155,10 @@ export function HomeShell() {
           onOpenTeam={openTeam}
         />
       </Prim.Box>
-      <Prim.Box flex={1} flexDirection="column" minHeight={0} display={tab === 'chat' ? 'flex' : 'none'}>
+      <Prim.Box flex={1} flexDirection="column" minHeight={0} display={tab === 'chat' && !browserOpen ? 'flex' : 'none'}>
         <ChatShell onSwitchSurface={switchTo} {...(badges ? { surfaceBadges: badges } : {})} />
       </Prim.Box>
-      <Prim.Box flex={1} flexDirection="column" minHeight={0} display={tab === 'teams' ? 'flex' : 'none'}>
+      <Prim.Box flex={1} flexDirection="column" minHeight={0} display={tab === 'teams' && !browserOpen ? 'flex' : 'none'}>
         <TeamScreen
           onMentionCount={setTeamMentions}
           openTeamId={teamFocus?.teamId}
@@ -155,12 +166,27 @@ export function HomeShell() {
           onSwitchSurface={switchTo}
         />
       </Prim.Box>
+      {/* Mounted alongside the three rather than replacing them, for the same reason they are
+          mounted alongside each other: a browser is a place with state — open tabs, a half-filled
+          form, a page an agent is midway through reading — and remounting it every time somebody
+          glances at chat would throw all of that away. The stream itself pauses while hidden, so
+          the cost of keeping it is memory rather than CPU. */}
+      <Prim.Box flex={1} flexDirection="column" minHeight={0} display={browserOpen ? 'flex' : 'none'}>
+        <BrowserPane visible={browserOpen} />
+      </Prim.Box>
 
       <Drawer open={navOpen} onClose={() => setNavOpen(false)} side="left" width="$64">
         <Prim.Col flex={1} paddingTop="$3">
           <Prim.Box flex={1}>
             <SurfaceSwitcher current={tab} onSwitch={switchTo} {...(badges ? { badges } : {})} />
           </Prim.Box>
+          <DrawerRow
+            label="Browser"
+            onPress={() => {
+              setBrowserOpen(true)
+              setNavOpen(false)
+            }}
+          />
           <DrawerRow
             label="Local access"
             onPress={() => {

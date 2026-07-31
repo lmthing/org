@@ -43,9 +43,6 @@
     ],
     "category": "Productivity",
     "shortDescription": "lmthing",
-    "longDescription": "Chat, teams and your workspace, on the desktop.",
-    "externalBin": [
-      "binaries/lmthing-serve"
-    ]
+    "longDescription": "Chat, teams and your workspace, on the desktop."
   }
 }

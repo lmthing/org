@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core'
 import { wsUrl } from '@lmthing/ui/platform'
-import { CdpClient, callTool, type CdpEndpoint } from './cdp'
+import type { CdpClient } from './cdp'
+import { callTool } from './browser-tools'
+import { browserSession } from './browser-session'
 
 /**
  * The desktop half of the host bridge: dial the pod, answer its requests.
@@ -78,8 +80,6 @@ export class DesktopHostBridge {
   private attempt = 0
   private timer: ReturnType<typeof setTimeout> | null = null
   private state: HostBridgeState = { status: 'idle', activity: [] }
-  /** Attached lazily: the browser is only started when an agent actually asks for it. */
-  private cdp: CdpClient | null = null
   private listeners = new Set<(s: HostBridgeState) => void>()
 
   constructor(private getAccessToken: () => Promise<string>) {}
@@ -113,9 +113,7 @@ export class DesktopHostBridge {
     this.socket = null
     // The browser goes with it. Leaving a signed-in browser running after the person said "stop
     // reaching my computer" would answer a narrower question than the one they asked.
-    this.cdp?.close()
-    this.cdp = null
-    void invoke('browser_stop').catch(() => {})
+    void browserSession.stop().catch(() => {})
     this.set({ status: 'idle' })
   }
 
@@ -240,19 +238,17 @@ export class DesktopHostBridge {
   }
 
   /**
-   * Ensure the agent's browser is running and attached.
+   * Ensure the browser is running and attached.
    *
    * Started on FIRST USE rather than at connect: a browser signed into somebody's accounts should
    * appear because an agent needed one, at a moment the person can see in the activity log — not
    * quietly, at launch, forever.
+   *
+   * The session is SHARED with the pane, so an agent that navigates is navigating the tab the
+   * person is watching. That is the design, not a coincidence: see `browser-session.ts`.
    */
   private async ensureCdp(): Promise<CdpClient> {
-    if (this.cdp?.connected()) return this.cdp
-    const endpoint = await invoke<CdpEndpoint>('browser_start')
-    const client = new CdpClient()
-    await client.connect(endpoint)
-    this.cdp = client
-    return client
+    return browserSession.ensure()
   }
 
   /**
@@ -264,6 +260,9 @@ export class DesktopHostBridge {
   private async handleBrowser(id: string, body: unknown): Promise<void> {
     const rpc = body as { id?: unknown; params?: { name?: string; arguments?: Record<string, unknown> } }
     const name = rpc?.params?.name ?? ''
+    // Told to the pane BEFORE the call, not after: the point of the indicator is that a person
+    // watching sees the agent take the wheel as it happens, not once the page has already changed.
+    browserSession.noteAgentActivity(name)
     try {
       const client = await this.ensureCdp()
       const result = await callTool(client, name, rpc?.params?.arguments ?? {})
@@ -285,6 +284,7 @@ export class DesktopHostBridge {
 
   /** A raw protocol command from the desktop-only devtools agent. Consent already granted. */
   private async handleCdp(id: string, method: string, params?: Record<string, unknown>): Promise<void> {
+    browserSession.noteAgentActivity(method)
     try {
       const client = await this.ensureCdp()
       if (method === 'subscribe') {

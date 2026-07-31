@@ -18,8 +18,19 @@
 //! "six platform × arch native rebuilds" to "copy a binary", and it is the single change that makes
 //! this phase tractable at all.
 //!
-//! The sidecar itself is declared in `tauri.conf.json` under `bundle.externalBin` and produced by
-//! the release pipeline; this module only finds it, starts it, and reports the port.
+//! ## Where the binary comes from — and why it is not declared yet
+//!
+//! `bundle.externalBin` is deliberately ABSENT from `tauri.conf.json`. Tauri's build script
+//! resolves external binaries at COMPILE time and fails the whole build when one is missing, so
+//! declaring a sidecar that nothing produces does not "prepare for" packaging — it breaks
+//! `cargo test`, `cargo build` and `tauri dev` for everyone, immediately and confusingly.
+//!
+//! The release pipeline that builds `lmthing serve` per platform must add
+//! `"externalBin": ["binaries/lmthing-serve"]` back to the bundle config at the same time as it
+//! stages `src-tauri/binaries/lmthing-serve-<target-triple>`. Until then, local mode runs from
+//! `LMTHING_SIDECAR`, which is what a developer has anyway.
+//!
+//! This module only finds the binary, starts it, and reports the port.
 
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;

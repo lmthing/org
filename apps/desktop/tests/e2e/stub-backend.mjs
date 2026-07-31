@@ -42,6 +42,11 @@ function json(res, status, body, extraHeaders = {}) {
   res.end(payload)
 }
 
+function html(res, body) {
+  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+  res.end(`<!doctype html><meta charset="utf-8">${body}`)
+}
+
 const SESSION = {
   access_token: 'e2e-access-token',
   refresh_token: 'e2e-refresh-token',
@@ -72,6 +77,28 @@ const server = createServer(async (req, res) => {
     }
   }
   record(req, body)
+
+  // ── pages for the real Chromium the browser-pane spec drives ───────────────
+  // Served from here rather than a file:// URL so the browser under test makes an ordinary
+  // network request, exactly as it would for any site. Each page reports what happened to it
+  // through `document.title`, which the pane's tab strip displays — so the assertion can be made
+  // on the app's own UI rather than by reaching around it into the browser.
+  if (path === '/__page/click') {
+    return html(
+      res,
+      `<title>click me</title><body style="margin:0">
+       <button style="width:100vw;height:100vh;font-size:48px"
+               onclick="document.title='was clicked'">Click anywhere</button>`,
+    )
+  }
+  if (path === '/__page/type') {
+    return html(
+      res,
+      `<title>type here</title><body style="margin:0">
+       <input id="i" autofocus style="width:100vw;height:100vh;font-size:48px"
+              oninput="document.title='typed: '+this.value">`,
+    )
+  }
 
   // ── the harness's own introspection ────────────────────────────────────────
   if (path === '/__calls') return json(res, 200, { calls }, { origin })

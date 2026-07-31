@@ -29,10 +29,25 @@ import type { HostBridge } from '../rpc/host-bridge.js';
  * ephemeral port means the endpoint is unreachable from outside the pod at all.
  */
 export interface BrowserEndpoint {
-  /** The URL to publish as `LIGHTPANDA_MCP_URL`. */
+  /** The URL published to the VM as both browser endpoint variables. */
   url: string;
   close(): Promise<void>;
 }
+
+/**
+ * The desktop browser's own variable, separate from `LIGHTPANDA_MCP_URL` on purpose.
+ *
+ * Both point at this same server, so why two? Because they answer different questions.
+ * `LIGHTPANDA_MCP_URL` means "there is a browser somewhere" — a pod-side Lightpanda would set it
+ * too, and the 27 wrappers are happy either way. `system-desktop-browser`'s functions need
+ * something stronger: "the browser on the person's machine, the one they are watching". If they
+ * read the Lightpanda variable, then on a pod with a headless browser and NO desktop attached they
+ * would silently drive that instead — reporting tabs the person cannot see and clicks they cannot
+ * watch, while every layer worked exactly as designed.
+ *
+ * With its own variable, the absence of a desktop is unambiguous, and the function says so.
+ */
+export const DESKTOP_BROWSER_ENV = 'LMTHING_DESKTOP_BROWSER_URL';
 
 /** Long enough for a real page load over a WAN hop to somebody's laptop, plus the load itself. */
 const BROWSER_TIMEOUT_MS = 60_000;
@@ -84,12 +99,16 @@ export async function startBrowserEndpoint(bridge: HostBridge): Promise<BrowserE
   // attach: `ensureLightpanda`'s own policy is that an explicit URL means "use that server, never
   // spawn", so setting it unconditionally would disable a pod-side Lightpanda if one is ever added.
   process.env['LIGHTPANDA_MCP_URL'] = url;
+  process.env[DESKTOP_BROWSER_ENV] = url;
 
   return {
     url,
     close: () =>
       new Promise<void>((resolve) => {
         if (process.env['LIGHTPANDA_MCP_URL'] === url) delete process.env['LIGHTPANDA_MCP_URL'];
+        // Unconditional, unlike the line above: nothing else ever sets this one, so a leftover
+        // value could only ever point at a server that has closed.
+        delete process.env[DESKTOP_BROWSER_ENV];
         server.close(() => resolve());
       }),
   };
