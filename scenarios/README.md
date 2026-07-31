@@ -18,6 +18,33 @@ steps) plus a **`fixtures/`** dir of real input files. It is played by the **gen
 | [20](./20-studio/scenario.yaml) | **TEAM · Fold Studio** — four people, one shared brain | a thread remembers across MEMBERS; the team directory; THING acting across channels; a parked question a *different* member answers; a viewer refused |
 | [21](./21-newsroom/scenario.yaml) | **TEAM · The Alcalá Post** — the room works while it is empty | a scheduled turn that posts into a channel; THING creating a channel; a private DM to the same brain; in-app chat |
 | [22](./22-crossfire/scenario.yaml) | **TEAM · Harbour Works** — three people change one app at once | `concurrent:` beats (real races, not sequences); a genuine contradiction surfaced rather than silently resolved |
+| [23](./23-hackernews/scenario.yaml) | **DESKTOP · Pull up Hacker News** — an agent in the cloud reaches the browser on this desk | a real PROD pod + a desktop attached to `/api/host/ws` with a real Chromium behind it; a page nobody controls, so a remembered answer cannot match |
+| [24](./24-hackernews-team/scenario.yaml) | **TEAM · the same request, refused** | `/api/host/ws` refused on a team pod before any role check; the refusal reaching the MODEL as something it answers honestly rather than papers over |
+
+## The three runners
+
+| Runner | Plays | Pod |
+|---|---|---|
+| `run-scenario.mjs` | the eight personal scenarios | a per-run local `lmthing serve` |
+| `run-team-scenario.mjs` | the `team:`/`cast:` ones (20–22, 24) | a per-run local `lmthing serve` in TEAM MODE |
+| `run-desktop-scenario.mjs` | the desktop one (23) | a provisioned **production** pod, plus a desktop attached to it |
+
+`run-desktop-scenario.mjs` is the odd one out twice over, and both differences are the point of it.
+It runs against a real production pod rather than a local server, because the thing under test is a
+cloud agent reaching a machine it cannot address — and it attaches a DESKTOP to that pod, which no
+other scenario has any concept of:
+
+```bash
+# under tsx, not node — it imports the desktop app's own TypeScript
+pnpm exec tsx scenarios/run-desktop-scenario.mjs 23-hackernews
+pnpm exec tsx scenarios/run-desktop-scenario.mjs 23-hackernews --verbose --through 1
+```
+
+The desktop side is `apps/desktop/src/{cdp,browser-tools}.ts` — the code that ships — driving a real
+Chromium (`harness/lib/desktop-bridge.mjs`). A second copy of `callTool` would drift from the one in
+the product, and a scenario passing against the copy would prove nothing. What it does NOT stand in
+for is the Tauri shell or `grants.rs`: `fs.request` is answered with a refusal, because approximating
+a security boundary in JavaScript would test the approximation's rules rather than the product's.
 
 ## Running one
 

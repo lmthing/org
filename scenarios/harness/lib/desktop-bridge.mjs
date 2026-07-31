@@ -292,16 +292,83 @@ export async function attachDesktop({ base, token, verbose = false }) {
 }
 
 /**
- * Try to attach, and report a refusal as an OUTCOME rather than throwing.
+ * Ask a pod whether it will accept a desktop host bridge, and nothing else.
  *
- * A team pod refuses `/api/host/ws` outright (`server/team-guard.ts`), and that refusal is the
- * whole point of the team scenario — so it must arrive as data the scenario can assert on.
+ * ## Why this is separate from `attachDesktop`
+ *
+ * The team scenario asserts a REFUSAL. The first version of it called `attachDesktop` and recorded
+ * whatever error came back — and it recorded a pass, because the harness could not resolve a
+ * module and that failure looked exactly like the pod saying no. A false pass on a security
+ * assertion is worse than no assertion at all: it reports the boundary as holding, forever, without
+ * ever having touched it.
+ *
+ * So this probe launches no browser, imports none of the desktop's code, and reports the pod's own
+ * HTTP status. There is nothing left that can fail and be mistaken for a refusal.
+ *
+ * The handshake is written out by hand with `node:http` rather than using a WebSocket client, for
+ * two reasons. `scenarios/` is zero-dep by design, so `ws` is not resolvable from here at all. And
+ * Node's global `WebSocket` reports a rejected upgrade as close code 1006 with no status — which
+ * cannot tell a 403 apart from a pod that is not listening, and that is precisely the distinction
+ * this probe exists to make. A raw request gives `101` on the `upgrade` event and the real status
+ * on `response`.
  */
-export async function tryAttachDesktop(opts) {
-  try {
-    const desktop = await attachDesktop(opts);
-    return { attached: true, desktop };
-  } catch (err) {
-    return { attached: false, error: err instanceof Error ? err.message : String(err) };
-  }
+export async function probeHostBridge({ base, token = 'probe', timeoutMs = 20_000 }) {
+  const url = new URL(`${base}/api/host/ws?access_token=${encodeURIComponent(token)}`);
+  const { request } = await import(url.protocol === 'https:' ? 'node:https' : 'node:http');
+  const { randomBytes } = await import('node:crypto');
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (v) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try {
+        req.destroy();
+      } catch {
+        /* already gone */
+      }
+      resolve(v);
+    };
+    const timer = setTimeout(() => done({ accepted: false, status: null, reason: 'timed out' }), timeoutMs);
+
+    const req = request(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port || (url.protocol === 'https:' ? 443 : 80),
+        path: `${url.pathname}${url.search}`,
+        method: 'GET',
+        headers: {
+          Connection: 'Upgrade',
+          Upgrade: 'websocket',
+          'Sec-WebSocket-Version': '13',
+          'Sec-WebSocket-Key': randomBytes(16).toString('base64'),
+          Origin: base,
+        },
+      },
+      // Anything that is NOT an upgrade. This is the branch a refusal takes, and the status is the
+      // whole answer.
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () =>
+          done({
+            accepted: false,
+            status: res.statusCode,
+            reason: Buffer.concat(chunks).toString('utf8').slice(0, 300) || `HTTP ${res.statusCode}`,
+          }),
+        );
+      },
+    );
+
+    req.on('upgrade', (_res, socket) => {
+      socket.destroy();
+      done({ accepted: true, status: 101, reason: 'the pod accepted the bridge' });
+    });
+    // No status — the connection failed rather than being refused. Reported as such, because "the
+    // pod is unreachable" must never be scored as "the pod refused".
+    req.on('error', (err) => done({ accepted: false, status: null, reason: err?.message ?? String(err) }));
+    req.end();
+  });
 }

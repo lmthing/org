@@ -982,19 +982,25 @@ export class TeamScenarioRunner {
     // refusal is asserted against a running pod rather than trusted from a unit test — this is the
     // one property whose failure mode is a security hole rather than a broken feature.
     if (step.attach_desktop) {
-      const { tryAttachDesktop } = await import('../harness/lib/desktop-bridge.mjs');
-      const outcome = await tryAttachDesktop({ base: pod.base, token: 'team-scenario' });
-      rec.desktopBridge = { attached: outcome.attached, ...(outcome.error ? { error: outcome.error } : {}) };
-      if (outcome.attached) {
-        // Not a failed assertion to be scored later: a team pod that ACCEPTS a desktop is a hole,
-        // and the run stops rather than carrying on to ask an agent to use it.
-        await outcome.desktop.close();
+      const { probeHostBridge } = await import('../harness/lib/desktop-bridge.mjs');
+      const outcome = await probeHostBridge({ base: pod.base, token: 'team-scenario' });
+      rec.desktopBridge = outcome;
+      if (outcome.accepted) {
+        // Not a failed expectation to be scored later: a team pod that ACCEPTS a desktop bridge is
+        // a hole, and the run stops rather than going on to ask an agent to use it.
         rec.notes.push('⚠️ the team pod ACCEPTED a desktop bridge — this must never happen');
         throw new FatalError(
           'a team pod accepted a desktop host bridge; team-guard.ts is not refusing /api/host/ws',
         );
       }
-      rec.notes.push(`desktop bridge refused: ${outcome.error}`);
+      // A refusal must be the POD's, with a status. No status means the pod was unreachable, and
+      // scoring that as "refused" would report the boundary as holding without having touched it.
+      if (outcome.status === null) {
+        throw new FatalError(
+          `could not reach the team pod's /api/host/ws to prove it refuses a desktop: ${outcome.reason}`,
+        );
+      }
+      rec.notes.push(`desktop bridge refused with HTTP ${outcome.status}: ${outcome.reason}`);
     }
 
     if (step.concurrent) {
