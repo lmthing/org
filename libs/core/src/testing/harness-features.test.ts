@@ -650,42 +650,57 @@ describe('harness — delegate()', () => {
 });
 
 describe('harness — registerSpace()', () => {
-  it('registers a space at runtime and a later delegate reaches it by spaceKey', async () => {
-    const workerDir = await makeWorkerSpace();
-    let sessionStep = 0;
-    const m = mockMatch(
-      [
-        { when: /Run action: compute/, respond: () => `currentTask.resolve({ result: 99 });` },
-      ],
-      () => {
-        sessionStep++;
-        if (sessionStep === 1)
-          return `const reg = await registerSpace(${JSON.stringify(workerDir)});`;
-        if (sessionStep === 2)
-          return (
-            `display("ok=" + reg.ok + " slug=" + reg.agentSlug);\n` +
-            `const d = await delegate(reg.spaceKey, reg.agentSlug, "compute", { query: "go" }) as { result: number };`
-          );
-        if (sessionStep === 3) return `display("delegated=" + (d as any).result);`;
-        return '';
-      },
-    );
+  /**
+   * A top-level session does NOT hold registerSpace. It is a write-capable-fork grant
+   * only — which is where the sole callers in the shipped spaces run (the architect's
+   * `synthesize_and_run#register` and `iterate_space#reregister`, both `role: general`).
+   * An orchestrator that cannot scaffold a space should not be able to register one.
+   *
+   * Probed by existence rather than by calling it: an undefined-global await surfaces as
+   * an unhandled rejection rather than an eval error, so a call would not fail reliably
+   * (same idiom as fork.test.ts's read-only-role probe). Reached through `globalThis`
+   * because a BARE `registerSpace` no longer typechecks at session level either — which
+   * is the other half of the fix, and is covered directly in bootstrap.test.ts.
+   */
+  it('is NOT available to a top-level session', async () => {
+    const m = createMockStreamFn((_o, { callIndex }) => {
+      if (callIndex === 0)
+        return `display("available=" + (typeof (globalThis as any).registerSpace === "function"));`;
+      return '';
+    });
     const r = await runSession({ streamFn: m, message: 'go' });
     expect(r.error).toBeUndefined();
-    // registerSpace returned the contract { ok, spaceKey, agentSlug }.
-    expect(r.displays).toContain('ok=true slug=worker');
-    // And the delegate routed through the freshly registered key.
-    expect(r.displays).toContain('delegated=99');
-    expect(r.trace.some((e) => e.type === 'yield' && e.kind === 'registerSpace')).toBe(true);
+    expect(r.displays).toContain('available=false');
   });
 
   it('reports an error (ok:false) for a directory that is not a space', async () => {
+    // Runs inside a write-capable fork — the only context that holds registerSpace now.
     const bogus = join(tmpdir(), 'lmthing-not-a-space-xyz-12345');
-    const m = createMockStreamFn((_o, { callIndex }) => {
-      if (callIndex === 0) return `const reg = await registerSpace(${JSON.stringify(bogus)});`;
-      if (callIndex === 1) return `display("ok=" + reg.ok);`;
-      return '';
-    });
+    let parentStep = 0;
+    const m = mockMatch(
+      [
+        {
+          when: (o: StreamOpts) =>
+            o.messages.some((mm) => mm.content.includes('Output schema:') && mm.content.includes('BOGUS_TASK')) &&
+            o.messages.some((mm) => mm.content.includes('VARIABLES')),
+          respond: () => `currentTask.resolve({ ok: (reg as any).ok });`,
+        },
+        {
+          when: (o: StreamOpts) =>
+            o.messages.some((mm) => mm.content.includes('Output schema:') && mm.content.includes('BOGUS_TASK')),
+          respond: () => `const reg = await registerSpace(${JSON.stringify(bogus)});`,
+        },
+      ],
+      () => {
+        // The fork's own turns go through the rules above, so the parent needs its own
+        // step counter — a shared callIndex would be advanced by the subagent's calls.
+        parentStep++;
+        if (parentStep === 1)
+          return `const f = await fork({ role: 'general', instruction: 'BOGUS_TASK', output: { ok: 'boolean' } }) as { ok: boolean };`;
+        if (parentStep === 2) return `display("ok=" + (f as any).ok);`;
+        return '';
+      },
+    );
     const r = await runSession({ streamFn: m, message: 'go' });
     expect(r.error).toBeUndefined();
     expect(r.displays).toContain('ok=false');

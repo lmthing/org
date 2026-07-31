@@ -77,10 +77,15 @@ export interface CapabilityProfile {
    *  `canDelegateTo: []`; fork leaves only get it when the TASK opts in via
    *  `canDelegateTo` AND the engine has a delegateRunner wired. */
   delegate: boolean;
-  /** `registerSpace()` — a session-state mutation (writes the shared
-   *  dynamicSpaces map), so it is withheld from read-only fork roles exactly
-   *  like writeFileRaw. NOTE: its DTS declaration is unconditional (matching
-   *  the pre-unification DTS, which only stripped ask/tasklist/fork/delegate). */
+  /** `registerSpace()` — a session-state mutation (writes the shared dynamicSpaces map),
+   *  so it is withheld from read-only fork roles exactly like writeFileRaw. Held ONLY by
+   *  write-capable fork roles: that is where the only callers in the shipped spaces run
+   *  (the architect's `synthesize_and_run#register` and `iterate_space#reregister` nodes,
+   *  both `role: general`). A top-level session does not get it — an orchestrator that
+   *  cannot scaffold a space should not be able to register one either, and THING's
+   *  instructions say exactly that. Declaration follows injection (`REGISTER_SPACE_DTS`
+   *  in `buildAmbientDts`), so a call in a context without it fails typecheck rather than
+   *  passing typecheck and throwing. */
   registerSpace: boolean;
   /** `setSessionMeta()` — sets the session title/slug. Top-level session only
    *  (forks/delegates are headless sub-runs with no session identity to name),
@@ -104,11 +109,12 @@ export interface CapabilityProfile {
   app: AppCapabilities;
 }
 
-/** Top-level session VM: the full toolkit, including the interactive `ask()`.
+/** Top-level session VM: the full toolkit, including the interactive `ask()` — but NOT
+ *  `registerSpace`, which is a write-capable-fork grant only (see the field's doc).
  *  `canDelegate` comes from the session agent's `canDelegateTo` policy
  *  (`evaluateDelegatePolicy(...).mode !== 'none'`); defaults to true. */
 export function sessionCapabilities(canDelegate = true, app: AppCapabilities = {}): CapabilityProfile {
-  return { kind: 'session', ask: true, orchestrate: true, delegate: canDelegate, registerSpace: true, setSessionMeta: true, allowWrite: true, scratchFs: !!app['fs:scratch'], app };
+  return { kind: 'session', ask: true, orchestrate: true, delegate: canDelegate, registerSpace: false, setSessionMeta: true, allowWrite: true, scratchFs: !!app['fs:scratch'], app };
 }
 
 /**
