@@ -3,7 +3,7 @@
  *
  * There are two app builders and they produce different things. `system-appbuilder`
  * produces an esbuild browser bundle — WebView-bound forever, and the default.
- * `system-viewbuilder` produces **specs**: data, which this app fetches and renders
+ * `system-appbuilder` produces **specs**: data, which this app fetches and renders
  * with the same `ViewRenderer` the web bundle uses. That is the one capability the
  * spec pipeline exists to deliver, so the branch has to be total — a viewbuilder app
  * never touches a WebView on any page.

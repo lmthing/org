@@ -63,6 +63,8 @@ import { handleChannelWsUpgrade } from './ws/team-channels.js';
 import { handleHostWsUpgrade } from './ws/host.js';
 import { HostBridge } from '../rpc/host-bridge.js';
 import { startBrowserEndpoint } from '../host/browser-endpoint.js';
+import { startZerostackEndpoint } from '../host/zerostack-endpoint.js';
+import { resolveAlias } from '../providers/aliases.js';
 
 export interface SessionServerOpts {
   port: number;
@@ -326,7 +328,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     }),
   );
 
-  // The view specs of an installed app (`system-viewbuilder`), for a client that
+  // The view specs of an installed app (`system-appbuilder`), for a client that
   // renders them itself. The mobile app is that client: it has no host page to
   // inject `window.__APP_ENDPOINTS__` into, which is why the endpoint manifest
   // travels in this payload alongside the specs. `{ views: [] }` means the project
@@ -472,6 +474,18 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // browser untouched. Not one of those files changes.
   const browserEndpoint = await startBrowserEndpoint(hostBridge);
   console.log(`[serve] desktop browser endpoint on ${browserEndpoint.url}`);
+
+  // Publishes LMTHING_ZEROSTACK_URL, the entire integration for the `system-zerostack` space:
+  // its functions POST an op to that URL and this runs the external zerostack coding agent over
+  // the data directory. Started unconditionally — when the binary is absent the endpoint still
+  // answers, explaining why, which is a far better failure than an unset variable.
+  await startZerostackEndpoint({
+    dataDir: terminalCwd,
+    // `bin.ts` always sets this; the fallback resolves the same alias chain it would have used, so
+    // an embedded SessionManager still gets a real `provider:modelId` rather than the bare "M".
+    modelSpec: manager.defaultModel ?? resolveAlias(process.env['LM_MODEL'] ?? 'M'),
+    log: (m) => console.log(m),
+  });
 
   httpServer.on('upgrade', (req, socket, head) => {
     // Dev: let Vite's own upgrade listener handle its HMR socket (identified by

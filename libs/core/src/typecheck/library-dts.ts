@@ -325,7 +325,7 @@ export const PROJECT_API_DTS = `declare function writeProjectApi(route: string, 
 export const PROJECT_COMPONENT_DTS = `declare function writeProjectComponent(name: string, src: string): { ok: boolean; error?: string };`;
 
 // `views:write` — a SEPARATE capability from `pages:write`, and the mechanism behind
-// `system-viewbuilder`'s zero-WebView guarantee.
+// `system-appbuilder`'s zero-WebView guarantee.
 //
 // It earns the VIEW-SPEC writers: the medium where a page is DATA (a validated object literal)
 // rather than TSX, rendered by one shared `ViewRenderer` on the web bundle AND natively in the

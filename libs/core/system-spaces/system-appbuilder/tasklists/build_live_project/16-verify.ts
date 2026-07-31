@@ -1,30 +1,58 @@
 /**
  * The build gate — HOST-RUN, so it always executes.
  *
- * This replaces `compile_pass1` + `compile_pass2`, which asked the model to re-emit ~50 lines
- * of scanning TypeScript as "one statement" on every pass. In run 32 of the 06-tanzania
- * scenario that accounted for 44 of 124 errors (35%) across the three build steps — cascades of
- * `'gateErrors' is not defined` after one slip. A gate that fails to execute contributes no
- * findings, and the pipeline reads its empty result as "clean", so the failure mode was silent
- * AND load-bearing. As a code node the scan cannot fail to be reproduced.
+ * Three ground truths are merged here, and NONE of them is a model self-assessment:
  *
- * It reports; it never fixes, and it never throws on a finding (a code node has no salvage path
- * — a throw fails the whole node). `fix` fans out over `offending`, then resumes this node via
- * its `onFail`, so the compile→fix cycle loops until clean instead of being hand-unrolled.
+ *  1. **`buildProjectApp()`** — the real project-app typecheck then the esbuild bundle, over the
+ *     generated page wrappers (`writeProjectView` persists `pages/<route>.view.json` AND host-writes
+ *     the trivial `pages/<route>.tsx` that renders it), the api handlers and the hooks.
+ *  2. **`validateAppViews()`** — the WHOLE-APP static checks a per-artifact save cannot make: an
+ *     orphan route no nav reaches, a nav target that is not a route, a declared component nothing
+ *     uses, a `reveals`/`rowAction`/`prefill` target that resolves nowhere app-wide, a page with no
+ *     data-bound section.
+ *  3. **`renderSmokeViews()`** — the view twin of `smoke_endpoints`: every view spec MOUNTED against
+ *     the app's LIVE endpoint responses over the seeded rows, reporting render errors, binding
+ *     coverage, and empty-render detection.
  *
- * `buildProjectApp()` covers what the compiler can see: typecheck then esbuild. The scans below
- * cover what it structurally cannot.
+ * (3) is the one that catches what nothing else can. A spec whose every name resolves and whose every
+ * binding is contract-valid still ships a blank page when the endpoint's computed field is not
+ * actually computed — the "structurally-valid zeros" failure, which passes the writer, passes
+ * `validateAppViews`, passes typecheck and passes the bundle. **An always-null binding is therefore
+ * an ENDPOINT defect, not a view defect**, and this node routes it to the handler's file so `fix`
+ * repairs the thing that is actually wrong. Pointing that at the view instead teaches the fixer to
+ * delete the binding — i.e. to delete the feature — which is how a gate makes an app worse.
+ *
+ * There is deliberately no TSX scanning here. The appbuilder's copy of this node scans for dangling
+ * imports, `{ type, props }` descriptors leaking into JSX and surface-token-as-text, because its
+ * pages are freshly authored TSX. A spec has no imports, no JSX and no class names — those whole
+ * fault classes do not exist in this builder, and carrying the scans would only invent work.
+ *
+ * It reports; it never fixes, and it never throws on a finding (a code node has no salvage path — a
+ * throw fails the whole node). `fix` fans out over `offending`, then resumes this node via its
+ * `onFail`, so the verify→fix cycle loops until clean.
  */
 
 export const node = {
   id: 'verify',
-  dependsOn: ['implement_tables', 'implement_endpoints', 'smoke_endpoints', 'check_acceptance', 'implement_components', 'implement_pages', 'implement_automations'],
+  dependsOn: [
+    'implement_tables',
+    'implement_endpoints',
+    'smoke_endpoints',
+    'check_acceptance',
+    'implement_view_components',
+    'implement_views',
+    'implement_shell',
+    'implement_automations',
+  ],
   output: {
     ok: 'boolean',
     built: 'boolean',
     routes: 'array',
     offending: 'array',
     offendingCount: 'number',
+    viewsValidated: 'boolean',
+    renderSmoked: 'boolean',
+    unavailable: 'array',
   },
 };
 
@@ -35,11 +63,9 @@ type Await<T> = T | Promise<T>;
  *
  * `worker-load-entry.ts` proxies each authoring global into the worker as an RPC stub returning a
  * PROMISE, so `ctx.listProjectDir(dir).entries` reads a property off a Promise — `undefined` — and
- * `walkFiles` silently returns `[]`. The node still resolves, still reports `buildProjectApp`'s
- * compiler errors, and contributes ZERO scan findings, which the pipeline reads as "the scans were
- * clean". That is exactly the silent-and-load-bearing failure this gate exists to end, and it is
- * invisible to a unit test that injects a synchronous mock — which is why one test below drives an
- * all-async ctx.
+ * `walkFiles` silently returns `[]`. The node still resolves, still reports the compiler errors, and
+ * contributes ZERO findings, which the pipeline reads as "the checks were clean". That is exactly the
+ * silent-and-load-bearing failure this gate exists to end.
  */
 interface Ctx {
   buildProjectApp: () => Promise<{
@@ -50,7 +76,62 @@ interface Ctx {
   }>;
   listProjectDir: (dir: string) => Await<{ ok: boolean; entries: string[]; error?: string }>;
   readProjectFile: (path: string) => Await<{ ok: boolean; content: string; error?: string }>;
+  /**
+   * App-wide view validation — `libs/cli/src/app/view-spec/validate.ts#validateAppViews`, bound to
+   * this project's root by the code-node ctx factory (exactly as `buildProjectApp` is).
+   *
+   * ZERO-ARG on purpose: a code node is transpiled standalone and evaluated in a worker, so it
+   * cannot import `validate.ts` and cannot construct the `ContractsLike` the underlying function
+   * optionally takes. Both underlying functions accept `{ contracts }` to skip a second full
+   * `ts-json-schema-generator` pass over every handler; threading one call's contracts into the
+   * next is therefore the HOST's job, at the single place that owns both bindings
+   * (`libs/cli/src/app/authoring/globals.ts` — the `validateAppViews`/`renderSmokeViews` entries of
+   * `createProjectAuthoringGlobals`). Nothing about it is expressible from here.
+   */
+  validateAppViews?: () => Await<ViewValidationResult>;
+  /**
+   * Headless render smoke over the live endpoint responses —
+   * `libs/cli/src/app/view-spec/validate.ts#renderSmokeViews`, bound the same way (and supplied
+   * with `callProjectApi`, without which it reports `unavailable` rather than a clean run).
+   */
+  renderSmokeViews?: () => Await<RenderSmokeResult>;
 }
+
+/**
+ * One finding — `libs/cli/src/app/view-spec/messages.ts#ViewError`.
+ *
+ * `file` is the project-relative artifact the finding belongs to. **`endpoint` overrides it**: it is
+ * set by `renderSmokeViews` for an always-null binding, where the view named a field the contract
+ * declares and the defect is that the ENDPOINT never computes it.
+ */
+interface ViewError {
+  code: string;
+  path: string;
+  message: string;
+  severity: 'error' | 'warning';
+  file?: string;
+  endpoint?: string;
+}
+/** `libs/cli/src/app/view-spec/messages.ts#ViewValidationResult`. */
+interface ViewValidationResult {
+  ok: boolean;
+  errorCount: number;
+  warningCount: number;
+  /** How many artifacts were examined. `0` with `ok:true` means NOTHING RAN, not "clean". */
+  checked: number;
+  errors: ViewError[];
+}
+/** `libs/cli/src/app/view-spec/validate.ts#RenderSmokeResult`. */
+interface RenderSmokeResult extends ViewValidationResult {
+  unavailable: boolean;
+  reason?: string;
+  rendererMounted: boolean;
+}
+
+/** `libs/cli/src/app/view-spec/files.ts#SHELL_SPEC_PATH` — `_`-prefixed, so never a route. */
+const SHELL_SPEC_PATH = 'pages/_shell.view.json';
+/** `libs/cli/src/app/view-spec/files.ts#VIEW_COMPONENT_DIR`, under `pages/`. */
+const VIEW_COMPONENT_PREFIX = 'pages/components/';
 
 interface Finding {
   line?: number;
@@ -58,14 +139,14 @@ interface Finding {
   message: string;
 }
 
-/** Every `.ts`/`.tsx` file under `dir`, walked breadth-first. */
+/** Every `.ts`/`.tsx`/`.json` file under `dir`, walked breadth-first. */
 async function walkFiles(ctx: Ctx, dir: string): Promise<string[]> {
   const out: string[] = [];
   const listed = await ctx.listProjectDir(dir);
   const queue = (listed?.entries || []).map((n) => `${dir}/${n}`);
   while (queue.length > 0) {
     const p = queue.shift() as string;
-    if (p.endsWith('.ts') || p.endsWith('.tsx')) {
+    if (p.endsWith('.ts') || p.endsWith('.tsx') || p.endsWith('.json')) {
       out.push(p);
       continue;
     }
@@ -80,20 +161,15 @@ async function read(ctx: Ctx, path: string): Promise<string> {
   return r?.content || '';
 }
 
-/** Endpoint names the project's `api/` actually exports, with the route params each needs. */
-async function realEndpoints(ctx: Ctx): Promise<Map<string, string[]>> {
-  const found = new Map<string, string[]>();
+/** Endpoint NAME → the api module file that exports it. This is what lets an always-null binding be
+ *  routed to the handler that fails to compute the field, instead of to the page that reads it. */
+async function endpointFiles(ctx: Ctx): Promise<Map<string, string>> {
+  const found = new Map<string, string>();
   for (const path of await walkFiles(ctx, 'api')) {
+    if (!path.endsWith('.ts')) continue;
     const src = await read(ctx, path);
     const m = /export\s+const\s+name\s*=\s*['"`]([A-Za-z0-9_-]+)['"`]/.exec(src);
-    if (!m) continue;
-    // Params come from the ROUTE (the directory path), e.g. api/trips/[id]/GET.ts → ['id'].
-    const params: string[] = [];
-    for (const seg of path.split('/')) {
-      const p = /^\[([A-Za-z0-9_]+)\]$/.exec(seg);
-      if (p) params.push(p[1] as string);
-    }
-    found.set(m[1] as string, params);
+    if (m) found.set(m[1] as string, path);
   }
   return found;
 }
@@ -106,25 +182,6 @@ async function realTables(ctx: Ctx): Promise<string[]> {
     .map((n) => n.replace(/\.json$/, ''));
 }
 
-/**
- * Design tokens that name a SURFACE colour. Using one as a text colour (`text-muted`) compiles
- * clean — Tailwind generates `text-*` for every registered colour token — and renders text in
- * its own background colour. A real build shipped 149 of these at contrast 1.08 (WCAG AA needs
- * 4.5): invisible text, and nothing in the toolchain could see it.
- */
-const SURFACE_TOKENS: Record<string, string> = {
-  muted: 'muted-foreground',
-  card: 'card-foreground',
-  popover: 'popover-foreground',
-  accent: 'accent-foreground',
-  secondary: 'secondary-foreground',
-  sidebar: 'sidebar-foreground',
-  // No `-foreground` partner exists for these — body text is the correct replacement.
-  background: 'foreground',
-  border: 'foreground',
-  input: 'foreground',
-};
-
 export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Record<string, unknown>> {
   const build = await ctx.buildProjectApp();
   const byFile: Record<string, Finding[]> = {};
@@ -133,32 +190,29 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     list.push(f);
     byFile[file] = list;
   };
+  const unavailable: string[] = [];
 
   // FOLD IN the runtime probes. `smoke_endpoints` is the only node that actually CALLS a generated
   // endpoint, and its findings must land in `offending` because `fix` fans out over
-  // `verify.offending` and nothing else — depending on the node without reading it would compute
-  // every 500, every `"undefined"` param and every broken envelope and then throw them away, which
-  // is worse than not probing at all: the pipeline would report a gate that ran and found nothing.
+  // `verify.offending` and nothing else.
   const smoke = inputs['smoke_endpoints'] as
     | { offending?: Array<{ path?: string; errors?: Finding[] }>; unavailable?: boolean; reason?: string }
     | undefined;
   if (smoke?.unavailable) {
-    // The probe could not run at all (no `callProjectApi` on ctx). Surface it as a finding rather
-    // than letting an un-run gate read as a clean one.
+    unavailable.push('smoke_endpoints');
     add('api', { phase: 'smoke', message: `endpoint smoke probes did not run: ${smoke.reason ?? 'unavailable'}` });
   }
   for (const entry of smoke?.offending ?? []) {
     for (const e of entry.errors ?? []) add(String(entry.path ?? 'api'), e);
   }
 
-  // FOLD IN the acceptance gate the same way. `check_acceptance` calls each endpoint against the
-  // seeded data and evaluates the source-grounded checks; its `offending` is ONLY the code faults
-  // (data exists, endpoint reports it wrong) — the extraction gaps it found go to `finalize` as
-  // `dataGaps`, never to `fix`, so this fold is safe to route straight at the per-file fixer.
+  // FOLD IN the acceptance gate the same way. Its `offending` is ONLY the code faults; the extraction
+  // gaps it found go to `finalize` as `dataGaps`, never to `fix`.
   const acceptance = inputs['check_acceptance'] as
     | { offending?: Array<{ path?: string; errors?: Finding[] }>; unavailable?: boolean; reason?: string }
     | undefined;
   if (acceptance?.unavailable) {
+    unavailable.push('check_acceptance');
     add('api', { phase: 'acceptance', message: `acceptance checks did not run: ${acceptance.reason ?? 'unavailable'}` });
   }
   for (const entry of acceptance?.offending ?? []) {
@@ -169,14 +223,93 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     add(e.file, { line: e.line, phase: e.phase, message: e.message });
   }
 
-  const endpoints = await realEndpoints(ctx);
-  const endpointNames = [...endpoints.keys()];
+  const apiFiles = await endpointFiles(ctx);
   const tables = await realTables(ctx);
-  const known = endpointNames.length > 0 ? endpointNames.join(', ') : 'none';
 
-  // (1) An api module querying a table that does not exist. The db surface is dynamically
-  // typed, so this builds CLEAN and 500s on every call — as broken as an unresolved import.
-  for (const path of await walkFiles(ctx, 'api')) {
+  /**
+   * Route ONE view-check error to the file the FIX belongs in.
+   *
+   * The subtlety this function exists for: `endpoint` set (or `cause: 'endpoint'`) means the defect
+   * is in the HANDLER even though the symptom was seen on a page — an always-null binding is a
+   * computed field that is not computed. Sending it to the view would get the binding deleted.
+   */
+  const routeViewError = (e: ViewError, phase: string): void => {
+    // WARNINGS are reported, never routed: `fix` fans out over `offending`, so sending it a dead
+    // component would have the model "repair" something the gate itself does not consider broken.
+    if (e.severity !== 'error') return;
+    const message = e.path ? `${e.path}: ${e.message}` : e.message;
+    const endpointName = String(e.endpoint ?? '');
+    if (endpointName) {
+      const file = apiFiles.get(endpointName);
+      add(file ?? 'api', {
+        phase,
+        message: file
+          ? message
+          : `${message} (no api module exports the name "${endpointName}" — the endpoint was never written)`,
+      });
+      return;
+    }
+    // `file` is already project-relative (`pages/index.view.json`,
+    // `pages/components/RecipeCard.view.json`). App-wide findings carry none — the shell is the
+    // only artifact that owns the app as a whole, so an orphan-route / bad-nav-target lands there.
+    add(e.file || SHELL_SPEC_PATH, { phase, message });
+  };
+
+  // (A) WHOLE-APP view validation.
+  let viewsValidated = false;
+  if (typeof ctx.validateAppViews === 'function') {
+    const res = await ctx.validateAppViews();
+    // `checked: 0` with `ok: true` means NOTHING was examined — the exact reading that makes an
+    // un-run gate indistinguishable from a clean one.
+    viewsValidated = (res?.checked ?? 0) > 0;
+    for (const e of res?.errors ?? []) routeViewError(e, 'views');
+    if (!viewsValidated) {
+      add(SHELL_SPEC_PATH, {
+        phase: 'views',
+        message: 'app-wide view validation examined 0 artifacts — nothing was checked, which is not the same as clean',
+      });
+    }
+  } else {
+    unavailable.push('validateAppViews');
+    add(SHELL_SPEC_PATH, {
+      phase: 'views',
+      message:
+        'app-wide view validation did not run: the code-node ctx has no `validateAppViews`. Thread it ' +
+        'through `ProjectAuthoringGlobals` (libs/cli/src/app/authoring/globals.ts, alongside ' +
+        '`buildProjectApp`) so `createCodeNodeCtxFactory` passes it in `authoring`. Until then an ' +
+        'orphan route, a dangling nav target and a dead component all ship unnoticed.',
+    });
+  }
+
+  // (B) RENDER SMOKE — mount every view against the live endpoint responses over the seeded rows.
+  let renderSmoked = false;
+  if (typeof ctx.renderSmokeViews === 'function') {
+    const res = await ctx.renderSmokeViews();
+    renderSmoked = res?.unavailable !== true;
+    for (const e of res?.errors ?? []) routeViewError(e, 'render-smoke');
+    if (!renderSmoked) {
+      unavailable.push('renderSmokeViews');
+      add(SHELL_SPEC_PATH, {
+        phase: 'render-smoke',
+        message: `view render smoke did not run: ${res?.reason ?? 'unavailable'}`,
+      });
+    }
+  } else {
+    unavailable.push('renderSmokeViews');
+    add(SHELL_SPEC_PATH, {
+      phase: 'render-smoke',
+      message:
+        'view render smoke did not run: the code-node ctx has no `renderSmokeViews`. Thread it through ' +
+        '`ProjectAuthoringGlobals` alongside `buildProjectApp`. Until then a page that renders but ' +
+        'shows nothing — every binding contract-valid and every value null — passes every gate.',
+    });
+  }
+
+  // The ONE mechanical scan a spec app still needs: a handler (or a hook) querying a table that does
+  // not exist. The db surface is dynamically typed, so it builds CLEAN and 500s on every call — and
+  // that 500 is what a view renders as a permanently empty section.
+  for (const path of [...(await walkFiles(ctx, 'api')), ...(await walkFiles(ctx, 'hooks'))]) {
+    if (!path.endsWith('.ts')) continue;
     const src = await read(ctx, path);
     const ref = /\bdb\s*\.\s*(?:query|insert|update|remove)\s*\(\s*['"`]([A-Za-z0-9_-]+)['"`]/g;
     for (let m = ref.exec(src); m; m = ref.exec(src)) {
@@ -185,26 +318,7 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
         phase: 'gate',
         message:
           `references table "${m[1]}" which does not exist in database/ (have: ${tables.join(', ') || 'none'}) ` +
-          `— builds clean but 500s at runtime, exactly like an unresolved import`,
-      });
-    }
-  }
-
-  // (1b) A HOOK (project automation) whose handler reads/writes a table that does not exist, or that
-  // subscribes to a synthetic `project/db.<table>.<event>` for a table that never landed. Both build +
-  // load clean — the db surface is dynamically typed and a bad hook is skipped-with-warn at load — and
-  // then the scheduled/reactive code 500s or never fires, so nothing the user's story promised happens.
-  // Most apps author ZERO hooks, so this loop usually walks nothing. Awaited async ctx, like every scan.
-  for (const path of await walkFiles(ctx, 'hooks')) {
-    const src = await read(ctx, path);
-    const ref = /\bdb\s*\.\s*(?:query|insert|update|remove)\s*\(\s*['"`]([A-Za-z0-9_-]+)['"`]/g;
-    for (let m = ref.exec(src); m; m = ref.exec(src)) {
-      if (tables.includes(m[1] as string)) continue;
-      add(path, {
-        phase: 'gate',
-        message:
-          `hook references table "${m[1]}" which does not exist in database/ (have: ${tables.join(', ') || 'none'}) ` +
-          `— the automation loads clean but its handler 500s on every run. Point it at a real table (or create it).`,
+          `— builds clean but 500s at runtime, and the section that reads it renders permanently empty`,
       });
     }
     const evt = /['"`]project\/db\.([A-Za-z0-9_]+)\.(?:insert|update|remove)['"`]/g;
@@ -219,75 +333,19 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     }
   }
 
-  // (2)+(3)+(4) Client-side scans over pages/ and components/.
-  for (const path of [...(await walkFiles(ctx, 'pages')), ...(await walkFiles(ctx, 'components'))]) {
-    const src = await read(ctx, path);
-
-    const apiRef =
-      /\b(useApiMutation|useApi|apiCall)\s*(?:<[^(]*>)?\s*\(\s*['"`]([A-Za-z0-9_/?=&.-]+)['"`]\s*(,?)/g;
-    for (let m = apiRef.exec(src); m; m = apiRef.exec(src)) {
-      const caller = m[1] as string;
-      const name = m[2] as string;
-      if (!endpoints.has(name)) {
-        add(path, {
-          phase: 'gate',
-          message:
-            `calls useApi/useApiMutation/apiCall("${name}") which is not a generated endpoint name ` +
-            `(have: ${known}) — the client rejects an unknown name BEFORE issuing any request, so the ` +
-            `page renders an error state with nothing in the network panel. Use the endpoint's exact ` +
-            `\`export const name\`, never the route, the method, or a query string.`,
-        });
-        continue;
-      }
-      // `useApiMutation` returns a MUTATE FUNCTION — its input is supplied when that function is
-      // called, never at hook time, so a bare `useApiMutation('notes-delete')` is correct even for a
-      // `[id]` route. Run 34 flagged exactly that and it was a false positive; a gate that invents
-      // work teaches the fixer to "repair" working code, which is worse than missing a fault.
-      const params = caller === 'useApiMutation' ? [] : (endpoints.get(name) as string[]);
-      if (params.length > 0 && m[3] !== ',') {
-        add(path, {
-          phase: 'gate',
-          message:
-            `calls "${name}" with no input, but that route takes ${params.map((p) => `[${p}]`).join('')} ` +
-            `— the missing value is stringified into the path ("/api/.../undefined"), which still matches ` +
-            `and passes validation, so it returns a plausible 200 carrying the wrong row. Pass ` +
-            `{ ${params.map((p) => `${p}: … `).join(', ')}}.`,
-        });
-      }
-    }
-
-    if (/\breturn\s*\{\s*type\s*:\s*(?:'[^']*'|"[^"]*"|[A-Za-z_$][\w$]*)\s*,\s*props\s*:/.test(src)) {
-      add(path, {
-        phase: 'gate',
-        message:
-          `returns a plain { type, props } object literal instead of JSX — that is this system's OWN ` +
-          `display()-descriptor shape (the chat/tasklist protocol), not renderable React. It typechecks ` +
-          `clean and throws React error #31 at runtime. Return real JSX (\`<div>…</div>\`).`,
-      });
-    }
-
-    for (const token of Object.keys(SURFACE_TOKENS)) {
-      if (!new RegExp(`(?<![\\w-])text-${token}(?![\\w-])`).test(src)) continue;
-      add(path, {
-        phase: 'gate',
-        message:
-          `uses \`text-${token}\` — \`--${token}\` is a SURFACE token, so this paints text in its own ` +
-          `background colour (near-invisible; a shipped app measured 1.08:1 where WCAG AA needs 4.5). ` +
-          `It is a real Tailwind utility, so it compiles clean and nothing else catches it. ` +
-          `Use \`text-${SURFACE_TOKENS[token]}\` for text; \`bg-${token}\` is the correct use of the bare name.`,
-      });
-    }
-  }
+  // ORDER MATTERS: the component dir and the shell both live UNDER `pages/`, so the generic page
+  // branch has to come last or every component would be handed to the fixer as a view.
+  const kindOf = (path: string): string => {
+    if (path === SHELL_SPEC_PATH) return 'shell';
+    if (path.startsWith(VIEW_COMPONENT_PREFIX)) return 'viewComponent';
+    if (path.startsWith('api/')) return 'api';
+    if (path.startsWith('hooks/')) return 'hook';
+    return 'view';
+  };
 
   const offending = Object.keys(byFile).map((path) => ({
     path,
-    kind: path.startsWith('components/')
-      ? 'component'
-      : path.startsWith('api/')
-        ? 'api'
-        : path.startsWith('hooks/')
-          ? 'hook'
-          : 'page',
+    kind: kindOf(path),
     errors: byFile[path],
   }));
 
@@ -297,5 +355,8 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     routes: build.routes,
     offending,
     offendingCount: offending.length,
+    viewsValidated,
+    renderSmoked,
+    unavailable,
   };
 }

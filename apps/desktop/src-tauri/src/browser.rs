@@ -135,18 +135,24 @@ pub fn is_snap(path: &Path) -> bool {
     }
 }
 
-/// Find a browser, preferring one whose profile flag is actually honoured.
+/// An explicitly chosen browser, if the person named one.
 ///
-/// Two passes over the same candidates: everything non-snap first, then snaps. A snap is used only
-/// when it is the only thing installed — better a browser with a shared profile than no browser —
-/// and `LMTHING_BROWSER` overrides the lot, because an explicit choice is a person's to make.
-pub fn find_browser() -> Option<PathBuf> {
-    if let Ok(explicit) = std::env::var("LMTHING_BROWSER") {
-        let p = PathBuf::from(explicit);
-        if p.exists() {
-            return Some(p);
-        }
-    }
+/// The only route to an installed browser now. The app fetches and drives its OWN Chromium (see
+/// [`crate::chromium`]) — using whatever happens to be installed meant an agent's activity appeared
+/// in the person's own browser's process list and crash reports, and on Linux, under a snap, in
+/// their everyday profile. `LMTHING_BROWSER` remains for anyone who would rather not download
+/// 150MB, and being explicit is the point: they chose it.
+pub fn explicit_browser() -> Option<PathBuf> {
+    let p = PathBuf::from(std::env::var("LMTHING_BROWSER").ok()?);
+    p.exists().then_some(p)
+}
+
+/// Find an installed Chromium-family browser, preferring one whose profile flag is honoured.
+///
+/// No longer used to pick the browser — see [`explicit_browser`]. It survives because it is what
+/// makes the "you could point LMTHING_BROWSER at this" half of a failure message concrete, and
+/// because naming a snap as a snap is worth doing wherever one is offered to somebody.
+pub fn find_installed_browser() -> Option<PathBuf> {
     #[cfg(target_os = "macos")]
     for p in MAC_PATHS {
         let path = PathBuf::from(p);
@@ -221,16 +227,12 @@ pub fn launch_args(profile_dir: &Path, headless: bool) -> Vec<String> {
 /// home. Reading the profile directory then times out with "the browser started but never reported
 /// a debugging port" — which is true, and describes the wrong thing entirely. The stderr line is
 /// printed by every Chromium build regardless of confinement, and carries the whole URL.
-pub fn launch(profile_dir: PathBuf, headless: bool) -> Result<BrowserProcess, String> {
-    let bin = find_browser().ok_or_else(|| {
-        "No Chromium-family browser found. Install Chromium, Chrome, Brave or Edge, or set \
-         LMTHING_BROWSER to a binary."
-            .to_string()
-    })?;
+pub fn launch(bin: PathBuf, profile_dir: PathBuf, headless: bool) -> Result<BrowserProcess, String> {
     std::fs::create_dir_all(&profile_dir).map_err(|e| e.to_string())?;
     // Stale from a previous run: without removing it, `read_devtools_port` can return the OLD
     // port immediately and everything then connects to a browser that is not there.
     let _ = std::fs::remove_file(profile_dir.join("DevToolsActivePort"));
+    clear_stale_singleton(&profile_dir);
 
     let mut child = Command::new(&bin)
         .args(launch_args(&profile_dir, headless))
@@ -328,6 +330,56 @@ pub fn parse_devtools_stderr(line: &str) -> Option<(u16, String)> {
     let (hostport, path) = rest.split_once('/')?;
     let port = hostport.rsplit(':').next()?.trim().parse::<u16>().ok()?;
     Some((port, format!("/{}", path.trim())))
+}
+
+/// Remove a `SingletonLock` left behind by a browser that is no longer running.
+///
+/// Chromium refuses to start a second instance against one profile, and it says so by creating
+/// `SingletonLock` — a symlink named `<hostname>-<pid>`. When the browser exits cleanly it removes
+/// it; when it is killed, or the machine loses power, it does not. The next launch then **aborts**
+/// with "Failed to create a ProcessSingleton for your profile directory", which is a real
+/// protection against two browsers corrupting one profile and a dead end when the pid it names has
+/// been gone for an hour.
+///
+/// The pid is checked rather than assumed dead. A lock naming a LIVE process is doing its job: two
+/// copies of this app, or a popped-out window still open, and deleting it would corrupt exactly
+/// what it exists to protect. `kill(pid, 0)` reports existence without sending anything; `EPERM`
+/// means the process is alive and simply not ours, which is still alive.
+///
+/// Unix only — Windows implements the same guarantee with a named mutex the OS releases on exit,
+/// so there is nothing to clean up.
+#[cfg(unix)]
+fn clear_stale_singleton(profile_dir: &Path) {
+    let lock = profile_dir.join("SingletonLock");
+    let Ok(target) = std::fs::read_link(&lock) else { return };
+    let Some(pid) = target
+        .to_string_lossy()
+        .rsplit('-')
+        .next()
+        .and_then(|p| p.parse::<i32>().ok())
+    else {
+        return;
+    };
+    if pid_is_alive(pid) {
+        return;
+    }
+    let _ = std::fs::remove_file(&lock);
+    // The other two are written alongside it and are just as stale. Leaving them behind produces a
+    // different failure a launch later, which looks like the fix did not work.
+    let _ = std::fs::remove_file(profile_dir.join("SingletonCookie"));
+    let _ = std::fs::remove_file(profile_dir.join("SingletonSocket"));
+}
+
+#[cfg(not(unix))]
+fn clear_stale_singleton(_profile_dir: &Path) {}
+
+#[cfg(unix)]
+fn pid_is_alive(pid: i32) -> bool {
+    // Safe: signal 0 sends nothing and only asks whether the pid exists.
+    if unsafe { libc::kill(pid, 0) } == 0 {
+        return true;
+    }
+    std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }
 
 /// Poll for the file Chromium writes once its debugging server is listening.

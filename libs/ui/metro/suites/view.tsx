@@ -1,7 +1,7 @@
 /**
  * The **view renderer**, RENDERED on the React Native target.
  *
- * This is the suite the whole `system-viewbuilder` bet rests on. A view spec is data, so a
+ * This is the suite the whole `system-appbuilder` bet rests on. A view spec is data, so a
  * phone can fetch one and draw it with the same renderer the web bundles — and that claim
  * is only worth anything if the drawing actually mounts on a device. The graph gate proves
  * the modules RESOLVE; it says nothing about whether a section produces a view.

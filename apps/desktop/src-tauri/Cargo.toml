@@ -18,7 +18,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# `unstable` is what exposes `Window::add_child` — a SECOND REAL WEBVIEW inside this app's window,
+# which is how the browser pane shows an actual browser rather than a picture of one. Tauri marks
+# the multi-webview API unstable because its layout story is still settling, not because it is
+# experimental in the sense of unreliable; the alternative was streaming JPEG frames over CDP, and
+# a person can tell the difference immediately.
+tauri = { version = "2", features = ["unstable"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

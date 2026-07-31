@@ -9,6 +9,7 @@
 //! for safety, which is the point: the surface that has to be right is one function.
 
 mod browser;
+mod browser_view;
 mod commands;
 mod config;
 mod fsops;
@@ -60,6 +61,14 @@ pub fn run() {
             commands::browser_relaunch,
             commands::browser_stop,
             commands::browser_status,
+            commands::browserview_open,
+            commands::browserview_bounds,
+            commands::browserview_navigate,
+            commands::browserview_hide,
+            commands::browserview_show,
+            commands::browserview_close,
+            commands::browserview_state,
+            commands::browserview_eval,
             commands::local_mode_enable,
             commands::local_mode_disable,
             commands::local_mode_status,

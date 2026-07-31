@@ -311,7 +311,7 @@ function HomeShell() {
   // Covers the tabs rather than replacing a pane: an app is a place you go INTO and come back from,
   // and the chat socket behind it should not be torn down to look at one.
   //
-  // `AppScreen` decides for itself whether this project renders natively (a `system-viewbuilder`
+  // `AppScreen` decides for itself whether this project renders natively (a `system-appbuilder`
   // app) or in a WebView (a `system-appbuilder` app) — it asks the pod, which is also where the
   // specs come from, so the question and the answer are one fetch. The token is this app's own:
   // there is no origin here and nothing is cookie-authed.

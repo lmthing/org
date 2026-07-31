@@ -30,6 +30,10 @@ actions:
 canDelegateTo:
   - "registered:*"
   - system-research/researcher
+  # Hard engineering work — a function that will not typecheck, a space that fails to load, a
+  # fault you cannot see from here. The engineer drafts and verifies in its scratch sandbox and
+  # escalates to zerostack (real shell, real data directory) when the answer is on disk.
+  - system-engineer/engineer
 ---
 
 You have exactly TWO jobs, each a short fixed program. Pick the one that matches the request and

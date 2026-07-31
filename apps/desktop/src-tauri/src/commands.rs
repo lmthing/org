@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
 use crate::browser::{self, BrowserEndpoint};
+use crate::browser_view;
 use crate::fsops;
 use crate::grants::{Grant, Grants, Mode};
 use crate::sidecar::{self, LocalPod};
@@ -405,4 +406,71 @@ fn uuid() -> String {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     format!("grant-{nanos:x}")
+}
+
+// ── the browser pane ─────────────────────────────────────────────────────────
+//
+// A second REAL webview inside this window, not a picture of one. See `browser_view.rs` for what
+// that buys and what it gives up.
+
+#[tauri::command]
+pub fn browserview_open(
+    app: AppHandle,
+    url: String,
+    rect: browser_view::PaneRect,
+) -> Result<browser_view::ViewState, String> {
+    browser_view::open(&app, &url, rect)
+}
+
+#[tauri::command]
+pub fn browserview_bounds(app: AppHandle, rect: browser_view::PaneRect) -> Result<(), String> {
+    browser_view::set_bounds(&app, rect)
+}
+
+#[tauri::command]
+pub fn browserview_navigate(app: AppHandle, url: String) -> Result<browser_view::ViewState, String> {
+    browser_view::navigate(&app, &url)
+}
+
+#[tauri::command]
+pub fn browserview_hide(app: AppHandle) -> Result<(), String> {
+    browser_view::hide(&app)
+}
+
+#[tauri::command]
+pub fn browserview_show(app: AppHandle) -> Result<(), String> {
+    browser_view::show(&app)
+}
+
+#[tauri::command]
+pub fn browserview_close(app: AppHandle) -> Result<(), String> {
+    browser_view::close(&app)
+}
+
+#[tauri::command]
+pub fn browserview_state(app: AppHandle) -> Result<browser_view::ViewState, String> {
+    browser_view::state(&app)
+}
+
+/// Evaluate JavaScript in the page and return its value.
+///
+/// The whole read path. `eval` alone returns nothing in Tauri, so without `eval_with_callback`
+/// there would be no way to get a page's text back out of a webview at all — which is what made
+/// the earlier CDP design necessary.
+#[tauri::command]
+pub async fn browserview_eval(app: AppHandle, js: String) -> Result<String, String> {
+    let view = app
+        .get_webview(browser_view::BROWSER_LABEL)
+        .ok_or_else(|| "the browser pane is not open".to_string())?;
+    let (tx, rx) = tokio::sync::oneshot::channel::<String>();
+    let slot = std::sync::Mutex::new(Some(tx));
+    view.eval_with_callback(js, move |value| {
+        if let Ok(mut g) = slot.lock() {
+            if let Some(tx) = g.take() {
+                let _ = tx.send(value);
+            }
+        }
+    })
+    .map_err(|e| e.to_string())?;
+    rx.await.map_err(|_| "the page did not answer".to_string())
 }

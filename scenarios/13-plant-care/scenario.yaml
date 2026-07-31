@@ -3,11 +3,11 @@ title: A small houseplant tracker, built entirely as SPEC views
 project: plant-care
 
 # A deliberately SMALL brief (2 tables, ~6 endpoints, 4 pages) driven STRAIGHT at
-# `system-viewbuilder/automator` via `space_session` — THING is bypassed on purpose, so what this
+# `system-appbuilder/automator` via `space_session` — THING is bypassed on purpose, so what this
 # measures is the view-spec pipeline itself, not routing. See PROGRESS.md, Wave 3.
 
 persona: >
-  A first live-run harness for `system-viewbuilder`, not a real persona. The brief is delivered the
+  A first live-run harness for `system-appbuilder`, not a real persona. The brief is delivered the
   way THING's delegate would phrase it: outcomes and known rows, no product vocabulary about specs,
   sections or elements — the pipeline has to choose those itself.
 
@@ -29,7 +29,7 @@ invariants:
 
 steps:
   # 1 — the whole build, in one delegate-shaped turn straight at the space.
-  - space_session: system-viewbuilder/automator
+  - space_session: system-appbuilder/automator
     say: >
       Build a houseplant-care app INTO this live project.
 

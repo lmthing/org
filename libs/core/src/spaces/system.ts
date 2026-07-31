@@ -30,12 +30,12 @@ export const GLOBAL_SPACE_NAME = 'system-global';
 export const SYSTEM_SPACE_NAMES = [
   'system-global',
   'system-engineer',
+  'system-zerostack',
   'system-architect',
   'system-research',
   'system-browser',
   'system-desktop-browser',
   'system-appbuilder',
-  'system-viewbuilder',
   'system-vision',
   'system-files',
   'system-store',

@@ -3,7 +3,7 @@ id: plan_acceptance
 output:
   checks: array
   ok: boolean
-dependsOn: [plan_endpoints, plan_pages, user_stories, read_sources]
+dependsOn: [plan_endpoints, plan_views, user_stories, read_sources]
 role: general
 functions: []
 ---
@@ -18,7 +18,7 @@ grounded in the SOURCE, and evaluable by plain code — never a vibe.
 
 In scope: `user_stories.stories` (each with its `acceptance` prose), `read_sources.summary` (the
 source-derived build brief — the FIGURES the app must reflect), `plan_endpoints.endpoints` (each
-`{ name, route, purpose, tables, fields }` — the exact endpoint NAMES you target), and `plan_pages` (an
+`{ name, route, purpose, tables, fields, input? }` — the exact endpoint NAMES you target), and `plan_views` (an
 array of page specs, each with an `endpoints` list — the endpoints a page actually RENDERS). A check
 names ONE endpoint by its exact `name` and asserts one of two things a source figure justifies:
 
@@ -34,7 +34,7 @@ names ONE endpoint by its exact `name` and asserts one of two things a source fi
   round-off and currency splits make exact matches false alarms).
 
 Rules that keep this from ever flagging correct code:
-- **Check ONLY an endpoint a page RENDERS.** The endpoint you name must appear in some `plan_pages`
+- **Check ONLY an endpoint a page RENDERS.** The endpoint you name must appear in some `plan_views`
   page's `endpoints` list — an endpoint no page reads shows the user nothing, so proving it works
   proves nothing they see. Verifying an orphaned endpoint is exactly how a broken dashboard passes
   acceptance while the real endpoint its page renders is the one that fails.

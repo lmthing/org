@@ -7,15 +7,19 @@
  * agent slug fell through to the flattened merge of all system spaces, where the last space to
  * define that slug wins.
  *
- * `system-appbuilder` and `system-viewbuilder` both define `automator`, `api-author`,
- * `data-modeler` AND a `build_live_project` tasklist, and the viewbuilder is listed later in
- * `SYSTEM_SPACE_NAMES`. A session bound to `system-appbuilder/automator` therefore ran the
- * viewbuilder's agent and tasklist and wrote `.view.json` specs — from a ref that named the
+ * It was found when `system-appbuilder` and `system-viewbuilder` shipped side by side: both defined
+ * `automator`, `api-author`, `data-modeler` AND a `build_live_project` tasklist, and the viewbuilder
+ * sorted later in `SYSTEM_SPACE_NAMES`. A session bound to `system-appbuilder/automator` therefore
+ * ran the viewbuilder's agent and tasklist and wrote `.view.json` specs — from a ref that named the
  * appbuilder in as many words.
  *
  * Nothing about it looked wrong: the session ledger recorded the correct `spaceRef`, the run
  * completed, and the app built. It was only visible by running the two builders on the same brief
  * and noticing the outputs were the same medium.
+ *
+ * The two builders have since merged, so that specific pair no longer collides — which is exactly why
+ * these tests use SYNTHETIC space dirs rather than the shipped ones. The bug is about resolution, not
+ * about those two spaces, and it reappears the moment any two system spaces share an agent slug.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';

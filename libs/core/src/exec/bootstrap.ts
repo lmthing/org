@@ -438,7 +438,7 @@ function buildAppCapabilityDts(app: AppCapabilities, appDts?: string, projectRoo
   // storeSearch/storeInspect + installSpace + emitEvent (plan S10). Each emitted only
   // when its grant is present.
   // `views:write` sits beside `pages:write` here, never inside it: the two authoring media are
-  // separated BY CAPABILITY, which is what makes `system-viewbuilder`'s zero-WebView guarantee a
+  // separated BY CAPABILITY, which is what makes `system-appbuilder`'s zero-WebView guarantee a
   // typecheck error rather than an instruction (see the fragment's own doc in library-dts.ts).
   // `team:read`/`team:post` ride the same list. They reach it only on a team pod —
   // the parse step drops the grants everywhere else — which is what makes the whole

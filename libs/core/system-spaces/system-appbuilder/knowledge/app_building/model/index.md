@@ -1,6 +1,6 @@
 ---
 variable: appBuildingModel
-description: How a project-as-application is structured and built — the four file kinds (database schemas, API handlers, React pages, automation hooks), the capability grant model that gates the authoring globals, and the typed contracts that hold it together.
+description: How a spec-view project-as-application is structured and built — the file kinds (database schemas, API handlers, view/component/shell SPECS, automation hooks), the capability grant model that gates the authoring globals, and the typed contracts that hold it together.
 ---
 
 # The project-as-application model
@@ -12,8 +12,15 @@ LIVE project directory, each written by a synchronous, validated authoring globa
   Every table, column, and relation carries a required `description`.
 - **`api/<path>/<METHOD>.ts`** — typed HTTP handlers. `writeProjectApi('<name>/<METHOD>', src)`. Each
   exports `name`, `description`, `Input`, `Output`, and a default async handler using `ctx.db`.
-- **`pages/<route>.tsx`** — React pages. `writeProjectPage(route, src)`. Data comes from `@app/runtime`
-  hooks; styling uses `@lmthing/css` design tokens only.
+- **`pages/<route>.view.json`** — pages, as SPECS. `writeProjectView(route, spec)`. A page is an
+  ordered list of sections from a closed menu of eight kinds; values are bound by PATH (`$.field`)
+  into the ONE endpoint each section names. No TSX, no imports, no class names, no colours — the
+  writer host-generates the trivial React wrapper that renders the spec, and the SAME spec renders
+  natively in the mobile app with no WebView.
+- **reusable view components** — `writeProjectViewComponent(name, def)`. A named composition of the
+  closed 24-element vocabulary with declared props, referenced from a section as `{ use: '<Name>' }`.
+- **the app shell** — `writeProjectViewShell(shell)`. Navigation (flat `nav` or grouped), per-entity
+  `subnav`, and the persistent `assistant` dock. The spec replacement for a hand-written `_layout`.
 - **`hooks/<slug>.ts`** — automation. `writeProjectHook(slug, src)`. A cron trigger (time-based) or a
   database trigger (fires on a table write).
 - **`events/<name>.ts`** — emitter defs. `writeProjectEvent(name, src)`. A PRODUCER that emits events.

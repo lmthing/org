@@ -1,27 +1,32 @@
 /**
  * The contract gate — HOST-RUN, and it runs BEFORE a single line of app code exists.
  *
- * `plan_tables` + `plan_endpoints` + `plan_components` + `plan_pages` are four independent model
- * turns. Nothing made them agree. In 06-tanzania run 32 the Costs page called
- * `useApi('costs-summary')` — a name `plan_endpoints` never assigned — and the page shipped dead:
- * the client rejects an unknown name BEFORE issuing a request, so there was an error state and
- * nothing in the network panel. That fault was authored at PLAN time and only surfaced after every
- * table, endpoint, component and page had been written.
+ * `plan_tables` + `plan_endpoints` + `plan_view_components` + `plan_views` are four independent model
+ * turns. Nothing made them agree. This node cross-checks the whole graph while it is still cheap to
+ * fix, and its `onFail` resumes `plan_tables` carrying `errors` — so the redesign is TOLD which
+ * references broke rather than re-running blind and reproducing them. Each message names the offending
+ * node and the offending reference, because that text is the entire input the resumed design node
+ * receives, and it NAMES THE REAL OPTIONS (the endpoints that exist, the fields that exist) rather
+ * than only saying "invalid".
  *
- * This node cross-checks the whole graph while it is still cheap to fix, and its `onFail` resumes
- * `plan_tables` carrying `errors` — so the redesign is TOLD which references broke rather than
- * re-running blind and reproducing them. Each message names the offending node and the offending
- * reference, because that text is the entire input the resumed design node receives.
+ * **Why the page checks below are unusually strict.** A page here is a SPEC — an ordered
+ * list of sections, each naming ONE endpoint and binding `$.field` paths straight into its Output.
+ * There is no client-side glue: no `.map`, no join across two responses, no ternary. So a binding the
+ * endpoint does not declare is not a cosmetic mismatch, it is a value that can never appear on the
+ * page, and it is unfixable downstream — `implement_views` has nowhere to put the missing computation.
+ * That is the **view-shaped-endpoint rule**, and checks (V2)/(V3) below are it: every section's FULL
+ * binding set must be satisfiable by its ONE endpoint's declared Output, and a miss is routed to
+ * `plan_endpoints` — the endpoint grows a computed field; the page never grows glue.
  *
- * It reports; it never throws on a finding (a code node has no salvage path — a throw fails the
- * whole node and aborts the tasklist), and it emits a SCALAR `ok` because the condition DSL's
- * `getAtPath` returns `undefined` for arrays, so `validate_contract.errors.length > 0` is not
- * expressible in a `when:`.
+ * It reports; it never throws on a finding (a code node has no salvage path — a throw fails the whole
+ * node and aborts the tasklist), and it emits a SCALAR `ok` because the condition DSL's `getAtPath`
+ * returns `undefined` for arrays, so `validate_contract.errors.length > 0` is not expressible in a
+ * `when:`.
  */
 
 export const node = {
   id: 'validate_contract',
-  dependsOn: ['plan_tables', 'plan_endpoints', 'plan_components', 'plan_pages', 'plan_automations'],
+  dependsOn: ['plan_tables', 'plan_endpoints', 'plan_view_components', 'plan_views', 'plan_automations'],
   output: {
     ok: 'boolean',
     errorCount: 'number',
@@ -30,7 +35,6 @@ export const node = {
   // Resume the DESIGN, not the implementation — nothing has been written yet. `carry: errors` is the
   // point: `getUpstreamOutputs` only passes `dependsOn`, and the resumed node cannot depend on its
   // own checker without creating a cycle, so the reasons ride in on the seed as `feedback` instead.
-  // Without it the design nodes re-run blind and reproduce the same mistake.
   onFail: {
     goto: 'plan_tables',
     when: 'validate_contract.ok == false',
@@ -51,16 +55,28 @@ interface EndpointSpec {
   name?: string;
   route?: string;
   tables?: string[];
-  fields?: string[];
+  fields?: unknown[];
+  /** A write endpoint's request-body keys, as `'key: type'`. See check (1b). */
+  input?: unknown[];
 }
 interface ComponentSpec {
   name?: string;
   props?: string[];
 }
+interface SectionSpec {
+  id?: string;
+  kind?: string;
+  endpoint?: string;
+  from?: string;
+  component?: string;
+  reveals?: string[];
+  bindings?: string[];
+}
 interface PageSpec {
   route?: string;
   endpoints?: string[];
   components?: string[];
+  sections?: SectionSpec[];
 }
 interface AutomationSpec {
   slug?: string;
@@ -84,6 +100,41 @@ function fieldName(entry: string): string {
   return String(entry).split(':')[0]!.trim();
 }
 
+/**
+ * The declared key names of one endpoint's response item. `05-plan_endpoints` allows TWO shapes per
+ * entry — a `'key: type'` string for a scalar, and a `{ name, list?, nullable?, item: [...] }` object
+ * for a LIST or RECORD field — and a binding may legitimately name either.
+ */
+function endpointFieldNames(e: EndpointSpec): Set<string> {
+  const out = new Set<string>();
+  for (const raw of Array.isArray(e.fields) ? e.fields : []) {
+    if (typeof raw === 'string') {
+      const n = fieldName(raw);
+      if (n) out.add(n);
+      continue;
+    }
+    if (raw && typeof raw === 'object') {
+      const n = String((raw as { name?: unknown }).name ?? '').trim();
+      if (n) out.add(n);
+    }
+  }
+  return out;
+}
+
+/**
+ * The FIRST path segment of a `$.`-rooted binding — the only part this gate can check against a plan.
+ * `'$.paid_by_name'` → `'paid_by_name'`; `'$.plan.days'` → `'plan'` (the endpoint declares `plan` with
+ * a nested `item` shape, and the sub-keys inside it are the emitted contract's business, not this
+ * node's). Returns `''` for a binding rooted anywhere else (`$props.`, `$route.`, `$data.`, `$result.`,
+ * `$form.`, `$client.timezone`, bare `$`) — those resolve outside the endpoint's Output.
+ */
+function ownFieldOfBinding(binding: string): string {
+  const s = String(binding).trim();
+  if (!s.startsWith('$.')) return '';
+  const seg = s.slice(2).split('.')[0] ?? '';
+  return seg.replace(/\[\d+\]$/, '');
+}
+
 /** The `[param]` segments a route declares, e.g. `bookings/[id]/PATCH` → `['id']`. */
 function routeParams(route: string): string[] {
   const out: string[] = [];
@@ -97,22 +148,39 @@ function routeParams(route: string): string[] {
 const list = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 
 /** The ONLY column `type`s the write-time schema validator accepts — mirrors
- *  `libs/core/src/db/validate.ts#COLUMN_TYPES` (canonical kind: `libs/core/src/db/schema.ts#ColumnType`)
- *  exactly. Anything else — a TS union (`'string | null'`) or an array shape (`'string[]'`) — throws
- *  `unknown column type` at write time and the WHOLE table silently fails to land (caught by
- *  `writeProjectTable`'s try/catch as `{ ok:false, error }`, with no log line before this check
- *  existed). `04-plan_tables.md` teaches base types + `required` for nullability; this is the
- *  write-time safety net for a plan that still drifts. */
+ *  `libs/core/src/db/validate.ts#COLUMN_TYPES` exactly. Anything else — a TS union
+ *  (`'string | null'`) or an array shape (`'string[]'`) — throws `unknown column type` at write time
+ *  and the WHOLE table silently fails to land. */
 const BASE_COLUMN_TYPES: ReadonlySet<string> = new Set(['string', 'number', 'boolean', 'date', 'json']);
+
+/**
+ * The eight section kinds, verbatim from `libs/cli/src/app/view-spec/schema.ts#SECTION_KINDS`. The
+ * union is FULL and capped — a ninth kind is a plan change decided by the improvement-loop ratchet,
+ * never something a planner may mint. Catching an invented kind HERE, with the real menu named, is
+ * far cheaper than catching it at `writeProjectView` time on every page that used it.
+ */
+const SECTION_KINDS: ReadonlySet<string> = new Set([
+  'list',
+  'detail',
+  'create',
+  'stats',
+  'markdown',
+  'chat',
+  'toolbar',
+  'timeline',
+]);
+
+/** Kinds that do not necessarily read an endpoint. Everything else must name one. */
+const ENDPOINTLESS_KINDS: ReadonlySet<string> = new Set(['toolbar', 'chat', 'markdown']);
 
 export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<Record<string, unknown>> {
   const tables = list<TableSpec>((inputs['plan_tables'] as { tables?: unknown } | undefined)?.tables);
   const endpoints = list<EndpointSpec>((inputs['plan_endpoints'] as { endpoints?: unknown } | undefined)?.endpoints);
   const components = list<ComponentSpec>(
-    (inputs['plan_components'] as { components?: unknown } | undefined)?.components,
+    (inputs['plan_view_components'] as { components?: unknown } | undefined)?.components,
   );
-  // `plan_pages` is a per-page forEach, so its output is already an ARRAY of page specs.
-  const pages = list<PageSpec>(inputs['plan_pages']);
+  // `plan_views` is a per-page forEach, so its output is already an ARRAY of page specs.
+  const pages = list<PageSpec>(inputs['plan_views']);
   const automations = list<AutomationSpec>(
     (inputs['plan_automations'] as { automations?: unknown } | undefined)?.automations,
   );
@@ -123,19 +191,21 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
   };
 
   const tableNames = new Set(tables.map((t) => String(t.name ?? '')).filter(Boolean));
-  const endpointNames = new Set(endpoints.map((e) => String(e.name ?? '')).filter(Boolean));
+  const endpointByName = new Map<string, EndpointSpec>();
+  for (const e of endpoints) {
+    const n = String(e.name ?? '');
+    if (n && !endpointByName.has(n)) endpointByName.set(n, e);
+  }
+  const endpointNames = new Set(endpointByName.keys());
   const componentNames = new Set(components.map((c) => String(c.name ?? '')).filter(Boolean));
   const knownEndpoints = [...endpointNames].join(', ') || 'none';
   const knownComponents = [...componentNames].join(', ') || 'none';
   const knownTables = [...tableNames].join(', ') || 'none';
 
-  // (0) A planned column `type` outside the five base kinds `writeProjectTable` accepts. This is the
-  // grammar mismatch that stalled a real build forever: `04-plan_tables.md` used to teach a TS union
-  // or array (`'string | null'`, `'string[]'`) as a legal column `type`, but the write-time validator
-  // exact-matches against BASE_COLUMN_TYPES and throws — silently failing the whole table (no rows,
-  // no schema) with no log line, so `implement_tables` kept "succeeding" against a table that was
-  // never on disk and the downstream repair loop never had a real fault to fix. Caught HERE, at plan
-  // time, instead of as a silent write-time failure discovered only when the app 500s.
+  // (0) A planned column `type` outside the five base kinds `writeProjectTable` accepts. The
+  // write-time validator exact-matches and THROWS, silently failing the whole table (no rows, no
+  // schema) with no log line — so `implement_tables` keeps "succeeding" against a table that was
+  // never on disk. Caught HERE, at plan time.
   for (const t of tables) {
     const tableName = String(t.name ?? '(unnamed)');
     const columns = t.schema?.columns;
@@ -154,15 +224,15 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
     }
   }
 
-  // (1) Duplicate endpoint names / routes. `name` is what a page passes to useApi and what the
-  // module exports; two endpoints sharing one means whichever loads second silently wins.
+  // (1) Duplicate endpoint names / routes. `name` is what a section's `query`/`mutation` resolves
+  // against and what the module exports; two endpoints sharing one means whichever loads second wins.
   const seenName = new Set<string>();
   const seenRoute = new Set<string>();
   for (const e of endpoints) {
     const n = String(e.name ?? '');
     const r = String(e.route ?? '');
     if (!n) {
-      add('plan_endpoints', '(unnamed)', 'an endpoint has no `name` — `name` is what pages pass to useApi() and what the module exports; every endpoint needs a unique one');
+      add('plan_endpoints', '(unnamed)', 'an endpoint has no `name` — `name` is what a section names in `query`/`mutation` and what the module exports; every endpoint needs a unique one');
     } else if (seenName.has(n)) {
       add('plan_endpoints', n, `two endpoints share the name "${n}" — names are unique per project; whichever module loads second silently wins. Rename one.`);
     }
@@ -171,6 +241,52 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
       add('plan_endpoints', r, `two endpoints share the route "${r}" — one file path can hold one handler. Give one of them a different route.`);
     }
     seenRoute.add(r);
+  }
+
+  // (1b) A FORM'S endpoint with no `input` — the body nothing described.
+  //
+  // A `create` section declares no fields by design: the renderer derives every one from the
+  // endpoint's Input JSON Schema. So an absent `input` is not a missing annotation, it is a form with
+  // no fields — the page renders "Nothing to fill in." above a Save button, and `buildApp`,
+  // `validateAppViews` and `renderSmokeViews` all pass, because the spec and the data are both
+  // perfectly consistent with a body that was never specified. Caught here, at plan time, because
+  // this is the last point where adding it costs one field instead of a re-plan.
+  //
+  // **Scoped to the endpoints a `create` section actually reads, which is the whole failure mode.**
+  // The first version asked every POST/PUT/PATCH for a body, and that is not a property of the method:
+  // an ACTION write — `plants/[id]/water-today/POST`, `plants/[id]/toggle-resting/PATCH` — carries no
+  // body ON PURPOSE. Its argument is the route `[param]`, and the toggle rule in `05-plan_endpoints.md`
+  // says plainly that the page passes no value because the server computes the opposite. So the rule
+  // asked for something that does not exist, and on `13-plant-care` run 8 the model refused it three
+  // times — declaring `input: ['watered_at?: string']` once, then `input: []` — which spent BOTH
+  // `onFail` attempts and 12 unrelated errors before the DAG gave up and ran on with the plan anyway.
+  // A gate no correct plan can satisfy does not improve the plan; it only costs the budget that would
+  // have fixed the real findings.
+  const formEndpoints = new Set<string>();
+  for (const p of pages) {
+    for (const s of list<SectionSpec>(p.sections)) {
+      if (String(s.kind ?? '') !== 'create') continue;
+      const name = String(s.endpoint ?? '').trim();
+      if (name) formEndpoints.add(name);
+    }
+  }
+  for (const e of endpoints) {
+    const r = String(e.route ?? '');
+    const name = String(e.name ?? r);
+    if (!formEndpoints.has(name)) continue;
+    const body = Array.isArray(e.input) ? e.input.filter((x) => String(x ?? '').trim() !== '') : [];
+    if (body.length > 0) continue;
+    add(
+      'plan_endpoints',
+      name,
+      `"${name}" is what a \`create\` section submits, but it declares no \`input\` — the request body is ` +
+        `undescribed, so its Input type degrades to \`Record<string, unknown>\` and the page renders an ` +
+        `EMPTY form ("Nothing to fill in.") above a Save button. A \`create\` section declares no fields ` +
+        `of its own BY DESIGN; this endpoint's \`input\` is the only place they can come from. Add it, ` +
+        `listing the body keys as 'key: type' (\`?\` suffix = optional), e.g. \`input: ['name: string', ` +
+        `'room: string', 'waterIntervalDays: number', 'lastWatered?: string']\`. Route \`[param]\`s do ` +
+        `NOT go here — emit_types adds those.`,
+    );
   }
 
   // (2) An endpoint declaring a table that was never planned. The db surface is dynamically typed,
@@ -182,63 +298,151 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
     }
   }
 
-  // NOTE — there is deliberately NO "endpoint field must be a real column" check. It was here and
-  // removed after run 35: a single-table GROUP BY / aggregate legitimately computes fields no column
-  // carries (`costs-summary` on `costs`), so the check fired on correct designs, and the model began
-  // dismissing the WHOLE feedback channel as noise. The one real case it caught — a re-cased field
-  // (`amountUSD` for `amount_usd`) — is now a COMPILE error via the `emit_types` contract (a page
-  // reading the wrong key does not typecheck), and a field the handler never actually returns is
-  // caught at runtime by `smoke_endpoints`. Both downstream mechanisms are precise; this one was not.
+  // ── the VIEW checks (V1–V6) ────────────────────────────────────────────────────────────────────
+  //
+  // A spec page has no client code, so each of these is a value that could never appear rather than
+  // a mismatch someone patches later — which is why they are errors here and not warnings.
 
-  // (4) A page naming an endpoint nobody assigned — the run-32 dead-page fault, caught at plan time.
   for (const p of pages) {
-    for (const ref of list<string>(p.endpoints)) {
-      if (endpointNames.has(String(ref))) continue;
-      add('plan_pages', String(ref), `page "${p.route}" reads endpoint "${ref}" which plan_endpoints never declares (have: ${knownEndpoints}) — the client rejects an unknown name before issuing any request, so the page renders an error state with nothing in the network panel`);
+    const route = String(p.route ?? '(unrouted)');
+    const sections = list<SectionSpec>(p.sections);
+
+    if (sections.length === 0) {
+      add('plan_views', route, `page "${route}" plans no sections — a page IS its section list, so this route would render an empty shell. Give it at least one section (a \`list\` over the endpoint that serves this page's story is the usual answer).`);
     }
-    for (const ref of list<string>(p.components)) {
-      if (componentNames.has(String(ref))) continue;
-      add('plan_pages', String(ref), `page "${p.route}" renders component "${ref}" which plan_components never declares (have: ${knownComponents}) — a dangling import fails the whole bundle`);
+
+    // (V1) Section ids: present where they are referenced, and unique on the page. `id` is the handle
+    // for `reveals` and for `$data.<id>.…`, so a duplicate silently redirects one of them.
+    const idsOnPage = new Set<string>();
+    for (const s of sections) {
+      const id = String(s.id ?? '');
+      if (!id) continue;
+      if (idsOnPage.has(id)) {
+        add('plan_views', `${route}#${id}`, `page "${route}" has two sections with id "${id}" — an id is the handle a \`reveals\` target and a \`$data.${id}.…\` binding resolve against, so a duplicate silently points at whichever came first. Rename one.`);
+      }
+      idsOnPage.add(id);
+    }
+
+    for (const s of sections) {
+      const id = String(s.id ?? '(unnamed section)');
+      const ref = `${route}#${id}`;
+      const kind = String(s.kind ?? '');
+
+      // (V2) The kind must be one of the eight. The union is capped; there is no `custom`.
+      if (!SECTION_KINDS.has(kind)) {
+        add('plan_views', ref, `section "${id}" on page "${route}" has kind "${kind}" — that is not a section kind. The complete menu is: ${[...SECTION_KINDS].join(', ')}. There is no ninth kind and no custom escape: if none of the eight expresses this surface, drop the section and record it in this page's \`cannotExpress\` instead of forcing it into the nearest kind.`);
+      }
+
+      // (V3) The endpoint must exist. A section naming an endpoint nobody assigned is a dead section:
+      // `writeProjectView` rejects the name, so the page never lands at all.
+      const endpointName = String(s.endpoint ?? '');
+      if (!endpointName) {
+        if (!ENDPOINTLESS_KINDS.has(kind) && !String(s.from ?? '').startsWith('$data.')) {
+          add('plan_views', ref, `section "${id}" on page "${route}" is a \`${kind}\` but names no endpoint — a ${kind} section reads exactly one. Name one of: ${knownEndpoints} (or source it from another section's Output with \`from: '$data.<sectionId>.<path>'\`).`);
+        }
+      } else if (!endpointNames.has(endpointName)) {
+        add('plan_views', endpointName, `section "${id}" on page "${route}" reads endpoint "${endpointName}" which plan_endpoints never declares (have: ${knownEndpoints}) — the writer rejects an unknown endpoint name, so this whole page fails to save`);
+      }
+
+      // (V4) THE VIEW-SHAPED-ENDPOINT RULE. Every `$.`-rooted binding this section shows must be a
+      // field of its ONE endpoint. The fix is ALWAYS at the endpoint: a spec page has no `.map`, no
+      // join and no ternary, so a value the endpoint does not return has nowhere to come from. This
+      // error is deliberately addressed to `plan_endpoints`.
+      const ep = endpointName ? endpointByName.get(endpointName) : undefined;
+      if (ep) {
+        const declared = endpointFieldNames(ep);
+        const have = [...declared].join(', ') || 'none';
+        const checked = [...list<string>(s.bindings), String(s.from ?? '')].filter(Boolean);
+        const flagged = new Set<string>();
+        for (const b of checked) {
+          const own = ownFieldOfBinding(b);
+          if (!own || declared.has(own) || flagged.has(own)) continue;
+          flagged.add(own);
+          add(
+            'plan_endpoints',
+            `${endpointName}.${own}`,
+            `page "${route}" section "${id}" binds "${b}", but endpoint "${endpointName}" does not declare a field "${own}" (it declares: ${have}). ` +
+              `One section reads ONE endpoint and a spec page has no client code — no map, no join, no ternary — so this value has nowhere to come from. ` +
+              `ADD "${own}" to "${endpointName}"'s \`fields\` as a COMPUTED field the handler produces (a cross-table name, a total, a group-by, a status label, a picked "current" record, a boolean the row's controls read). ` +
+              `Do NOT instead point the section at a second endpoint, and do NOT drop the value the story needs.`,
+          );
+        }
+      }
+
+      // (V5) A `$data.<sectionId>.…` binding must name a section that exists ON THIS PAGE, and a
+      // `reveals` target likewise. Both resolve within one page's spec; a miss is a dead reference the
+      // renderer can only treat as null.
+      for (const b of list<string>(s.bindings)) {
+        const m = /^\$data\.([A-Za-z_][A-Za-z0-9_]*)\./.exec(String(b));
+        if (!m) continue;
+        const target = m[1] as string;
+        if (idsOnPage.has(target)) continue;
+        add('plan_views', `${ref} → ${target}`, `section "${id}" on page "${route}" binds "${b}", but this page has no section with id "${target}" (ids on this page: ${[...idsOnPage].join(', ') || 'none'}). A \`$data.<sectionId>\` binding reads ANOTHER SECTION OF THE SAME PAGE — give that section an \`id\`, or read the value from this section's own endpoint.`);
+      }
+      for (const target of list<string>(s.reveals)) {
+        if (idsOnPage.has(String(target))) continue;
+        add('plan_views', `${ref} → ${target}`, `section "${id}" on page "${route}" reveals "${target}", but this page has no section with that id (ids on this page: ${[...idsOnPage].join(', ') || 'none'}). A toolbar reveals sections of its OWN page: add the section it is meant to open (usually a hidden \`create\`), or drop the button.`);
+      }
+
+      // (V6) A component reference must resolve. `{ use: '<Name>' }` against an undeclared name is a
+      // save-time rejection of the whole page.
+      const comp = String(s.component ?? '');
+      if (comp && !componentNames.has(comp)) {
+        add('plan_views', comp, `page "${route}" section "${id}" uses view component "${comp}" which plan_view_components never declares (have: ${knownComponents}) — the writer rejects an unresolved \`{ use: … }\`, so the whole page fails to save. Reference a declared component, or use the flat item form ({ title, caption, badge, … }) instead.`);
+      }
+    }
+
+    // The page-level endpoint/component lists are the page's own summary; keep them honest too.
+    for (const refName of list<string>(p.endpoints)) {
+      if (endpointNames.has(String(refName))) continue;
+      add('plan_views', String(refName), `page "${route}" lists endpoint "${refName}" which plan_endpoints never declares (have: ${knownEndpoints})`);
+    }
+    for (const refName of list<string>(p.components)) {
+      if (componentNames.has(String(refName))) continue;
+      add('plan_views', String(refName), `page "${route}" lists view component "${refName}" which plan_view_components never declares (have: ${knownComponents})`);
     }
   }
 
   // (5) A parameterized route with no caller able to supply its param. The missing value is
   // stringified into the path ("/api/.../undefined"), which still matches and passes validation,
   // so it returns a plausible 200 carrying the wrong row.
+  const sectionsOf = (p: PageSpec): SectionSpec[] => list<SectionSpec>(p.sections);
+  const readsEndpoint = (name: string): boolean =>
+    pages.some(
+      (p) => list<string>(p.endpoints).includes(name) || sectionsOf(p).some((s) => String(s.endpoint ?? '') === name),
+    );
   for (const e of endpoints) {
     const params = routeParams(String(e.route ?? ''));
     if (params.length === 0) continue;
-    const called = pages.some((p) => list<string>(p.endpoints).includes(String(e.name)));
-    if (called) continue;
-    add('plan_endpoints', String(e.name), `endpoint "${e.name}" takes ${params.map((x) => `[${x}]`).join('')} but no page declares it — either a page must read it (and supply the param) or it should not be in the contract`);
+    if (readsEndpoint(String(e.name))) continue;
+    add('plan_endpoints', String(e.name), `endpoint "${e.name}" takes ${params.map((x) => `[${x}]`).join('')} but no page section declares it — either a section must read it (and supply the param) or it should not be in the contract`);
   }
 
-  // (5b) An endpoint no page reads and no automation runs is dead weight — and worse, plan_acceptance may
-  // "verify" it, greenlighting an endpoint the user never hits while the page's real one is broken.
+  // (5b) An endpoint no section reads and no automation runs is dead weight — and worse,
+  // `plan_acceptance` may "verify" it, greenlighting an endpoint the user never hits while the
+  // section's real one is broken.
   for (const e of endpoints) {
     const name = String(e.name ?? '');
     if (!name) continue;
-    const calledByPage = pages.some((p) => list<string>(p.endpoints).includes(name));
     const usedByAuto = automations.some((a) => String(a.run ?? '') === name);
-    if (!calledByPage && !usedByAuto) {
-      add('plan_endpoints', name, `endpoint "${name}" is declared but no page reads it and no automation runs it — drop it, or have a page use it. An unused endpoint is never seen and cannot be meaningfully acceptance-checked.`);
+    if (!readsEndpoint(name) && !usedByAuto) {
+      add('plan_endpoints', name, `endpoint "${name}" is declared but no page section reads it and no automation runs it — drop it, or have a section use it. An unused endpoint is never seen and cannot be meaningfully acceptance-checked.`);
     }
   }
 
-  // (6) A component whose props no page-visible endpoint can feed. Props are the contract between a
-  // page and a component; one nothing supplies renders permanently blank.
+  // (6) A view component nothing references is dead weight the app will never show. There is
+  // deliberately NO "every prop must be an endpoint field" check: a prop is the contract between the
+  // USE SITE and the component (a literal is a legal argument), and at plan time "fed a literal" is
+  // indistinguishable from "fed nothing". An earlier version of that check fired on every static
+  // label until the model started dismissing real errors alongside the false ones.
   for (const c of components) {
-    const used = pages.some((p) => list<string>(p.components).includes(String(c.name)));
+    const name = String(c.name ?? '');
+    const used = pages.some(
+      (p) => list<string>(p.components).includes(name) || sectionsOf(p).some((s) => String(s.component ?? '') === name),
+    );
     if (!used) {
-      add('plan_components', String(c.name), `component "${c.name}" is declared but no page renders it — drop it, or have a page use it`);
+      add('plan_view_components', name, `view component "${name}" is declared but no page section uses it — drop it, or have a section use it as its item/header shape. Most rows need no component at all: the flat item form ({ title, caption, badge, value, … }) covers an ordinary row.`);
     }
-    // There is deliberately NO "every prop must be an endpoint field" check. A prop is a contract
-    // between the PAGE and the component, not between the component and an endpoint: a page passes
-    // literals (`label="Pending"`), values it derives client-side, or endpoint fields, and at plan
-    // time "fed a literal" is indistinguishable from "fed nothing". The version that flagged this
-    // (run 35) fired on every static `title`/`subtitle`/`message`/`label`, inflating the error list
-    // until the model dismissed real errors alongside the false ones. A prop actually fed nothing
-    // surfaces where it is real — an empty render — not as a plan-time guess.
   }
 
   // (7) A table nothing reads is dead weight the app will never show.
@@ -249,9 +453,7 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
   }
 
   // (9) Two tables that hold the SAME real-world entity — duplicate tables make a retract non-atomic
-  // (a delete removes the row from only one; the other lingers and any total double-counts). Flag a pair
-  // whose SUBSTANTIVE (non-id) column sets overlap heavily so the redesign collapses them to one table.
-  // The 3-column floor + 0.6 overlap keeps a legitimate FK child (few shared substantive columns) clear.
+  // (a delete removes the row from only one; the other lingers and any total double-counts).
   const colSet = (t: TableSpec): Set<string> =>
     new Set(Object.keys(t.schema?.columns ?? {}).filter((c) => c !== 'id'));
   for (let i = 0; i < tables.length; i++) {
@@ -272,10 +474,7 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
 
   // (8) AUTOMATIONS — a cron/event hook is authored ONLY when a user story needs it, and MOST apps
   // plan none (an empty list is the correct common case, so this loop simply runs zero times). When
-  // one IS planned, every table it reads/writes/reacts-to must be a table `plan_tables` declares: a
-  // handler querying a table that never landed builds clean and 500s at runtime, and an event hook
-  // subscribed to `project/db.<missingTable>.<event>` never fires — a dangling trigger. This is the
-  // same class of fault as an endpoint reading a missing table (check 2), routed to the same redesign.
+  // one IS planned, every table it reads/writes/reacts-to must be a table `plan_tables` declares.
   const WRITE_EVENTS = new Set(['insert', 'update', 'remove']);
   const seenSlug = new Set<string>();
   const refTable = (auto: AutomationSpec, table: unknown, role: string): void => {

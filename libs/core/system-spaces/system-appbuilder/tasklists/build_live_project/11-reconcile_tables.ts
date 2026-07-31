@@ -13,7 +13,7 @@
  * The consequence for the contract is direct: after `implement_tables`, `database/*.json` and
  * `plan_tables.tables` can legitimately disagree — a retried element, a name the writer corrected
  * to snake_case, a column merged in from a pre-existing table. Types emitted from the plan would
- * then be a lie at exactly the moment `implement_endpoints` and `implement_pages` start compiling
+ * then be a lie at exactly the moment `implement_endpoints` and `implement_views` start compiling
  * against them. So the LANDED schema is ground truth: this node re-reads `database/*.json`,
  * rebuilds the row types from it, and re-emits the contract.
  *
@@ -45,7 +45,7 @@ export const node = {
   // transitive closure: an upstream output that is not a DIRECT dependency simply is not in
   // `inputs`. They add no ordering (all three already run before `implement_tables`) and no
   // cycle; without them this node could not see the contract it is reconciling.
-  dependsOn: ['implement_tables', 'plan_tables', 'plan_endpoints', 'plan_components'],
+  dependsOn: ['implement_tables', 'plan_tables', 'plan_endpoints', 'plan_view_components'],
   output: {
     ok: 'boolean',
     written: 'boolean',
@@ -109,6 +109,18 @@ interface ContractEndpoint {
   purpose?: string;
   tables?: string[];
   fields?: unknown[];
+  /**
+   * A WRITE endpoint's request-body keys, as `'key: type'` — verbatim twin of
+   * `09-emit_types.ts#ContractEndpoint.input`. It has to be carried HERE too, and forgetting it was
+   * a silent total regression: this node re-emits the WHOLE contract from disk, so a version of
+   * `renderEndpoints` that ignores `input` does not merely fail to add the body — it OVERWRITES the
+   * good `interface <Base>Input` that `emit_types` had already written with the typeless
+   * `Record<string, unknown>` fallback. Measured on `13-plant-care` run 8: `plan_endpoints` declared
+   * `input` on `create-plant` in all three planning rounds, `emit_types` resolved the correct
+   * 4-property interface, and the file on disk still ended up with
+   * `type CreatePlantInput = Record<string, unknown>;` — because this twin ran after it.
+   */
+  input?: unknown[];
 }
 
 interface ContractComponent {
@@ -406,9 +418,28 @@ function renderEndpoints(endpoints: ContractEndpoint[]): string {
     lines.push(`/** \`${endpoint.name}\`${endpoint.route ? ` — ${endpoint.route}` : ''}${purpose ? `: ${purpose}` : ''} */`);
     lines.push(item.block);
     lines.push(`interface ${base}Output { items: ${item.typeName}[]; }`);
+    /**
+     * `Input` = the route's parameters PLUS the declared request body — verbatim twin of
+     * `09-emit_types.ts#renderEndpoints`. See {@link ContractEndpoint.input} for why omitting it here
+     * is worse than omitting it there: this node re-emits the whole file, so the old params-only
+     * version silently UNDID the body that had already been emitted.
+     */
+    const bodyFields = (endpoint.input ?? []).map(parseField).filter(Boolean) as ParsedField[];
+    const inputProps = [
+      ...params.map((p) => `  ${propKey(p)}: string;`),
+      ...bodyFields
+        // A route param and a body key of the same name are the same value; the path wins.
+        .filter((f) => !params.includes(f.key.replace(/\?$/, '')))
+        .map((f) => {
+          const optional = f.key.endsWith('?');
+          const key = f.key.replace(/\?$/, '');
+          const type = f.type && f.type.trim() !== '' ? f.type : 'unknown';
+          return `  ${propKey(key)}${optional ? '?' : ''}: ${type};`;
+        }),
+    ];
     lines.push(
-      params.length > 0
-        ? `interface ${base}Input {\n${params.map((p) => `  ${propKey(p)}: string;`).join('\n')}\n}`
+      inputProps.length > 0
+        ? `interface ${base}Input {\n${inputProps.join('\n')}\n}`
         : `type ${base}Input = Record<string, unknown>;`,
     );
     blocks.push(lines.join('\n'));
@@ -578,7 +609,7 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
   const previous = await ctx.readProjectFile(CONTRACT_PATH);
   const prior = previous?.ok ? sectionsOf(previous.content || '') : null;
   const endpoints = pick<ContractEndpoint>(input, 'endpoints', 'plan_endpoints');
-  const components = pick<ContractComponent>(input, 'components', 'plan_components');
+  const components = pick<ContractComponent>(input, 'components', 'plan_view_components');
   const rows = renderRows(landed);
   const dts = assembleDts({
     rows: rows.text,

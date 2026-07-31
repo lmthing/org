@@ -245,7 +245,7 @@ export function injectAppGlobals(
   // The view-spec writers are gated on `views:write` — a SEPARATE capability from `pages:write`,
   // and deliberately not an alternative to it.
   //
-  // This is the mechanism behind `system-viewbuilder`'s central guarantee ("its output is 100%
+  // This is the mechanism behind `system-appbuilder`'s central guarantee ("its output is 100%
   // spec, zero WebView by construction"), and it only works as a split. A capability profile names
   // capability IDs, not individual globals, so a space cannot hold `pages:write` and decline
   // `writeProjectPage`: the grant injects the TSX writers and emits their DTS as one unit. Gate the

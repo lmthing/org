@@ -67,10 +67,23 @@ from the material for every `<…>` (never leave a placeholder). Plan for an app
   count silently drops from N sources to fewer rows because two of them "are basically the same thing,"
   that drop is the bug: re-open your count and give the vision/audio item its own row with its own
   details, distinct from whatever unrelated fact happens to share the word.
-- **endpoints** — enough to read every table a page shows (at least one read per view).
-- **components** — a few REUSABLE pieces (a card, a row, a stat) that repeat across pages. COUNT them
-  deliberately: name each shared UI element the pages will import, not per-page markup.
+- **endpoints** — enough to read every table a page shows, and shaped for the SECTION that reads them:
+  in this builder **one section reads exactly ONE endpoint**, and that endpoint's response must carry
+  every value the section shows. So plan an endpoint PER VIEW, not per table — a page with a stats
+  strip and a list needs two endpoints, and a list that shows a name from another table needs that
+  name as a field on its OWN endpoint. Joins and selections are the endpoint's job here, never the
+  page's.
+- **components** — a few REUSABLE VIEW COMPONENTS (a card, a row, a stat shape) that repeat across
+  pages. These are **spec fragments — compositions of the element vocabulary with declared props** —
+  never React and never TSX. COUNT them deliberately: name each shared shape the pages will reference
+  by `{ use: '<Name>' }`, not per-page markup.
 - **pages** — an `index` home PLUS the list/detail/dashboard views the stories call for. Multiple pages.
+  Each page is a SPEC: an ordered list of sections drawn from a closed menu of 8 kinds — `list`,
+  `detail`, `create`, `stats`, `markdown`, `chat`, `toolbar`, `timeline`. Plan pages you can build
+  from those kinds. If a story needs a surface none of them expresses, say so PLAINLY in that page's
+  `purpose` ("the compare grid needs a multi-select the spec language has no way to express") — an
+  honest gap is a correct answer here and gets routed elsewhere; a page forced into the wrong section
+  kind is the failure this pipeline measures.
 
 Emit one statement:
 
@@ -87,7 +100,8 @@ currentTask.resolve({
   tables: [ { name: '<table_slug>', purpose: '<what it stores + which stories it serves, from the source>' } ],
   // Each route encodes its HTTP method last, e.g. 'items-list/GET'. Methods: GET|POST|PUT|PATCH|DELETE.
   endpoints: [ { route: '<name>/GET', purpose: '<what it returns or does>' } ],
-  // Reusable UI the pages share — a card/row/badge/stat, PascalCase name. Count them.
+  // Reusable VIEW components the pages share — a card/row/stat SHAPE, PascalCase name. Count them.
+  // These are element compositions (spec fragments), never React.
   components: [ { name: '<ComponentName>', purpose: '<the repeated UI it renders>' } ],
   // Use 'index' for the home; add list/detail/dashboard pages the stories need.
   pages: [ { route: 'index', purpose: '<what the home shows + the story it serves>' } ],

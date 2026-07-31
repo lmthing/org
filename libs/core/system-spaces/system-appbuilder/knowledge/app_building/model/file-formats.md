@@ -1,5 +1,5 @@
 ---
-description: LOAD WHEN you are hand-authoring a file kind freeform and want its exact required shape rather than your memory of it — database/*.json, api/<path>/<METHOD>.ts, pages/*.tsx, hooks/*, events/*.
+description: LOAD WHEN you are hand-authoring a file kind freeform and want its exact required shape rather than your memory of it.
 ---
 
 # File formats
@@ -55,13 +55,54 @@ export default async function handler(input: Input, ctx: { db: any }): Promise<O
 `Output` become the endpoint's JSON-Schema contract. `import { HttpError } from '@app/runtime'` to
 signal 4xx/5xx.
 
-## Page — `writeProjectPage(route, src)` → `pages/<route>.tsx`
+## Page — `writeProjectView(route, spec)` → `pages/<route>.view.json`
 
-`route` is `index` (root) or a path like `items/[id]` (a `[seg]` is dynamic, read via
-`useParams`). `src` is a full `.tsx` module with a default-exported component. Data hooks come from
-`@app/runtime`: `useApi(name, input?, opts?)` (GET/DELETE reads → `{ data, error, isLoading,
-refetch }`), `useApiMutation(name, { invalidates? })` (POST/PATCH/PUT → `{ mutate }`), `apiCall`,
-`Link`, `navigate`. Style with design tokens ONLY.
+`route` is `index` (root) or a path like `items/[id]` (a `[seg]` is dynamic, read as `$route.id`).
+`spec` is a plain OBJECT — never a string, never TSX:
+
+```ts
+{
+  route: 'items',
+  title: 'Items',
+  sections: [
+    { kind: 'toolbar', id: 'tools', actions: [ { label: 'Add', icon: 'plus', reveals: ['add'] } ] },
+    { kind: 'create', id: 'add', mutation: 'add-item', invalidates: ['items-list'] },
+    { kind: 'list', id: 'items', query: 'items-list', layout: 'rows',
+      item: { title: '$.title', caption: '$.note', value: { value: '$.amount', format: 'currency' } },
+      rowAction: { navigate: 'items/[id]', params: { id: '$.id' } },
+      empty: { title: 'Nothing yet', message: 'Add one above.' } },
+  ],
+}
+```
+
+- `kind` is one of exactly eight: `list` `detail` `create` `stats` `markdown` `chat` `toolbar`
+  `timeline`. There is no ninth and no `custom`.
+- `query`/`mutation` name an endpoint's `export const name` — never a URL, never a route.
+- Values are PATHS: `$` `$.field` `$props.x` `$route.<param>` `$data.<sectionId>.<path>`
+  `$result.<field>` `$form.<field>` `$client.timezone`. No conditionals, no arithmetic, no `${…}`.
+  A binding that resolves to null renders nothing.
+- A `create` section declares NO fields — they derive from the mutation's `Input` JSON Schema. Give a
+  foreign-key Input property an `x-options` annotation (`{ query, label, value }`) so it renders as a
+  select instead of a UUID text box.
+- The writer host-generates the trivial `pages/<route>.tsx` wrapper that renders the spec, so the
+  existing page walk/hash/cache machinery is untouched.
+
+## View component — `writeProjectViewComponent(name, def)` → `pages/components/<Name>.view.json`
+
+`name` is PascalCase. `def` is `{ name, description?, props, node }`; `props` maps each prop to a type
+(`{ item: 'Expense' }`), read inside `node` as `$props.<key>`. `node` is an element tree from the
+closed 24-element vocabulary — `row col grid spacer divider surface heading text caption markdown
+badge statcard meter keyvalue table timeline rating image icon banner empty button link field` — where
+`row`/`col`/`grid`/`surface` take `children: [...]`. Components may reference other components
+(acyclic) and never React.
+
+## App shell — `writeProjectViewShell(shell)` → `pages/_shell.view.json`
+
+`{ brand?, nav?, groups?, subnav?, placement?, assistant? }`. A `nav` entry's `route` must be a real
+STATIC route (a `[param]` route is a drill-in, never a nav item). Above five top-level routes use
+`groups: [{ label, home, routes, icon }]` instead of a flat `nav`. `subnav: [{ match: 'trips/[tripId]',
+items: [...] }]` gives a parameterised route family its own bar. `assistant: { agent: 'thing' }` is
+the persistent chat dock.
 
 ## Hook — `writeProjectHook(slug, src)` → `hooks/<slug>.ts`
 

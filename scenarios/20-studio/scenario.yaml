@@ -95,9 +95,10 @@ steps:
       - Any question it asks is answerable by a studio owner in plain words — no product vocabulary.
       - Nothing is authored yet — the offer precedes the work.
 
-  # ── 2. the acceptance, carrying the requirement that selects the SECOND builder.
-  #     "It has to run on the phone itself" is a condition about HOW IT RUNS, which is the documented
-  #     line for routing to system-viewbuilder. "I'll use it on my phone" would NOT be, and must not be.
+  # ── 2. the acceptance. Ana states a requirement about HOW IT RUNS — it must work on the phone
+  #     itself, not as a website squeezed into an app. There is one builder now and it answers that
+  #     requirement by construction, so what this beat tests is that the requirement is HONOURED, not
+  #     which builder gets picked.
   - as: ana
     in: studio
     reply_to: 1
@@ -109,7 +110,6 @@ steps:
       "which jobs": "Almeida, Trindade Bakery and the Serralves catalogue."
       "what states": "It's either with us, with the client, at the printer, or done."
     expect:
-      - THING routes the build to system-viewbuilder, not system-appbuilder — the request states a requirement about HOW IT MUST RUN.
       - A live project exists with real tables and the three jobs Ana named as actual DB rows.
       - The pages are view SPECS, and GET /api/apps/:id/views returns a non-empty `views` array.
       - If any part of the surface could not be expressed, THING says WHICH part and why — it never silently drops it.

@@ -209,7 +209,7 @@ export interface AppCapabilities {
   'pages:write'?: true;
   /**
    * The SPEC-view writers — `writeProjectView` / `writeProjectViewComponent` /
-   * `writeProjectShell` (`system-viewbuilder`). Deliberately a SEPARATE id from
+   * `writeProjectShell` (`system-appbuilder`). Deliberately a SEPARATE id from
    * `pages:write` rather than a share of it: the whole guarantee of that builder is that its
    * UI is 100% spec and therefore renders natively with no WebView, and the mechanism for
    * that guarantee is capability absence — an agent holding `views:write` and NOT

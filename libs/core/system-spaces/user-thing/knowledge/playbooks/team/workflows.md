@@ -32,6 +32,5 @@ workspace (no `teamContext` in your types ⇒ no team, and none of these apply).
   DOWN is not asking — a displayed question ends the turn, reaches nobody, and gets answered, if at
   all, as an unrelated new conversation. Only `ask()` waits.
 
-The medium an existing app was built in is one of these: changing a `*.tsx` app to `*.view.json`
-specs (or the reverse) reverses a requirement somebody stated, so it is `settle_team_decision`, not
-your call — see `('playbooks','building','spec-app')`.
+Rebuilding a surface somebody else asked for is one of these: it reverses a requirement a teammate
+stated, so it is `settle_team_decision`, not your call.

@@ -4,8 +4,10 @@
  * `render-rig.mjs` is deliberately ignorant: it takes a base URL and a list of routes, drives a real
  * Chrome over CDP, and measures pixels. Everything it knows how to find is therefore true of ANY app
  * served by the pod, whoever authored it. This module is the thin layer that supplies those two
- * inputs from a running scenario, and it is the reason the gate can score `system-appbuilder` and
- * `system-viewbuilder` on the same instrument:
+ * inputs from a running scenario. Keeping it builder-agnostic is deliberate and still worth it now
+ * that `system-appbuilder` is the only builder: it is what let the gate score the TSX builder and the
+ * spec builder on ONE instrument during the comparison that retired the former, and it is what will
+ * let it score whatever replaces either:
  *
  *  - **routes** come from `POST /api/projects/:id/app/build`, which answers with the app's real route
  *    table (`{routePath, file}`) — the pages the app actually serves, not the pages some spec file

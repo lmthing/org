@@ -218,7 +218,7 @@ export interface ProjectAuthoringGlobals {
    *  counterpart of the catalog's `writePage`. */
   writeProjectPage: (route: string, src: string, opts?: { replace?: boolean }) => { ok: boolean; error?: string };
   /** Write `<projectRoot>/pages/<route>.view.json` (a VIEW SPEC) plus its generated
-   *  `pages/<route>.tsx` wrapper — the `system-viewbuilder` counterpart of `writeProjectPage`.
+   *  `pages/<route>.tsx` wrapper — the `system-appbuilder` counterpart of `writeProjectPage`.
    *
    *  A view is data, not TSX: the spec is validated against the project's endpoint contracts at
    *  save time (`view-spec/validate.ts#validateViewSpec`) and rendered by the shared
@@ -640,7 +640,7 @@ export function createProjectAuthoringGlobals(opts: {
     return out;
   }
 
-  // ── view specs (system-viewbuilder) ────────────────────────────────────────
+  // ── view specs (system-appbuilder) ────────────────────────────────────────
   //
   // The same four-step shape as `writeProjectPage` above — validate, `throwLint`, `writeUnder`,
   // `onAppWrite` — over a different medium. Consistency with its siblings is the point: a writer

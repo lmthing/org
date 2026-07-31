@@ -28,7 +28,7 @@ import { openUrl } from '@tauri-apps/plugin-opener'
  * shell has no router, because its panes are a window's state and not a browser history.
  *
  * Unlike mobile there is no app-target probe. A pinned app opens on the rail, exactly as it does on
- * web — the probe exists on the phone to keep a `system-viewbuilder` app out of a WebView, and a
+ * web — the probe exists on the phone to keep a `system-appbuilder` app out of a WebView, and a
  * desktop window is wide enough for the rail the web surface was designed around.
  */
 export function TeamScreen({

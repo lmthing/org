@@ -57,7 +57,7 @@ export function TeamScreen({
   const [rail, setRail] = React.useState<Rail>(null)
 
   // Opening a pinned app is now a question before it is a state change: a
-  // `system-viewbuilder` app renders NATIVELY and must never reach a WebView, and the
+  // `system-appbuilder` app renders NATIVELY and must never reach a WebView, and the
   // only way to know which kind it is, is to ask the pod for its specs. So the probe
   // runs first and its answer picks the destination — the native screen, or the rail
   // exactly as before. `probing` holds the project while that round trip is in flight.

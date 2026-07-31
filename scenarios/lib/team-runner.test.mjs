@@ -148,10 +148,10 @@ describe('attributeLedger', () => {
       summarizeTeamTurn({ sessionId: 'missing' }, { who: 'cai', role: 'editor', channel: 'z', sent: '3' }),
     ];
     attributeLedger(turns, [
-      { sessionId: 'a', totalInputTokens: 10, totalOutputTokens: 2, totalCostUsd: 0.1, status: 'done', delegates: [{ target: 'system-viewbuilder/builder', status: 'done', depth: 0, durationMs: 5 }] },
+      { sessionId: 'a', totalInputTokens: 10, totalOutputTokens: 2, totalCostUsd: 0.1, status: 'done', delegates: [{ target: 'system-appbuilder/builder', status: 'done', depth: 0, durationMs: 5 }] },
       { sessionId: 'b', totalInputTokens: 4, totalOutputTokens: 1, totalCostUsd: 0.05, status: 'done', delegates: [] },
     ]);
-    expect(turns[0].delegates).toEqual(['system-viewbuilder/builder']);
+    expect(turns[0].delegates).toEqual(['system-appbuilder/builder']);
     expect(turns[0].tokens).toEqual({ in: 10, out: 2 });
     expect(turns[0].ledgerTracked).toBe(true);
     expect(turns[1].delegates).toEqual([]);
@@ -177,13 +177,13 @@ describe('threadSessionFacts', () => {
   it('recovers the delegate target and the globals from the code the model wrote', () => {
     const d = mkTmp();
     writeSnapshot(d, 'user', 's1', [
-      "const plan = await delegate({ space: 'system-viewbuilder', agent: 'builder', query: 'jobs board' });",
+      "const plan = await delegate({ space: 'system-appbuilder', agent: 'builder', query: 'jobs board' });",
       "await writeProjectTable('jobs', schema); await db.insert('jobs', row); display(<Stack/>);",
     ]);
     const facts = threadSessionFacts(d, 'user', 's1');
     expect(facts.statements).toBe(2);
-    expect(facts.delegates).toEqual(['system-viewbuilder/builder']);
-    expect(facts.spacesMentioned).toEqual(['system-viewbuilder']);
+    expect(facts.delegates).toEqual(['system-appbuilder/builder']);
+    expect(facts.spacesMentioned).toEqual(['system-appbuilder']);
     expect(facts.globals).toEqual(expect.arrayContaining(['writeProjectTable', 'display']));
     expect(facts.db).toEqual(['db.insert']);
   });
@@ -215,7 +215,7 @@ describe('compactTeamStep / teamTraceLines', () => {
           { status: 'done', ok: true, text: 'here you go', threadId: 'th-1', sessionId: 's1', durationMs: 2000, asks: [] },
           { who: 'bo', role: 'editor', channel: 'studio', sent: 'can it also show…' },
         ),
-        wrote: { statements: 2, delegates: ['system-viewbuilder/builder'], spacesMentioned: ['system-viewbuilder'], globals: ['writeProjectTable'], db: ['db.insert'], code: 'x' },
+        wrote: { statements: 2, delegates: ['system-appbuilder/builder'], spacesMentioned: ['system-appbuilder'], globals: ['writeProjectTable'], db: ['db.insert'], code: 'x' },
       },
     ],
     denied: { who: 'vic', role: 'viewer', channel: 'studio', status: 403, body: { error: 'viewers cannot change this team workspace' } },
@@ -227,7 +227,7 @@ describe('compactTeamStep / teamTraceLines', () => {
     const c = compactTeamStep(rec);
     expect(c.step).toBe(3);
     expect(c.turns[0]).toMatchObject({ who: 'bo', role: 'editor', channel: 'studio', threadId: 'th-1', status: 'done' });
-    expect(c.turns[0].wrote.delegates).toEqual(['system-viewbuilder/builder']);
+    expect(c.turns[0].wrote.delegates).toEqual(['system-appbuilder/builder']);
     expect(c.denied.status).toBe(403);
     expect(c.crossChannelPosts[0].channelId).toBe('studio');
     expect(c.activeProject).toBe('jobs');
@@ -247,7 +247,7 @@ describe('compactTeamStep / teamTraceLines', () => {
   it('writes a trace a human can read who-said-what from', () => {
     const md = teamTraceLines(rec).join('\n');
     expect(md).toContain('**bo** <editor> in #studio');
-    expect(md).toContain('delegated to: system-viewbuilder/builder');
+    expect(md).toContain('delegated to: system-appbuilder/builder');
     expect(md).toContain('⛔ REFUSED by the pod: 403');
     expect(md).toContain('THING posted into channels nobody asked it from');
     expect(md).toContain('- [ ] it answers Bo');

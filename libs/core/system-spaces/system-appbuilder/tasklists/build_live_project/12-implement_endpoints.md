@@ -11,7 +11,7 @@ functions: []
 ---
 
 Write ONE typed API handler into the LIVE project's `api/`. Your endpoint is in `item` =
-{ name, route, purpose, tables, fields }: `item.name` is the stable id the plan assigned, and `item.route`
+{ name, route, purpose, tables, fields, input? }: `item.name` is the stable id the plan assigned, and `item.route`
 already encodes the method last (e.g. `cost-lines/GET`). `plan_tables.tables` (the real schemas being
 written) is in scope — read its columns so your query matches real data. **`item.fields` is the EXACT
 shape of one response item (`items[0]`) — each entry is `'key: type'`.** Your `Output` item type AND the
@@ -45,8 +45,21 @@ field you renamed, dropped or typed wrong:
 
 ```typescript
 export const name = 'cost-lines';
-export type Input = CostLinesInput;     // global — carries the route [param]s (empty for a plain route)
+export type Input = CostLinesInput;     // global — the route [param]s PLUS the planned body keys
 export type Output = CostLinesOutput;   // global — no import, no path to compute
+```
+
+**`Input` is a REAL typed object on a write endpoint — read its fields directly.** `plan_endpoints`
+declares each write's body in `input`, and `emit_types` turns that into named, typed properties, so
+`input.name` and `input.waterIntervalDays` are already `string` and `number`. Do **not** re-cast it
+(`const body = input as Record<string, unknown>`) and do not hand-check each key's `typeof`: the cast
+throws away exactly the checking that keeps the form, the handler and the table in agreement, and it
+was only ever necessary back when a body had no declared type at all. An optional key (planned with a
+`?`) arrives as `string | undefined`, so a guard THERE is real work; a guard on a required one is not.
+
+```typescript
+await ctx.db.insert('plants', { id: crypto.randomUUID(), name: input.name, room: input.room });  // ✅
+const body = input as Record<string, unknown>;                                                   // ✗
 ```
 
 **The handler MUST be `handler(input: Input, ctx: ApiCtx): Promise<Output>` — NEVER `input: any`, NEVER
@@ -79,6 +92,30 @@ instead of 500ing on the first real call:
 - `ctx.db.query` / `insert` / `update` / `remove` are all keyed on the real tables, so a typo'd table
   or column is a compile error, not an empty result.
 
+**Do NOT re-type a `.find`/`.filter` callback's row parameter.** `ctx.db.query('plants')` already
+returns a typed `PlantsRow[]`, so the row parameter is ALREADY `PlantsRow` — annotating it yourself,
+especially as `(p: Record<string, unknown>) => …`, is a genuine build failure, not a style choice:
+`Record<string, unknown>` has no index signature `PlantsRow` satisfies, so `.find`/`.filter` reports
+"No overload matches this call" and the write is rejected (seen live, three times in one build, always
+the same annotation). Leave the parameter unannotated and let it infer, or type it explicitly as the
+real row (`PlantsRow`) — never `Record<string, unknown>`, `any`, or a hand-rolled shape:
+
+```typescript
+const plant = (await ctx.db.query('plants')).find((p) => p.id === input.id);   // ✅ inferred PlantsRow
+```
+
+**Every field you compute — including a flat stats number like a total or a count — goes INSIDE the
+one `items[0]` object, never beside `items` at the response root.** `return { total_count,
+overdue_count, items: [...] }` compiles under a loose type and fails once `Output` is real
+(`'total_count' does not exist in type '<Name>Output'`, seen live) because the contract's item type
+already declares those fields — they belong on the object inside the array, alongside the row's other
+fields, exactly like the aggregate example above:
+
+```typescript
+return { items: [{ total_count: plants.length, overdue_count: overdue.length, ...restOfFields }] };  // ✅
+return { total_count: plants.length, overdue_count: overdue.length, items: plants };                 // ✗
+```
+
 NEVER write `import ... from '../types/contract'` or emit any project import (`@app/runtime`,
 `../types/...`) as a statement: these are AMBIENT/app modules that do not exist in your authoring VM,
 so importing one is a guaranteed "Cannot find module" that means nothing about whether the app builds.
@@ -95,7 +132,7 @@ const param = (String(ep.route).match(/\[(\w+)\]/) || [])[1]; // e.g. 'id' for t
 const src = [
   "export const name = '" + name + "';",
   "export const description = '" + String(ep.purpose).replace(/'/g, '') + "';",
-  "export type Input = " + Pascal + "Input;",   // global — carries the route [param]s
+  "export type Input = " + Pascal + "Input;",   // global — route [param]s + the planned body keys
   "export type Output = " + Pascal + "Output;", // global — no import, no path to compute
   "export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {",
   param
@@ -153,6 +190,46 @@ export default async function handler(input: Input, ctx: ApiCtx): Promise<Output
   return { items: [{ trip_name: 'My Trip', grand_total_usd, paid_total_usd }] };
 }
 ```
+
+✅ **A TOGGLE endpoint flips the value ITSELF.** Its `purpose` says TOGGLE and its `Input` carries no
+new value, because the page — a spec — has no `!` and cannot send one. Read the row, store the
+opposite, return the new state:
+
+```typescript
+import { HttpError } from '@app/runtime';   // the handler's ONE legal import
+export const name = 'toggle-saved';
+export const description = 'Toggle whether the article is saved.';
+export type Input = ToggleSavedInput;    // { id: string } — the route [param], nothing else
+export type Output = ToggleSavedOutput;
+export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {
+  const [row] = (await ctx.db.query('articles')).filter((r) => r.id === input.id);
+  if (!row) throw new HttpError(404, 'no such article');
+  await ctx.db.update('articles', { id: input.id }, { saved: !row.saved });
+  return { items: [{ id: input.id, saved: !row.saved }] };
+}
+```
+
+A handler that instead expects `input.saved` compiles clean and can never be called correctly: every
+save/pin/dismiss/archive button in the app becomes a no-op. Same rule for unpin, un-dismiss, mark
+unread, and "done ↔ not done".
+
+✅ **Compute the fields the VIEW needs — the page cannot.** This endpoint is read by ONE section that
+binds paths straight into its Output, with no client code. So a cross-table name, a group-by total, a
+"which one is tonight's" pick, a percentage, a status label, or a boolean the row's controls depend on
+is computed HERE, in this handler, and returned as a declared field:
+
+```typescript
+const travelers = await ctx.db.query('travelers');
+const nameById = new Map(travelers.map((t) => [t.id, t.name]));
+const rows = (await ctx.db.query('expenses')).filter((e) => e.trip_id === input.id);
+const expenses = rows.map((e) => ({ ...e, paid_by_name: nameById.get(e.paid_by_traveler_id) ?? '—' }));
+const byCategory = new Map<string, number>();
+for (const e of expenses) byCategory.set(e.category, (byCategory.get(e.category) ?? 0) + (e.amount ?? 0));
+return { items: [{ expenses, totals_by_category: [...byCategory].map(([category, total]) => ({ category, total })) }] };
+```
+
+Leaving that to the page is not an option in this builder — there is nowhere to put it, so the value
+simply never appears.
 
 **A LIST or RECORD field returns STRUCTURED data, never a pre-formatted display string.** When the
 contract types a field as `<Name>Item[]` or `<Name>Item | null` (the plan declared it with a nested

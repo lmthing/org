@@ -33,7 +33,7 @@ import {
  *
  * - `system-appbuilder` produces an esbuild browser bundle. It is WebView-bound forever and it is
  *   the DEFAULT builder, so that path below is unchanged and stays that way.
- * - `system-viewbuilder` produces **view specs** — data. `@lmthing/ui/view` renders them on
+ * - `system-appbuilder` produces **view specs** — data. `@lmthing/ui/view` renders them on
  *   `Prim.*`, which means the same source the web bundle runs mounts here as real native views.
  *   No WebView is involved on any page of such an app; that is the single capability the whole
  *   spec pipeline exists to deliver, so the branch is total by construction — the native path has

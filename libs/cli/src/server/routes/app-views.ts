@@ -1,7 +1,7 @@
 /**
  * **The spec-fetch route** — `GET /api/apps/:id/views`.
  *
- * A `system-viewbuilder` app's pages are not a bundle: they are **specs**
+ * A `system-appbuilder` app's pages are not a bundle: they are **specs**
  * (`sdk/org/libs/cli/src/app/view-spec/schema.ts`), persisted as JSON by the
  * authoring writers and rendered by the shared `ViewRenderer` on both targets.
  * This route is the transport for the **native** target, and it exists because

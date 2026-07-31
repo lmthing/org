@@ -29,7 +29,6 @@ canDelegateTo:
   - system-architect/architect
   - system-engineer/engineer
   - system-appbuilder/automator
-  - system-viewbuilder/automator
   - system-store/finder
   - system-vision/vision
   - system-files/dispatch

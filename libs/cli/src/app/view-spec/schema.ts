@@ -1,6 +1,6 @@
 /**
  * **The view-spec contract** — the single shared artifact every part of the
- * `system-viewbuilder` pipeline codes against.
+ * `system-appbuilder` pipeline codes against.
  *
  * A page in a viewbuilder app is not TSX: it is a **spec**, a plain object the model
  * emits as a TypeScript object literal, validated here at save time and rendered by the

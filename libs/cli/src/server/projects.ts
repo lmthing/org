@@ -168,14 +168,17 @@ export function projectSpaceDir(root: string, projectId: string, spaceId: string
  * the flattened merge of ALL system spaces — where the LAST space to define that slug wins
  * (`mergeSystemInto` uses `Object.assign`, and `SYSTEM_SPACE_NAMES` order decides it).
  *
- * That is not hypothetical: `system-appbuilder` and `system-viewbuilder` both define an `automator`
- * (and `api-author`, and `data-modeler`) and both define a `build_live_project` tasklist. A session
- * bound to `system-appbuilder/automator` therefore ran the VIEWBUILDER's agent and tasklist —
- * writing `.view.json` specs from a ref that explicitly named the appbuilder. The delegate path is
- * unaffected (`DelegateRegistry#matchesSpace` matches on the space's real dir), so this only ever bit
- * space-BOUND sessions; but those are how the scenario harness's `space_session` and any
- * chat-with-a-space-agent surface reach an agent, and there the space half of the ref was silently
- * discarded.
+ * That is not hypothetical. While `system-appbuilder` and `system-viewbuilder` shipped side by side,
+ * both defined an `automator` (and an `api-author`, and a `data-modeler`) and both defined a
+ * `build_live_project` tasklist — so a session bound to `system-appbuilder/automator` actually ran the
+ * VIEWBUILDER's agent and tasklist, writing `.view.json` specs from a ref that explicitly named the
+ * appbuilder. The two builders have since been merged into one, which removes that particular
+ * collision but NOT the bug: any two system spaces sharing an agent slug reproduce it exactly.
+ *
+ * The delegate path was never affected (`DelegateRegistry#matchesSpace` matches on the space's real
+ * dir), so this only ever bit space-BOUND sessions — but those are how the scenario harness's
+ * `space_session` and any chat-with-a-space-agent surface reach an agent, and there the space half of
+ * the ref was silently discarded.
  *
  * Falling back to the system dir makes the ref mean what it says. The project copy still wins, so a
  * space a user has customized in their project keeps overriding the shipped one.
