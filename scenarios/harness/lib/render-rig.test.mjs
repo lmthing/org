@@ -23,8 +23,10 @@
 import { describe, expect, it } from 'vitest';
 import { homedir } from 'node:os';
 import {
+  analyzeInteraction,
   analyzeSnapshot,
   compareSelfTest,
+  pickInteractionTarget,
   expectsFormFor,
   finding,
   findBrowser,
@@ -570,5 +572,86 @@ describe('VIEWPORTS', () => {
   it('are the two real archetypes — the phone nav relocates and can fail on its own', () => {
     expect(VIEWPORTS.desktop).toMatchObject({ name: 'desktop', width: 1280, height: 900, mobile: false });
     expect(VIEWPORTS.phone).toMatchObject({ name: 'phone', width: 390, height: 844, mobile: true });
+  });
+});
+
+// ── the INTERACTION probe ────────────────────────────────────────────────────────────────────────
+// A button that paints, is reachable, and does nothing when clicked passes every other check in this
+// module and every gate in the pipeline. These are the two pure halves of the check that sees it.
+
+describe('pickInteractionTarget', () => {
+  const el = (o) => ({ tag: 'button', href: null, type: null, disabled: false, reachable: true, rect: { x: 0, y: 0, w: 40, h: 20 }, text: 't', desc: 'button', ...o });
+
+  it('prefers a real action control over a navigation link', () => {
+    const target = pickInteractionTarget({ interactive: [el({ tag: 'a', href: '/plants', text: 'Plants' }), el({ tag: 'button', text: 'Mark watered' })] });
+    expect(target.text).toBe('Mark watered');
+  });
+
+  it('falls back to a link when the page has no action control', () => {
+    const target = pickInteractionTarget({ interactive: [el({ tag: 'a', href: '/plants', text: 'Plants' })] });
+    expect(target.text).toBe('Plants');
+  });
+
+  it('never picks a disabled control — correctly doing nothing is not a defect', () => {
+    expect(pickInteractionTarget({ interactive: [el({ disabled: true })] })).toBeNull();
+  });
+
+  it('never picks an unreachable one — offscreenInteractive already reports that, under its own name', () => {
+    expect(pickInteractionTarget({ interactive: [el({ reachable: false })] })).toBeNull();
+    expect(pickInteractionTarget({ interactive: [el({ reachable: null })] })).toBeNull();
+  });
+
+  it('returns null on a page with nothing to click, and that is NOT a finding', () => {
+    expect(pickInteractionTarget({ interactive: [] })).toBeNull();
+    expect(pickInteractionTarget({})).toBeNull();
+    const { findings } = analyzeInteraction({ target: null });
+    expect(findings).toEqual([]);
+  });
+});
+
+describe('analyzeInteraction', () => {
+  const target = { text: 'Mark watered', desc: 'button.row-action', tag: 'button', rect: { x: 0, y: 0, w: 40, h: 20 } };
+  const pre = { url: 'http://x/app/p/plants', textElements: 10, contentChars: 100 };
+
+  it('a request going out counts as working', () => {
+    const { interaction, findings } = analyzeInteraction({ target, pre, post: { ...pre }, requests: [{ method: 'POST', url: '/api/water', status: 200 }] });
+    expect(interaction.acted).toBe(true);
+    expect(interaction.dead).toBe(false);
+    expect(findings).toEqual([]);
+  });
+
+  it('navigation counts as working', () => {
+    const { interaction } = analyzeInteraction({ target, pre, post: { ...pre, url: 'http://x/app/p/plants/1' } });
+    expect(interaction.navigated).toBe(true);
+    expect(interaction.dead).toBe(false);
+  });
+
+  it('a re-render with no network counts as working', () => {
+    const { interaction } = analyzeInteraction({ target, pre, post: { ...pre, contentChars: 140 } });
+    expect(interaction.domChanged).toBe(true);
+    expect(interaction.dead).toBe(false);
+  });
+
+  it('THE POINT: no request, no navigation, no DOM change ⇒ dead-control', () => {
+    const { interaction, findings } = analyzeInteraction({ target, pre, post: { ...pre }, route: 'plants', viewport: 'desktop', file: 'pages/plants.tsx' });
+    expect(interaction.dead).toBe(true);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].code).toBe('dead-control');
+    expect(findings[0].file).toBe('pages/plants.tsx');
+    expect(findings[0].message).toMatch(/did nothing/);
+    expect(findings[0].message).toMatch(/wiring defect, not a layout one/);
+  });
+
+  it('a 4xx/5xx routes the fix to the ENDPOINT, not the view', () => {
+    const { findings } = analyzeInteraction({ target, pre, post: { ...pre }, requests: [{ method: 'POST', url: '/api/water', status: 500 }] });
+    expect(findings.map((f) => f.code)).toEqual(['action-failed']);
+    expect(findings[0].message).toMatch(/fix the ENDPOINT/);
+  });
+
+  it('a probe that could not run reports measured:false with a reason — never a silent pass', () => {
+    const { interaction, findings } = analyzeInteraction({ target, pre, post: { error: 'state probe threw: boom' } });
+    expect(interaction.measured).toBe(false);
+    expect(interaction.reason).toMatch(/boom/);
+    expect(findings).toEqual([]);
   });
 });

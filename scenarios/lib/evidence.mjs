@@ -23,6 +23,7 @@
  * `compactStep` golden fixture below) are unaffected.
  */
 import { viewFacts, compactViewFacts, nativeViewFacts } from '../harness/lib/view-facts.mjs';
+import { compactRenderGate } from '../harness/lib/render-gate.mjs';
 
 // ── state capture: what the judge verifies token-in-state against ──────────────────────────────
 export async function snapshot(pod, projectId, { projectRoot = null, sdkRoot } = {}) {
@@ -196,6 +197,11 @@ export function compactStep(rec) {
     appBuild: rec.appBuild,
     appCheck: rec.appCheck,
     appPageStatus: rec.appPageStatus,
+    // Additive, exactly like `viewFacts` below: a spread of `{}` adds no key at all, so every step
+    // that did not run the layout gate stays byte-identical to before (the golden fixtures depend
+    // on it). `build → check → 200` are the three fields directly above, and all three were green
+    // on the all-blank app — which is the whole reason this one exists next to them.
+    ...(rec.renderGate ? { renderGate: compactRenderGate(rec.renderGate) } : {}),
     createdProject: rec.createdProject,
     userProjectClean: rec.userProjectClean,
     notes: rec.notes,

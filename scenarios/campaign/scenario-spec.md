@@ -54,7 +54,8 @@ steps:
   - attach: [file, ...]        # optional: files delivered WITH the message
     say: "verbatim user message"
     then_say: "..."            # optional: a second message in the same step
-    open_app: true             # optional: the user opens the served app
+    open_app: true             # optional: the user opens the served app (build + check + fetch root)
+    open_app: { render: true, interact: true }   # ...and LOOK at it in a real browser (see below)
     in_app_chat: "..."         # optional: a message typed INSIDE the app
     fresh_session: true        # optional: a brand-new session, zero history
     restart_pod: true          # optional: bounce the pod, assert durability
@@ -64,6 +65,28 @@ steps:
       - an observable claim the judge verifies on the trace or on disk
       - ...
 ```
+
+### `open_app` — the three cheap checks, and the two that need a browser
+
+`open_app: true` builds the app, asks the pod for the authoritative typecheck verdict, and fetches
+the root page. Those three are necessary and **were never sufficient**: `13-plant-care` run 7 passed
+all three, scored `app: usable` on every ratchet metric, and rendered a **completely blank page on
+every route** (the shell's root box was 98px and every descendant divided zero). `renderSmokeViews`
+cannot see it either — it mounts with `renderToStaticMarkup`, so there is no DOM, no CSS and no
+layout engine anywhere in it.
+
+`open_app: { render: true }` therefore drives a **real Chrome over CDP** at every route × {desktop
+1280×900, phone 390×844} and reports `blankPage`, `collapsedScroller`, `offscreenInteractive`,
+`horizontalOverflow`, `emptyForm` and console errors, writing a PNG per route per viewport into the
+run's `shots/` dir. Adding `interact: true` also **clicks one control per route** with a real mouse
+event (not `element.click()`, which would happily "succeed" on a button covered by an overlay) and
+reports whether the app did anything at all: a request, a navigation, or a re-render. A control that
+paints, is reachable, and does none of those is a `dead-control` — the commonest shape of an app
+that builds perfectly and does not work.
+
+Both are opt-in, so every existing scenario's `open_app: true` behaves exactly as before. Note that
+`interact: true` **mutates the app's data** (it really does click Save), so put it on a beat where
+that is acceptable — it runs once per route, on the last viewport only, and records what it clicked.
 
 `attach:` wires files onto the step's `say` message ONLY — the runner has no attachment path for
 `then_say` or `in_app_chat`. So a beat that must deliver a file (a voice note, a photo) has to be a

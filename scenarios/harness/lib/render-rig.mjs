@@ -553,6 +553,13 @@ export const PAGE_SNAPSHOT_JS = String.raw`(() => {
     }
     interactive.push({
       desc: desc(el),
+      tag: el.tagName.toLowerCase(),
+      // href separates a link (whose whole job is to navigate) from a control that must ACT; the
+      // interaction probe uses it to prefer a real action over a nav item. (No backticks in here —
+      // this whole block is a String.raw template, and one would terminate it.)
+      href: el.getAttribute ? el.getAttribute('href') : null,
+      type: el.getAttribute ? el.getAttribute('type') : null,
+      disabled: !!el.disabled || el.getAttribute?.('aria-disabled') === 'true',
       text: trunc((el.innerText || el.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim(), 28),
       rect: r,
       centerInView,
@@ -613,7 +620,17 @@ export function finding({ code, message, severity = 'error', file = undefined, p
   return f;
 }
 
-/** `plants/[id]` → `pages/plants/[id].view.json` — the artifact a finding is filed against. */
+/**
+ * `plants/[id]` → `pages/plants/[id].view.json` — the artifact a finding is filed against.
+ *
+ * This is the SPEC-app default only. The gate itself is builder-neutral — it drives a URL and
+ * measures pixels, and knows nothing about how the page was authored — so it is equally valid
+ * against an appbuilder app, whose pages are `pages/plants/[id].tsx`. A route entry may therefore
+ * carry an explicit `file` (the appbuilder's own `appBuild().routes[].file`), which wins. Without
+ * that override every finding on a TSX app would name a `.view.json` that does not exist, sending
+ * a reader to the wrong file — and a gate that misfiles its findings is the kind of accusation
+ * against innocent code this harness has already had to fix twice.
+ */
 export function specFileFor(route) {
   return `pages/${route}${route.endsWith('.view.json') ? '' : '.view.json'}`;
 }
@@ -644,7 +661,9 @@ export const BLANK_TEXT_ELEMENTS = 0;
  */
 export function analyzeSnapshot(snapshot, ctx = {}) {
   const { route = '?', viewport = '?', expectsForm = false, emptyFormSentinel = null, bodyText = null, consoleErrors = [] } = ctx;
-  const file = specFileFor(route);
+  // `ctx.file` is the authored artifact when the caller knows it (the appbuilder's `.tsx`); the
+  // `.view.json` guess is only a spec-app default. See {@link specFileFor}.
+  const file = ctx.file ?? specFileFor(route);
   const at = `${route} @ ${viewport}`;
   const findings = [];
   const mk = (code, message, severity = 'error') => {
@@ -940,6 +959,7 @@ export async function renderCheck({
   settleTimeoutMs = 8000,
   navTimeoutMs = 30_000,
   sdkRoot = undefined,
+  interact = false,
 } = {}) {
   const started = Date.now();
   const K = productConstants(sdkRoot ? { root: sdkRoot } : {});
@@ -1076,10 +1096,29 @@ export async function renderCheck({
           emptyFormSentinel: K.emptyFormSentinel ?? null,
           bodyText,
           consoleErrors: collected,
+          file: (typeof entry === 'object' && entry?.file) || undefined,
         });
         page.url = url;
         page.httpStatus = httpStatus;
         page.screenshot = screenshot;
+
+        // ── the interaction probe, on the LAST viewport only ─────────────────────────────────────
+        // Clicking MUTATES the app's data, so it runs once per route, not once per viewport, and
+        // records exactly what it clicked. Everything above this line is read-only.
+        if (interact && vp === viewports[viewports.length - 1] && !navError && !snapshot.error) {
+          const target = pickInteractionTarget(snapshot);
+          const probe = await probeInteraction(cdp, target, { settleMs, settleTimeoutMs });
+          const { interaction, findings: iFindings } = analyzeInteraction({
+            target,
+            ...probe,
+            route,
+            viewport: vp.name,
+            file: (typeof entry === 'object' && entry?.file) || undefined,
+          });
+          page.interaction = interaction;
+          findings.push(...iFindings);
+        }
+
         pages.push(page);
         findings.push(...pageFindings);
       }
@@ -1113,6 +1152,11 @@ export async function renderCheck({
     horizontalOverflow: pages.filter((p) => p.horizontalOverflow?.overflows === true).length,
     emptyForms: pages.filter((p) => p.emptyForm?.empty === true).length,
     consoleErrors: pages.reduce((n, p) => n + (p.consoleErrors?.total ?? 0), 0),
+    // Interaction: `clicked` is the DENOMINATOR. `deadControls` out of 0 clicks is not a clean app,
+    // it is an unrun probe — the same null-vs-zero discipline the rest of this module holds to.
+    clicked: pages.filter((p) => p.interaction?.measured === true).length,
+    actedOnClick: pages.filter((p) => p.interaction?.acted === true).length,
+    deadControls: pages.filter((p) => p.interaction?.dead === true).length,
   };
   return {
     ...base,
@@ -1129,6 +1173,173 @@ export async function renderCheck({
     findings,
     ms: Date.now() - started,
   };
+}
+
+// ── the INTERACTION probe: does the app actually DO anything when you click it? ──────────────────
+
+/**
+ * Choose the one control to click on this page. **Pure** — over {@link PAGE_SNAPSHOT_JS}'s output.
+ *
+ * Every other check in this module is about whether a page can be SEEN. This one is about whether it
+ * WORKS, which is a different question and the one a build gate answers worst: `buildApp` compiles a
+ * handler that is never called, and a button wired to nothing renders exactly like a button wired to
+ * something. The failure it exists for is a control that paints, is reachable, and does nothing at
+ * all when clicked.
+ *
+ * The preference order is about picking a control whose click is EVIDENCE:
+ *  1. a real action control (a `button`, not an `<a href>`) — its whole purpose is to act;
+ *  2. an in-app link — navigating is a legitimate, observable outcome;
+ * and it never picks a disabled control (a correctly-disabled button doing nothing is correct
+ * behaviour, not a defect) nor an unreachable one (`offscreenInteractive` already reports those, and
+ * clicking into a void would just report this bug twice under a second name).
+ *
+ * Returns `null` when the page has no eligible control — which is NOT a finding. Plenty of correct
+ * pages (a read-only detail, a markdown page) have nothing to click, and inventing a defect there
+ * would make the gate lie in the one direction this module refuses to lie in.
+ */
+export function pickInteractionTarget(snapshot) {
+  const all = Array.isArray(snapshot?.interactive) ? snapshot.interactive : [];
+  const eligible = all.filter((el) => el.reachable === true && !el.disabled && (el.rect?.w ?? 0) > 0 && (el.rect?.h ?? 0) > 0);
+  if (!eligible.length) return null;
+  const isAction = (el) => el.tag === 'button' || el.type === 'submit' || (el.tag !== 'a' && !el.href);
+  return eligible.find(isAction) ?? eligible[0];
+}
+
+/**
+ * Did the click do anything? **Pure** — over the before/after states the browser collected.
+ *
+ * An outcome is any of: a request went out, the URL changed, or the rendered content changed. Any one
+ * of those is the app responding. None of them, on a control that is not disabled, is a dead control.
+ *
+ * A 4xx/5xx from the click is reported as its own, more specific finding: the wiring is right and the
+ * ENDPOINT is wrong, which routes the fix to a different file — the same routing discipline
+ * `renderSmokeViews` learned when it started naming the handler instead of the view.
+ */
+export function analyzeInteraction({ target, pre, post, requests = [], consoleErrors = [], route = '?', viewport = '?', file = undefined } = {}) {
+  const at = `${route} @ ${viewport}`;
+  if (!target) {
+    return { interaction: { measured: false, reason: 'no reachable, enabled control on this page — nothing to click' }, findings: [] };
+  }
+  if (post?.error) {
+    return { interaction: { measured: false, reason: post.error, target: target.text || target.desc }, findings: [] };
+  }
+  const failed = requests.filter((r) => typeof r.status === 'number' && r.status >= 400);
+  const navigated = !!(pre && post && pre.url !== post.url);
+  const domChanged = !!(pre && post && (pre.contentChars !== post.contentChars || pre.textElements !== post.textElements));
+  const acted = requests.length > 0 || navigated || domChanged;
+  const interaction = {
+    measured: true,
+    target: { text: target.text || null, desc: target.desc, tag: target.tag ?? null },
+    requests: requests.slice(0, 8),
+    requestCount: requests.length,
+    navigated,
+    domChanged,
+    acted,
+    dead: !acted,
+    consoleErrors: summariseConsole(consoleErrors),
+  };
+  const findings = [];
+  if (!acted) {
+    findings.push(
+      finding({
+        code: 'dead-control',
+        route,
+        viewport,
+        file,
+        path: `${route}: "${target.text || target.desc}"`,
+        message:
+          `${at}: clicking "${target.text || target.desc}" did nothing — no request was sent, the URL did not change ` +
+          `and the rendered content is byte-identical. The control is painted and reachable, so this is a wiring ` +
+          `defect, not a layout one: the action names no endpoint, or its handler is never reached.`,
+      }),
+    );
+  }
+  for (const r of failed.slice(0, 3)) {
+    findings.push(
+      finding({
+        code: 'action-failed',
+        route,
+        viewport,
+        file,
+        path: `${route}: "${target.text || target.desc}"`,
+        message:
+          `${at}: clicking "${target.text || target.desc}" called ${r.method} ${r.url} which answered ${r.status}. ` +
+          `The UI is wired correctly — fix the ENDPOINT.`,
+      }),
+    );
+  }
+  return { interaction, findings };
+}
+
+/** The small before/after state the interaction verdict is computed from. Kept tiny on purpose. */
+export const INTERACT_STATE_JS = String.raw`(() => {
+  const ownText = (el) => {
+    let t = '';
+    for (const n of el.childNodes) if (n.nodeType === 3) t += ' ' + n.textContent;
+    return t.replace(/\s+/g, ' ').trim();
+  };
+  const root = document.getElementById('root') || document.body;
+  const texts = [];
+  if (root) for (const el of root.querySelectorAll('*')) { const t = ownText(el); if (t) texts.push(t); }
+  return { url: location.href, textElements: texts.length, contentChars: texts.join(' ').length };
+})()`;
+
+/**
+ * Click `target` for real and collect what followed. Never throws — a failed probe reports itself.
+ *
+ * The click is dispatched through `Input.dispatchMouseEvent` at the element's centre, NOT
+ * `element.click()`. That distinction is the whole point: `element.click()` fires the handler
+ * directly and would happily "succeed" on a button covered by an overlay, clipped by a collapsed
+ * scroller, or under `pointer-events: none` — the exact conditions this module exists to detect. A
+ * real mouse event goes through hit-testing, so it only reaches whatever a user's click would reach.
+ */
+async function probeInteraction(cdp, target, { settleMs = 600, settleTimeoutMs = 8000 } = {}) {
+  if (!target) return { pre: null, post: null, requests: [], consoleErrors: [] };
+  const requests = [];
+  const byId = new Map();
+  const consoleErrors = [];
+  const offSend = cdp.on('Network.requestWillBeSent', (p) => {
+    const r = { method: p.request?.method ?? '?', url: String(p.request?.url ?? '').slice(0, 200), status: null };
+    byId.set(p.requestId, r);
+    requests.push(r);
+  });
+  const offRecv = cdp.on('Network.responseReceived', (p) => {
+    const r = byId.get(p.requestId);
+    if (r) r.status = p.response?.status ?? null;
+  });
+  const offConsole = cdp.on('Runtime.consoleAPICalled', (p) => {
+    if (p.type !== 'error' && p.type !== 'assert') return;
+    consoleErrors.push({ source: 'console', level: p.type, text: (p.args ?? []).map((a) => a.description ?? a.value ?? a.type).join(' ').slice(0, 400) });
+  });
+  const readState = async () => {
+    try {
+      const res = await cdp.send('Runtime.evaluate', { expression: `JSON.stringify(${INTERACT_STATE_JS})`, returnByValue: true });
+      if (res.exceptionDetails) return { error: `state probe threw: ${res.exceptionDetails.exception?.description ?? res.exceptionDetails.text}` };
+      return JSON.parse(res.result.value);
+    } catch (e) {
+      return { error: `state probe failed: ${String(e?.message ?? e)}` };
+    }
+  };
+  try {
+    const pre = await readState();
+    const x = target.rect.x + target.rect.w / 2;
+    const y = target.rect.y + target.rect.h / 2;
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1, buttons: 1 });
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1, buttons: 0 });
+    // Give the app a round trip plus a paint. A shorter window would report a working button dead.
+    const deadline = Date.now() + settleTimeoutMs;
+    await sleep(settleMs);
+    while (requests.some((r) => r.status === null) && Date.now() < deadline) await sleep(100);
+    await sleep(300);
+    const post = await readState();
+    return { pre, post, requests, consoleErrors };
+  } catch (e) {
+    return { pre: null, post: { error: `interaction probe failed: ${String(e?.message ?? e)}` }, requests, consoleErrors };
+  } finally {
+    offSend();
+    offRecv();
+    offConsole();
+  }
 }
 
 /** `document.body.innerText`, for the empty-form sentinel. Null (never `''`) when it cannot be read. */

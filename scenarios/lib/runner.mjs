@@ -34,6 +34,7 @@ import {
 } from '../harness/lib/local.mjs';
 import { applyEnv, readEnvVar } from '../harness/lib/env.mjs';
 import { signHmac } from '../harness/lib/webhook-sign.mjs';
+import { renderGate } from '../harness/lib/render-gate.mjs';
 import { getUser } from '../harness/provision.mjs';
 import { snapshot, summarizeTurn, compactStep, traceLines, compact, deadTurnError } from './evidence.mjs';
 import { StepAsks } from './asks.mjs';
@@ -173,7 +174,46 @@ export async function runStep({ step, thing, pod, run, projectId, fixturesDir, r
     };
     const page = await pod.appPage(projectId).catch((e) => ({ error: String(e?.message ?? e) }));
     rec.appPageStatus = page?.status ?? (page?.error ? `error: ${page.error}` : 'ok');
-    rec.notes.push('opened app (built + fetched root page; browser render is the judge\'s job)');
+
+    // ── the LAYOUT + INTERACTION gate: a real browser, real pixels, real clicks ──────────────────
+    // Everything above this line is `build → check → HTTP 200`, and all three were GREEN on an app
+    // whose every page rendered completely blank (PROGRESS.md, Wave 3: the shell's root box was 98px
+    // and every descendant divided zero). `renderSmokeViews` cannot see it either — it mounts with
+    // `renderToStaticMarkup`, so there is no DOM, no CSS and no layout engine. Only a browser can
+    // answer "would the user see anything", and only a click can answer "does anything happen".
+    //
+    // `open_app: true` stays exactly as it was for every existing scenario. `open_app: {…}` opts in.
+    const gateOpts = typeof step.open_app === 'object' ? step.open_app : null;
+    if (gateOpts?.render) {
+      const tables = {};
+      try {
+        const man = await pod.appManifest(projectId).catch(() => null);
+        for (const t of (man?.tables ?? man?.database ?? [])) {
+          const name = t.name ?? t.slug ?? t;
+          const rows = await pod.appData(projectId, name).catch(() => null);
+          if (rows) tables[name] = rows.rows ?? rows.data ?? rows;
+        }
+      } catch { /* an unresolvable param is reported by the rig as unmeasured, never as a pass */ }
+      const shotDir = run?.dataDir ? join(run.dataDir, '..', 'shots', `step-${String(rec.step ?? 0).padStart(2, '0')}`) : null;
+      rec.renderGate = await renderGate({
+        pod,
+        projectId,
+        buildRoutes: build?.routes ?? [],
+        tables,
+        screenshotDir: shotDir,
+        interact: gateOpts.interact === true,
+      }).catch((e) => ({ ok: null, unavailable: true, reason: `render gate threw: ${String(e?.message ?? e)}` }));
+      const c = rec.renderGate?.counts;
+      rec.notes.push(
+        rec.renderGate?.unavailable
+          ? `render gate UNAVAILABLE: ${rec.renderGate.reason}`
+          : `render gate: ${c?.measured}/${c?.pages} measured, ${c?.blank} blank, ${c?.collapsedScrollers} collapsed, ` +
+            `${c?.unusableInteractive} unreachable controls, ${c?.emptyForms} empty forms, ` +
+            `${c?.deadControls}/${c?.clicked} clicked controls dead`,
+      );
+    } else {
+      rec.notes.push('opened app (built + fetched root page; browser render is the judge\'s job)');
+    }
   }
 
   // ── DIRECT pod probes — 0 LLM calls, exactly the "direct, no LLM call" beats 08/09/10 need ─────
