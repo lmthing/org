@@ -20,6 +20,7 @@ import {
   isValidChannelId,
   listChannels,
   mentionsThing,
+  patchChannel,
   promptFor,
   readMessages,
   stripMention,
@@ -788,6 +789,71 @@ describe('THING in a thread', () => {
     const { messages } = await readMessages(root, 'general');
     expect(messages[1]!.text).not.toContain('ETIMEDOUT');
     expect(messages[1]!.text.toLowerCase()).toContain('could not finish');
+  });
+
+  describe('which project a channel turn runs in', () => {
+    async function writeApp(projectId: string) {
+      await mkdir(join(root, projectId, 'pages'), { recursive: true });
+      await writeFile(join(root, projectId, 'project.json'), JSON.stringify({ id: projectId, name: projectId }), 'utf8');
+      await writeFile(join(root, projectId, 'pages', 'index.tsx'), 'export default () => null;', 'utf8');
+    }
+    function spyManager(seen: Array<string | undefined>) {
+      return {
+        runHeadlessThreaded: vi.fn(async (opts: any) => {
+          seen.push(opts.projectId);
+          return { ok: true, result: 'ok', sessionId: opts.sessionId };
+        }),
+      } as any;
+    }
+    const post = (manager: any, channelId: string) =>
+      handlePostMessage(manager, root)(
+        mkReq('POST', `/api/team/channels/${channelId}/messages`, { text: '@thing what is in there' }),
+        mkRes(), { channelId }, {} as any,
+      );
+
+    it('runs in the app pinned to THIS channel', async () => {
+      // The bug: the turn was started with no projectId at all, so it ran in the
+      // default project while THING had correctly built the team's app in one of
+      // its own — db.tables() answered [] about a database holding three rows.
+      //
+      // The trap is that DOING THE RIGHT THING triggered it. A run where THING
+      // lazily built into the shared default project worked; the run where it
+      // properly made a dedicated project did not.
+      await writeApp('job-tracker');
+      await writeApp('something-else');
+      await createChannel(root, 'studio', 'u1');
+      await patchChannel(root, 'studio', { apps: ['job-tracker'] });
+
+      const seen: Array<string | undefined> = [];
+      await post(spyManager(seen), 'studio');
+      await settle();
+      expect(seen).toEqual(['job-tracker']);
+    });
+
+    it('falls back to the only app on the pod when this channel has no pin', async () => {
+      // #press asking about what #studio built is the ordinary case, and with
+      // exactly one app there is nothing to be ambiguous about.
+      await writeApp('job-tracker');
+      await createChannel(root, 'press', 'u1');
+
+      const seen: Array<string | undefined> = [];
+      await post(spyManager(seen), 'press');
+      await settle();
+      expect(seen).toEqual(['job-tracker']);
+    });
+
+    it('refuses to guess between several unpinned apps', async () => {
+      // Guessing here would make a thread's meaning depend on what somebody did
+      // in another channel a minute ago. Undefined keeps the caller's default.
+      await writeApp('one');
+      await writeApp('two');
+      await createChannel(root, 'press', 'u1');
+
+      const seen: Array<string | undefined> = [];
+      await post(spyManager(seen), 'press');
+      await settle();
+      expect(seen).toEqual([undefined]);
+    });
   });
 
   it('a CRASHED turn still reaches the person who asked', async () => {

@@ -918,6 +918,50 @@ export function channelFailureText(raw: string): string {
 }
 
 /**
+ * Which project a channel turn runs in.
+ *
+ * A channel turn was started with no `projectId` at all, so it ran in
+ * `DEFAULT_PROJECT_ID` (`'user'`) while THING — correctly — had built the team's
+ * app in a project of its own. The turn's `db.tables()` answered `[]` about a
+ * database holding three rows. Every follow-up in the thread that asked about the
+ * app, changed it, or was refused for touching it, was answering about a project
+ * that was not the one under discussion.
+ *
+ * The trap is that **doing the right thing is what triggered it**: a run where
+ * THING lazily built into the shared `user` project worked fine, and the run where
+ * it properly created a dedicated project did not. So the correct behaviour looked
+ * like the broken one and the broken one looked correct.
+ *
+ * Resolution, in order:
+ *
+ *  1. **The channel's own pinned app.** `announceNewApps` pins a project to the
+ *     channel it was built from, so this is the channel saying what it is about.
+ *     More than one pinned means the channel spans several apps and there is no
+ *     single right answer — fall through rather than guess.
+ *  2. **The only project on the pod that has an app.** A team asking about "the
+ *     tracker" in a channel that was never the one it was built in (`#press`
+ *     asking about what `#studio` made) is the common case, and with exactly one
+ *     app there is nothing to be ambiguous about.
+ *  3. **Nothing** — the caller's default. A pod with no app yet, or several with no
+ *     pin to choose between, keeps today's behaviour.
+ *
+ * Deliberately NOT "the most recently touched project": that makes a thread's
+ * meaning depend on what somebody else did in another channel a minute ago.
+ */
+async function projectForChannel(
+  root: string,
+  channel: Channel,
+  withApps: Set<string>,
+): Promise<string | undefined> {
+  const pinned = (channel.apps ?? []).filter((id) => withApps.has(id));
+  if (pinned.length === 1) return pinned[0];
+  if (pinned.length > 1) return undefined;
+  const all = [...withApps];
+  if (all.length === 1) return all[0];
+  return undefined;
+}
+
+/**
  * Answer a mention in the thread it was asked in.
  *
  * The session id is stable per (channel, thread), so every message in a thread
@@ -960,6 +1004,9 @@ async function runThingReply(
   // turn, so a change is attributable to it rather than diffed against a stored
   // list a Studio edit could have moved while nobody was watching.
   const fingerprintsBefore = await appFingerprints(root);
+  // Which project this channel's conversation is actually about. Same snapshot,
+  // so the answer cannot drift between deciding and running.
+  const turnProject = await projectForChannel(root, channel, appsBefore);
 
   // The host is OURS, not a throwaway, so an `ask()` becomes a question in the
   // thread instead of a promise nobody can settle.
@@ -1046,6 +1093,9 @@ async function runThingReply(
       // asking for it, so it is the one kind of run a member cannot see the cost
       // of anywhere else — and on a team pod the tokens are the TEAM's.
       origin: { source: 'team-channel' },
+      // The project this channel's work actually lives in. Without it the turn ran
+      // in the default project and could not see the app it had just built.
+      ...(turnProject ? { projectId: turnProject } : {}),
       // A viewer may talk to THING and may not change the workspace. Passing the
       // role withholds every write grant for this turn, so a write is a typecheck
       // error the model sees rather than a rule it may or may not follow — which
