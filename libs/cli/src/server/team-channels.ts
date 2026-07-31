@@ -78,6 +78,30 @@ export interface Category {
 /** Who or what produced a message. */
 export type MessageKind = 'user' | 'thing' | 'system';
 
+/**
+ * A file/image attached to a channel message.
+ *
+ * Deliberately thin — just enough for a client to render a thumbnail or a
+ * download link (`url` is `GET /api/uploads/:id`, auth'd the same way the rest
+ * of that surface is). The server-only extraction bookkeeping on `UploadMeta`
+ * (`transcript`/`text`/`pages`) stays server-side; THING reaches it by `id`
+ * through the same `assembleAttachments` pipeline `/chat` already uses, not
+ * through this row.
+ *
+ * This is the shape `libs/ui/src/team/types.ts#ChannelMessage` mirrors.
+ */
+export interface ChannelAttachment {
+  id: string;
+  kind: 'image' | 'audio' | 'file';
+  mediaType: string;
+  filename?: string;
+  url: string;
+  /** Audio only — the transcript the model actually received, so a client can
+   *  caption the clip the same way `/chat` does rather than a client fetching it
+   *  separately. Never present for image/file. */
+  transcript?: string;
+}
+
 export interface ChannelMessage {
   id: string;
   ts: string;
@@ -117,6 +141,16 @@ export interface ChannelMessage {
    * ever render braces, no matter what the client does later.
    */
   blocks?: unknown[];
+  /**
+   * Files/images posted with this message — see {@link ChannelAttachment}.
+   *
+   * Posting IS the audience grant: `POST /channels/:id/messages` accepts only
+   * ids the poster owns (`UploadMeta.ownerUserId`), then records this channel on
+   * each one (`recordUploadChannel`), which is what lets `GET /api/uploads/:id`
+   * serve it to the rest of this channel's audience — a DM's is its two
+   * members, same as a message read.
+   */
+  attachments?: ChannelAttachment[];
   /** The member who sent it (absent for `thing`/`system`). */
   userId?: string;
   email?: string;

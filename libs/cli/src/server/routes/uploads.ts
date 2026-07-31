@@ -1,6 +1,7 @@
 import { readBody, sendJson } from './utils.js';
 import type { RouteHandler } from '../router.js';
 import { readCaller } from '../team-guard.js';
+import { ensureDefaultChannel, isVisibleTo } from '../team-channels.js';
 
 /** Cap a single upload to keep base64 payloads (read fully into memory) bounded. */
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB
@@ -63,11 +64,15 @@ export const handleUpload: RouteHandler = async (req, res, _params, ctx) => {
  * Nothing published an id to anyone but its uploader and ids are `randomUUID`, so
  * this was not exploitable; the protection was that a member could not learn
  * another member's id. A channel attachment puts an id into a message body every
- * member reads, which ends that the moment the feature ships.
+ * member reads, which is exactly what closes that gap: a non-owner is now let
+ * through when the upload has been posted (`recordUploadChannel`) into a
+ * channel THEY can also see — the same `isVisibleTo` predicate a message read
+ * already uses, not a weaker one, so a DM's audience stays its two members.
  *
- * A **404, not a 403**, for someone else's upload — the same choice the DM routes
- * make. "You may not read this" and "there is no such thing" must be
- * indistinguishable, or the error itself becomes a way to test which ids exist.
+ * A **404, not a 403**, for an upload the caller may not see — the same choice
+ * the DM routes make. "You may not read this" and "there is no such thing" must
+ * be indistinguishable, or the error itself becomes a way to test which ids
+ * exist.
  */
 export const handleServeUpload: RouteHandler = async (req, res, params, ctx) => {
   const id = params['id']!;
@@ -77,15 +82,30 @@ export const handleServeUpload: RouteHandler = async (req, res, params, ctx) => 
     return;
   }
   const caller = readCaller(req);
-  // An upload with NO owner is served to any member, deliberately. Those are
-  // pre-existing files from before the field existed, and on a team pod they can
-  // only have come from a member of that same team's workspace — refusing them
-  // would break already-rendered images in already-sent messages to close a hole
-  // that the unguessable id is still covering for them. New uploads all carry an
-  // owner, so the ownerless set is closed and shrinks to nothing.
-  if (caller && found.ownerUserId && found.ownerUserId !== caller.userId) {
-    sendJson(res, 404, { error: 'upload not found' });
-    return;
+  // An upload with NO owner is refused on a team pod, unless it has been posted
+  // into a channel the caller can see.
+  //
+  // This DOES break pre-existing ownerless uploads — deliberately, on the owner's
+  // call. The alternative was serving them to any member on the grounds that they
+  // predate the field, which is precisely the "safe by accident" reasoning the
+  // authorization issue was written to end: it leaves a set of files whose only
+  // protection is that their id is hard to guess, and attachments exist to put
+  // ids in front of people. A closed, shrinking exception is still an exception,
+  // and this one would have been indistinguishable from the bug it replaced.
+  //
+  // `found.ownerUserId` being undefined can never equal a `userId`, so the
+  // ownerless case simply falls through to the audience check and fails closed
+  // there — no separate branch to keep in step with the owned one.
+  if (caller && found.ownerUserId !== caller.userId) {
+    const inAudience = await isVisibleInAnyChannel(
+      ctx.effectiveLmthingRoot,
+      found.channelIds,
+      caller.userId,
+    );
+    if (!inAudience) {
+      sendJson(res, 404, { error: 'upload not found' });
+      return;
+    }
   }
   res.writeHead(200, {
     'Content-Type': found.mediaType,
@@ -95,3 +115,24 @@ export const handleServeUpload: RouteHandler = async (req, res, params, ctx) => 
   });
   res.end(Buffer.from(found.bytes));
 };
+
+/**
+ * Whether `userId` may see at least one of the channels an upload has been
+ * posted into — the audience half of {@link handleServeUpload}'s check.
+ *
+ * `root` is only absent off a misconfigured team pod (team mode requires
+ * project-mode); `channelIds` is only absent for an upload never attached to a
+ * message. Either way there is nothing to grant against, so this fails closed.
+ */
+async function isVisibleInAnyChannel(
+  root: string | undefined,
+  channelIds: string[] | undefined,
+  userId: string,
+): Promise<boolean> {
+  if (!root || !channelIds?.length) return false;
+  const channels = await ensureDefaultChannel(root);
+  return channelIds.some((channelId) => {
+    const channel = channels.find((c) => c.id === channelId);
+    return channel ? isVisibleTo(channel, userId) : false;
+  });
+}

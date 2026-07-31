@@ -28,6 +28,7 @@ import type { RouteHandler } from '../router.js';
 import type { HeadlessRunResult, SessionManager } from '../session-manager.js';
 import { readBody, sendJson } from './utils.js';
 import { readCaller, type TeamCaller } from '../team-guard.js';
+import { uploadUrl } from '../uploads.js';
 import { listProjects } from '../projects.js';
 import { getOrCreateThreadSession, getThreadSession } from '../webhook-threads.js';
 import { WebRenderHost } from '../../rpc/server.js';
@@ -59,6 +60,7 @@ import {
   teamDir,
   threadRootOf,
   type Channel,
+  type ChannelAttachment,
   type ChannelMessage,
 } from '../team-channels.js';
 import {
@@ -181,6 +183,72 @@ async function parseJsonBody<T>(req: IncomingMessage, res: ServerResponse): Prom
     sendJson(res, 400, { error: 'invalid JSON body' });
     return null;
   }
+}
+
+/** A message can name only this many uploads — a key list, not a payload; the
+ *  25MB-per-file cap already bounds the size of what is behind each id. */
+const MAX_MESSAGE_ATTACHMENTS = 10;
+
+/**
+ * Turn a posted message's raw attachment ids into {@link ChannelAttachment}
+ * rows, refusing any id the poster does not own.
+ *
+ * Without this a member could name someone ELSE's upload id — private ids are
+ * unguessable, but a member only needs to guess their OWN prior upload's id
+ * wrong to hand over someone else's — and thereby publish it to the whole
+ * channel audience, reopening the exact hole `GET /api/uploads/:id`'s owner
+ * check exists to close, by a second door. An upload with no owner at all
+ * predates that field and is already served to any member (see
+ * `handleServeUpload`'s ownerless decision), so letting it be attached too adds
+ * no new exposure.
+ *
+ * Returns `null` after already sending an error response — the caller's cue to
+ * stop, matching `requireVisibleChannel`'s shape.
+ */
+async function resolveMessageAttachments(
+  manager: SessionManager,
+  caller: TeamCaller | null,
+  rawIds: unknown,
+  res: ServerResponse,
+): Promise<ChannelAttachment[] | null> {
+  const ids = Array.isArray(rawIds)
+    ? [...new Set(rawIds.filter((v): v is string => typeof v === 'string' && !!v))].slice(
+        0,
+        MAX_MESSAGE_ATTACHMENTS,
+      )
+    : [];
+  if (!ids.length) return [];
+  // The team guard already refuses any request in team mode with no verified
+  // caller, so this is defence in depth rather than a path a real client can
+  // reach — but there is no caller to own anything against, so refuse rather
+  // than silently posting no attachments.
+  if (!caller) {
+    sendJson(res, 401, { error: 'attachments need a verified caller' });
+    return null;
+  }
+  const found = await Promise.all(
+    ids.map(async (id) => ({ id, meta: await manager.readUploadMeta(id) })),
+  );
+  const notOwned = found.filter(
+    ({ meta }) => !meta || (meta.ownerUserId && meta.ownerUserId !== caller.userId),
+  );
+  if (notOwned.length) {
+    sendJson(res, 403, {
+      error: 'you can only attach uploads you own',
+      attachmentIds: notOwned.map((f) => f.id),
+    });
+    return null;
+  }
+  return found.map(({ id, meta }) => ({
+    id,
+    kind: meta!.kind,
+    mediaType: meta!.mediaType,
+    ...(meta!.filename ? { filename: meta!.filename } : {}),
+    // Audio's transcript rides along so a client can caption the clip the same
+    // way `/chat` does, rather than a second round trip to fetch it.
+    ...(meta!.transcript ? { transcript: meta!.transcript } : {}),
+    url: uploadUrl(id),
+  }));
 }
 
 // ─── Channels ────────────────────────────────────────────────────────────────
@@ -575,6 +643,7 @@ export function handlePostMessage(
       threadId?: unknown;
       clientId?: unknown;
       answersAskId?: unknown;
+      attachmentIds?: unknown;
     }>(req, res);
     if (!parsed) return;
     const text = typeof parsed.text === 'string' ? parsed.text.trim() : '';
@@ -597,6 +666,16 @@ export function handlePostMessage(
     const caller = readCaller(req);
     const channel = await requireVisibleChannel(root, channelId, caller, res);
     if (!channel) return;
+
+    // The poster must own every id they name; see `resolveMessageAttachments`.
+    // Bound to the channel right away — before the append, let alone the
+    // broadcast — so a member whose socket delivers the message a moment later
+    // can already fetch the attachment rather than racing the write.
+    const attachments = await resolveMessageAttachments(manager, caller, parsed.attachmentIds, res);
+    if (attachments === null) return;
+    if (attachments.length) {
+      await Promise.all(attachments.map((a) => manager.bindUploadToChannel(a.id, channelId)));
+    }
 
     // Which question, if any, this message is about to resolve. Read BEFORE the
     // append so the row itself can say so.
@@ -630,6 +709,7 @@ export function handlePostMessage(
       ...(clientId ? { clientId } : {}),
       ...(pendingId ? { answersAsk: pendingId } : {}),
       ...(mentioned.length ? { mentions: mentioned.map((m) => m.userId) } : {}),
+      ...(attachments.length ? { attachments } : {}),
     });
 
     // The same send, arriving twice. The row already exists, so everything that
@@ -945,10 +1025,23 @@ async function runThingReply(
       `channel:${message.channelId}`,
       threadId,
     );
+    // The message that mentioned THING (or replied in a thread it is already in)
+    // may carry its own attachments — route them into the turn through the SAME
+    // assembly `/chat`'s `sendMessage` already uses, rather than a second
+    // mechanism: images become a model-facing part, files an id THING delegates
+    // by, audio folds its transcript into the text.
+    const turnInput = message.attachments?.length
+      ? (
+          await manager.assembleAttachments(
+            promptFor(message),
+            message.attachments.map((a) => a.id),
+          )
+        ).input
+      : promptFor(message);
     const result = await manager.runHeadlessThreaded({
       sessionId,
       agentSlug: THING_AGENT,
-      message: promptFor(message),
+      message: turnInput,
       // Name the turn in the pod's session ledger. A channel turn has no client
       // asking for it, so it is the one kind of run a member cannot see the cost
       // of anywhere else — and on a team pod the tokens are the TEAM's.

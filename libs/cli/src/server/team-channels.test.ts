@@ -139,6 +139,28 @@ function mkManager(reply: string | ((msg: string) => string) = 'ok') {
   };
 }
 
+/** A manager stub with an in-memory upload store, standing in for
+ *  `SessionManager.readUploadMeta`/`bindUploadToChannel`/`assembleAttachments`. */
+function mkManagerWithUploads(reply: string | ((msg: unknown) => string) = 'ok') {
+  const { manager, runs } = mkManager(reply as never);
+  const uploads = new Map<string, { ownerUserId?: string; kind: string; mediaType: string; filename?: string }>();
+  const bound: Array<{ id: string; channelId: string }> = [];
+  manager.readUploadMeta = vi.fn(async (id: string) => uploads.get(id) ?? null);
+  manager.bindUploadToChannel = vi.fn(async (id: string, channelId: string) => {
+    bound.push({ id, channelId });
+  });
+  // Mirrors the real `SessionManager.assembleAttachments`'s shape closely enough
+  // to prove the ROUTING: THING's turn receives the attachment ids the message
+  // carried, not the ids re-derived some other way.
+  manager.assembleAttachments = vi.fn(async (text: string, attachmentIds: string[]) => ({
+    input: {
+      text,
+      attachments: attachmentIds.map((id) => ({ id, kind: 'image', mediaType: 'image/png' })),
+    },
+  }));
+  return { manager, runs, uploads, bound };
+}
+
 /** Wait for the out-of-band THING reply the POST handler kicked off. */
 const settle = settleChannelWork;
 
@@ -348,6 +370,90 @@ describe('channel routes', () => {
   });
 });
 
+describe('message attachments', () => {
+  it('refuses attachments with no verified caller — defence in depth', async () => {
+    // The team guard already refuses any team-mode request with no caller
+    // before this handler ever runs, so a real client cannot reach this path —
+    // but there is no identity to check ownership against, so it must refuse
+    // rather than silently posting no attachments.
+    const { manager, bound } = mkManagerWithUploads();
+    const res = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', {
+        text: 'hi', attachmentIds: ['up-1'],
+      }, {} as unknown as typeof VIEWER),
+      res, { channelId: 'general' }, {} as any,
+    );
+    expect(res.statusCode).toBe(401);
+    expect(bound).toEqual([]);
+  });
+
+  it('stores an owned attachment on the message, and binds it to the channel', async () => {
+    const { manager, uploads, bound } = mkManagerWithUploads();
+    uploads.set('up-1', { ownerUserId: 'u1', kind: 'image', mediaType: 'image/png', filename: 'cat.png' });
+
+    const res = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: 'look at this', attachmentIds: ['up-1'] }),
+      res, { channelId: 'general' }, {} as any,
+    );
+    expect(res.statusCode).toBe(201);
+    expect(res.json().message.attachments).toEqual([
+      { id: 'up-1', kind: 'image', mediaType: 'image/png', filename: 'cat.png', url: '/api/uploads/up-1' },
+    ]);
+    // Bound BEFORE the response even went out — no window where the socket frame
+    // could beat the write that makes the id fetchable.
+    expect(bound).toEqual([{ id: 'up-1', channelId: 'general' }]);
+
+    const { messages } = await readMessages(root, 'general');
+    expect(messages[0]!.attachments).toEqual([
+      { id: 'up-1', kind: 'image', mediaType: 'image/png', filename: 'cat.png', url: '/api/uploads/up-1' },
+    ]);
+  });
+
+  it("refuses to post someone else's upload as an attachment", async () => {
+    // Without this, a member could name an upload id they do not own and
+    // thereby publish it to the whole channel — reopening the authorization
+    // gap `GET /api/uploads/:id`'s owner check exists to close, by naming it in
+    // a POST instead of a GET.
+    const { manager, bound } = mkManagerWithUploads();
+    manager.readUploadMeta = vi.fn(async (id: string) =>
+      id === 'not-mine' ? { ownerUserId: 'u2', kind: 'image', mediaType: 'image/png' } : null,
+    );
+
+    const res = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', {
+        text: 'sneaky', attachmentIds: ['not-mine'],
+      }),
+      res, { channelId: 'general' }, {} as any,
+    );
+    expect(res.statusCode).toBe(403);
+    expect(res.json().attachmentIds).toEqual(['not-mine']);
+    expect(bound).toEqual([]);
+
+    // Nothing was posted at all — refusing the attachment refuses the message,
+    // rather than silently dropping the attachment and posting the text anyway.
+    const { messages } = await readMessages(root, 'general');
+    expect(messages).toEqual([]);
+  });
+
+  it('allows an ownerless (legacy) upload to be attached — same decision as serving it', async () => {
+    const { manager, bound } = mkManagerWithUploads();
+    manager.readUploadMeta = vi.fn(async (id: string) =>
+      id === 'legacy' ? { kind: 'image', mediaType: 'image/png' } : null,
+    );
+
+    const res = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: 'old one', attachmentIds: ['legacy'] }),
+      res, { channelId: 'general' }, {} as any,
+    );
+    expect(res.statusCode).toBe(201);
+    expect(bound).toEqual([{ id: 'legacy', channelId: 'general' }]);
+  });
+});
+
 describe('THING in a thread', () => {
   it('answers a mention in the thread, and stores the reply', async () => {
     const { manager, runs } = mkManager('42');
@@ -370,6 +476,49 @@ describe('THING in a thread', () => {
     ]);
     // The reply is threaded under the question, so the channel stays readable.
     expect(messages[1]!.threadId).toBe(asked.id);
+  });
+
+  it("passes the asking message's attachments into THING's turn", async () => {
+    // The path already exists for `/chat` (`assembleAttachments`) — this proves
+    // a channel mention routes through the SAME mechanism rather than a second
+    // one, so THING can actually see an image or read a file posted with the
+    // question, not just its text.
+    const { manager, runs, uploads } = mkManagerWithUploads('looks like a cat');
+    uploads.set('up-1', { ownerUserId: 'u1', kind: 'image', mediaType: 'image/png', filename: 'cat.png' });
+
+    const res = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', {
+        text: '@thing what is in this?', attachmentIds: ['up-1'],
+      }),
+      res, { channelId: 'general' }, {} as any,
+    );
+    expect(res.statusCode).toBe(201);
+    await settle();
+
+    expect(manager.assembleAttachments).toHaveBeenCalledWith(
+      '[ana@example.com in #general] what is in this?',
+      ['up-1'],
+    );
+    // What actually reached `runHeadlessThreaded` is `assembleAttachments`'s
+    // OUTPUT (text + attachments), not the bare prompt string.
+    expect(runs).toHaveLength(1);
+    expect(runs[0]!.message).toEqual({
+      text: '[ana@example.com in #general] what is in this?',
+      attachments: [{ id: 'up-1', kind: 'image', mediaType: 'image/png' }],
+    });
+  });
+
+  it('does not touch attachment assembly for a plain mention with no attachments', async () => {
+    const { manager, runs } = mkManagerWithUploads('ok');
+    const res = mkRes();
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing hello' }),
+      res, { channelId: 'general' }, {} as any,
+    );
+    await settle();
+    expect(manager.assembleAttachments).not.toHaveBeenCalled();
+    expect(runs[0]!.message).toBe('[ana@example.com in #general] hello');
   });
 
   it('keeps one session per thread — so THING remembers across messages', async () => {

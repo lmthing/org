@@ -24,7 +24,9 @@ import {
   extractDocumentText,
   extractPdfPageImages,
   resolveUploadDocument,
+  recordUploadChannel,
   type AttachmentRef,
+  type UploadMeta,
 } from './uploads.js';
 import { bootProjectApp } from '../app/boot.js';
 import { loadProjectApp } from '../app/loader.js';
@@ -1683,20 +1685,46 @@ export class SessionManager {
   }
 
   /** Read a stored upload's bytes + metadata for the serving route. */
-  async readUpload(id: string): Promise<{ bytes: Uint8Array; mediaType: string; ownerUserId?: string } | null> {
+  async readUpload(
+    id: string,
+  ): Promise<{ bytes: Uint8Array; mediaType: string; ownerUserId?: string; channelIds?: string[] } | null> {
     const meta = await readUploadMeta(this.uploadsDir, id);
     if (!meta) return null;
     const bytes = await readUploadBytes(this.uploadsDir, id);
     if (!bytes) return null;
-    // The owner rides along so the serve route can authorize without a second read.
-    return { bytes, mediaType: meta.mediaType, ...(meta.ownerUserId ? { ownerUserId: meta.ownerUserId } : {}) };
+    // The owner and the channels it has been shared into ride along so the serve
+    // route can authorize without a second read.
+    return {
+      bytes,
+      mediaType: meta.mediaType,
+      ...(meta.ownerUserId ? { ownerUserId: meta.ownerUserId } : {}),
+      ...(meta.channelIds?.length ? { channelIds: meta.channelIds } : {}),
+    };
+  }
+
+  /** Read a stored upload's metadata (no bytes) — for a caller that needs to
+   *  check ownership or build a client-facing attachment record without paying
+   *  to read the file's content off disk. */
+  async readUploadMeta(id: string): Promise<UploadMeta | null> {
+    return readUploadMeta(this.uploadsDir, id);
+  }
+
+  /** Record that an upload was posted into a channel — see
+   *  {@link recordUploadChannel}. Called by the channel message route AFTER it
+   *  has verified the poster owns the upload. */
+  async bindUploadToChannel(id: string, channelId: string): Promise<void> {
+    await recordUploadChannel(this.uploadsDir, id, channelId);
   }
 
   /** Assemble the model input (text + image/file parts) and the trace-facing
    *  attachment list from stored uploads. Server-authoritative: only the id is
    *  trusted; bytes/metadata are re-read from disk. Audio contributes its
-   *  transcript to the text (the model gets text, not the raw audio). */
-  private async assembleAttachments(
+   *  transcript to the text (the model gets text, not the raw audio).
+   *
+   *  Public: the team-channel route reuses this SAME assembly (rather than a
+   *  second mechanism) to hand THING a channel message's attachments — the
+   *  identical path `sendMessage` already uses for `/chat`. */
+  async assembleAttachments(
     content: string,
     attachmentIds: string[],
   ): Promise<{ input: UserInput; traceAttachments?: TraceAttachment[] }> {
@@ -2088,7 +2116,10 @@ export class SessionManager {
     projectId?: string;
     spaceRef?: string;
     agentSlug: string;
-    message: string;
+    /** Plain text, or text plus image/file attachments (see {@link
+     *  assembleAttachments}) — a team-channel message's attachments travel this
+     *  same field the `/chat` session path already uses, not a second one. */
+    message: UserInput;
     budget?: BuildSessionArgs['budget'];
     /** A human will read this turn's output even though nobody can answer an
      *  `ask()` — a THING run in a team channel. Turns ON the anti-silent guard so

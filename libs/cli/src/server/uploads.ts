@@ -24,6 +24,20 @@ export interface UploadMeta {
    * whole point of the attachment feature.
    */
   ownerUserId?: string;
+  /**
+   * Channels this upload has been posted into as a message attachment — what
+   * makes {@link ownerUserId} an "OR", not the whole rule. `GET /api/uploads/:id`
+   * on a team pod serves a non-owner caller only when one of these channels is
+   * visible to them (the same `isVisibleTo` predicate a message read uses).
+   *
+   * Recorded when `POST /channels/:id/messages` accepts the attachment
+   * (`recordUploadChannel`), never by the upload itself — an upload with nothing
+   * in this list has never been shared anywhere and is readable by its owner
+   * only. Append-only and small (a handful of channels at most), so no cap is
+   * needed in practice; kept as an array rather than one id because the same
+   * photo can legitimately be shared into more than one channel.
+   */
+  channelIds?: string[];
   kind: AttachmentKind;
   mediaType: string;
   filename?: string;
@@ -279,6 +293,31 @@ export async function readUploadMeta(uploadsDir: string, id: string): Promise<Up
   } catch {
     return null;
   }
+}
+
+/**
+ * Record that an upload was posted into a channel — the binding that makes it
+ * readable by that channel's audience (see {@link UploadMeta.channelIds}).
+ *
+ * Called by `POST /channels/:id/messages` AFTER it has verified the poster owns
+ * the upload, and BEFORE the message is broadcast — so a member who receives the
+ * socket frame can already fetch the attachment rather than racing the write.
+ * Idempotent (a repeat of the same channel is a no-op) and best-effort: a
+ * missing upload is silently ignored, since the poster-owns-it check already
+ * ran against the same read and would have rejected a genuinely missing id.
+ */
+export async function recordUploadChannel(
+  uploadsDir: string,
+  id: string,
+  channelId: string,
+): Promise<void> {
+  if (!isSafeUploadId(id)) return;
+  const meta = await readUploadMeta(uploadsDir, id);
+  if (!meta) return;
+  const channelIds = meta.channelIds ?? [];
+  if (channelIds.includes(channelId)) return;
+  const updated: UploadMeta = { ...meta, channelIds: [...channelIds, channelId] };
+  await writeFile(join(uploadsDir, `${id}.json`), JSON.stringify(updated), 'utf8');
 }
 
 export async function readUploadBytes(uploadsDir: string, id: string): Promise<Uint8Array | null> {
