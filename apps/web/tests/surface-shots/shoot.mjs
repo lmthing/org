@@ -57,7 +57,7 @@ if (!existsSync(DIST)) {
   process.exit(1)
 }
 
-const FIXTURES = ['team', 'team-long', 'team-thread', 'team-dm', 'team-paging', 'chat', 'chat-empty', 'chat-devpanel']
+const FIXTURES = ['team', 'team-long', 'team-thread', 'team-dm', 'team-paging', 'team-attachments', 'chat', 'chat-empty', 'chat-devpanel']
 const VIEWPORTS = {
   // iPhone 14/15 logical size — the one the team surface has to survive.
   phone: { width: 390, height: 844, isMobile: true, hasTouch: true },

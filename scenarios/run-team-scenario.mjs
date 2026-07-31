@@ -81,6 +81,8 @@ const reporter = {
         : `[run-team] run ${id} → ${runDir} (port ${port}, ${base}); team ${teamId}`,
     ),
   onPid: ({ pid, pidFile }) => console.log(`[run-team] pid ${pid} → ${pidFile}`),
+  onProvider: ({ ok, hosts, note }) =>
+    console.log(`[run-team] provider ${ok ? 'reachable' : 'UNREACHABLE'}: ${note ?? hosts.map((h) => `${h.host} ${h.ok ? h.ms + 'ms' : h.error}`).join(' · ')}`),
   onProvisioned: ({ cast, channels }) =>
     console.log(
       `[run-team] cast: ${cast.map((m) => `${m.name}<${m.role}>`).join(', ')}  ·  channels: ${channels.map((c) => `#${c.id}`).join(', ')}`,
@@ -101,6 +103,9 @@ const reporter = {
   },
   onSnapshot: ({ step, dir }) => console.log(`[run-team] step ${step} snapshot → ${dir}`),
   onDone: ({ ranSteps, ofSteps, outDir: od, tracePath, summary }) => {
+    if (summary.voidSteps?.length) {
+      console.log(`\n🚫 ${summary.verdict} — steps ${summary.voidSteps.join(', ')}. This run is NOT a result; rerun it.`);
+    }
     console.log(`\n✅ played ${ranSteps}/${ofSteps} steps → ${od}`);
     console.log(`   ${summary.turns} channel turns (${summary.tokenAccounting.turnsWithout} of them unaccounted in the pod ledger) · project ${summary.project}`);
     console.log(`   read: ${tracePath}  +  step-NN.json (compact; step-NN.full.json for drill-down)  +  summary.json`);

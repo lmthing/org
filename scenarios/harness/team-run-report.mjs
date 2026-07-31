@@ -17,7 +17,7 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { threadSessionFacts } from '../lib/team-runner.mjs';
+import { threadSessionFacts, jargonHits } from '../lib/team-runner.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const [scenarioId = '20-studio', runId = 'latest'] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
@@ -180,6 +180,20 @@ for (const s of steps) {
   }
 }
 if (!any) console.log('  (none)');
+
+// Computed here as well as in the runner, so a run recorded before the scan existed still gets it.
+console.log(`\n## Machine words in what THING said to a channel`);
+let jargonAny = false;
+for (const s of steps) {
+  for (const t of s.turns ?? []) {
+    const hits = t.jargon?.length ? t.jargon : jargonHits(t.lastText);
+    if (!hits.length) continue;
+    jargonAny = true;
+    console.log(`  step ${s.step} (${t.who} in ${t.dm ? 'a DM' : '#' + t.channel}): ${hits.map((h) => h.word).join(', ')}`);
+    for (const h of hits) console.log(`      "…${h.context}…"`);
+  }
+}
+if (!jargonAny) console.log('  (none — every reply was in the persona\'s own words)');
 
 console.log(`\n## Refusals`);
 const refusals = steps.filter((s) => s.denied);

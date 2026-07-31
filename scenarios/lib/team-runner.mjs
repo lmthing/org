@@ -59,6 +59,7 @@ import {
   reapOrphanRuns,
   readRunJson,
 } from '../harness/lib/local.mjs';
+import { checkProvider, providerOutageInLog, logSize } from '../harness/lib/provider.mjs';
 import { snapshot, compactStep, traceLines, compact } from './evidence.mjs';
 import { FatalError } from './errors.mjs';
 
@@ -188,12 +189,21 @@ export function summarizeTeamTurn(turn, { who, role, channel, threadId, sent, dm
     lastText: turn?.text ?? '',
     blocks: turn?.blocks ? turn.blocks.map((b) => b?.type ?? typeof b) : null,
     blockCount: turn?.blocks?.length ?? 0,
-    asks: (turn?.asks ?? []).map((a) => ({ text: String(a.message?.text ?? '').slice(0, 400), answeredWith: a.answeredWith })),
+    asks: (turn?.asks ?? []).map((a) => ({
+      text: String(a.message?.text ?? '').slice(0, 400),
+      // The pod now NAMES the ask (`ChannelMessage.ask.id`) and dates it, and an answer can say
+      // which ask it answered — so "did it park" stops being an inference from timing.
+      askId: a.askId ?? a.message?.ask?.id ?? null,
+      expiresAt: a.expiresAt ?? a.message?.ask?.expiresAt ?? null,
+      answeredWith: a.answeredWith,
+    })),
     answeredAsks: turn?.answered ?? 0,
     consumedPendingAsk: turn?.consumedPendingAsk ?? false,
     activity: turn?.activity ?? [],
     apps: turn?.apps ?? [],
     replyCount: turn?.replies?.length ?? 0,
+    /** Machine vocabulary in what THING actually SAID to the channel — see `jargonHits`. */
+    jargon: jargonHits(turn?.text),
     /** The id of the message this turn's `lastText` came from — so a reader can find it in the log. */
     replyId: turn?.reply?.id ?? null,
     /**
@@ -309,6 +319,129 @@ export function threadSessionFacts(dataDir, projectId, sessionId, { since = 0 } 
   };
 }
 
+/**
+ * Every cron EMITTER DEF the run actually has, read off disk.
+ *
+ * A scenario cannot name these: the MODEL authors them mid-run, so `run_emitter: {scope, name}` in
+ * the yaml is a SHAPE, not a promise (`campaign/scenario-spec.md` — "resolve the real value from the
+ * live pod … a scenario file can only fix what's deterministic"). Firing the literal name would
+ * either 404 or, worse, silently run nothing and let the step "pass".
+ *
+ * Defs live in `events/*.ts`, scoped to the project (`<project>/events/`) or to a space
+ * (`<project>/spaces/<space>/events/`), and the run endpoint takes the pseudo-slug
+ * `@emitter:<scope>:<name>` (`libs/cli/src/server/routes/hooks.ts:695`). A `type:'cron'` def is the
+ * only kind a tick can force.
+ */
+export function scanEmitterDefs(dataDir, projectId) {
+  const out = [];
+  const root = join(dataDir, '.lmthing', projectId);
+  const scan = (dir, scope) => {
+    let files = [];
+    try {
+      files = readdirSync(dir).filter((f) => /\.(ts|js|mjs)$/.test(f));
+    } catch {
+      return;
+    }
+    for (const f of files) {
+      let src = '';
+      try {
+        src = readFileSync(join(dir, f), 'utf8');
+      } catch {
+        continue;
+      }
+      for (const m of src.matchAll(/export\s+const\s+([A-Za-z_$][\w$]*)\s*[:=]/g)) {
+        const name = m[1];
+        // The def's own body decides whether a tick can force it; `type: 'cron'` anywhere after the
+        // declaration is a good-enough read of a file that usually holds one or two defs.
+        const after = src.slice(m.index, m.index + 800);
+        const type = /type\s*:\s*['"](\w+)['"]/.exec(after)?.[1] ?? 'unknown';
+        out.push({ scope, name, type, file: join(dir, f), slug: `@emitter:${scope}:${name}` });
+      }
+    }
+  };
+  scan(join(root, 'events'), projectId);
+  let spaces = [];
+  try {
+    spaces = readdirSync(join(root, 'spaces'), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+  } catch {
+    /* no spaces */
+  }
+  for (const space of spaces) scan(join(root, 'spaces', space, 'events'), space);
+  return out;
+}
+
+/**
+ * Turn a scenario's placeholder `run_emitter` into the slug this run actually has.
+ *
+ * Exact name wins; then a case-insensitive token overlap ("morning_brief" finds `morningBrief`,
+ * `daily-brief`, `briefPost`); then, if the run has exactly ONE cron def, that one — a scenario that
+ * asks for "the scheduled thing" when the model built exactly one scheduled thing means that one.
+ * Returns what it resolved AND everything it saw, so a step that fired the wrong emitter (or none)
+ * is readable in the evidence rather than looking like the def simply did nothing.
+ */
+export function resolveEmitter(spec, defs, hooks = []) {
+  const requested = typeof spec === 'string' ? { slug: spec } : spec.slug ? { slug: spec.slug } : { scope: spec.scope, name: spec.name };
+  const candidates = defs.map((d) => ({ ...d }));
+  const seen = { emitterDefs: candidates, hookSlugs: hooks.map((h) => h.slug) };
+  if (requested.slug) return { requested, resolved: { slug: requested.slug }, how: 'literal', seen };
+
+  const norm = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const tokens = (s) => String(s ?? '').toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2);
+  const wanted = norm(requested.name);
+
+  const exact = candidates.find((d) => norm(d.name) === wanted && (!requested.scope || d.scope === requested.scope));
+  if (exact) return { requested, resolved: exact, how: 'exact', seen };
+  const anyScope = candidates.find((d) => norm(d.name) === wanted);
+  if (anyScope) return { requested, resolved: anyScope, how: 'name-match-different-scope', seen };
+
+  const want = tokens(requested.name);
+  const scored = candidates
+    .map((d) => ({ d, score: tokens(d.name).filter((t) => want.includes(t)).length + (want.some((t) => norm(d.name).includes(t)) ? 1 : 0) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+  if (scored.length) return { requested, resolved: scored[0].d, how: `fuzzy(score ${scored[0].score})`, seen };
+
+  const crons = candidates.filter((d) => d.type === 'cron');
+  if (crons.length === 1) return { requested, resolved: crons[0], how: 'the run has exactly one cron def', seen };
+
+  // A hook (not an emitter def) may be what the model authored instead — a plain `hooks/*.ts` cron.
+  const hookMatch = hooks.find((h) => want.some((t) => norm(h.slug).includes(t)));
+  if (hookMatch) return { requested, resolved: { slug: hookMatch.slug }, how: 'matched a plain hook slug', seen };
+
+  return { requested, resolved: null, how: 'UNRESOLVED', seen };
+}
+
+/**
+ * Words that name a part of the MACHINE, scanned in what THING says to a channel.
+ *
+ * Every team scenario's persona says the same thing: these people have never read a manual and will
+ * never say space, project, agent, hook, table, deploy… The rule binds THING's replies too — a
+ * journalist told her story now lives in "its own space", built by a "specialist", inside "the
+ * Alcalá Post project" has been handed three words that mean nothing to her (21-newsroom run 1
+ * step 4). Reported, never auto-failed: "the table by the window" is prose, and only a reader can
+ * tell. The judge gets the word and the sentence it appeared in.
+ */
+const JARGON = [
+  'space', 'spaces', 'project', 'projects', 'agent', 'agents', 'specialist', 'specialists',
+  'hook', 'hooks', 'webhook', 'emitter', 'integration', 'install', 'installed', 'database',
+  'schema', 'endpoint', 'endpoints', 'api', 'deploy', 'deployed', 'capability', 'consent',
+  'delegate', 'delegated', 'tasklist', 'workflow', 'session', 'sessions', 'runtime', 'sandbox',
+];
+
+/** Machine words in one message, with the sentence each appeared in. */
+export function jargonHits(text) {
+  const out = [];
+  const body = String(text ?? '');
+  for (const word of JARGON) {
+    const re = new RegExp(`\\b${word}\\b`, 'i');
+    const m = re.exec(body);
+    if (!m) continue;
+    const start = Math.max(0, m.index - 60);
+    out.push({ word, context: body.slice(start, m.index + word.length + 60).replace(/\s+/g, ' ').trim() });
+  }
+  return out;
+}
+
 /** `compactStep` + the team fields. The personal `compactStep` is called unchanged, then the turn
  *  rows are re-projected with who/role/channel/thread so the judge can attribute every line. */
 export function compactTeamStep(rec) {
@@ -332,6 +465,7 @@ export function compactTeamStep(rec) {
     asks: t.asks,
     answeredAsks: t.answeredAsks,
     consumedPendingAsk: t.consumedPendingAsk,
+    jargon: t.jargon,
     apps: t.apps,
     tokens: t.tokens,
     durationMs: t.durationMs,
@@ -342,6 +476,12 @@ export function compactTeamStep(rec) {
   if (rec.channels) base.channels = rec.channels;
   if (rec.activeProject) base.activeProject = rec.activeProject;
   if (rec.crossChannelPosts) base.crossChannelPosts = rec.crossChannelPosts;
+  // What the tick actually fired — the yaml can only carry a PLACEHOLDER name (the model authors
+  // the real emitter mid-run), so "which slug ran, and what else existed" is the whole evidence for
+  // a scheduled-turn step. `compactStep` knows nothing about it.
+  if (rec.runEmitter) base.runEmitter = rec.runEmitter;
+  if (rec.providerOutage) { base.providerOutage = rec.providerOutage; base.void = true; }
+  if (rec.answeredParkedAsk !== undefined) base.answeredParkedAsk = rec.answeredParkedAsk;
   return base;
 }
 
@@ -412,6 +552,8 @@ export class TeamScenarioRunner {
     this.liveness = null;
     /** sessionId → statements the thread had before the current turn (the snapshot is cumulative). */
     this.wroteMark = new Map();
+    /** Steps whose failure was the PROVIDER's, not the product's — see `provider.mjs`. */
+    this.voidSteps = [];
   }
 
   log(...a) {
@@ -627,6 +769,17 @@ export class TeamScenarioRunner {
       }
     }
 
+    // A run is hours of real model work. If the provider is already down, every turn will fail
+    // identically and the evidence will look like a product collapse — so refuse to start instead.
+    const provider = await checkProvider();
+    this.reporter.onProvider?.(provider);
+    if (!provider.ok) {
+      throw new FatalError(
+        `the model provider is unreachable — not starting a run that would record an outage as a product failure:\n  ` +
+          provider.hosts.map((h) => `${h.host}:${h.port} — ${h.ok ? `ok (${h.ms}ms)` : h.error}`).join('\n  '),
+      );
+    }
+
     const runId = this.runId ?? nextRunId(scenarioDir);
     // The one server-side difference a team scenario needs. The `.team/` directory (channels,
     // members, the thread→session map) lives inside `.lmthing`, so it rides along in every snapshot
@@ -689,13 +842,30 @@ export class TeamScenarioRunner {
         this.reporter.onStepStart?.({ step: num, verbs: rec.verbs, of: Math.min(through, steps.length) });
 
         const t0 = Date.now();
+        const logMark = logSize(run.logFile);
         const ledgerBefore = await this.ledgerIds(readPod);
         const channelsBefore = await this.channelSnapshot(pod, setup.editor);
         try {
-          activeProject = await this.runTeamStep({ step, num, pod, readPod, run, rec, activeProject, setup });
+          activeProject = await this.runTeamStep({ step, num, pod, readPod, run, rec, activeProject, setup, channelsBefore });
         } catch (e) {
           rec.error = String(e?.stack ?? e?.message ?? e);
           rec.notes.push(`STEP THREW: ${rec.error.split('\n')[0]}`);
+        }
+
+        // ── did the PROVIDER fail, rather than the product? ─────────────────────────────────────
+        // A turn that "gave up after its final retry" is only a finding when the pod was actually
+        // talking to a model. Read the step's own slice of the server log before judging it.
+        const failed = rec.error || rec.turns.some((t) => t.status === 'error' || t.status === 'timeout');
+        if (failed) {
+          const outage = providerOutageInLog(run.logFile, logMark);
+          if (outage) {
+            rec.providerOutage = outage;
+            rec.void = true;
+            rec.notes.push(
+              `VOID — the model provider was unreachable during this step (${outage.signature}). This step tests nothing; do not file it as a defect.`,
+            );
+            this.voidSteps.push(num);
+          }
         }
 
         // ── evidence ────────────────────────────────────────────────────────────────────────────
@@ -776,6 +946,10 @@ export class TeamScenarioRunner {
       outDir,
       runDir: run.dir,
       finishedAt: new Date().toISOString(),
+      // A run with void steps is not a result. Say so at the top level, where a judge reads first.
+      ...(this.voidSteps.length
+        ? { voidSteps: this.voidSteps, verdict: `VOID — ${this.voidSteps.length} step(s) failed because the model provider was unreachable` }
+        : {}),
     };
     writeFileSync(join(outDir, 'summary.json'), JSON.stringify(summary, null, 2));
     const tracePath = join(outDir, 'trace.md');
@@ -786,7 +960,7 @@ export class TeamScenarioRunner {
   }
 
   // ── per-step verb dispatch ────────────────────────────────────────────────────────────────────
-  async runTeamStep({ step, num, pod, readPod, run, rec, activeProject, setup }) {
+  async runTeamStep({ step, num, pod, readPod, run, rec, activeProject, setup, channelsBefore = [] }) {
     if (step.restart_pod) {
       rec.notes.push('restarting the team pod…');
       await restartRun(run);
@@ -882,17 +1056,50 @@ export class TeamScenarioRunner {
     }
 
     if (step.run_emitter) {
-      const spec = step.run_emitter;
-      const result =
-        typeof spec === 'string'
-          ? await readPod.runHook(activeProject, spec).catch((e) => ({ error: String(e?.message ?? e) }))
-          : spec.slug
-            ? await readPod.runHook(activeProject, spec.slug, spec.payload ?? {}).catch((e) => ({ error: String(e?.message ?? e) }))
-            : await readPod.runEmitter(activeProject, spec.scope, spec.name, spec.payload).catch((e) => ({ error: String(e?.message ?? e) }));
-      rec.runEmitter = { ...(typeof spec === 'string' ? { slug: spec } : spec.slug ? { slug: spec.slug } : { scope: spec.scope, name: spec.name }), result: compact(result) };
-      // A scheduled turn's whole point is that it POSTS somewhere. Give it a moment to land, then
-      // the cross-channel diff below records where.
-      await sleep(3000);
+      // The yaml's emitter name is a PLACEHOLDER — the model authored the real one earlier in this
+      // same run. Resolve it against what the pod actually has before firing anything.
+      const defs = scanEmitterDefs(run.dataDir, activeProject);
+      const hooks = (await readPod.listHooks().catch(() => ({ hooks: [] }))).hooks ?? [];
+      const resolution = resolveEmitter(step.run_emitter, defs, hooks.filter((h) => h.projectId === activeProject));
+      rec.runEmitter = {
+        requested: resolution.requested,
+        resolved: resolution.resolved,
+        how: resolution.how,
+        // Everything the run HAS, so an unresolved step is readable as "the model authored these
+        // instead" rather than as a silent no-op.
+        available: resolution.seen,
+      };
+      if (!resolution.resolved) {
+        rec.notes.push(
+          `run_emitter: nothing matches ${JSON.stringify(resolution.requested)} — the run has ${defs.length} emitter def(s): ${defs.map((d) => d.slug).join(', ') || '(none)'}`,
+        );
+      } else {
+        const slug = resolution.resolved.slug ?? `@emitter:${resolution.resolved.scope}:${resolution.resolved.name}`;
+        rec.notes.push(`run_emitter: fired ${slug} (${resolution.how})`);
+        const result = await readPod
+          .runHook(activeProject, slug, step.run_emitter.payload ?? {})
+          .catch((e) => ({ error: String(e?.message ?? e) }));
+        rec.runEmitter.slug = slug;
+        rec.runEmitter.result = compact(result);
+      }
+      // Nothing was fired, so there is nothing to wait for — waiting the full budget here would
+      // burn fifteen minutes proving that an emitter that was never run posted nothing.
+      if (!resolution.resolved) return activeProject;
+
+      // A scheduled turn's whole point is that it POSTS somewhere, out of band, while nobody is
+      // typing. The tick returns as soon as the dispatch is QUEUED — the agent then reads state,
+      // reasons and writes, which takes as long as it takes. So WAIT for the post rather than
+      // sleeping a guessed interval: a fixed sleep either wastes minutes or, worse, ends the step
+      // before the brief lands and records "it posted nothing" for a feature that works.
+      const waited = await this.waitForAnyPost(pod, setup.editor, channelsBefore, {
+        timeoutMs: Number(process.env.SCENARIO_EMITTER_WAIT_MS || 900_000),
+      });
+      rec.runEmitter.postedAfterMs = waited.ms;
+      rec.notes.push(
+        waited.posted
+          ? `the tick produced a post in #${waited.channelId} after ${(waited.ms / 1000).toFixed(0)}s`
+          : `NOTHING was posted in any channel within ${(waited.ms / 1000).toFixed(0)}s of the tick`,
+      );
     }
 
     return activeProject;
@@ -906,6 +1113,25 @@ export class TeamScenarioRunner {
 
   async ledgerIds(readPod) {
     return new Set((await this.ledger(readPod)).map((s) => s.sessionId));
+  }
+
+  /**
+   * Wait until any channel gains a message, or the budget runs out.
+   *
+   * The completion signal for a SCHEDULED turn. Nobody is in a thread to watch over the socket (the
+   * tick is not a reply to anyone), and the run endpoint answers as soon as the dispatch is queued —
+   * so the only honest "it happened" is the message appearing in the log.
+   */
+  async waitForAnyPost(pod, who, before, { timeoutMs = 900_000, pollMs = 5_000 } = {}) {
+    const beforeById = new Map((before ?? []).map((c) => [c.id, c.count]));
+    const t0 = Date.now();
+    while (Date.now() - t0 < timeoutMs) {
+      const now = await this.channelSnapshot(pod, who);
+      const grew = now.find((c) => c.count > (beforeById.get(c.id) ?? 0));
+      if (grew) return { posted: true, channelId: grew.id, ms: Date.now() - t0 };
+      await sleep(pollMs);
+    }
+    return { posted: false, channelId: null, ms: Date.now() - t0 };
   }
 
   /** Every channel with its message count — the cheap before/after a cross-channel post shows up in. */

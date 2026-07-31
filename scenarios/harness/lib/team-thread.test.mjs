@@ -56,8 +56,8 @@ class FakeTeamPod {
     this.emit({ type: 'message', message });
     return message;
   }
-  status(channelId, threadId, status, activity) {
-    this.emit({ type: 'thing_status', channelId, threadId, status, ...(activity ? { activity } : {}) });
+  status(channelId, threadId, status, activity, askId) {
+    this.emit({ type: 'thing_status', channelId, threadId, status, ...(activity ? { activity } : {}), ...(askId ? { askId } : {}) });
   }
 }
 
@@ -224,5 +224,81 @@ describe('ThreadSession threading', () => {
     await expect(
       thread.ask('ana', '@thing hello', { ...FAST, timeoutMs: 120, stallGraceMs: 60 }),
     ).rejects.toThrow(/no thing_status terminal/);
+  });
+});
+
+describe('ThreadSession — the pod SAYS it is parked', () => {
+  it('acts on `thing_status: waiting` immediately, without waiting out the ask grace', async () => {
+    const pod = new FakeTeamPod();
+    const asked = [];
+    const thread = new ThreadSession(pod, {
+      channelId: 'general',
+      onAsk: (m) => { asked.push(m.ask?.id); return 'Teal.'; },
+    });
+    await thread.open();
+    // A grace long enough that the heuristic could NOT have fired — only the `waiting` frame can.
+    const turn = thread.ask('ana', '@thing which colour?', { ...FAST, askGraceMs: 60_000 });
+    await new Promise((r) => setTimeout(r, 20));
+    const threadId = pod.posted[0].id;
+    const q = pod.thingSays('general', threadId, { text: 'Teal or amber?', ask: { id: 'ask-9', expiresAt: '2026-08-01T00:00:00Z' } });
+    pod.status('general', threadId, 'waiting', undefined, 'ask-9');
+
+    await new Promise((r) => setTimeout(r, 200));
+    expect(asked).toEqual(['ask-9']);
+    const answer = pod.posted.find((m) => m.text === 'Teal.');
+    expect(answer?.threadId).toBe(threadId);
+
+    pod.thingSays('general', threadId, { text: 'Teal it is.' });
+    pod.status('general', threadId, 'done');
+    const result = await turn;
+    expect(result.status).toBe('done');
+    expect(result.asks[0]).toMatchObject({ askId: 'ask-9', expiresAt: '2026-08-01T00:00:00Z', answeredWith: 'Teal.' });
+    expect(result.text).toBe('Teal it is.');
+    void q;
+  });
+
+  it('still reports a park when nothing answers it, carrying the ask id', async () => {
+    const pod = new FakeTeamPod();
+    const thread = new ThreadSession(pod, { channelId: 'general' });
+    await thread.open();
+    const turn = thread.ask('ana', '@thing which colour?', { ...FAST, askGraceMs: 60_000, parkGraceMs: 150 });
+    await new Promise((r) => setTimeout(r, 20));
+    const threadId = pod.posted[0].id;
+    pod.thingSays('general', threadId, { text: 'Teal or amber?', ask: { id: 'ask-7', expiresAt: 'later' } });
+    pod.status('general', threadId, 'waiting', undefined, 'ask-7');
+    const result = await turn;
+    expect(result.status).toBe('parked');
+    expect(result.asks[0].askId).toBe('ask-7');
+    expect(pod.posted).toHaveLength(1);
+  });
+});
+
+describe('ThreadSession — a receipt is not a question', () => {
+  it('does not report `parked` when a plain reply ANSWERED the ask', async () => {
+    const pod = new FakeTeamPod();
+    const thread = new ThreadSession(pod, { channelId: 'general' });
+    await thread.open();
+    const turn = thread.ask('ana', '@thing build it', { ...FAST, parkGraceMs: 150 });
+    await new Promise((r) => setTimeout(r, 20));
+    const threadId = pod.posted[0].id;
+    pod.thingSays('general', threadId, { text: 'Where do reprint costs live?', ask: { id: 'ask-3', expiresAt: 'later' } });
+    pod.status('general', threadId, 'waiting', undefined, 'ask-3');
+    await new Promise((r) => setTimeout(r, 80));
+
+    // The pod's receipt for the answer — a `system` message that RESOLVES the ask.
+    pod.thingSays('general', threadId, {
+      kind: 'system',
+      text: 'Ana Duarte’s reply was taken as the answer to THING’s question: “separately.”',
+      answersAsk: 'ask-3',
+    });
+    pod.thingSays('general', threadId, { text: 'Separately it is — done.' });
+    pod.status('general', threadId, 'done');
+
+    const result = await turn;
+    expect(result.status).toBe('done');
+    expect(result.text).toBe('Separately it is — done.');
+    // Exactly one question was asked; the receipt must not have been counted as a second.
+    expect(result.asks).toHaveLength(1);
+    expect(result.asks[0].askId).toBe('ask-3');
   });
 });

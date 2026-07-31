@@ -96,7 +96,14 @@ const MESSAGES: Record<string, unknown[]> = {
 
 /** An in-memory `TeamClient`. Every method resolves; none of them touch the network. */
 export function fakeTeamClient(
-  overrides: { messages?: Record<string, unknown[]>; hasMore?: boolean } = {},
+  overrides: {
+    messages?: Record<string, unknown[]>
+    hasMore?: boolean
+    /** Never resolve `uploadAttachment` — how the `team-attachments` fixture freezes the composer
+     *  in its "Uploading…" state for the screenshot, instead of racing a real upload against the
+     *  shot being taken. */
+    neverResolveUpload?: boolean
+  } = {},
 ): TeamClient {
   const messages = { ...MESSAGES, ...(overrides.messages ?? {}) }
   const ok = <T,>(v: T) => Promise.resolve(v)
@@ -124,7 +131,81 @@ export function fakeTeamClient(
     setProfile: () => ok({ profile: MEMBERS[0] }),
     // No socket in a shot: `entry.tsx` stubs `WebSocket`, so this URL is never dialled.
     socketUrl: () => ok('ws://localhost:0/api/team/ws'),
+    uploadAttachment: overrides.neverResolveUpload
+      ? () => new Promise<never>(() => {})
+      : (input: { filename?: string; mediaType: string }) =>
+          ok({ id: `up-${input.filename ?? 'file'}`, kind: 'file', url: '#', mediaType: input.mediaType, filename: input.filename }),
+    // No real pod behind this harness, so no token to append — the fixtures that need a real
+    // image (`team-attachments`) hand `MESSAGES` a `data:` URL directly, which needs nothing
+    // resolved onto it.
+    attachmentUrl: (url: string) => url,
   } as unknown as TeamClient
+}
+
+// A tiny inline SVG standing in for a real screenshot — an actual `data:` image so the attachment
+// fixture below renders a real thumbnail rather than a broken-image icon (there is no pod behind
+// this harness to serve `/api/uploads/*`).
+const PLACEHOLDER_IMAGE =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200">' +
+      '<rect width="320" height="200" fill="#d8dee8"/>' +
+      '<text x="160" y="105" font-family="sans-serif" font-size="16" fill="#4b5563" text-anchor="middle">empty-state.png</text>' +
+      '</svg>',
+  )
+
+// Two sent messages carrying an attachment — the two states `messages.tsx` renders differently
+// (an image thumbnail vs. a named file chip). Appended to `general`'s own transcript rather than a
+// dedicated empty channel, so the fixture also proves an attachment sits correctly alongside a
+// transcript that already has ordinary text messages in it.
+const ATTACHMENT_MESSAGES: unknown[] = [
+  ...GENERAL,
+  {
+    id: 'att-img', ts: at(3), channelId: 'c-general', kind: 'user', userId: 'u-kim', email: 'kim@lmthing.org',
+    text: 'Redline for the empty state, before/after',
+    attachments: [{ id: 'att-img-1', kind: 'image', url: PLACEHOLDER_IMAGE, mediaType: 'image/png', filename: 'empty-state.png' }],
+  },
+  {
+    id: 'att-file', ts: at(2), channelId: 'c-general', kind: 'user', userId: 'u-bo', email: 'bo@lmthing.org',
+    text: 'Full write-up is attached',
+    attachments: [{ id: 'att-file-1', kind: 'file', url: '#', mediaType: 'application/pdf', filename: 'design-review.pdf' }],
+  },
+]
+
+/**
+ * The three attachment states in one screenshot: a sent image, a sent file, and — via a real
+ * (synthetic) file-pick through the composer's own hidden input — the composer FROZEN mid-upload.
+ * `fakeTeamClient({ neverResolveUpload: true })` never resolves the upload, so "Uploading…" is
+ * still showing when the shot is taken; a feature nobody can see is a feature nobody can review.
+ */
+function TeamAttachments() {
+  const client = React.useMemo(
+    () => fakeTeamClient({ messages: { 'c-general': ATTACHMENT_MESSAGES }, neverResolveUpload: true }),
+    [],
+  )
+  React.useEffect(() => {
+    const input = document.querySelector<HTMLInputElement>('[data-testid="attach-input"]')
+    if (!input) return
+    const file = new File(['# Q3 roadmap notes'], 'roadmap-notes.md', { type: 'text/markdown' })
+    const dt = new DataTransfer()
+    dt.items.add(file)
+    input.files = dt.files
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+  }, [])
+  return (
+    <TeamChannelsView
+      client={client}
+      isEditor
+      activeChannelId="c-general"
+      rail={null}
+      onSelectChannel={() => {}}
+      onOpenThread={() => {}}
+      onOpenApp={() => {}}
+      onCloseRail={() => {}}
+      appUrl={(id) => `/app/${id}`}
+      team={{ id: 't1', name: 'lmthing' }}
+    />
+  )
 }
 
 function Team({ rail, channel = 'c-general' }: { rail?: { kind: 'thread'; threadId: string }; channel?: string }) {
@@ -330,6 +411,7 @@ export const FIXTURES: Record<string, () => React.ReactElement> = {
   },
   'team-thread': () => <Team rail={{ kind: 'thread', threadId: 'm4' }} />,
   'team-dm': () => <Team channel="c-dm-ana" />,
+  'team-attachments': () => <TeamAttachments />,
   // A channel the pod says has MORE history behind it. Exists to photograph the "Load earlier
   // messages" affordance, which is invisible in every other fixture because they all report
   // `hasMore: false` — a feature nobody can see is a feature nobody can review.

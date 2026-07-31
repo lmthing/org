@@ -243,6 +243,8 @@ export class ThreadSession {
     let liveMark = liveness ? liveness() : null;
     let lastThingAt = null;
     let parkedSince = null;
+    /** Set by a `thing_status: waiting` frame — the pod SAYING it is parked, not us guessing. */
+    let waitingAskId = null;
     let answered = 0;
 
     const mine = (f) =>
@@ -265,7 +267,9 @@ export class ThreadSession {
           if (m.id === sent.id) continue; // our own post echoed back
           if (m.kind === 'thing' || m.kind === 'system') {
             replies.push(m);
-            lastThingAt = Date.now();
+            // Only a genuine `thing` message can start the "is this a question?" clock — see the
+            // askable filter below.
+            if (m.kind === 'thing' && !m.answersAsk) lastThingAt = Date.now();
             parkedSince = null;
           }
           if (m.app) apps.push(m.app);
@@ -273,6 +277,13 @@ export class ThreadSession {
           if (f.status === 'running') {
             running = true;
             if (f.activity) activity.push(f.activity);
+          } else if (f.status === 'waiting') {
+            // The AUTHORITATIVE park signal. Before the pod emitted this, a park could only be
+            // INFERRED (a `thing` message with no terminal behind it within `askGraceMs`), which
+            // costs twelve seconds and cannot tell a question apart from a slow answer. `askId`
+            // names the ask, so the reply that answers it can say which one it answered.
+            waitingAskId = f.askId ?? waitingAskId;
+            running = true;
           } else if (TERMINAL.has(f.status)) {
             terminal = f.status;
           }
@@ -293,11 +304,27 @@ export class ThreadSession {
         }
       }
 
-      // ── a `thing` message with no terminal behind it is a QUESTION ─────────────────────────
-      if (lastThingAt && Date.now() - lastThingAt >= askGraceMs) {
-        const question = replies[replies.length - 1];
+      // ── a parked question ──────────────────────────────────────────────────────────────────
+      // `waiting` is the pod telling us; the grace-based read is the fallback for a turn that
+      // parks without one (and for a pod that predates the frame).
+      const parkedNow = waitingAskId !== null || (lastThingAt && Date.now() - lastThingAt >= askGraceMs);
+      if (parkedNow) {
+        // A QUESTION is a `thing` message THING posted to ask something. Two things are not:
+        //   - the `system` RECEIPT the pod appends when a plain reply is taken as the answer
+        //     ("Ana Duarte's reply was taken as the answer to THING's question: …"), and
+        //   - any message carrying `answersAsk`, which by definition resolves one.
+        // Treating the receipt as a new question reported step 8 of 20-studio run 4 as `parked`
+        // when the ask had just been ANSWERED — the driver inventing a question nobody asked.
+        const askable = replies.filter((m) => m.kind === 'thing' && !m.answersAsk);
+        const question =
+          askable.filter((m) => (waitingAskId ? m.ask?.id === waitingAskId : true)).slice(-1)[0] ??
+          askable[askable.length - 1];
+        if (!question) {
+          await sleep(pollMs);
+          continue;
+        }
         if (!asks.some((a) => a.message.id === question.id)) {
-          asks.push({ message: question, answeredWith: null });
+          asks.push({ message: question, askId: question.ask?.id ?? waitingAskId ?? null, expiresAt: question.ask?.expiresAt ?? null, answeredWith: null });
           this.log('parked on a question:', (question.text ?? '').slice(0, 140));
           const answer = onAsk ? onAsk(question, { threadId, channelId: this.channelId }) : undefined;
           if (typeof answer === 'string' && answer.length) {
@@ -305,6 +332,7 @@ export class ThreadSession {
             answered++;
             lastThingAt = null;
             parkedSince = null;
+            waitingAskId = null;
             // The next message in the thread IS the answer (`answerPendingAsk`), so this must not
             // look like a fresh mention — post it plainly, in-thread, as a person would.
             await this.pod.postMessage(this.answerAs ?? who, this.channelId, answer, { threadId });
