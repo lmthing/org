@@ -39,14 +39,17 @@ describe('buildAmbientDts — generic fs is removed from the model surface (only
     expect(names).not.toContain('readFileRaw');
   });
 
-  it('LIBRARY_DTS bundles keep the full raw-primitive set (for typecheckSource), even though no context emits them by default', () => {
-    // host-tools.ts typecheckSource checks standalone space-function sources against
-    // LIBRARY_DTS, which must still know readFileRaw/writeFileRaw/execShell (architect
-    // builder bodies call them) — that is DISTINCT from the per-agent ambient DTS above.
+  it('the LIBRARY_DTS bundles no longer carry the raw primitives either', () => {
+    // They used to, so `typecheckSource` (host-tools.ts) saw the full global set when
+    // checking a standalone space-function source. But `typecheckSource` DROPS "Cannot
+    // find name" (TS2304/2552) — a function may legitimately reference siblings absent
+    // from an isolated check — so an undeclared execShell in a builder body was never
+    // reported anyway. The only thing the re-append achieved was keeping three raw
+    // fs/shell primitives alive in a bundle the package index exports.
     for (const bundle of [LIBRARY_DTS, LIBRARY_DTS_NO_ASK]) {
-      expect(bundle).toContain('declare function execShell(');
-      expect(bundle).toContain('declare function writeFileRaw(');
-      expect(bundle).toContain('declare function readFileRaw(');
+      expect(bundle).not.toContain('declare function execShell(');
+      expect(bundle).not.toContain('declare function writeFileRaw(');
+      expect(bundle).not.toContain('declare function readFileRaw(');
     }
   });
 });
@@ -80,7 +83,8 @@ describe('buildAmbientDts — per-context declaration contract', () => {
     for (const absent of ['ask', 'tasklist', 'fork', 'delegate', 'setSessionMeta', 'execShell', 'writeFileRaw', 'readFileRaw', 'createScratch', 'fetch']) {
       expect(names, `read-only fork DTS must not declare ${absent}`).not.toContain(absent);
     }
-    for (const present of ['display', 'setActivity', 'inspect', 'loadKnowledge', 'sleep', 'registerSpace', 'currentTask', 'process']) {
+    expect(names, 'a read-only fork does not get registerSpace injected, so it must not be declared either').not.toContain('registerSpace');
+    for (const present of ['display', 'setActivity', 'inspect', 'loadKnowledge', 'sleep', 'currentTask', 'process']) {
       expect(names).toContain(present);
     }
   });
@@ -233,5 +237,44 @@ describe('per-node capability narrowing shapes the fork DTS', () => {
   it('the db node can db.insert but NOT writeKnowledge', () => {
     expect(runTsc({ ambientDts: dbNode, sessionContext: '', statement: dbStmt }).ok).toBe(true);
     expect(runTsc({ ambientDts: dbNode, sessionContext: '', statement: knowStmt }).ok).toBe(false);
+  });
+});
+
+/**
+ * The invariant the capability→{inject, dts} registry exists to hold: **not granted ⇒ not
+ * injected AND absent from the DTS**, so a call the context cannot make fails typecheck
+ * (clean, retryable) instead of passing typecheck and throwing at runtime.
+ *
+ * `registerSpace` was the one global that broke it. It sat in COMMON_DTS, declared
+ * unconditionally "matching the pre-unification DTS", while `createChildVM` injected it
+ * only under `caps.registerSpace` — so in a delegate and in a read-only fork the model
+ * could write `await registerSpace(dir)`, watch it typecheck, and get a runtime throw.
+ * Only the injection side was ever tested (`fork.test.ts` — "withholds registerSpace from
+ * read-only roles"), which is why the DTS half drifted unnoticed.
+ */
+describe('buildAmbientDts — registerSpace is declared exactly where it is injected', () => {
+  const contexts = [
+    ['session', sessionCapabilities()],
+    ['delegate', delegateCapabilities()],
+    ['fork explore (read-only)', forkCapabilities('explore', false)],
+    ['fork plan (read-only)', forkCapabilities('plan', false)],
+    ['fork general (write-capable)', forkCapabilities('general', false)],
+  ] as const;
+
+  for (const [label, caps] of contexts) {
+    it(`${label}: injected=${caps.registerSpace} ⇒ declared=${caps.registerSpace}`, () => {
+      const declared = declNames(buildAmbientDts({ capabilities: caps })).includes('registerSpace');
+      expect(
+        declared,
+        `${label} injects registerSpace=${caps.registerSpace} but declares=${declared} — the two must move together`,
+      ).toBe(caps.registerSpace);
+    });
+  }
+
+  it('only a write-capable fork holds it at all — no session and no delegate', () => {
+    expect(sessionCapabilities().registerSpace, 'a session orchestrator must not register spaces').toBe(false);
+    expect(delegateCapabilities().registerSpace).toBe(false);
+    expect(forkCapabilities('explore', false).registerSpace).toBe(false);
+    expect(forkCapabilities('general', false).registerSpace).toBe(true);
   });
 });

@@ -4,8 +4,7 @@ import {
   LIBRARY_DTS,
   LIBRARY_DTS_NO_ASK,
   EXEC_SHELL_DTS,
-  WRITE_FILE_RAW_DTS,
-  READ_FILE_RAW_DTS,
+  REGISTER_SPACE_DTS,
   SCRATCH_DTS,
   composeDbDts,
   API_CALL_DTS,
@@ -38,29 +37,42 @@ describe('library-dts write primitives are gated', () => {
   it('COMMON_DTS declares NONE of the generic fs primitives (execShell/writeFileRaw/readFileRaw)', () => {
     expect(COMMON_DTS).not.toContain('execShell');
     expect(COMMON_DTS).not.toContain('writeFileRaw');
-    // readFileRaw moved OUT of COMMON_DTS (it was the last always-declared raw primitive) —
-    // it is internal-only now, present only in the LIBRARY_DTS bundle for typecheckSource.
     expect(COMMON_DTS).not.toContain('readFileRaw');
   });
 
-  it('LIBRARY_DTS still includes all three raw primitives via fragments (for typecheckSource)', () => {
-    expect(LIBRARY_DTS).toContain('declare function execShell(');
-    expect(LIBRARY_DTS).toContain('declare function writeFileRaw(');
-    expect(LIBRARY_DTS).toContain('declare function readFileRaw(');
+  /**
+   * The bundles used to re-append execShell/writeFileRaw/readFileRaw so `typecheckSource`
+   * (host-tools.ts) saw the FULL global set when checking a standalone space-function
+   * source. It never bought anything: `typecheckSource` DROPS "Cannot find name" (TS2304/
+   * 2552) so a builder body naming an undeclared primitive was never reported either way.
+   * What it did buy was three raw fs/shell primitives kept alive in a bundle exported from
+   * the package index. `readFileRaw`/`writeFileRaw` now have no DTS fragment anywhere, and
+   * `execShell` has exactly one declaration site: the engineer's `fs:scratch` sandbox.
+   */
+  it('no bundle declares the raw fs/shell primitives any more', () => {
+    for (const bundle of [LIBRARY_DTS, LIBRARY_DTS_NO_ASK]) {
+      expect(bundle).not.toContain('declare function execShell(');
+      expect(bundle).not.toContain('declare function writeFileRaw(');
+      expect(bundle).not.toContain('declare function readFileRaw(');
+    }
   });
 
-  it('LIBRARY_DTS_NO_ASK also includes all three raw primitives but not ask', () => {
-    expect(LIBRARY_DTS_NO_ASK).toContain('declare function execShell(');
-    expect(LIBRARY_DTS_NO_ASK).toContain('declare function writeFileRaw(');
-    expect(LIBRARY_DTS_NO_ASK).toContain('declare function readFileRaw(');
+  it('LIBRARY_DTS_NO_ASK is LIBRARY_DTS without ask', () => {
+    expect(LIBRARY_DTS).toContain('declare function ask');
     expect(LIBRARY_DTS_NO_ASK).not.toContain('declare function ask');
   });
 
   it('the split fragments carry the verbatim signatures', () => {
     expect(EXEC_SHELL_DTS).toContain('execShell(cmd: string');
-    expect(WRITE_FILE_RAW_DTS).toContain('writeFileRaw(path: string, content: string)');
-    expect(READ_FILE_RAW_DTS).toContain('readFileRaw(path: string');
+    expect(REGISTER_SPACE_DTS).toContain('registerSpace(dir: string)');
     expect(SCRATCH_DTS).toContain('createScratch()');
+  });
+
+  /** `registerSpace` moved OUT of COMMON_DTS: its injection is gated on
+   *  `caps.registerSpace`, so its declaration has to be gated the same way. */
+  it('COMMON_DTS no longer declares registerSpace — it has its own gated fragment', () => {
+    expect(COMMON_DTS).not.toContain('registerSpace');
+    expect(REGISTER_SPACE_DTS).toContain('declare function registerSpace(');
   });
 });
 

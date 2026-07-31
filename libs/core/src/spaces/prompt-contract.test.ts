@@ -2,9 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { agentPromptCorpus, loadPointsIn } from './agent-prompt-corpus.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SYSTEM_SPACES = join(__dirname, '..', '..', 'system-spaces');
+
+/** THING's whole readable prompt: the always-on instruct body plus every `playbooks/*`
+ *  knowledge file it can pull in with `loadKnowledge`. Doctrine that lives behind a load
+ *  is asserted against THIS; anything that must hold on EVERY turn is asserted against
+ *  `instruct.md` alone. See `agent-prompt-corpus.ts`. */
+const thingCorpus = () => agentPromptCorpus(join(SYSTEM_SPACES, 'user-thing'), 'thing');
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir)) {
@@ -166,7 +173,9 @@ describe('user-thing/thing — the ingest turn must ASK, and must not leak its p
    * one fixed sentence shape and say explicitly that riding facts don't resolve the ambiguity.
    */
   it('the "keep this front of mind" ambiguity covers the rememberer-as-subject phrasing and multi-fact statements', () => {
-    const src = instruct();
+    // The full phrasing list lives in the `playbooks/writing/world-and-preferences` aspect;
+    // the instruct keeps the routing line that reaches it. Assert on the corpus.
+    const src = thingCorpus();
     expect(
       src,
       'the ambiguity rule must not be scoped to one grammatical subject ("X slip") — "don\'t let ME/US forget" is the same ambiguity with a different subject',
@@ -209,6 +218,9 @@ describe('user-thing/thing — act on a determined change, ask only when the cho
   // Whitespace-flattened source: line-wrap must never break these anchors (a rewrap has broken
   // hardcoded regexes in this file before). Match single-space phrases against the flattened body.
   const flat = () => instruct().replace(/\s+/g, ' ');
+  // Same, over the whole corpus — for doctrine that now lives in a `playbooks/*` aspect THING
+  // loads when it takes that route. `flat()` stays for rules that must hold on EVERY turn.
+  const flatCorpus = () => thingCorpus().replace(/\s+/g, ' ');
 
   /**
    * Live 06-tanzania run 19: THREE ask-vs-act failures in ONE run, pulling opposite ways.
@@ -242,7 +254,7 @@ describe('user-thing/thing — act on a determined change, ask only when the cho
    * an update. The new record must move any total that sums those records.
    */
   it('routes a newly-reported payment to a NEW row (db.insert), not an annotation on an existing one', () => {
-    const src = flat();
+    const src = flatCorpus();
     expect(src).toMatch(/a payment that had no prior row is a new row/i);
     expect(src).toMatch(/must MOVE any total that sums those records/i);
     // The one case that IS an update: correcting a value the row already holds (keeps step 16 green).
@@ -256,7 +268,7 @@ describe('user-thing/thing — act on a determined change, ask only when the cho
    * re-guess, never abandon on the throw.
    */
   it('extends the field-name discipline to writes: introspect real columns before db.insert/db.update', () => {
-    const src = flat();
+    const src = flatCorpus();
     expect(src).toMatch(/keys you pass to `db\.insert`/);
     expect(src).toMatch(/THROWS `no such column`/i);
     expect(src).toMatch(/never re-guess a second name/i);
@@ -269,7 +281,7 @@ describe('user-thing/thing — act on a determined change, ask only when the cho
    * nothing.
    */
   it('forbids ending a turn silently after repeated write failures', () => {
-    const src = flat();
+    const src = flatCorpus();
     expect(src).toMatch(/keeps failing is never a reason to fall silent/i);
     expect(src).toMatch(/empty reply after failed writes/i);
     expect(src).toMatch(/Recover the write, or report that it failed/i);
@@ -284,7 +296,7 @@ describe('user-thing/thing — act on a determined change, ask only when the cho
    * carrying inline "fix it yourself" prose — reverting the route back to prose turns this RED.
    */
   it('routes a flagged/mis-adding figure to the deterministic resolve_flagged_figure tasklist', () => {
-    const src = flat();
+    const src = flatCorpus();
     expect(src).toMatch(/tasklist\('resolve_flagged_figure', ?\{ ?complaint ?\}\)/);
     // 06-routing (07-life-admin run 19 step 8): "go through the rows and check the maths" over a
     // too-high total READ like a question, so THING answered it inline (path 1) — re-printed a
@@ -305,7 +317,7 @@ describe('user-thing/thing — act on a determined change, ask only when the cho
    * (The narrow correction-of-an-existing-row case stays inline, keeping step 16 green.)
    */
   it('routes a newly-reported payment through the hardened write_fact tasklist', () => {
-    expect(flat()).toMatch(/tasklist\('write_fact', ?\{ ?fact, ?kind: ?'personal' ?\}\)/);
+    expect(flatCorpus()).toMatch(/tasklist\('write_fact', ?\{ ?fact, ?kind: ?'personal' ?\}\)/);
   });
 
   /**
@@ -317,7 +329,7 @@ describe('user-thing/thing — act on a determined change, ask only when the cho
    * store-vs-remind inline — reverting the route to an inline decision turns this RED.
    */
   it('routes a store-vs-remind-ambiguous volunteered item through write_fact', () => {
-    expect(flat()).toMatch(/tasklist\('write_fact', ?\{ ?fact, ?kind: ?'preference' ?\}\)/);
+    expect(flatCorpus()).toMatch(/tasklist\('write_fact', ?\{ ?fact, ?kind: ?'preference' ?\}\)/);
   });
 });
 
@@ -581,10 +593,9 @@ describe('system-appbuilder repair turns', () => {
 
 describe('user-thing supplied-material organization', () => {
   it('consumes the organizer envelope inline without re-entering the build', () => {
-    const thing = readFileSync(
-      join(SYSTEM_SPACES, 'user-thing', 'agents', 'thing', 'instruct.md'),
-      'utf8',
-    );
+    // The organizer call shape lives in the `playbooks/paths/application` aspect THING loads
+    // when it takes path 4 — the always-on body carries the gate that decides to take it.
+    const thing = thingCorpus();
 
     expect(thing).toMatch(/organize_material[\s\S]{0,700}?\.then\(\(organized\) => display/);
     expect(thing).toMatch(/Do NOT delegate to the automator or architect, call the organizer again,\s+or continue authoring/i);

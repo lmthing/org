@@ -27,11 +27,25 @@ export const DELEGATE_DTS = `declare function delegate(packageName: string, agen
 declare function delegate(packageName: string, agentName: string, action?: string, opts?: DelegateOpts): Promise<any>;`;
 
 /**
+ * `registerSpace()` — load a directory as a space and register it into the LIVE
+ * runtime, so a later `delegate()` can reach it by the returned key.
+ *
+ * Emitted by `buildAmbientDts` ONLY when `caps.registerSpace` (write-capable fork
+ * roles — where the architect's `register`/`reregister` nodes actually run). It used
+ * to sit in `COMMON_DTS`, declared unconditionally "matching the pre-unification DTS,
+ * where only ask/tasklist/fork/delegate were stripped" — which broke the invariant the
+ * whole capability→{inject, dts} registry exists to hold: in a delegate and in a
+ * read-only fork the global is NOT injected, so `await registerSpace(dir)` typechecked
+ * and then threw at runtime, instead of failing typecheck cleanly and retryably.
+ */
+export const REGISTER_SPACE_DTS = `declare function registerSpace(dir: string): Promise<{ ok: boolean; spaceKey: string; agentSlug: string; error?: string }>;`;
+
+/**
  * Declarations present in EVERY VM context (session, fork leaf, delegate): the
  * non-orchestration globals, supporting interfaces, host-injected primitives and
- * the design-system catalog. NOTE: `registerSpace` stays declared even where the
- * global is not injected (read-only fork roles, delegates) — matching the
- * pre-unification DTS, where only ask/tasklist/fork/delegate were stripped.
+ * the design-system catalog. Everything here is injected unconditionally by
+ * `injectHostTools`, which is what earns it an unconditional declaration — a global
+ * whose injection is gated belongs in its own fragment, gated the same way.
  */
 export const COMMON_DTS = `
 declare function display(descriptor: unknown): void;
@@ -40,7 +54,6 @@ declare function setActivity(text: string): void;
 declare function inspect(...args: (unknown | [unknown, InspectQuery])[]): Promise<void>;
 declare function loadKnowledge(...path: string[]): Promise<any>;
 declare function sleep(duration: string): Promise<void>;
-declare function registerSpace(dir: string): Promise<{ ok: boolean; spaceKey: string; agentSlug: string; error?: string }>;
 
 declare interface JSXDescriptor {
   type: string | ((...args: unknown[]) => unknown);
@@ -108,18 +121,25 @@ declare function progress(): { episodes: number; toolCalls: number; elapsedMs: n
 ` + '\n' + catalogDts();
 
 /**
- * Raw fs/shell primitives. These are NO LONGER emitted in any agent's model
- * ambient DTS by default — `readFileRaw`/`writeFileRaw` are internal-only host
- * primitives (memory/todos + the architect builder functions call them in their
- * bodies, which are NOT typechecked against the model DTS), and `execShell` is
- * emitted ONLY for the engineer's `fs:scratch` sandbox (where it is the
- * scratch-rooted variant). They stay bundled into `LIBRARY_DTS`/`LIBRARY_DTS_NO_ASK`
- * below solely so `typecheckSource` (host-tools.ts) keeps the FULL global set when
- * it checks a standalone space-function source. See exec/bootstrap.ts buildAmbientDts.
+ * `execShell`, and the ONE surface it is declared on.
+ *
+ * `readFileRaw`/`writeFileRaw` have no DTS fragment at all: they are internal-only
+ * host primitives (memory/todos + the architect builder functions call them in their
+ * bodies, which are NOT typechecked against any DTS), so nothing should ever be able
+ * to name them and typecheck. `execShell` is emitted ONLY for the engineer's
+ * `fs:scratch` sandbox, where it is the scratch-rooted variant — see
+ * `exec/bootstrap.ts#buildAmbientDts`.
+ *
+ * The three used to be re-appended to `LIBRARY_DTS`/`LIBRARY_DTS_NO_ASK` so that
+ * `typecheckSource` (host-tools.ts) checked a standalone space-function source against
+ * the FULL global set. That bought nothing: `typecheckSource` already DROPS "Cannot
+ * find name" diagnostics (TS2304/2552) because one function may legitimately reference
+ * sibling functions absent from an isolated check, so an undeclared `execShell(...)` in
+ * a builder body was never going to be reported either way. What the re-append DID do
+ * was keep three raw fs/shell primitives alive in a bundle exported from the package
+ * index — a surface with no reader and a plain downside.
  */
 export const EXEC_SHELL_DTS = `declare function execShell(cmd: string, opts?: { timeout?: number }): { ok: boolean; stdout: string; stderr: string; exitCode: number };`;
-export const WRITE_FILE_RAW_DTS = `declare function writeFileRaw(path: string, content: string): { ok: boolean; bytes: number; error?: string };`;
-export const READ_FILE_RAW_DTS = `declare function readFileRaw(path: string, opts?: { offset?: number; limit?: number }): { ok: boolean; content: string; lines: number; truncated: boolean; error?: string };`;
 
 /**
  * `fs:scratch` earns `createScratch` — the engineer creates a throwaway
@@ -481,13 +501,6 @@ export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
   'team:post': TEAM_POST_DTS,
 };
 
-// Raw fs/shell primitives, appended to the full-DTS bundles below. `host-tools.ts`'s
-// `typecheckSource` needs the FULL global set (incl. execShell/writeFileRaw/readFileRaw
-// — the architect builder functions reference them in their bodies), so the LIBRARY_DTS
-// bundles re-append these fragments even though the per-agent model DTS (buildAmbientDts)
-// no longer emits them by default.
-const WRITE_PRIMITIVES_DTS = [EXEC_SHELL_DTS, WRITE_FILE_RAW_DTS, READ_FILE_RAW_DTS].join('\n');
-
 // Raw `fetch` gets the same internal-only treatment as the fs/shell primitives: it stays
 // INJECTED in every VM (the system-global webSearch/webFetch function BODIES run on it, and
 // they are typechecked against the full bundles below, not the model DTS) but is NOT declared
@@ -518,7 +531,7 @@ export const PROCESS_ENV_DTS = `declare const process: { env: Record<string, str
 export const PROCESS_EXIT_DTS = `declare const process: { exit(code?: number): never };`;
 
 /** Full library DTS for the top-level session VM (all globals, incl. `ask`). */
-export const LIBRARY_DTS = [ASK_DTS, SET_SESSION_META_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, WRITE_PRIMITIVES_DTS, NET_FETCH_DTS, PROCESS_ENV_DTS].join('\n');
+export const LIBRARY_DTS = [ASK_DTS, SET_SESSION_META_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, REGISTER_SPACE_DTS, COMMON_DTS, NET_FETCH_DTS, PROCESS_ENV_DTS].join('\n');
 
 /**
  * Library DTS WITHOUT `ask`. Fork and delegate VMs run headless/autonomous — there is
@@ -527,4 +540,4 @@ export const LIBRARY_DTS = [ASK_DTS, SET_SESSION_META_DTS, TASKLIST_DTS, FORK_DT
  * name 'ask'") and steers the model back to working from its seed/inputs, instead of
  * binding `undefined` (or, in a real PTY, blocking forever on stdin).
  */
-export const LIBRARY_DTS_NO_ASK = [TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, WRITE_PRIMITIVES_DTS, NET_FETCH_DTS, PROCESS_ENV_DTS].join('\n');
+export const LIBRARY_DTS_NO_ASK = [TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, REGISTER_SPACE_DTS, COMMON_DTS, NET_FETCH_DTS, PROCESS_ENV_DTS].join('\n');

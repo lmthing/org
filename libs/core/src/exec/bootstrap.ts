@@ -38,7 +38,7 @@ import { createConsentRequestGlobal } from '../globals/consent.js';
 import { CATALOG_NAMES } from '../ui/catalog.js';
 import {
   ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, SET_SESSION_META_DTS,
-  EXEC_SHELL_DTS, SCRATCH_DTS,
+  EXEC_SHELL_DTS, SCRATCH_DTS, REGISTER_SPACE_DTS,
   LOCAL_FS_READ_DTS,
   LOCAL_FS_WRITE_DTS,
   HOST_CDP_DTS, composeDbDts, CAPABILITY_DTS_FRAGMENTS,
@@ -377,13 +377,14 @@ export const CURRENT_TASK_DTS = `declare const currentTask: { resolve: (value: u
  * (whitespace aside) — pinned by exec/bootstrap.test.ts.
  */
 export interface AmbientDtsOpts {
-  /** Which orchestration + write + app-capability globals are declared. `registerSpace`
-   *  and everything left in COMMON_DTS are declared unconditionally; the generic fs/shell
-   *  primitives are NO LONGER emitted by `allowWrite` — `readFileRaw`/`writeFileRaw` are
-   *  internal-only, and `execShell` + `createScratch` are emitted ONLY under `scratchFs`
-   *  (the engineer's sandbox). The project-app globals are gated on the `app` grants. Pass
-   *  the full CapabilityProfile (it satisfies this Pick). */
-  capabilities: Pick<CapabilityProfile, 'ask' | 'orchestrate' | 'delegate' | 'setSessionMeta' | 'allowWrite' | 'scratchFs' | 'localFsRead' | 'localFsWrite' | 'browserCdp' | 'app'>;
+  /** Which orchestration + write + app-capability globals are declared. Only what
+   *  `injectHostTools` injects unconditionally (COMMON_DTS + `process.exit`) is declared
+   *  unconditionally; everything whose injection is gated is declared through the matching
+   *  gate — `registerSpace` on `registerSpace`, `execShell` + `createScratch` on `scratchFs`
+   *  (the engineer's sandbox), the local-fs/CDP globals on their desktop grants, the
+   *  project-app globals on the `app` grants. `readFileRaw`/`writeFileRaw` are internal-only
+   *  and have no fragment at all. Pass the full CapabilityProfile (it satisfies this Pick). */
+  capabilities: Pick<CapabilityProfile, 'ask' | 'orchestrate' | 'delegate' | 'setSessionMeta' | 'registerSpace' | 'allowWrite' | 'scratchFs' | 'localFsRead' | 'localFsWrite' | 'browserCdp' | 'app'>;
   /** Function/component overlay (buildOverlay output). Empty/omitted → none. */
   overlay?: string;
   /** Declare the `currentTask` capture global (fork + delegate contexts). */
@@ -456,6 +457,11 @@ export function buildAmbientDts(opts: AmbientDtsOpts): string {
     caps.orchestrate ? TASKLIST_DTS : '',
     caps.orchestrate ? FORK_DTS : '',
     caps.delegate ? DELEGATE_DTS : '',
+    // registerSpace() mutates shared session state, so its injection is gated
+    // (`injectGlobal` on `caps.registerSpace`, step 4b) — the declaration is gated with it.
+    // Withheld from sessions and delegates entirely; only a write-capable fork role has it,
+    // which is exactly where the architect's register/reregister nodes run.
+    caps.registerSpace ? REGISTER_SPACE_DTS : '',
     COMMON_DTS,
     // process.exit is declared UNCONDITIONALLY, same tier as COMMON_DTS — the runtime already
     // injects a real `process.exit` in every VM regardless of role/capabilities

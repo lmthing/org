@@ -6,6 +6,7 @@
  */
 
 import { join } from 'node:path';
+import { agentPromptCorpus } from './agent-prompt-corpus.js';
 import { describe, it, expect } from 'vitest';
 
 import { loadSpace } from './load.js';
@@ -53,7 +54,8 @@ describe('user-thing (THING) store capabilities', () => {
     expect(thing).toBeDefined();
     expect(thing!.capabilities?.['store:read']).toBe(true);
     expect(thing!.capabilities?.['store:install']).toBe(true);
-    // The pre-install existence check must be documented, not just capable.
-    expect(thing!.instructBody).toMatch(/storeInspect/);
+    // The pre-install existence check must be documented, not just capable. Its detail lives in
+    // the `playbooks/paths/integrations` aspect THING loads when it takes path 7.
+    expect(agentPromptCorpus(userThingDir(), 'thing')).toMatch(/storeInspect/);
   });
 });
