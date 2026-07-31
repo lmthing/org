@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+import { existsSync, readdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -8,14 +9,34 @@ const APP_PORT = Number(process.env.APP_PORT || 4410)
 const STUB_PORT = Number(process.env.STUB_PORT || 4411)
 
 /**
- * The installed `@playwright/test` pins a browser build newer than the one on disk, and
+ * Which Chromium to run the app in.
+ *
+ * Locally the installed `@playwright/test` pins a browser build newer than the one on disk, and
  * `playwright install` is deliberately not run here — `tests/visual/playwright.config.ts` carries
- * the same note for the same reason. Point at the newest already-downloaded Chromium instead.
- * Overridable with `PW_CHROMIUM`, which is how CI supplies its own.
+ * the same note for the same reason — so an already-downloaded one is used.
+ *
+ * In CI the workflow DOES install the pinned build, and Playwright's own default is correct. This
+ * must therefore resolve to nothing rather than to a guess: pointing `executablePath` at a version
+ * that is not there fails every test at launch with "executable doesn't exist", which reads as a
+ * broken suite rather than a wrong path. That is exactly what it did.
  */
-const executablePath =
-  process.env.PW_CHROMIUM ||
-  `${process.env.HOME}/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome`
+function localChromium(): string | undefined {
+  if (process.env.PW_CHROMIUM) return process.env.PW_CHROMIUM
+  const cache = `${process.env.HOME}/.cache/ms-playwright`
+  if (!existsSync(cache)) return undefined
+  const versions = readdirSync(cache)
+    .filter((d) => d.startsWith('chromium-'))
+    .sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]))
+  for (const v of versions) {
+    for (const layout of ['chrome-linux64/chrome', 'chrome-linux/chrome']) {
+      const p = `${cache}/${v}/${layout}`
+      if (existsSync(p)) return p
+    }
+  }
+  return undefined
+}
+
+const executablePath = localChromium()
 
 /**
  * End-to-end gate for the desktop shell.
@@ -39,7 +60,8 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${APP_PORT}`,
     viewport: { width: 1280, height: 860 },
     ...devices['Desktop Chrome'],
-    launchOptions: { executablePath },
+    // Only when one was actually found — an undefined `executablePath` lets Playwright use its own.
+    ...(executablePath ? { launchOptions: { executablePath } } : {}),
   },
   projects: [{ name: 'desktop' }],
   webServer: [

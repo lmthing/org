@@ -1,0 +1,63 @@
+# 23-hackernews — the DESKTOP scenario.
+#
+# Played by `run-desktop-scenario.mjs`, not the generic runner, because it has a beat no other
+# scenario has: a DESKTOP is attached to the pod, with a real browser behind it. The runner stands
+# up a real prod pod, attaches the desktop's own shipped code (`apps/desktop/src/cdp.ts` +
+# `browser-tools.ts`) to `/api/host/ws` with a real Chromium behind it, and then talks to THING.
+#
+# What makes this scenario worth running at all: every other proof of the browser is a unit test or
+# a Playwright spec against a stub. This is the only place the whole chain exists at once — a real
+# pod, a real model deciding to reach for the browser, the real bridge, and a real page on the
+# public internet.
+#
+# It is deliberately about a page nobody controls. A fixture page would prove the plumbing and
+# nothing else; news.ycombinator.com changes every few minutes, so a reply that matches what the
+# browser actually holds cannot have been remembered from training.
+
+id: 23-hackernews
+title: "Pull up Hacker News" — an agent in the cloud reaches the browser on this desk
+project: user
+
+persona: >
+  Someone at their own computer with the LMThing desktop app open. They are not testing anything.
+  They want to know what is on the front page of Hacker News right now, and they ask for it the way
+  they would ask a person sitting next to them. They will not say "browser", "agent", "delegate",
+  "space" or "capability", and they do not know or care which machine anything runs on.
+
+promise: >
+  A person asks for a web page and gets what is ON it right now. The agent runs in the cloud and
+  the browser runs on their desk, and neither of those facts appears in the answer. What the agent
+  reports is what the browser actually loaded — not a memory of what that site usually looks like.
+
+knows:
+  - "they mean news.ycombinator.com when they say Hacker News"
+
+invariants:
+  - THE ANSWER MUST COME FROM THE PAGE THE BROWSER LOADED, NEVER FROM MEMORY.
+  - THE BROWSER RUNS ON THE PERSON'S MACHINE — THE POD NEVER FETCHES THE PAGE ITSELF.
+  - A REPLY THAT NAMES STORIES MUST NAME STORIES THAT ARE ACTUALLY ON THE PAGE.
+  - NO PRODUCT VOCABULARY IN THE REPLY — NOT "DELEGATE", NOT "SPACE", NOT "CAPABILITY".
+
+steps:
+  # 1 — the whole feature in one sentence.
+  - say: >
+      Can you pull up the Hacker News front page and tell me what the top few stories are right now?
+    expect:
+      - the desktop browser was driven — at least one browser operation crossed the host bridge.
+      - the browser is left on news.ycombinator.com, not on about:blank.
+      - the reply names stories that appear in the text the browser actually holds.
+      - the reply does not name a story that is absent from the page.
+
+  # 2 — the follow-up a person would really ask. Proves the browser is STATEFUL across turns: the
+  # page is still loaded, so this is answerable without navigating again.
+  - then_say: "Which of those has the most comments?"
+    expect:
+      - answered from the page already loaded, without re-fetching it from memory.
+      - the browser is still on news.ycombinator.com.
+
+  # 3 — a second navigation, so the scenario covers more than one shot. `open` a story's comments
+  # page: this is the beat where a stale element index would break a naive implementation.
+  - then_say: "Open the comments for the top one and give me the gist of what people are saying."
+    expect:
+      - the browser navigated to a DIFFERENT url than the front page.
+      - the summary reflects text the browser actually holds at that new url.
