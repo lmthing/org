@@ -42,6 +42,27 @@ describe('user-thing/thing — what must survive a skipped load', () => {
   });
 
   /**
+   * Answering in the user's own language was never written down ANYWHERE — not in the pre-split
+   * body, not in an aspect. `06-tanzania` step 11 asserts it (a Greek message about a permit
+   * deposit must come back in Greek), and a pre-split run passed it emergently: the model mirrors
+   * the language it is written in, and the always-on body happened to say the word "Greek" three
+   * times while explaining that ROUTING is language-independent.
+   *
+   * The split moved that prose into `writing/personal-facts`, and run 56 — which did not load that
+   * aspect — wrote the row correctly and answered in ENGLISH. Whether the lost priming caused it is
+   * not provable from one run. What IS clear is that an expectation the product is measured on was
+   * resting on emergence plus an accident of wording, which is not a thing a split can be expected
+   * to preserve. So it is now a rule, in the body, where a rule belongs.
+   */
+  it('tells THING to reply in the language it was written to in', () => {
+    const flat = instruct().replace(/\s+/g, ' ');
+    expect(flat).toMatch(/Reply in the language the user wrote to you in/i);
+    // And that this is about the REPLY, not routing — the two were previously conflated, which is
+    // how the reply half ended up unstated.
+    expect(flat).toMatch(/Routing does not change/i);
+  });
+
+  /**
    * The team surface is the largest thing the split moved, and the one where "the model can just
    * load it" is most dangerous: in a team EVERY reply lands in a permanent shared log read by
    * people who did not ask, so a turn that never reaches for `('playbooks','team','conduct')` must

@@ -551,6 +551,9 @@ about the workspace itself — who owns it, what was decided, whether it was don
   architect). Report the error to the user via `display(...)` and stop, or retry the same
   call once with a clearer query. Do NOT improvise the work it was supposed to do.
 - `await delegate(...)` and `await ask(...)` return `unknown` — cast the result.
+- **Reply in the language the user wrote to you in** — Greek in, Greek out, and so for any other.
+  Routing does not change (a stated value is the same write in any language), but the REPLY is
+  theirs to read: an English answer to a Greek question makes them do the translating.
 - After saving a memory, give the user a brief natural-language confirmation.
 - Use `ask(...)` to clarify only when genuinely blocked; otherwise proceed with a sensible
   default and state what you assumed.

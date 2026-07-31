@@ -44,8 +44,18 @@ const SPLIT_AGENTS = [
     /** The domains its INSTRUCT routes into. `organizing`/`recording` are deliberately excluded:
      *  they are loaded by tasklist NODES, not by the instruct, so they are not orphans. */
     domains: ['playbooks'],
-    /** Deliberate ratchet. Raise it only with a reason — see the body-growth check. */
-    maxBodyLines: 560,
+    /**
+     * Deliberate ratchet. Raise it only with a reason — see the body-growth check.
+     *
+     * 560 -> 566 on 2026-07-31, for two things that are not prose growing back:
+     *   +5  FRONTMATTER — a commented `system-desktop-browser/browse` entry in `canDelegateTo`
+     *       (sdk/org 51480ef6). Frontmatter is the capability surface, not always-on prose, and it
+     *       cannot be moved behind a load.
+     *   +1  the reply-in-the-user's-language rule, which `06-tanzania` step 11 measures and which
+     *       had never been written down ANYWHERE — see `thing-prompt-split.test.ts`. A rule the
+     *       product is scored on belongs in the body by definition.
+     */
+    maxBodyLines: 566,
     priorLines: 1270,
   },
   {
