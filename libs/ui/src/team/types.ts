@@ -42,6 +42,38 @@ export interface ChannelMessage {
   mentions?: string[]
   /** Set on the card posted when THING finishes building an app. */
   app?: { projectId: string; name: string }
+  /**
+   * Files/images/audio riding with this message, resolved server-side from the `attachmentIds`
+   * `postMessage` sent — mirrors `libs/cli/src/server/team-channels.ts#ChannelAttachment`. Close
+   * to, but not identical to, the `/chat` surface's own `TraceAttachment`
+   * (`libs/core/src/sandbox/trace.ts`): both ride the same upload store (`POST /api/uploads`), but
+   * only this one carries `id` — a channel attachment is re-authorized per read (`GET
+   * /api/uploads/:id` checks the caller against the channel it was posted into), so the id has to
+   * survive the round trip for `TeamClient.attachmentUrl` to reconstruct an authorized URL.
+   */
+  attachments?: ChannelAttachment[]
+}
+
+/**
+ * One file/image/audio clip — a staged upload before send, or one riding on an already-posted
+ * {@link ChannelMessage}. One type for both: the pod's own `ChannelAttachment`
+ * (`libs/cli/src/server/team-channels.ts`) always carries `id`, on a freshly uploaded file and on
+ * one read back out of history alike, so there is nothing a "staged" variant would add.
+ */
+export interface ChannelAttachment {
+  /** The upload's id — what `TeamClient.postMessage` sends back as `attachmentIds` to bind a
+   *  staged attachment to a message, and the `<id>` in the `url` below for one already sent. */
+  id: string
+  kind: 'image' | 'audio' | 'file'
+  mediaType: string
+  filename?: string
+  /** `GET`-able, relative to the pod (`/api/uploads/<id>`) — resolve through
+   *  `TeamClient.attachmentUrl` before handing it to an `<img>`/`<audio>`/`<a>`, none of which can
+   *  send the bearer token this endpoint now requires (`GET /api/uploads/:id` serves only the
+   *  owner or a member of a channel the upload was posted into). */
+  url: string
+  /** Audio only — the text the model actually received. */
+  transcript?: string
 }
 
 export interface MemberProfile {

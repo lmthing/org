@@ -22,7 +22,7 @@ import { AppIcon, CloseIcon, ThreadIcon } from './icons'
 import { useTeamChat } from './use-team-chat'
 import { useTeamLayout } from './use-layout'
 import { ChannelSidebar } from './sidebar'
-import { Composer } from './composer'
+import { Composer, type ComposerProps } from './composer'
 import { AppFrame, ChannelHeader, OpenAppExternally, RailPane, RAIL_DEFAULT } from './rail'
 import {
   MessageGroupView,
@@ -34,7 +34,7 @@ import {
   type MessageContext,
 } from './messages'
 import { channelTitle } from './format'
-import type { ChannelMessage, Directory, Rail } from './types'
+import type { ChannelMessage, Directory, Rail, ChannelAttachment } from './types'
 import type { TeamClient } from './client'
 
 /**
@@ -244,13 +244,23 @@ export function TeamChannelsView({
     [chat.channels, activeId],
   )
 
+  // Shared by every attachment on screen AND by both composers' staged-preview thumbnails — one
+  // function, so a message rendered right after sending it resolves its image the same way the
+  // composer that just uploaded it did.
+  const resolveAttachmentUrl = useCallback((url: string) => client.attachmentUrl(url), [client])
+  const uploadAttachment = useCallback(
+    (input: { filename?: string; mediaType: string; data: string }) => client.uploadAttachment(input),
+    [client],
+  )
+
   const ctx: MessageContext = useMemo(
     () => ({
       members: chat.directory.members,
       appProjects: new Set(chat.directory.projects.filter((p) => p.hasApp).map((p) => p.id)),
       onOpenApp,
+      resolveUrl: resolveAttachmentUrl,
     }),
-    [chat.directory, onOpenApp],
+    [chat.directory, onOpenApp, resolveAttachmentUrl],
   )
 
   // An app THING just built opens beside the person who ASKED for it. Everyone
@@ -523,7 +533,9 @@ export function TeamChannelsView({
           prefill={prefill}
           onPrefillApplied={() => setPrefill(null)}
           onTyping={() => activeId && chat.notifyTyping(activeId)}
-          onSend={(text) => chat.send(text)}
+          onSend={(text, attachments) => chat.send(text, undefined, attachments)}
+          onUpload={uploadAttachment}
+          resolveUrl={resolveAttachmentUrl}
         />
       </Prim.Col>
 
@@ -543,7 +555,9 @@ export function TeamChannelsView({
           compact={compact}
           backLabel={channel?.kind === 'dm' ? title : `#${title}`}
           onClose={closeRail}
-          onSend={(text) => chat.send(text, rail.threadId)}
+          onSend={(text, attachments) => chat.send(text, rail.threadId, attachments)}
+          onUpload={uploadAttachment}
+          resolveUrl={resolveAttachmentUrl}
           onTyping={() => activeId && chat.notifyTyping(activeId)}
           width={railWidth}
           onWidthChange={setRailWidth}
@@ -648,6 +662,8 @@ function ThreadRail({
   backLabel,
   onClose,
   onSend,
+  onUpload,
+  resolveUrl,
   onTyping,
   width,
   onWidthChange,
@@ -663,7 +679,12 @@ function ThreadRail({
   compact?: boolean
   backLabel?: string
   onClose: () => void
-  onSend: (text: string) => Promise<void>
+  onSend: (text: string, attachments?: ChannelAttachment[]) => Promise<void>
+  /** Forwarded to the thread's own `Composer` — see `ComposerProps.onUpload`. A message that
+   *  addresses THING here needs to carry an attachment the same way a channel message does, so
+   *  the agent can see the image or read the file. */
+  onUpload: ComposerProps['onUpload']
+  resolveUrl: ComposerProps['resolveUrl']
   onTyping: () => void
   /** Forwarded straight to `RailPane` — owned by `TeamChannelsView`, see its own note. */
   width: number
@@ -741,6 +762,8 @@ function ThreadRail({
         meId={meId}
         onTyping={onTyping}
         onSend={onSend}
+        onUpload={onUpload}
+        resolveUrl={resolveUrl}
       />
     </RailPane>
   )

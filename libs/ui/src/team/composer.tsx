@@ -13,14 +13,60 @@ import { Textarea } from '../elements/forms/textarea'
 import { Button } from '../elements/forms/button'
 import { Avatar, AvatarFallback } from '../elements/content/avatar'
 import { Caption } from '../elements/typography/caption'
-import { AppIcon, SendIcon } from './icons'
+import { AppIcon, CloseIcon, FileIcon, PlusIcon, SendIcon } from './icons'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isWeb } from '@tamagui/core'
-import type { Directory, MemberProfile } from './types'
+import type { Directory, MemberProfile, ChannelAttachment } from './types'
 import { initials, memberLabel } from './format'
 
 /** How tall the composer grows before it scrolls instead. */
 const MAX_COMPOSER_HEIGHT = 180
+
+/** Mirrors the pod's own cap (`libs/cli/src/server/routes/uploads.ts#MAX_UPLOAD_BYTES`) so a file
+ *  picked too big is refused immediately, filename and all — rather than after a full base64
+ *  upload comes back a bare 413. The pod is still the one that actually enforces this; this is
+ *  purely a faster, friendlier no, and the one place a rejected upload MUST be visible rather than
+ *  silently swallowed (see `attachError` below). */
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
+
+/** Mirrors the pod's own cap (`routes/team-channels.ts#MAX_MESSAGE_ATTACHMENTS`). The pod does
+ *  not reject a post over this — it silently `.slice(0, 10)`s the id list — so this is the one
+ *  place refusing early actually matters: without it, an 11th file would upload successfully,
+ *  sit in the composer looking staged and ready, and then vanish on send with no error at all. */
+const MAX_ATTACHMENTS_PER_MESSAGE = 10
+
+/** File types the attach picker accepts — mirrors `chat/app/Composer.tsx#ATTACH_ACCEPT`
+ *  (duplicated rather than imported: the two composers are independent surfaces, and this list
+ *  only shapes the OS picker — the server accepts any type regardless). Images/audio, plus every
+ *  document type the system-files reader can extract host-side. */
+const ATTACH_ACCEPT = [
+  'image/*',
+  'audio/*',
+  'application/pdf',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.oasis.opendocument.text',
+  'application/vnd.oasis.opendocument.presentation',
+  'application/vnd.oasis.opendocument.spreadsheet',
+  'application/vnd.ms-excel',
+  '.md,.csv,.tsv,.docx,.pptx,.xlsx,.xls,.odt,.odp,.ods',
+].join(',')
+
+/** Read a browser `File` as a base64 data URL — `TeamClient.uploadAttachment` accepts the
+ *  `data:<mime>;base64,` form and strips the prefix server-side. Web-only by construction
+ *  (`FileReader` is a DOM API); every caller of this is already behind an `isWeb`/`onUpload` gate. */
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(reader.error ?? new Error('file read failed'))
+    reader.readAsDataURL(file)
+  })
+}
 
 type Suggestion =
   | { kind: 'thing'; token: string; label: string; detail: string }
@@ -81,7 +127,26 @@ export interface ComposerProps {
   disabled?: boolean
   /** Called on every change, so the pod can tell the others someone is typing. */
   onTyping?: () => void
-  onSend: (text: string) => Promise<void> | void
+  onSend: (text: string, attachments?: ChannelAttachment[]) => Promise<void> | void
+  /**
+   * Upload one picked/pasted/dropped file, returning the staged ref this composer holds until
+   * send — wired to `TeamClient.uploadAttachment` by the caller (`channels-view.tsx`).
+   *
+   * Web-only in effect, not just in principle: without it (native, or a test harness with nothing
+   * to upload to) the attach control, paste-to-attach and drag-and-drop are simply ABSENT rather
+   * than present-but-broken. `<input type="file">` has no React Native equivalent — a bare
+   * `TextInput` under the hood, so an ungated button would sit there doing nothing on a phone,
+   * which is exactly the "silently show a dead button" failure to avoid. Optional for the same
+   * reason `onPrefillApplied` is: existing unit tests mount `Composer` with no upload wiring at
+   * all and must keep working.
+   */
+  onUpload?: (input: { filename?: string; mediaType: string; data: string }) => Promise<ChannelAttachment>
+  /**
+   * Turn a staged/sent attachment's `url` into something an `<img>` can actually load — wired to
+   * `TeamClient.attachmentUrl`. Identity when omitted, which only matters for the staged-preview
+   * thumbnail below (a sent message's own rendering resolves through `MessageContext` instead).
+   */
+  resolveUrl?: (url: string) => string
   /**
    * Text to drop into the box and focus — how a suggestion elsewhere on the surface ("Ask THING")
    * hands the member a half-written message instead of sending one for them. Cleared by the caller
@@ -98,6 +163,8 @@ export function Composer({
   disabled,
   onTyping,
   onSend,
+  onUpload,
+  resolveUrl = (url) => url,
   prefill,
   onPrefillApplied,
 }: ComposerProps) {
@@ -105,6 +172,58 @@ export function Composer({
   const [mention, setMention] = useState<{ query: string; start: number } | null>(null)
   const [highlighted, setHighlighted] = useState(0)
   const ref = useRef<HTMLTextAreaElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [attachments, setAttachments] = useState<ChannelAttachment[]>([])
+  const [attaching, setAttaching] = useState(false)
+  const [attachError, setAttachError] = useState<string | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+
+  const uploadOne = useCallback(
+    async (file: File): Promise<void> => {
+      if (!onUpload) return
+      const data = await readAsDataUrl(file)
+      const staged = await onUpload({
+        filename: file.name,
+        mediaType: file.type || 'application/octet-stream',
+        data,
+      })
+      setAttachments((prev) => [...prev, staged])
+    },
+    [onUpload],
+  )
+
+  /** Upload one or more files onto the pending message — the picker, a paste, or a drop all funnel
+   *  here. Size-checked up front (see {@link MAX_ATTACHMENT_BYTES}) so a too-big file is refused
+   *  before spending a base64 round trip on something the pod would 413 anyway. */
+  const handleFiles = useCallback(
+    async (files: File[]) => {
+      if (!files.length || !onUpload) return
+      if (attachments.length + files.length > MAX_ATTACHMENTS_PER_MESSAGE) {
+        setAttachError(`A message can carry at most ${MAX_ATTACHMENTS_PER_MESSAGE} attachments`)
+        return
+      }
+      const tooBig = files.find((f) => f.size > MAX_ATTACHMENT_BYTES)
+      if (tooBig) {
+        setAttachError(`"${tooBig.name}" is over the 25MB attachment limit`)
+        return
+      }
+      setAttaching(true)
+      setAttachError(null)
+      try {
+        for (const file of files) await uploadOne(file)
+      } catch (err) {
+        setAttachError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setAttaching(false)
+      }
+    },
+    [onUpload, uploadOne, attachments.length],
+  )
+
+  const removeAttachment = useCallback(
+    (id: string) => setAttachments((prev) => prev.filter((a) => a.id !== id)),
+    [],
+  )
 
   const suggestions = useMemo(
     () => (mention ? suggestionsFor(mention.query, directory, meId) : []),
@@ -184,15 +303,24 @@ export function Composer({
 
   const submit = async () => {
     const text = draft.trim()
-    if (!text) return
+    // The pod requires text on every post, attachments or not
+    // (`routes/team-channels.ts#handlePostMessage`) — there is no attachment-only message on this
+    // surface, so this stays a hard requirement rather than something the composer could relax on
+    // its own; sending a bare photo with no caption is one word away ("👍", "see attached") rather
+    // than genuinely unreachable.
+    if (!text || attaching) return
+    const pending = attachments
     setDraft('')
     setMention(null)
+    setAttachments([])
+    setAttachError(null)
     requestAnimationFrame(grow)
     try {
-      await onSend(text)
+      await onSend(text, pending.length ? pending : undefined)
     } catch {
-      // Put it back rather than losing what somebody wrote.
+      // Put it back rather than losing what somebody wrote, or uploaded.
       setDraft(text)
+      setAttachments(pending)
       requestAnimationFrame(grow)
     }
   }
@@ -235,14 +363,80 @@ export function Composer({
     }
   }
 
+  // Paste-to-attach: a pasted image/file has no text form, so there is nothing for the textarea's
+  // own paste handling to do with it — hand it straight to the same upload path the picker uses.
+  // Web-only: `ClipboardEvent`/`DataTransfer` are DOM concepts `nativeSafeProps` does not forward,
+  // so on native this prop is simply never passed (see the spread at the call site).
+  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData?.files ?? [])
+    if (!files.length) return
+    e.preventDefault()
+    void handleFiles(files)
+  }
+
+  // Drag-and-drop, same reasoning as paste: cheap on web, meaningless on a touch device with
+  // nothing to drag from. `onDrop`/`onDragOver` are DOM-only and dropped by `nativeSafeProps`
+  // regardless, but gating explicitly keeps `dragOver` (and the overlay it drives) from ever being
+  // true on native, where there is no drag gesture to end it.
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    if (onUpload) setDragOver(true)
+  }
+  const onDragLeave = () => setDragOver(false)
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    void handleFiles(Array.from(e.dataTransfer?.files ?? []))
+  }
+
+  const canAttach = isWeb && !!onUpload
+
   return (
-    <Prim.Box position="relative">
+    <Prim.Box
+      position="relative"
+      {...(canAttach ? { onDragOver, onDragLeave, onDrop } : {})}
+    >
       {open ? (
         <MentionPicker
           suggestions={suggestions}
           highlighted={highlighted}
           onHover={setHighlighted}
           onPick={accept}
+        />
+      ) : null}
+      {/* A drop target that covers the composer while a drag is over it — not a border on the
+          textarea itself, which would shift its content and read as a layout bug rather than a
+          hint. */}
+      {dragOver ? (
+        <Prim.Box
+          position="absolute"
+          top={0}
+          left={0}
+          right={0}
+          bottom={0}
+          zIndex={30}
+          borderWidth={2}
+          borderStyle="dashed"
+          borderColor="$primary"
+          borderRadius="$radius-md"
+          backgroundColor="color-mix(in srgb, var(--primary) 8%, transparent)"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          pointerEvents="none"
+        >
+          <Prim.Text fontSize="$sm" fontWeight="$medium" color="$primary">
+            Drop to attach
+          </Prim.Text>
+        </Prim.Box>
+      ) : null}
+      {attachments.length > 0 || attaching || attachError ? (
+        <StagedAttachments
+          attachments={attachments}
+          attaching={attaching}
+          error={attachError}
+          resolveUrl={resolveUrl}
+          onRemove={removeAttachment}
         />
       ) : null}
       <Prim.Row
@@ -252,6 +446,13 @@ export function Composer({
         borderColor="$border"
         alignItems="flex-end"
       >
+        {canAttach ? (
+          <AttachButton
+            disabled={(disabled ?? false) || attaching}
+            fileRef={fileRef}
+            onFiles={(files) => void handleFiles(files)}
+          />
+        ) : null}
         <Textarea
           ref={ref}
           value={draft}
@@ -269,13 +470,146 @@ export function Composer({
           // — a real cost on a surface whose whole point is replying quickly. Not on native: an RN
           // `TextInput`'s `autoFocus` pops the keyboard the instant the screen mounts, which on a
           // phone is a surprise, not a convenience, the moment you are just reading a channel.
-          {...(isWeb ? { autoFocus: true } : {})}
+          {...(isWeb ? { autoFocus: true, onPaste } : {})}
         />
-        <Button size="icon" onClick={() => void submit()} disabled={!draft.trim()}>
+        <Button size="icon" onClick={() => void submit()} disabled={!draft.trim() || attaching}>
           <SendIcon size={14} />
         </Button>
       </Prim.Row>
     </Prim.Box>
+  )
+}
+
+/**
+ * The attach control: a plus (not a paperclip — see `chat/app/Composer.tsx`'s own note on the
+ * same choice), sized `44px` on the base scale and shrinking to `28px` once a mouse is likely
+ * (`$md`), matching the touch-target fix the rest of this composer's controls got in round 1.
+ *
+ * Web-only by construction — see `ComposerProps.onUpload`. The hidden `<input type="file">` is
+ * the one place this surface reaches for a raw DOM control; there is no primitive for it because
+ * there is no React Native equivalent to have one.
+ */
+function AttachButton({
+  disabled,
+  fileRef,
+  onFiles,
+}: {
+  disabled: boolean
+  fileRef: React.RefObject<HTMLInputElement>
+  onFiles: (files: File[]) => void
+}) {
+  return (
+    <Prim.Text
+      as="label"
+      {...(disabled ? { opacity: 0.5, pointerEvents: 'none' as const } : {})}
+      transition="quick"
+      animateOnly={['color', 'background-color', 'border-color']}
+      flexShrink={0}
+      width="$11"
+      height="$11"
+      $md={{ width: '$7', height: '$7' }}
+      borderRadius="$radius-lg"
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
+      color="$muted-foreground"
+      cursor="pointer"
+      hoverStyle={{ color: '$foreground' }}
+      title="Add an image, audio, or file to your message"
+    >
+      <PlusIcon size={14} />
+      <Prim.TextField
+        ref={fileRef}
+        type="file"
+        accept={ATTACH_ACCEPT}
+        multiple
+        display="none"
+        data-testid="attach-input"
+        onChange={(e) => {
+          onFiles(Array.from(e.target.files ?? []))
+          if (fileRef.current) fileRef.current.value = ''
+        }}
+      />
+    </Prim.Text>
+  )
+}
+
+/** The staged attachments row — above the input, cleared on send or on remove. */
+function StagedAttachments({
+  attachments,
+  attaching,
+  error,
+  resolveUrl,
+  onRemove,
+}: {
+  attachments: ChannelAttachment[]
+  attaching: boolean
+  error: string | null
+  resolveUrl: (url: string) => string
+  onRemove: (id: string) => void
+}) {
+  return (
+    <Prim.Row paddingHorizontal="$3" paddingTop="$3" flexWrap="wrap" gap="$3" alignItems="center">
+      {attachments.map((a) => (
+        <Prim.Row
+          key={a.id}
+          alignItems="center"
+          gap="$1.5"
+          maxWidth={220}
+          borderRadius="$radius-lg"
+          borderWidth={1}
+          borderColor="$border"
+          backgroundColor="$muted"
+          paddingHorizontal="$2"
+          paddingVertical="$1"
+        >
+          {a.kind === 'image' ? (
+            <Prim.Image
+              src={resolveUrl(a.url)}
+              alt={a.filename ?? 'image'}
+              width={24}
+              height={24}
+              borderRadius="$radius-sm"
+              objectFit="cover"
+            />
+          ) : (
+            <FileIcon size={12} />
+          )}
+          <Prim.Text
+            fontSize="$xs"
+            color="$foreground"
+            overflow="hidden"
+            textOverflow="ellipsis"
+            whiteSpace="nowrap"
+          >
+            {a.filename ?? a.kind}
+          </Prim.Text>
+          <Prim.Pressable
+            onClick={() => onRemove(a.id)}
+            flexShrink={0}
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            color="$muted-foreground"
+            hoverStyle={{ color: '$foreground' }}
+            aria-label={`Remove ${a.filename ?? 'attachment'}`}
+            // 44px hit area around an 11px glyph, the same `rail.tsx` unpin-control shape: the
+            // negative margin grows the invisible touch target without inflating the visible chip.
+            width={44}
+            height={44}
+            margin="-$4"
+          >
+            <CloseIcon size={11} />
+          </Prim.Pressable>
+        </Prim.Row>
+      ))}
+      {attaching ? <Caption>Uploading…</Caption> : null}
+      {error ? (
+        <Prim.Text fontSize="$xs" color="$destructive">
+          {error}
+        </Prim.Text>
+      ) : null}
+    </Prim.Row>
   )
 }
 

@@ -26,6 +26,8 @@ function makeClient(overrides: Partial<TeamClient> = {}): TeamClient {
     profile: vi.fn().mockResolvedValue({ profile: null as MemberProfile | null }),
     setProfile: vi.fn(),
     socketUrl: vi.fn().mockResolvedValue('ws://pod.test/api/team/ws'),
+    uploadAttachment: vi.fn(),
+    attachmentUrl: vi.fn((url: string) => url),
     ...overrides,
   }
 }

@@ -20,6 +20,7 @@ import type {
   ChannelUnread,
   Directory,
   MemberProfile,
+  ChannelAttachment,
 } from './types'
 
 /** How long a `typing` event is believed without a follow-up (the server has
@@ -93,7 +94,7 @@ export interface TeamChat {
   unread: Map<string, ChannelUnread>
   /** Mentions across every channel — what the browser tab's badge counts. */
   totalMentions: number
-  send: (text: string, threadId?: string) => Promise<void>
+  send: (text: string, threadId?: string, attachments?: ChannelAttachment[]) => Promise<void>
   createChannel: (name: string, categoryId?: string) => Promise<Channel | null>
   createCategory: (name: string) => Promise<void>
   deleteCategory: (categoryId: string) => Promise<void>
@@ -393,10 +394,10 @@ export function useTeamChat(client: TeamClient, activeId: string | null): TeamCh
   }, [client])
 
   const send = useCallback(
-    async (text: string, threadId?: string) => {
+    async (text: string, threadId?: string, attachments?: ChannelAttachment[]) => {
       if (!activeId) return
       try {
-        const { message } = await client.postMessage(activeId, text, threadId)
+        const { message } = await client.postMessage(activeId, text, threadId, attachments)
         // Appended from the REST response rather than waiting for the socket to echo it back —
         // on a slow or dropped connection that echo might never arrive, and the sender would
         // never see their own message land. The socket handler above dedupes on `id`, so the

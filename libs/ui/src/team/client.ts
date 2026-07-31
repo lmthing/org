@@ -18,6 +18,7 @@ import type {
   ChannelUnread,
   Directory,
   MemberProfile,
+  ChannelAttachment,
 } from './types'
 
 export interface TeamTransport {
@@ -46,7 +47,19 @@ export interface TeamClient {
     channelId: string,
     opts?: { limit?: number; before?: string },
   ): Promise<{ messages: ChannelMessage[]; hasMore: boolean }>
-  postMessage(channelId: string, text: string, threadId?: string): Promise<{ message: ChannelMessage }>
+  /**
+   * `attachments` are files already staged by `uploadAttachment` below — only their `id`s cross
+   * the wire (`attachmentIds`), mirroring the WS convention the personal chat surface's
+   * `sendMessage` frame already uses (`libs/cli/src/server/ws/agent.ts`): the pod re-reads the
+   * bytes/metadata from its own upload store rather than trusting whatever the client says about
+   * them.
+   */
+  postMessage(
+    channelId: string,
+    text: string,
+    threadId?: string,
+    attachments?: ChannelAttachment[],
+  ): Promise<{ message: ChannelMessage }>
   markRead(channelId: string): Promise<{ ok: true }>
   openDm(userId: string): Promise<{ channel: Channel; created: boolean }>
   createCategory(name: string): Promise<{ category: Category; created: boolean }>
@@ -59,11 +72,42 @@ export interface TeamClient {
   }): Promise<{ profile: MemberProfile }>
   /** The channel socket's URL, token included — `WebSocket` cannot set headers. */
   socketUrl(): Promise<string>
+  /**
+   * Upload a file for a soon-to-be-sent message, and get back a staged ref the composer holds
+   * until send. `data` is a `data:<mime>;base64,…` URL — the same encoding the personal chat
+   * surface's `Composer` reads a `File` into (`FileReader`/`Buffer` differ across web and
+   * native, base64 text does not).
+   *
+   * This is `POST /api/uploads`, reached directly rather than through `/api/team/*`: uploads are
+   * not a team concept, they are the same store the personal pod uses, and `team-guard.ts`
+   * already opens the route to a viewer ("attach a file to a message").
+   */
+  uploadAttachment(input: { filename?: string; mediaType: string; data: string }): Promise<ChannelAttachment>
+  /**
+   * Resolve a stored attachment's `url` into something an `<img>`/`<audio>`/`<a>` can load with
+   * no `Authorization` header — `GET /api/uploads/:id` is authorized per-request (the owner, or a
+   * member of a channel the upload was posted into, `routes/uploads.ts`), and none of those
+   * elements can send a bearer token. The token rides as an `access_token` query param instead —
+   * not a workaround: Envoy's `team-jwt` policy explicitly validates it from there
+   * (`devops/argocd/envoy/team-policies.yaml`), the same mechanism `socketUrl` above already
+   * relies on for the one other place this surface cannot set a header.
+   *
+   * Synchronous, off the most recently resolved token: every call above refreshes it, and by the
+   * time any message — therefore any attachment — can be on screen, `channels()`/`messages()`/
+   * `directory()`/`profile()` have already resolved one on mount. Falls back to the bare URL when
+   * none has landed yet, the same degradation `chat/app/auth.ts#withAuthToken` uses with no token
+   * at all, rather than throwing over a slow mint.
+   */
+  attachmentUrl(url: string): string
 }
 
 export function createTeamClient(transport: TeamTransport): TeamClient {
+  // The most recently resolved token — kept only for `attachmentUrl` below, which has no async
+  // path of its own (an `<img src>` needs a plain string, not a promise to await).
+  let lastToken = ''
   async function call<T>(path: string, options: RequestInit = {}): Promise<T> {
     const token = await transport.getToken()
+    lastToken = token
     const res = await fetch(`${transport.baseUrl}/api/team${path}`, {
       ...options,
       headers: {
@@ -100,10 +144,14 @@ export function createTeamClient(transport: TeamTransport): TeamClient {
       const qs = params.toString()
       return call(`/channels/${channelId}/messages${qs ? `?${qs}` : ''}`)
     },
-    postMessage: (channelId, text, threadId) =>
+    postMessage: (channelId, text, threadId, attachments) =>
       call(`/channels/${channelId}/messages`, {
         method: 'POST',
-        ...body({ text, ...(threadId ? { threadId } : {}) }),
+        ...body({
+          text,
+          ...(threadId ? { threadId } : {}),
+          ...(attachments?.length ? { attachmentIds: attachments.map((a) => a.id) } : {}),
+        }),
       }),
     markRead: (channelId) => call(`/channels/${channelId}/read`, { method: 'POST' }),
     openDm: (userId) => call('/dms', { method: 'POST', ...body({ userId }) }),
@@ -121,6 +169,34 @@ export function createTeamClient(transport: TeamTransport): TeamClient {
       const base = transport.baseUrl || globalThis.window?.location?.origin || ''
       const wsBase = base.replace(/^http/, 'ws')
       return `${wsBase}/api/team/ws?t=1&access_token=${encodeURIComponent(token)}`
+    },
+
+    async uploadAttachment(input) {
+      const token = await transport.getToken()
+      lastToken = token
+      const res = await fetch(`${transport.baseUrl}/api/uploads`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+      if (!res.ok) {
+        let message = `Upload failed (${res.status})`
+        try {
+          const err = (await res.json()) as { error?: string }
+          if (err.error) message = err.error
+        } catch {
+          /* non-JSON error body — keep the status message */
+        }
+        throw new Error(message)
+      }
+      return (await res.json()) as ChannelAttachment
+    },
+
+    attachmentUrl(url) {
+      const resolved = `${transport.baseUrl}${url}`
+      if (!lastToken) return resolved
+      const sep = resolved.includes('?') ? '&' : '?'
+      return `${resolved}${sep}access_token=${encodeURIComponent(lastToken)}`
     },
   }
 }

@@ -17,8 +17,8 @@ import { Button } from '../elements/forms/button'
 import { Caption } from '../elements/typography/caption'
 import { clipboard } from '../platform/clipboard'
 import { onDismiss } from '../platform/keyboard'
-import { AppIcon, CopyIcon, ThreadIcon } from './icons'
-import type { ChannelMessage, MemberProfile } from './types'
+import { AppIcon, CopyIcon, FileIcon, ThreadIcon } from './icons'
+import type { ChannelAttachment, ChannelMessage, MemberProfile } from './types'
 import { absoluteTime, initials, memberLabel, relativeTime } from './format'
 
 /** Consecutive same-sender messages within this window collapse under one
@@ -94,6 +94,18 @@ export interface MessageContext {
   appProjects: Set<string>
   /** Open a project's app in the rail. */
   onOpenApp: (projectId: string) => void
+  /**
+   * Turn an attachment's stored `url` into something an `<img>`/`<audio>`/`<a>` can load with no
+   * `Authorization` header — `TeamClient.attachmentUrl`. Optional (falls back to identity below,
+   * see `resolveAttachmentUrl`) so an existing `ctx` built before attachments existed — the native
+   * render suite's, in particular — keeps compiling unchanged.
+   */
+  resolveUrl?: (url: string) => string
+}
+
+/** `ctx.resolveUrl`, defaulted — see {@link MessageContext.resolveUrl}. */
+function resolveAttachmentUrl(ctx: MessageContext, url: string): string {
+  return ctx.resolveUrl ? ctx.resolveUrl(url) : url
 }
 
 function labelFor(members: MemberProfile[], userId?: string, email?: string): string {
@@ -221,6 +233,84 @@ function withLinksAndMentions(text: string, ctx: MessageContext): React.ReactNod
 }
 
 /**
+ * One attachment on a sent message — an image shows as an image, everything else as a named,
+ * openable file. Mirrors `chat/app/Message.tsx#UserAttachment`, so a member sees the same shape
+ * on either surface.
+ *
+ * Capped well under the transcript's own width (a message row's text can run the column's full
+ * measure) so a large photo cannot blow up its row the way an un-capped `<img>` would.
+ */
+function MessageAttachment({ att, ctx }: { att: ChannelAttachment; ctx: MessageContext }) {
+  const url = resolveAttachmentUrl(ctx, att.url)
+  if (att.kind === 'image') {
+    return (
+      <Prim.Link href={url} target="_blank" rel="noreferrer">
+        <Prim.Image
+          src={url}
+          alt={att.filename ?? 'image attachment'}
+          maxWidth={280}
+          maxHeight={220}
+          borderRadius="$radius-lg"
+          borderWidth={1}
+          borderColor="$border"
+          objectFit="cover"
+        />
+      </Prim.Link>
+    )
+  }
+  if (att.kind === 'audio') {
+    return (
+      <Prim.Col gap="$1" alignItems="flex-start">
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        {/* `Prim.Audio` is a host passthrough — it IGNORES style props, so this is a `style`. */}
+        <Prim.Audio controls src={url} style={{ maxWidth: 280 }} />
+        {att.transcript ? (
+          <Prim.Box maxWidth="280px" fontSize="$xs" color="$muted-foreground" fontStyle="italic">
+            “{att.transcript}”
+          </Prim.Box>
+        ) : null}
+      </Prim.Col>
+    )
+  }
+  return (
+    <Prim.Link
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      alignItems="center"
+      gap="$1.5"
+      borderRadius="$radius-lg"
+      borderWidth={1}
+      borderColor="$border"
+      backgroundColor="$muted"
+      paddingHorizontal="$3"
+      paddingVertical="$2"
+      fontSize="$sm"
+      color="$foreground"
+      hoverStyle={{ opacity: 0.9 }}
+      display="inline-flex"
+    >
+      <FileIcon size={14} />
+      <Prim.Text maxWidth="200px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+        {att.filename ?? att.mediaType}
+      </Prim.Text>
+    </Prim.Link>
+  )
+}
+
+/** The full set of attachments on one message, wrapped so several stack without stretching the
+ *  transcript wider than the column. */
+function MessageAttachments({ attachments, ctx }: { attachments: ChannelAttachment[]; ctx: MessageContext }) {
+  return (
+    <Prim.Row flexWrap="wrap" gap="$2">
+      {attachments.map((att) => (
+        <MessageAttachment key={att.id} att={att} ctx={ctx} />
+      ))}
+    </Prim.Row>
+  )
+}
+
+/**
  * The body of one channel message.
  *
  * THING answers in JSX, so a `thing` message is usually a tree of design-system
@@ -235,18 +325,31 @@ function withLinksAndMentions(text: string, ctx: MessageContext): React.ReactNod
  * A member's own message is prose and stays prose: rendering a colleague's text
  * as markdown would let a stray `#` or `_` restyle what they typed. Mentions are
  * the one thing lifted out of it, because they are references, not formatting.
+ *
+ * Attachments (a composer upload) ride alongside whichever of the above the message otherwise
+ * renders as — a member can send a photo WITH a caption, and both need to show.
  */
 export function MessageBody({ message, ctx }: { message: ChannelMessage; ctx: MessageContext }) {
   const blocks = message.blocks?.length ? message.blocks : null
   const legacy = blocks ? null : toRenderableDescriptor(message.text)
   const descriptors = blocks ?? legacy
 
-  if (descriptors) return <Prim.Col gap="$1">{renderDescriptor(descriptors)}</Prim.Col>
-  if (message.kind === 'thing') return <Markdown source={message.text} preset="prose" />
-  return (
+  const text = descriptors ? (
+    <Prim.Col gap="$1">{renderDescriptor(descriptors)}</Prim.Col>
+  ) : message.kind === 'thing' ? (
+    <Markdown source={message.text} preset="prose" />
+  ) : message.text ? (
     <Prim.Text fontSize="$sm" whiteSpace="pre-wrap">
       {withLinksAndMentions(message.text, ctx)}
     </Prim.Text>
+  ) : null
+
+  if (!message.attachments?.length) return text
+  return (
+    <Prim.Col gap="$2">
+      {text}
+      <MessageAttachments attachments={message.attachments} ctx={ctx} />
+    </Prim.Col>
   )
 }
 

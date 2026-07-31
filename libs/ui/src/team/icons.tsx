@@ -136,3 +136,14 @@ export const ExternalLinkIcon = (p: IconProps) => (
     <Prim.Path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
   </Icon>
 )
+
+/** A generic file — the composer's attach button, and any non-image/audio attachment on a
+ *  message ("everything else as a named, openable file"). Not a paperclip, for the same reason
+ *  `chat/app/Composer.tsx`'s own attach control is a plus, not a clip — this one draws the FILE
+ *  being attached rather than the act of attaching. */
+export const FileIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <Prim.Path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z" />
+    <Prim.Path d="M14 2v6h6" />
+  </Icon>
+)

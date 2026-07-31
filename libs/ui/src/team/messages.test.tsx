@@ -118,3 +118,47 @@ describe('a revealed toolbar can be dismissed', () => {
     await waitFor(() => expect(queryByText('Copy')).toBeNull())
   })
 })
+
+describe('MessageBody — attachments', () => {
+  it('draws an image attachment as an <img>, resolved through ctx.resolveUrl', () => {
+    const ctx = { ...CTX, resolveUrl: (url: string) => `${url}?access_token=t` }
+    const msg = message({
+      text: 'a screenshot of the bug',
+      attachments: [{ id: 'a1', kind: 'image', url: '/api/uploads/a1', mediaType: 'image/png', filename: 'bug.png' }],
+    })
+    const { container } = render(<MessageRow message={msg} showHeader={true} ctx={ctx} />)
+    const img = container.querySelector('img')
+    expect(img?.getAttribute('src')).toBe('/api/uploads/a1?access_token=t')
+    expect(img?.getAttribute('alt')).toBe('bug.png')
+  })
+
+  it('draws a non-image attachment as a named, openable file link', () => {
+    const msg = message({
+      text: '',
+      attachments: [{ id: 'a2', kind: 'file', url: '/api/uploads/a2', mediaType: 'application/pdf', filename: 'spec.pdf' }],
+    })
+    const { getByText } = render(<MessageRow message={msg} showHeader={true} ctx={CTX} />)
+    expect(getByText('spec.pdf')).toBeTruthy()
+  })
+
+  it('resolves through the bare url when ctx carries no resolveUrl at all', () => {
+    // `CTX` above never sets `resolveUrl` — proving the fallback in `messages.tsx` rather than
+    // pinning behaviour that only ever exercises a caller that remembered to wire it.
+    const msg = message({
+      text: '',
+      attachments: [{ id: 'a3', kind: 'image', url: '/api/uploads/a3', mediaType: 'image/png' }],
+    })
+    const { container } = render(<MessageRow message={msg} showHeader={true} ctx={CTX} />)
+    expect(container.querySelector('img')?.getAttribute('src')).toBe('/api/uploads/a3')
+  })
+
+  it('shows caption text AND the attachment together, not one or the other', () => {
+    const msg = message({
+      text: 'see attached',
+      attachments: [{ id: 'a4', kind: 'file', url: '/api/uploads/a4', mediaType: 'text/plain', filename: 'notes.txt' }],
+    })
+    const { getByText } = render(<MessageRow message={msg} showHeader={true} ctx={CTX} />)
+    expect(getByText('see attached')).toBeTruthy()
+    expect(getByText('notes.txt')).toBeTruthy()
+  })
+})
