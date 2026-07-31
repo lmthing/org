@@ -334,7 +334,9 @@ describe('build_live_project — the contract gate (08-validate_contract.ts)', (
     expect(fault.message).toContain('Route `[param]`s do NOT go here');
 
     // Declaring the body clears it.
-    c.plan_endpoints.endpoints[1]!.input = ['label: string', 'amount_usd: number'];
+    // `input` is optional on the fixture's endpoint literal — the whole point of the check above is
+    // that it may be ABSENT — so the contract type does not carry it and the assignment needs the cast.
+    (c.plan_endpoints.endpoints[1] as unknown as { input: string[] }).input = ['label: string', 'amount_usd: number'];
     const fixed = await run({}, c as unknown as Record<string, unknown>);
     expect(fixed.errors).toEqual([]);
   });
