@@ -14,6 +14,7 @@
  */
 export { storage } from './storage'
 export { clipboard } from './clipboard'
+export { haptics } from './haptics'
 export { getWindowSize, subscribeWindowSize, type Size } from './dimensions'
 export { apiBase, apiUrl, wsUrl, cloudBaseOverride } from './api-base'
 export { readLinkParams, writeLinkParams } from './deep-link'

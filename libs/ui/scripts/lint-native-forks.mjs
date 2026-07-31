@@ -99,7 +99,13 @@ const ALLOWED = {
 
   // `platform` — a browser global with no direct RN equivalent, behind a narrow API.
   'libs/ui/src/platform/api-base.native.ts': 'platform',
-  'libs/ui/src/platform/clipboard.native.ts': 'platform',
+    // `platform` — a capability seam. A laptop has no haptic engine, so web is all no-ops;
+  // native is `expo-haptics`, lazily imported so a build that does not link it still boots.
+  // It exists because the dependency runs one way: a shared surface owns the send button and
+  // the long-press, and `apps/mobile` cannot reach back into `libs/ui` to wire feedback onto
+  // controls it does not own — which is why those interactions were silent on a device.
+  'libs/ui/src/platform/haptics.native.ts': 'platform',
+'libs/ui/src/platform/clipboard.native.ts': 'platform',
   'libs/ui/src/platform/deep-link.native.ts': 'platform',
   'libs/ui/src/platform/keyboard.native.ts': 'platform',
   'libs/ui/src/platform/navigation.native.ts': 'platform',

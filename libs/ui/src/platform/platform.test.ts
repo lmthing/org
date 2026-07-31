@@ -61,3 +61,20 @@ describe('platform (web)', () => {
     expect(calls).toBe(1)
   })
 })
+
+describe('haptics (web)', () => {
+  // Every call is a no-op on web, and that is the contract rather than an omission: a laptop has
+  // no haptic engine, and the Vibration API some browsers expose is a blunt notification buzz,
+  // not the light confirmation tap this is for — using it would be worse than silence.
+  //
+  // What is worth pinning is that calling them is SAFE. Shared surfaces call these from a send
+  // handler and a long-press; if the web implementation could throw, a buzz that cannot happen
+  // would take down the action the person actually asked for.
+  it('does nothing, and never throws', async () => {
+    const { haptics } = await import('./haptics')
+    expect(() => haptics.success()).not.toThrow()
+    expect(() => haptics.warning()).not.toThrow()
+    expect(() => haptics.light()).not.toThrow()
+    expect(haptics.success()).toBeUndefined()
+  })
+})
