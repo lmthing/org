@@ -27,6 +27,14 @@ export interface TaskNode {
   /** Fork capability profile for this task's subagent (default 'general' when omitted).
    *  Read-only roles ('explore'/'plan') cannot write files or run mutating shell. */
   role?: 'explore' | 'plan' | 'general';
+  /** Model alias/spec THIS node's fork runs on (frontmatter `model:`) — lets an
+   *  expensive judgement step pin a strong model while the rest of the tasklist runs
+   *  the pod default. Highest-precedence model source for a task fork:
+   *  `task.model ?? modelForRole(task.role, roleModels) ?? defaultModel` (fork.ts).
+   *  Core treats it as an OPAQUE string; the provider layer resolves it (an alias like
+   *  `s`/`m`/`l`, or a full `provider:modelId` spec such as
+   *  `lmthingcloud:DeepSeek-V4-Flash`). */
+  model?: string;
   /** Allowlist of space-function names available to this task's fork. When set, only these
    *  functions are injected + listed in the prompt (least privilege); omit for all. */
   functions?: string[];
@@ -163,6 +171,18 @@ function buildTaskNode(
   }
   if (data['role'] === 'explore' || data['role'] === 'plan' || data['role'] === 'general') {
     task.role = data['role'];
+  }
+  if (data['model'] !== undefined) {
+    // Opaque to core (an alias or a `provider:modelId` spec — the provider layer
+    // resolves it), so the only load-time check is "a non-empty string". Rejected
+    // loudly rather than ignored: a mistyped/empty `model:` would otherwise fall back
+    // to the default silently, and the node would look pinned while it wasn't.
+    if (typeof data['model'] !== 'string' || !data['model'].trim()) {
+      throw new Error(
+        `Task "${id}" (${filePath}): "model" must be a non-empty string (a model alias or a "provider:modelId" spec)`,
+      );
+    }
+    task.model = data['model'].trim();
   }
   if (Array.isArray(data['functions'])) {
     task.functions = data['functions'].map(String);

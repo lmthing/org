@@ -79,6 +79,11 @@ export interface ForkTask {
   upstreamOutputSchemas?: Record<string, UpstreamOutputSchema>;
   /** Subagent role controlling capability profile + system-prompt preamble. */
   role?: 'explore' | 'plan' | 'general';
+  /** Per-task model override (tasklist frontmatter `model:`). WINS over the role model
+   *  and the engine default — the full chain is
+   *  `task.model ?? modelForRole(task.role, roleModels) ?? defaultModel`. Opaque to core:
+   *  an alias or a `provider:modelId` spec, resolved by the provider layer. */
+  model?: string;
   /** Allowlist of space-function names to inject + advertise (least privilege). When set,
    *  only these of the engine's agentFunctions are injected and listed; omit for all. */
   functions?: string[];
@@ -637,7 +642,9 @@ export class ForkEngine {
           traceContext: `fork:${task.taskId ?? task.role ?? 'general'}`,
           scope: forkScope,
           budget,
-          model: modelForRole(task.role, this.opts.roleModels) ?? this.opts.defaultModel,
+          // Model precedence, most specific first: the node's own `model:` (tasklist
+          // frontmatter) → the role model (`LM_MODEL_ROLE_*`) → the session default.
+          model: task.model ?? modelForRole(task.role, this.opts.roleModels) ?? this.opts.defaultModel,
         };
 
         // A BudgetExceededError here propagates to the outer catch and rejects: the

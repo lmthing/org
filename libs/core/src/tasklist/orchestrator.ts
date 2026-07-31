@@ -413,6 +413,7 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
               upstreamOutputSchemas,
               taskId: task.id,
               role: task.role,
+              model: task.model,
               functions: task.functions,
               canDelegateTo: task.canDelegateTo,
               capabilities: task.capabilities as import('../spaces/capabilities.js').CapabilityId[] | undefined,

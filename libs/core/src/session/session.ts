@@ -129,6 +129,22 @@ export class Session {
   private pendingAttachments = new Map<string, UserAttachment>();
   private systemBlock: string | null = null;
   private ambientDts: string | null = null;
+  /**
+   * The model THIS session's own turns run on — `agent.model ?? opts.modelAlias`.
+   *
+   * The running agent's frontmatter `model:` wins over the session default, mirroring the
+   * delegate rule (`delegate/delegate.ts` `runDelegate`: `agent.model ?? opts.model`). Before
+   * this, frontmatter `model:` only took effect when an agent was DELEGATED to — a system space
+   * could not pin itself to a strong model while the pod default stayed small.
+   *
+   * Resolved in `start()`/`resume()` once the agent is known (until then it is the session
+   * default, which is what the pre-agent paths want). It is also the session's `defaultModel`
+   * for forks and the inherited `model` for delegates — i.e. the effective session model, not
+   * the raw option — so a fork/delegate that declares nothing follows the running agent, while
+   * anything more specific (a task's `model:`, a role model, a delegate target's own
+   * frontmatter) still wins its own precedence chain.
+   */
+  private effectiveModel: string | undefined;
   /** Freshness (targeted DB-schema invalidation). `bakeAmbientDts` re-runs `buildAmbientDts`
    *  with a given schema, capturing THIS entry's overlay + session capabilities;
    *  `currentDbSchema` is what was last baked; `bakedDbSchemaRev` is the revision it was baked
@@ -233,6 +249,7 @@ export class Session {
   constructor(opts: SessionOpts, deps: SessionDeps) {
     this.opts = opts;
     this.deps = deps;
+    this.effectiveModel = opts.modelAlias;
     this.history = new MessageHistory();
     this.sessionId = randomUUID();
     this.tracer = new Tracer(opts.traceFile ?? null);
@@ -320,7 +337,7 @@ export class Session {
         budget: this.budget,
         initialContext: this.turnContext,
         onContextSnapshot: (c) => { this.turnContext = c; },
-        model: this.opts.modelAlias,
+        model: this.effectiveModel,
         beforeTurn: () => this.beforeTurn(),
         streamIdleMs: this.opts.streamIdleMs,
         maybeCompact: () => this.maybeCompactHistoryBySize(),
@@ -378,6 +395,11 @@ export class Session {
     if (!agent) {
       throw new Error(`Agent "${this.opts.agentSlug}" not found in space at "${this.opts.spaceDir}"`);
     }
+
+    // 2b. The agent may pin its own model (frontmatter `model:`) — it wins over the
+    // session default for this session's OWN turns, exactly as it does when the same
+    // agent is reached through delegate() (delegate.ts `runDelegate`).
+    this.effectiveModel = agent.model ?? this.opts.modelAlias;
 
     // 3. Resolve direct dependencies + the unified canDelegateTo policy (gates
     // whether `delegate` is injected/declared AND which targets a yield may hit).
@@ -502,7 +524,7 @@ export class Session {
         budget: this.budget,
         initialContext: this.turnContext,
         onContextSnapshot: (c) => { this.turnContext = c; },
-        model: this.opts.modelAlias,
+        model: this.effectiveModel,
         beforeTurn: () => this.beforeTurn(),
         streamIdleMs: this.opts.streamIdleMs,
         maybeCompact: () => this.maybeCompactHistoryBySize(),
@@ -582,6 +604,9 @@ export class Session {
     if (!agent) {
       throw new Error(`Agent "${snapshot.agentSlug}" not found`);
     }
+
+    // Same rule as start(): the resumed agent's frontmatter `model:` pins this session.
+    this.effectiveModel = agent.model ?? this.opts.modelAlias;
 
     // Restore history
     this.turnNo = 1;
@@ -674,7 +699,7 @@ export class Session {
         budget: this.budget,
         initialContext: this.turnContext,
         onContextSnapshot: (c) => { this.turnContext = c; },
-        model: this.opts.modelAlias,
+        model: this.effectiveModel,
         beforeTurn: () => this.beforeTurn(),
         streamIdleMs: this.opts.streamIdleMs,
         maybeCompact: () => this.maybeCompactHistoryBySize(),
@@ -1034,7 +1059,7 @@ export class Session {
       appGlobals: pctx.appGlobals,
       // Gate the delegated specialist's db.* against the parent's current schema.
       dbSchema: this.currentDbSchema,
-      model: this.opts.modelAlias,
+      model: this.effectiveModel,
       // Inherit the session's fork wiring down the delegation chain (A1 fix):
       // budget caps + role models for the delegate's leaf forks, and the SHARED
       // dynamicSpaces map so registerSpace() under the delegate propagates back.
@@ -1085,7 +1110,7 @@ export class Session {
       // Session forks are top-level: ForkEngine defaults their depth to 1.
       forkDepth: undefined,
       roleModels: this.opts.roleModels,
-      defaultModel: this.opts.modelAlias,
+      defaultModel: this.effectiveModel,
       // Same Map reference the delegate path reads — a fork's registerSpace() lands here.
       dynamicSpaces: this.dynamicSpaces,
       projectSpacesDir: pctx.projectSpacesDir,
@@ -1361,7 +1386,7 @@ export class Session {
           appGlobals: pctx.appGlobals,
           // Gate the delegated specialist's db.* against the parent's current schema.
           dbSchema: this.currentDbSchema,
-          model: this.opts.modelAlias,
+          model: this.effectiveModel,
           // Inherit the session's fork wiring down the delegation chain (A1 fix).
           budgetLimits: this.opts.budget,
           roleModels: this.opts.roleModels,
