@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { existsSync } from 'node:fs';
+import { agentPromptCorpus } from './agent-prompt-corpus.js';
 import {
   loadSystemSpaces,
   systemFunctionNames,
@@ -17,6 +18,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const SYSTEM_SPACES_ROOT = join(__dirname, '..', '..', 'system-spaces');
 const GLOBAL_DIR = join(SYSTEM_SPACES_ROOT, 'system-global');
 const ARCHITECT_DIR = join(SYSTEM_SPACES_ROOT, 'system-architect');
+/** THING's instruct body PLUS every `playbooks/*` knowledge file it can `loadKnowledge`.
+ *  Doctrine that moved behind a load is asserted here; always-on rules stay on instructBody. */
+const thingCorpus = () => agentPromptCorpus(join(SYSTEM_SPACES_ROOT, 'user-thing'), 'thing');
 
 describe('system spaces', () => {
   it('loads the system-global system space (no agents/ required)', async () => {
@@ -147,28 +151,32 @@ describe('system spaces', () => {
     const thing = spaces[0]?.agents['thing'];
     expect(thing, 'user-thing must ship a "thing" agent').toBeDefined();
     const instruct = thing!.instructBody;
+    // The path-4 detail (offer wording, the organizer envelope) lives in the
+    // `playbooks/paths/application` aspect THING loads when it takes path 4; the output
+    // discipline below must hold on EVERY turn and so stays in the always-on body.
+    const corpus = thingCorpus();
 
     // 1. It must OFFER unasked when handed material + an ongoing need — and wait, not build.
-    expect(instruct).toMatch(/OFFER — do not wait to be asked/);
-    expect(instruct).toMatch(/Do not author anything on the same turn as the offer/);
+    expect(corpus).toMatch(/OFFER — do not wait to be asked/);
+    expect(corpus).toMatch(/Do not author anything on the same turn as the offer/);
     expect(instruct).toMatch(/A turn that has decided something must END WITH THE DECISION/);
     expect(instruct).toMatch(/Ask, then\s+stop, then\s+wait/);
 
     // 2. A bare "yes" to its OWN offer is the consent path 4 requires (no re-spec, no re-offer).
-    expect(instruct).toMatch(/A bare yes to YOUR OWN offer is CONSENT/);
-    expect(instruct).toMatch(/The organizer owns the complete build/);
-    expect(instruct).toMatch(/Do NOT delegate to the automator or architect/);
+    expect(corpus).toMatch(/A bare yes to YOUR OWN offer is CONSENT/);
+    expect(corpus).toMatch(/The organizer owns the complete build/);
+    expect(corpus).toMatch(/Do NOT delegate to the automator or architect/);
 
     // 3. The organizer, not a second free-form path, creates every distinct scope.
-    expect(instruct).toMatch(/inventories independently\s+owned scopes,\s+builds every grounded specialist/);
-    expect(instruct).toMatch(/hands the complete source to the live-project\s+builder/);
+    expect(corpus).toMatch(/inventories independently\s+owned scopes,\s+builds every grounded specialist/);
+    expect(corpus).toMatch(/hands the complete source to the live-project\s+builder/);
 
     // 4. A turn may never end on a raw artifact (the "24872" failure).
     expect(instruct).toMatch(/LAST `display\(\)` is the only thing the user actually reads/);
 
     // …and the restraint it counterbalances must SURVIVE: propose, but still never scaffold
     // an app onto a vague opener. Losing this would trade one failure mode for the other.
-    expect(instruct).toMatch(/Do NOT scaffold an app on a vague or exploratory request/);
+    expect(corpus).toMatch(/Do NOT scaffold an app on a vague or exploratory request/);
   });
 
   // Adding the browser agent to canDelegateTo only makes it ALLOWED; THING also has to KNOW
@@ -184,12 +192,13 @@ describe('system spaces', () => {
     // Allowed to delegate to the browser space.
     expect(thing!.canDelegateTo).toContain('system-browser/browser');
 
-    // Told when to prefer it and how to call it (action-less: the 3-arg form).
-    const instruct = thing!.instructBody;
-    expect(instruct).toMatch(/Interactive browsing/);
-    expect(instruct).toMatch(/delegate\('system-browser', 'browser', \{/);
+    // Told when to prefer it and how to call it (action-less: the 3-arg form). The call shape
+    // lives in the `playbooks/paths/research` aspect THING loads when it takes path 2.
+    const corpus = thingCorpus();
+    expect(corpus).toMatch(/Interactive browsing/);
+    expect(corpus).toMatch(/delegate\('system-browser', 'browser', \{/);
     // The distinction from read-only research must be spelled out both ways.
-    expect(instruct).toMatch(/navigating or\s+interacting with a particular site/);
+    expect(corpus).toMatch(/navigating or\s+interacting with a particular site/);
   });
 
   // Live-prod evidence (scenario 06, Act V): asked a question his own files did NOT answer (how
@@ -200,13 +209,19 @@ describe('system spaces', () => {
   it('THING is told a space built from the user\'s material cannot answer beyond it — research instead', async () => {
     const spaces = await loadSystemSpaces([join(SYSTEM_SPACES_ROOT, 'user-thing')]);
     const instruct = spaces[0]!.agents['thing']!.instructBody;
+    const corpus = thingCorpus();
 
-    expect(instruct).toMatch(/A space you built from the user's own material knows ONLY that material/);
+    // The always-on triage entry must still carry the rule in short form, so THING routes to
+    // research instead of to the space before it has loaded anything.
+    expect(instruct).toMatch(/cannot know a fact that was not in it — research instead/);
+
+    // The full argument lives in the `playbooks/paths/research` aspect path 2 loads.
+    expect(corpus).toMatch(/A space you built from the user's own material knows ONLY that material/);
     // The decision rule, and the escalation when the space itself admits the gap.
-    expect(instruct).toMatch(/was this in what they gave me\?/);
-    expect(instruct).toMatch(/believe it, and\s+escalate\./);
+    expect(corpus).toMatch(/was this in what they gave me\?/);
+    expect(corpus).toMatch(/believe it, and\s+escalate\./);
     // …and the finding must be kept, not left in one chat reply.
-    expect(instruct).toMatch(/Then KEEP what you found/);
+    expect(corpus).toMatch(/Then KEEP what you found/);
   });
 });
 

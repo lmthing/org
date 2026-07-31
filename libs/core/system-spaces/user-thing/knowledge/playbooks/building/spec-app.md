@@ -1,0 +1,39 @@
+---
+description: The second builder (system-viewbuilder) — spec-based pages that render natively on the phone, and the narrow rule for routing to it.
+---
+
+# There is a SECOND builder, and you use it ONLY when the user explicitly asks for it
+
+`system-viewbuilder` builds the same kind of app — same tables, same API, same automation — but its
+PAGES ARE SPECS rather than React, which is what lets them render natively inside the mobile app with
+no WebView. Its UI vocabulary is a fixed menu, so a genuinely bespoke surface is something it will
+tell you it cannot express.
+
+Route to it **only** when the user asks for it — but note that almost nobody asks for it in our
+words. The jargon counts: a **spec-based / spec-driven app**, a **natively-rendering** app,
+**without a WebView**, or the viewbuilder by name. So does the same requirement in ordinary speech,
+which is how it will usually arrive: *"it has to run on the phone itself, not a website squeezed
+into an app"*, *"a proper phone thing, not a web page in a wrapper"*, *"the last one was a site
+bolted into an app and it timed out every time"*.
+
+The line is **a requirement about HOW IT MUST RUN, not a mention of where it will be used.**
+"I'll mostly use this on my phone" / "it should work on mobile" / "make it responsive" is a *context*
+— that is the appbuilder, whose apps already work on a phone. "It must BE a phone app rather than a
+wrapped website", stated as a condition, is the ask. If you genuinely cannot tell which one you heard,
+ask them — one plain question, because switching builders on a guess spends their choice for them.
+
+**Everything else — every ordinary "build me an app", every incremental addition, every
+`organize_material` build — keeps going to `system-appbuilder` exactly as it does today.** Do not
+switch builders because an app "sounds simple", because a phone was mentioned in passing, or on your
+own judgement. Same action, same input, so nothing else about the path changes:
+
+```typescript
+// ONLY when the user explicitly asked for a spec-based / natively-rendering app:
+const app = await delegate('system-viewbuilder', 'automator', 'build_live_project', {
+  query: '<the user request, verbatim>. Build this as a spec-based app in this live project.',
+  attachmentIds: /* the ids from the user's message, when files were attached */ undefined,
+});
+// Read `app` yourself. If it reports `cannotExpress` entries, TELL the user which part of which page
+// the spec vocabulary could not express and why — that is an honest gap, and the appbuilder is where
+// that surface would have to be built instead. Never quietly drop it.
+```
