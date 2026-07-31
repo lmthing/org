@@ -62,6 +62,7 @@ import {
   spaceSessionsDir,
   listSpaceSessions,
   projectSpaceDir,
+  resolveSpaceRefDir,
   readSpaceFiles,
   writeSpaceFiles,
   writeProjectSpaceFile as writeSpaceFile,
@@ -1442,7 +1443,7 @@ export class SessionManager {
     let agentSlug = opts.agentSlug ?? 'thing';
     if (opts.spaceRef) {
       const { space, agent } = parseSpaceRef(opts.spaceRef);
-      spaceDir = projectSpaceDir(root, projectId, space);
+      spaceDir = resolveSpaceRefDir(root, projectId, space);
       agentSlug = agent ?? (await resolveDefaultAgent(spaceDir)) ?? agentSlug;
     }
     const projectSpacesDir = join(root, projectId, 'spaces');
@@ -1504,7 +1505,7 @@ export class SessionManager {
     // Resume a spaceRef-bound session against its own space dir; else the
     // project root. agentSlug is restored from persisted meta below.
     const spaceDir = opts.spaceRef
-      ? projectSpaceDir(root, projectId, parseSpaceRef(opts.spaceRef).space)
+      ? resolveSpaceRefDir(root, projectId, parseSpaceRef(opts.spaceRef).space)
       : join(root, projectId);
     const projectSpacesDir = join(root, projectId, 'spaces');
 
@@ -2057,7 +2058,7 @@ export class SessionManager {
       spaceDir = opts.spaceDir;
     } else if (opts.spaceRef) {
       const spaceName = opts.spaceRef.split('/')[0] ?? opts.spaceRef;
-      spaceDir = join(projectRoot, 'spaces', spaceName);
+      spaceDir = resolveSpaceRefDir(root, projectId, spaceName);
     } else {
       spaceDir = projectRoot;
     }

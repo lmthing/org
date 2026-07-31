@@ -160,6 +160,35 @@ export function projectSpaceDir(root: string, projectId: string, spaceId: string
 }
 
 /**
+ * Resolve the dir a `spaceRef` names — the PROJECT's own copy if it has one, else the SYSTEM space.
+ *
+ * A system space is not materialized under `<project>/spaces/`; it lives once at
+ * `<root>/system/spaces/<id>`. So `projectSpaceDir` alone returns a path that does not exist for
+ * every `system-*` ref, `loadSpace` yields an empty space, and the agent slug then falls through to
+ * the flattened merge of ALL system spaces — where the LAST space to define that slug wins
+ * (`mergeSystemInto` uses `Object.assign`, and `SYSTEM_SPACE_NAMES` order decides it).
+ *
+ * That is not hypothetical: `system-appbuilder` and `system-viewbuilder` both define an `automator`
+ * (and `api-author`, and `data-modeler`) and both define a `build_live_project` tasklist. A session
+ * bound to `system-appbuilder/automator` therefore ran the VIEWBUILDER's agent and tasklist —
+ * writing `.view.json` specs from a ref that explicitly named the appbuilder. The delegate path is
+ * unaffected (`DelegateRegistry#matchesSpace` matches on the space's real dir), so this only ever bit
+ * space-BOUND sessions; but those are how the scenario harness's `space_session` and any
+ * chat-with-a-space-agent surface reach an agent, and there the space half of the ref was silently
+ * discarded.
+ *
+ * Falling back to the system dir makes the ref mean what it says. The project copy still wins, so a
+ * space a user has customized in their project keeps overriding the shipped one.
+ */
+export function resolveSpaceRefDir(root: string, projectId: string, spaceId: string): string {
+  const inProject = projectSpaceDir(root, projectId, spaceId);
+  if (existsSync(join(inProject, 'agents'))) return inProject;
+  const inSystem = join(root, 'system', 'spaces', spaceId);
+  if (existsSync(join(inSystem, 'agents'))) return inSystem;
+  return inProject;
+}
+
+/**
  * Read every file under a space dir into a flat `{ relPath: content }` map,
  * excluding runtime junk: a top-level `sessions/` dir, any `conversations/`
  * dir at any depth, and any `.env` file. `relPath` uses forward slashes.
