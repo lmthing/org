@@ -141,6 +141,12 @@ export async function attachDesktop({ base, token, verbose = false }) {
   const { CdpClient } = await import('../../../apps/desktop/src/cdp.ts');
   const { callTool } = await import('../../../apps/desktop/src/browser-tools.ts');
 
+  // Wait for a sleeping pod before dialling. A scaled-to-zero pod answers the upgrade `503
+  // {"waking":true}` — which is not a refusal and not an error, it is the pod telling you to come
+  // back. Treating it as either is how a scenario fails against a perfectly healthy workspace.
+  // The budget matches `waitForPodEdge`'s, because it is the same cold wake.
+  await waitForBridgeReady({ base, token, verbose });
+
   const browser = await launchChromium();
   const cdp = new CdpClient();
   await cdp.connect(browser.endpoint);
@@ -300,6 +306,26 @@ export async function attachDesktop({ base, token, verbose = false }) {
       await browser.close();
     },
   };
+}
+
+/**
+ * Poll until the pod will accept a bridge, or until it is clear it never will.
+ *
+ * A 503 is transient — the pod is waking — and a 403 is not, so they must not be retried the same
+ * way. Anything that is neither returns immediately and lets the caller report it.
+ */
+async function waitForBridgeReady({ base, token, verbose, timeoutMs = 120_000, intervalMs = 2_000 }) {
+  const deadline = Date.now() + timeoutMs;
+  let last = null;
+  while (Date.now() < deadline) {
+    last = await probeHostBridge({ base, token, timeoutMs: 15_000 });
+    if (last.accepted) return;
+    // Only a waking pod and an unreachable one are worth waiting on. A 403 is a decision.
+    if (last.status !== null && last.status !== 503 && last.status !== 504) return;
+    if (verbose) console.log('[desktop] pod not ready yet:', last.status ?? 'no answer', last.reason);
+    await sleep(intervalMs);
+  }
+  if (verbose) console.log('[desktop] gave up waiting for the pod:', JSON.stringify(last));
 }
 
 /**

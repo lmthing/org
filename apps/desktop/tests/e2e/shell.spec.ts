@@ -140,12 +140,21 @@ test.describe('sign-in', () => {
     expect(session?.email).toBe('someone@example.test')
 
     // And the boot sequence actually ran against the gateway and the pod.
-    const log = await calls(page)
-    const paths = log.map((c) => c.path)
-    expect(paths).toContain('/api/auth/email/start')
-    expect(paths).toContain('/api/auth/email/verify')
-    expect(paths).toContain('/api/compute/ensure')
-    expect(paths).toContain('/api/sessions')
+    //
+    // POLLED, not sampled. The login screen disappears the moment the session lands, which is
+    // BEFORE `waitForPodEdge` has made its first `/api/sessions` poll — so reading the call log
+    // once, right here, is a race that passes or fails on scheduling. It failed only under the
+    // full suite, which is the worst way for a race to announce itself.
+    await expect
+      .poll(async () => (await calls(page)).map((c) => c.path), { timeout: 15_000 })
+      .toEqual(
+        expect.arrayContaining([
+          '/api/auth/email/start',
+          '/api/auth/email/verify',
+          '/api/compute/ensure',
+          '/api/sessions',
+        ]),
+      )
   })
 
   test('a wrong code is refused and the app stays signed out', async ({ page }) => {

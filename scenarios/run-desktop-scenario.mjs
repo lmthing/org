@@ -127,7 +127,13 @@ try {
     // in the scenario's `expect` lines.
     const problems = [];
     if (ops.length === 0 && i === 0) problems.push('no browser operation crossed the bridge');
-    if (ops.some((o) => !o.ok)) problems.push(`browser op failed: ${ops.find((o) => !o.ok)?.error}`);
+    // Only TRANSPORT failures. A tool answering `isError` is a DESIGNED outcome — `tree`,
+    // `nodeDetails` and `findElement` are refused on purpose with a pointer to what does work, and
+    // the agent is expected to read that and pick another tool, which is exactly what it did here.
+    // Scoring those as problems reported a healthy run as broken, and would have trained me to
+    // stop reading this line.
+    const broken = ops.find((o) => o.error);
+    if (broken) problems.push(`browser op threw: ${broken.op} — ${broken.error}`);
     if (problems.length) {
       failed++;
       record.problems = problems;

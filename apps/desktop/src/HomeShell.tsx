@@ -9,6 +9,7 @@ import { TeamScreen } from './TeamScreen'
 import { AppScreen } from './AppScreen'
 import { LocalAccess } from './LocalAccess'
 import { BrowserPane } from './BrowserPane'
+import { SplitPane } from './SplitPane'
 import { DesktopHostBridge } from './host-bridge'
 
 /**
@@ -54,9 +55,11 @@ export function HomeShell() {
 
   const badges = teamMentions > 0 ? { teams: teamMentions } : undefined
 
+  // Switching surfaces LEAVES the browser open. It sits beside the surfaces rather than instead of
+  // them, so closing it on every switch would undo the thing the split is for: watching a page
+  // while you talk about it.
   const switchTo = React.useCallback((surface: NavTab) => {
     setTab(surface)
-    setBrowserOpen(false)
     setNavOpen(false)
   }, [])
 
@@ -125,7 +128,7 @@ export function HomeShell() {
           nav from `TeamChannelsView`. A row of its own rather than absolutely positioned, because
           `DashboardHome`'s first element is the greeting at display size, starting hard against the
           top edge — an overlaid button lands on top of the words. */}
-      {tab === 'home' && !browserOpen && (
+      {tab === 'home' && (
         <Prim.Row flexShrink={0} alignItems="center" paddingHorizontal="$2" paddingTop="$2">
           <Prim.Pressable
             onClick={() => setNavOpen(true)}
@@ -144,7 +147,8 @@ export function HomeShell() {
         </Prim.Row>
       )}
 
-      <Prim.Box flex={1} flexDirection="column" minHeight={0} display={tab === 'home' && !browserOpen ? 'flex' : 'none'}>
+      <SplitPane splitOpen={browserOpen} right={<BrowserPane visible={browserOpen} />} left={<>
+      <Prim.Box flex={1} flexDirection="column" minHeight={0} display={tab === 'home' ? 'flex' : 'none'}>
         <DashboardHome
           key={homeKey}
           onNewChat={() => setTab('chat')}
@@ -155,10 +159,10 @@ export function HomeShell() {
           onOpenTeam={openTeam}
         />
       </Prim.Box>
-      <Prim.Box flex={1} flexDirection="column" minHeight={0} display={tab === 'chat' && !browserOpen ? 'flex' : 'none'}>
+      <Prim.Box flex={1} flexDirection="column" minHeight={0} display={tab === 'chat' ? 'flex' : 'none'}>
         <ChatShell onSwitchSurface={switchTo} {...(badges ? { surfaceBadges: badges } : {})} />
       </Prim.Box>
-      <Prim.Box flex={1} flexDirection="column" minHeight={0} display={tab === 'teams' && !browserOpen ? 'flex' : 'none'}>
+      <Prim.Box flex={1} flexDirection="column" minHeight={0} display={tab === 'teams' ? 'flex' : 'none'}>
         <TeamScreen
           onMentionCount={setTeamMentions}
           openTeamId={teamFocus?.teamId}
@@ -166,14 +170,7 @@ export function HomeShell() {
           onSwitchSurface={switchTo}
         />
       </Prim.Box>
-      {/* Mounted alongside the three rather than replacing them, for the same reason they are
-          mounted alongside each other: a browser is a place with state — open tabs, a half-filled
-          form, a page an agent is midway through reading — and remounting it every time somebody
-          glances at chat would throw all of that away. The stream itself pauses while hidden, so
-          the cost of keeping it is memory rather than CPU. */}
-      <Prim.Box flex={1} flexDirection="column" minHeight={0} display={browserOpen ? 'flex' : 'none'}>
-        <BrowserPane visible={browserOpen} />
-      </Prim.Box>
+      </>} />
 
       <Drawer open={navOpen} onClose={() => setNavOpen(false)} side="left" width="$64">
         <Prim.Col flex={1} paddingTop="$3">
@@ -181,9 +178,9 @@ export function HomeShell() {
             <SurfaceSwitcher current={tab} onSwitch={switchTo} {...(badges ? { badges } : {})} />
           </Prim.Box>
           <DrawerRow
-            label="Browser"
+            label={browserOpen ? 'Close the browser' : 'Browser'}
             onPress={() => {
-              setBrowserOpen(true)
+              setBrowserOpen((open) => !open)
               setNavOpen(false)
             }}
           />
