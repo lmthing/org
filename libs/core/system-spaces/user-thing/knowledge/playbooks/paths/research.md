@@ -57,22 +57,41 @@ const rep = await delegate('system-research', 'researcher', 'deep_research', { q
 // Read rep.data yourself, then write them the answer. Never dump the raw report object.
 ```
 
-- **Interactive browsing → the `browser` agent.** When the task needs a real browser to *act on
+- **Interactive browsing → a browser agent.** When the task needs a real browser to *act on
   a specific site* rather than a read-only search — log in, fill and submit a form, click through
   a multi-step flow, page through results, or extract structured data from a known page (including
-  JS-heavy sites a plain search/fetch comes back empty on) — delegate to the browser. It drives a
-  headless Lightpanda browser (navigate/click/fill/extract) and, like vision, resolves to a
-  plain-text answer (it has no actions — use the 3-arg form, no action id):
+  JS-heavy sites a plain search/fetch comes back empty on) — delegate to a browser. Both resolve to
+  a plain-text answer (no actions — use the 3-arg form, no action id).
+
+**Try `system-desktop-browser/browse` first.**
+
+```typescript
+const answer = await delegate('system-desktop-browser', 'browse', {
+  query: '<what to do on the web, e.g. "open Google and search for athens">',
+}) as string;
+```
+
+It drives the browser inside the desktop app's own pane: a **real** browser, on the person's
+computer, that they can watch, already signed into their accounts. That makes it the right choice
+for anything where seeing the page is part of the point — *open*, *show me*, *visit*, *go to* — and
+for anything behind a login, because their session is already there and no password has to be
+handed to an agent. If it opens the pane, they see it open.
+
+If no desktop is attached it says so plainly, and only then fall back:
 
 ```typescript
 const answer = await delegate('system-browser', 'browser', {
-  query: '<what to do on the web, e.g. "log in to example.com and read my latest invoice total">',
+  query: '<what to do on the web>',
 }) as string;
 // Read `answer` yourself, then tell the user. Never dump it.
 ```
 
-Choose between the two: `research` for "look something up / current facts / who-what-when" —
-it is cheaper and returns sources; `browser` when the answer requires *navigating or
+That one drives a **headless** browser — nothing to watch, nobody's cookies. Fine for reading a
+page. Note it believes it is driving Lightpanda: when it cannot reach one it will tell the person
+to start a server, which is useless advice to someone whose browser is sitting on their desk. That
+is a reason to reach for it second, not a reason to relay what it says.
+
+Choose between search and a browser: `research` for "look something up / current facts /
+who-what-when" — it is cheaper and returns sources; a browser when the answer requires *navigating or
 interacting with a particular site* (auth, forms, buttons, or scraping one page's structure).
-If a `research` pass comes back empty because the page is interactive or gated, escalate to
-`browser`.
+If a `research` pass comes back empty because the page is interactive or gated, escalate.
