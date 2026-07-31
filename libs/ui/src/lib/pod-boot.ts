@@ -36,14 +36,32 @@ export async function ensureComputePod(
 ): Promise<void> {
   const base = cloudBase ?? dataPlaneOrigin('cloud')
   const token = await getAccessToken()
+  // Bounded, because this is the ONE unbounded await in the whole boot path and it sits in front
+  // of everything. `waitForPodEdge` below has its own 120s budget and throws, which a caller can
+  // show and offer a retry for; a `fetch` with no signal simply never settles, and the person is
+  // left on "Starting your workspace…" with no timeout, no error and no way forward but quitting.
+  // A gateway that has not answered in 30s is not about to.
   const res = await fetch(`${base}/api/compute/ensure`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(ENSURE_TIMEOUT_MS),
+  }).catch((err: unknown) => {
+    // `AbortSignal.timeout` rejects with a TimeoutError whose message names neither the URL nor
+    // the budget, so it arrives on screen as "signal timed out" and explains nothing.
+    const name = (err as { name?: string })?.name
+    throw new Error(
+      name === 'TimeoutError'
+        ? `the gateway did not answer within ${Math.round(ENSURE_TIMEOUT_MS / 1000)}s (${base})`
+        : `could not reach the gateway at ${base}: ${err instanceof Error ? err.message : String(err)}`,
+    )
   })
   if (!res.ok) {
     throw new Error(`compute/ensure failed: ${res.status}`)
   }
 }
+
+/** Long enough for a slow mobile network and a cold gateway; short enough to still be an answer. */
+const ENSURE_TIMEOUT_MS = 30_000
 
 export interface PodEdgeOptions {
   timeoutMs?: number

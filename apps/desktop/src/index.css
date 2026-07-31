@@ -1,0 +1,68 @@
+/*
+ * The desktop app's stylesheet entry.
+ *
+ * ## Why this file had to exist
+ *
+ * It did not, and the app was wrong without it. `main.tsx` imported `@lmthing/ui/chat/css` — the
+ * chat surface's BASE stylesheet — and nothing else. That file deliberately defines no colours:
+ * `theme.css` "keeps full control of theming", as `apps/web/src/routes/__root.tsx` puts it. So the
+ * desktop app ran with no design tokens at all: no `--background`, no `--foreground`, no theme.
+ *
+ * The two failure modes that produced are worth writing down, because between them they hid the
+ * bug completely:
+ *
+ * - In a PRODUCTION build the app rendered, unthemed. Tamagui finds no theme, and its complaint is
+ *   inside `process.env.NODE_ENV === 'development'`, which is compiled out. Every E2E passed —
+ *   they assert text and roles, and never a colour.
+ * - In DEV it did not render at all. The same complaint runs, and it formats itself with
+ *   `JSON.stringify(props)` where `props` carries React internals; both V8 and JavaScriptCore
+ *   throw on the cycle. The exception escapes module evaluation, so nothing mounts and the window
+ *   is just the background colour — a totally black window with no message anywhere.
+ *
+ * Mirrors `apps/web/src/index.css`, minus the parts that are genuinely web-only: no `@font-face`
+ * for the display font (a packaged desktop app has no `/TypeMates …otf` to fetch — that is a
+ * follow-up, and the `font-family` fallback below is what runs until then).
+ */
+@import "@lmthing/css/theme.css";
+/* The keyframe layer (`lm-*`, plus `animate-spin`/`animate-pulse`), used from `chat/` and the
+   dashboard alike. App-level rather than route-level for the same reason as on web: a route-scoped
+   stylesheet leaves them unstyled until that route's chunk loads. */
+@import "@lmthing/css/animations.css";
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  * {
+    border-color: var(--border);
+    outline-color: var(--ring);
+    @supports (color: color-mix(in lab, red, red)) {
+      outline-color: color-mix(in oklab, var(--ring) 50%, transparent);
+    }
+  }
+  body {
+    background-color: var(--background);
+    font-family: var(--font-sans, system-ui, sans-serif);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* A window is not a page: there is nothing above or below the app to scroll to, and a
+       rubber-band on a native window reads as the whole app coming loose. */
+    overflow: hidden;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.025em;
+  }
+  code, pre, kbd {
+    font-family: var(--font-mono);
+  }
+}
+
+@layer utilities {
+  .animate-fade-in { animation: fade-in 200ms ease-out; }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+}

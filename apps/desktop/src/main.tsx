@@ -1,6 +1,10 @@
 import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import { hydrateAuth } from '@lmthing/auth'
+// The design tokens FIRST — `@lmthing/ui/chat/css` deliberately defines no colours, so without
+// this the app has no `--background`, no theme, and Tamagui finds nothing to render with. See
+// `index.css` for the two ways that failed, one of them silently.
+import './index.css'
 import '@lmthing/ui/chat/css'
 import { installSsoHandler } from './desktop'
 import { App } from './App'

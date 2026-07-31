@@ -129,6 +129,22 @@ pub fn run() {
                 let _ = window.set_background_color(Some(color));
             }
 
+            // Devtools, on request.
+            //
+            // Worth a few lines because of how a webview fails: when the page does not render, the
+            // window is simply the background colour, and that is indistinguishable from a window
+            // that never loaded anything. There is no log — WebKitGTK does not forward console
+            // messages to stderr — so without this the only way to find out whether the bundle
+            // threw, rendered nothing, or was never fetched is to guess.
+            //
+            // Opt-in rather than always-on in debug builds: `tauri dev` is also how the app is
+            // demonstrated, and a devtools pane that appears uninvited every launch is its own
+            // small annoyance.
+            #[cfg(debug_assertions)]
+            if std::env::var("LMTHING_DEVTOOLS").is_ok() {
+                window.open_devtools();
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())

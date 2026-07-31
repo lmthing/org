@@ -167,7 +167,18 @@ export async function attachDesktop({ base, token, verbose = false }) {
     });
     socket.addEventListener('error', () => {
       clearTimeout(timer);
-      reject(new Error(`the pod refused the host bridge at ${base}`));
+      // Ask WHY before saying so. A browser WebSocket reports every failure as a bare error with
+      // no status, so the first version of this said "the pod refused" for a pod that was simply
+      // not up yet — and sent me looking for a guard that was working perfectly.
+      void probeHostBridge({ base, token, timeoutMs: 10_000 }).then((p) =>
+        reject(
+          new Error(
+            p.status
+              ? `the pod refused the host bridge at ${base} — HTTP ${p.status}: ${p.reason}`
+              : `could not reach ${base}/api/host/ws: ${p.reason}`,
+          ),
+        ),
+      );
     });
   });
 

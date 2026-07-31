@@ -16,6 +16,56 @@
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      The last-resort error surface, installed BEFORE the module graph runs.
+
+      `main.tsx` already catches a failure inside `boot()` and puts the reason on screen. It cannot
+      catch a failure during MODULE EVALUATION — an exception thrown while the bundle's imports are
+      still being evaluated happens before any of our code exists, and the result is a window that
+      is simply the background colour. On a dark theme that is a totally black window with nothing
+      in any log, because WebKitGTK does not forward console messages to stderr. It is the single
+      worst failure mode this app has: indistinguishable from "the app did not start".
+
+      So this is a plain inline script with plain CSS, and both are deliberate. It must survive the
+      design system, the bundler and the framework all having failed to load — anything it depended
+      on could be the very thing that broke.
+    -->
+    <script>
+      (function () {
+        var shown = false;
+        function surface(what, detail) {
+          if (shown) return;
+          shown = true;
+          var root = document.getElementById('root');
+          if (!root) return;
+          root.setAttribute(
+            'style',
+            'position:fixed;inset:0;padding:24px;overflow:auto;font:13px/1.5 ui-monospace,monospace;' +
+              'background:#1b0f0f;color:#ffd7d7;white-space:pre-wrap;',
+          );
+          root.textContent =
+            'The app failed to start.\n\n' + what + '\n\n' + detail + '\n\n' +
+            'This is a module-evaluation failure — it happened before the app could report it any ' +
+            'other way. Run with LMTHING_DEVTOOLS=1 for the full stack.';
+        }
+        window.addEventListener('error', function (e) {
+          surface(String(e.message || 'an error was thrown'), (e.filename || '') + ':' + (e.lineno || '?'));
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e.reason;
+          surface(String((r && r.message) || r || 'a promise rejected'), (r && r.stack) || '');
+        });
+        // Nothing threw, and nothing rendered either. A silent empty root is its own failure and
+        // needs saying — it is what a zero-height container or a render that returned null looks
+        // like, and neither raises anything.
+        window.setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && root.childNodes.length === 0) {
+            surface('Nothing rendered.', 'The bundle evaluated without throwing, but #root is empty.');
+          }
+        }, 8000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

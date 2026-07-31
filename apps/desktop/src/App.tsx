@@ -2,6 +2,7 @@ import * as React from 'react'
 import { TamaguiProvider } from '@tamagui/core'
 import { AuthProvider } from '@lmthing/auth'
 import { tamaguiConfig } from '@lmthing/ui/theme/tamagui.config'
+import { applyTheme } from '@lmthing/ui/chat'
 import { OfflineBanner } from './OfflineBanner'
 import { AuthGate } from './AuthGate'
 
@@ -23,8 +24,26 @@ import { AuthGate } from './AuthGate'
 export function App() {
   const scheme = usePreferredColorScheme()
 
+  // Light/dark is a CSS concern here, not a Tamagui one — `theme.css` keys every colour off
+  // `data-theme` on `<html>`, and `applyTheme` is what sets it. See the provider note below.
+  React.useEffect(() => {
+    applyTheme(scheme)
+  }, [scheme])
+
   return (
-    <TamaguiProvider config={tamaguiConfig} defaultTheme={scheme}>
+    // `defaultTheme="app"`, and NOT the light/dark name this used to pass.
+    //
+    // On the WEB target — which a Tauri webview is — the Tamagui config has exactly one theme,
+    // named `app`, and it is empty on purpose so `theme.css` keeps full control of colour
+    // (`@lmthing/ui/theme/tamagui.config`). `light` and `dark` are the NATIVE pair; naming one here
+    // means Tamagui finds no theme at all.
+    //
+    // That mistake was invisible in a production build and fatal in dev. Tamagui's complaint lives
+    // behind `NODE_ENV === 'development'`, so a built app rendered unthemed and every E2E passed
+    // (they assert text and roles, never colour) — while `pnpm tauri:dev` formatted that same
+    // complaint with `JSON.stringify(props)`, hit React's internal cycle, threw out of module
+    // evaluation, and left a totally black window with nothing in any log.
+    <TamaguiProvider config={tamaguiConfig} defaultTheme="app">
       {/* A property of the machine, not of whichever surface is open — as relevant on the login
           screen (you cannot sign in offline) and the pod-boot screen (that IS a network call) as
           once a conversation is open, so it sits above everything rather than inside `HomeShell`. */}
