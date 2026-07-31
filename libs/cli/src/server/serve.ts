@@ -480,7 +480,10 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // the data directory. Started unconditionally — when the binary is absent the endpoint still
   // answers, explaining why, which is a far better failure than an unset variable.
   await startZerostackEndpoint({
-    dataDir: terminalCwd,
+    // The lmthing ROOT, never `terminalCwd` — that falls back to `process.cwd()`, and zerostack
+    // materializes its primers into whatever it is given. A test server with no root once wrote
+    // AGENTS.md/ARCHITECTURE.md straight into the checkout. No root ⇒ the endpoint refuses turns.
+    dataDir: effectiveLmthingRoot,
     // `bin.ts` always sets this; the fallback resolves the same alias chain it would have used, so
     // an embedded SessionManager still gets a real `provider:modelId` rather than the bare "M".
     modelSpec: manager.defaultModel ?? resolveAlias(process.env['LM_MODEL'] ?? 'M'),

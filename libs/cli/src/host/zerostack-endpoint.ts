@@ -78,8 +78,17 @@ const WAIT_SLICE_MS = 15_000;
 const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 
 export interface ZerostackEndpointOpts {
-  /** The LMThing data root. Becomes zerostack's working directory — this IS the "full data directory" grant. */
-  dataDir: string;
+  /**
+   * The LMThing data root. Becomes zerostack's working directory — this IS the "full data
+   * directory" grant.
+   *
+   * `undefined` when the server is running without one (a bare `lmthing serve`, and several
+   * tests). It must NOT fall back to `process.cwd()`: zerostack's entire premise is the data root,
+   * and a cwd fallback means materializing `AGENTS.md`/`ARCHITECTURE.md` into whatever directory
+   * the process happened to start in — someone's repo, or their home. That is exactly what
+   * happened: a test server with no root wrote both primers into the checkout.
+   */
+  dataDir: string | undefined;
   /**
    * The resolved `provider:modelId` the pod's own agents run on (`SessionManager.defaultModel`).
    * zerostack runs on the same model, through the same key, so its spend lands on the same budget.
@@ -265,12 +274,16 @@ export async function startZerostackEndpoint(opts: ZerostackEndpointOpts): Promi
 
   // Everything zerostack owns lives under one directory on the pod volume, so sessions survive a
   // scale-to-zero wake exactly like projects do.
-  const zsRoot = join(opts.dataDir, '.zerostack');
+  const dataDir = opts.dataDir;
+  const zsRoot = join(dataDir ?? '', '.zerostack');
   const configDir = join(zsRoot, 'config');
   const sessionsRoot = join(zsRoot, 'agents');
   const mapped = mapProvider(opts.modelSpec);
 
   let workspaceReady = false;
+
+  /** Without a data root there is nothing to run zerostack over, and nowhere safe to write. */
+  const NO_ROOT = 'this pod has no LMThing data root, so there is nothing for zerostack to work over (the server was started without one)';
 
   /**
    * Materialize everything zerostack needs in the data directory — on the FIRST TURN, not at boot.
@@ -291,14 +304,14 @@ export async function startZerostackEndpoint(opts: ZerostackEndpointOpts): Promi
    * rather than not happening.
    */
   function ensureWorkspace(): void {
-    if (workspaceReady) return;
+    if (workspaceReady || !dataDir) return;
     mkdirSync(configDir, { recursive: true });
     mkdirSync(sessionsRoot, { recursive: true });
     if (mapped.ok) {
-      writeFileSync(join(configDir, 'config.toml'), renderConfigToml({ ...mapped, dataDir: opts.dataDir }), 'utf8');
+      writeFileSync(join(configDir, 'config.toml'), renderConfigToml({ ...mapped, dataDir }), 'utf8');
     }
-    writeFileSync(join(opts.dataDir, 'AGENTS.md'), ZEROSTACK_AGENTS_MD, 'utf8');
-    writeFileSync(join(opts.dataDir, 'ARCHITECTURE.md'), ZEROSTACK_ARCHITECTURE_MD, 'utf8');
+    writeFileSync(join(dataDir, 'AGENTS.md'), ZEROSTACK_AGENTS_MD, 'utf8');
+    writeFileSync(join(dataDir, 'ARCHITECTURE.md'), ZEROSTACK_ARCHITECTURE_MD, 'utf8');
     workspaceReady = true;
   }
 
@@ -329,6 +342,10 @@ export async function startZerostackEndpoint(opts: ZerostackEndpointOpts): Promi
     promptName?: string; resume?: boolean; loop?: { maxIterations?: number; validateCmd?: string };
   }): Promise<ZerostackTurnResult> {
     return new Promise((resolve) => {
+      if (!dataDir) {
+        resolve({ ok: false, sessionId: args.sessionId ?? '', text: '', exitCode: null, timedOut: false, error: NO_ROOT });
+        return;
+      }
       if (!bin || !version) {
         resolve({
           ok: false, sessionId: args.sessionId ?? '', text: '', exitCode: null, timedOut: false,
@@ -379,7 +396,7 @@ export async function startZerostackEndpoint(opts: ZerostackEndpointOpts): Promi
       let child: SpawnedProc;
       try {
         child = spawn(bin, argv, {
-          cwd: opts.dataDir,
+          cwd: dataDir,
           env: childEnv(id),
           stdio: ['ignore', 'pipe', 'pipe'],
         }) as unknown as SpawnedProc;
@@ -544,15 +561,16 @@ export async function startZerostackEndpoint(opts: ZerostackEndpointOpts): Promi
       switch (body.op) {
         case 'status':
           reply({
-            ok: bin !== null && version !== null && mapped.ok,
+            ok: bin !== null && version !== null && mapped.ok && dataDir !== undefined,
             installed: version !== null,
             version,
-            dataDir: opts.dataDir,
+            dataDir: dataDir ?? null,
             model: mapped.ok ? `${mapped.providerName}:${mapped.model}` : null,
             permissionMode: 'yolo',
             sessions: (await listSessions()).length,
             ...(mapped.ok ? {} : { error: mapped.reason }),
             ...(version === null ? { error: 'the zerostack binary is not installed in this pod' } : {}),
+            ...(dataDir ? {} : { error: NO_ROOT }),
           });
           return;
 
@@ -621,7 +639,7 @@ export async function startZerostackEndpoint(opts: ZerostackEndpointOpts): Promi
 
   log(
     version
-      ? `[zerostack] ${version} on ${url} (cwd ${opts.dataDir}, model ${mapped.ok ? `${mapped.providerName}:${mapped.model}` : 'UNAVAILABLE'})`
+      ? `[zerostack] ${version} on ${url} (cwd ${dataDir ?? 'NO DATA ROOT — turns will be refused'}, model ${mapped.ok ? `${mapped.providerName}:${mapped.model}` : 'UNAVAILABLE'})`
       : `[zerostack] binary not installed — endpoint on ${url} will report why`,
   );
 

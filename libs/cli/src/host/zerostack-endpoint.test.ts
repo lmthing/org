@@ -170,6 +170,31 @@ describe('the loopback zerostack endpoint', () => {
     expect(String(status['error'])).toMatch(/not installed/);
   });
 
+  /**
+   * Regression: `serve.ts` used to pass `terminalCwd`, which falls back to `process.cwd()`. A test
+   * server with no lmthing root therefore materialized AGENTS.md and ARCHITECTURE.md straight into
+   * the repository checkout. zerostack's whole premise is the data root — without one there is
+   * nothing to work over and nowhere safe to write, so it refuses rather than guessing a directory.
+   */
+  it('refuses to run, and writes NOTHING, when there is no data root', async () => {
+    process.env['LMTHING_ZEROSTACK_BIN'] = fakeZerostack(dataDir, RECORDER);
+    process.env['ZS_ARGV_LOG'] = join(dataDir, 'argv.log');
+    endpoint = await startZerostackEndpoint({ dataDir: undefined, modelSpec: 'lmthingcloud:m' });
+
+    const status = await post(endpoint.url, { op: 'status' });
+    expect(status['ok']).toBe(false);
+    expect(status['dataDir']).toBeNull();
+    expect(String(status['error'])).toMatch(/no LMThing data root/);
+
+    const r = await runOp(endpoint.url, { op: 'ask', message: 'go' });
+    expect(r['ok']).toBe(false);
+    expect(String(r['error'])).toMatch(/no LMThing data root/);
+
+    // The cwd is the one thing that must stay untouched — it is somebody's repo or home.
+    expect(existsSync(join(process.cwd(), 'AGENTS.md')), 'must not write into process.cwd()').toBe(false);
+    expect(existsSync(join(process.cwd(), 'ARCHITECTURE.md')), 'must not write into process.cwd()').toBe(false);
+  });
+
   it('reports an unusable model in status instead of running against the wrong account', async () => {
     process.env['LMTHING_ZEROSTACK_BIN'] = fakeZerostack(dataDir, RECORDER);
     endpoint = await startZerostackEndpoint({ dataDir, modelSpec: 'azure:gpt-5.5' });
