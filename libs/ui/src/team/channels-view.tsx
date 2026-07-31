@@ -175,6 +175,7 @@ export interface TeamChannelsViewProps {
   /** Every team the member is on, for the sidebar's switcher. */
   teams?: readonly { id: string; name: string }[]
   onSwitchTeam?: (teamId: string) => void
+  onSwitchSurface?: (surface: 'home' | 'chat' | 'teams') => void
   /** Called with the total mention count whenever it changes (tab badge, app icon badge). */
   onMentionCount?: (count: number) => void
 }
@@ -193,6 +194,7 @@ export function TeamChannelsView({
   team,
   teams,
   onSwitchTeam,
+  onSwitchSurface,
 }: TeamChannelsViewProps) {
   const [fallbackId, setFallbackId] = useState<string | null>(null)
   const activeId = activeChannelId ?? fallbackId
@@ -335,21 +337,24 @@ export function TeamChannelsView({
     <ChannelSidebar
       compact={compact}
       onDismiss={() => setDrawerOpen(false)}
-        team={team}
-        teams={teams}
-        onSwitchTeam={onSwitchTeam}
-        channels={chat.channels}
-        categories={chat.categories}
-        members={chat.directory.members}
-        meId={meId}
-        activeId={activeId}
-        isEditor={isEditor}
-        unread={chat.unread}
-        onSelect={selectChannel}
-        onCreateChannel={(name, categoryId) => void chat.createChannel(name, categoryId)}
-        onCreateCategory={(name) => void chat.createCategory(name)}
-        onDeleteCategory={(id) => void chat.deleteCategory(id)}
-        onMoveChannel={(channelId, categoryId) => void chat.patchChannel(channelId, { categoryId })}
+      team={team}
+      teams={teams}
+      onSwitchTeam={onSwitchTeam}
+      onSwitchSurface={onSwitchSurface}
+      channels={chat.channels}
+      categories={chat.categories}
+      members={chat.directory.members}
+      projects={chat.directory.projects}
+      onOpenApp={onOpenApp}
+      meId={meId}
+      activeId={activeId}
+      isEditor={isEditor}
+      unread={chat.unread}
+      onSelect={selectChannel}
+      onCreateChannel={(name, categoryId) => void chat.createChannel(name, categoryId)}
+      onCreateCategory={(name) => void chat.createCategory(name)}
+      onDeleteCategory={(id) => void chat.deleteCategory(id)}
+      onMoveChannel={(channelId, categoryId) => void chat.patchChannel(channelId, { categoryId })}
       onOpenDm={(userId) => {
         void chat.openDm(userId).then((channel) => channel && selectChannel(channel.id))
       }}

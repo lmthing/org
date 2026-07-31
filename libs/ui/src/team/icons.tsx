@@ -147,3 +147,22 @@ export const FileIcon = (p: IconProps) => (
     <Prim.Path d="M14 2v6h6" />
   </Icon>
 )
+
+export const UsersIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <Prim.Path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+    <Prim.Circle cx="9" cy="7" r="4" />
+    <Prim.Path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+    <Prim.Path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </Icon>
+)
+
+export const FolderKanbanIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <Prim.Path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+    <Prim.Path d="M8 10v4" />
+    <Prim.Path d="M12 10v2" />
+    <Prim.Path d="M16 10v6" />
+  </Icon>
+)
+

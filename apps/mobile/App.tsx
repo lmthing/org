@@ -254,8 +254,9 @@ function HomeShell() {
     setNavOpen(false)
   }, [])
 
-  const openTeam = React.useCallback((team: { id: string }) => {
-    setTeamFocus({ teamId: team.id })
+  const openTeam = React.useCallback((target: string | { id: string }, channelId?: string) => {
+    const id = typeof target === 'string' ? target : target.id
+    setTeamFocus({ teamId: id, channelId })
     setTab('teams')
   }, [])
 
@@ -337,7 +338,7 @@ function HomeShell() {
           overlaid button landed on top of the words. A strip costs one row of height; overlapping
           the heading costs the heading. Chat is excluded because `AppShell` already draws its own
           at mobile width, and two would be a duplicate. */}
-      {tab !== 'chat' && (
+      {tab === 'home' && (
         <Prim.Row flexShrink={0} alignItems="center" paddingHorizontal="$2" paddingTop="$2">
           <Prim.Pressable
             onClick={() => setNavOpen(true)}
@@ -385,6 +386,7 @@ function HomeShell() {
           onMentionCount={setTeamMentions}
           openTeamId={teamFocus?.teamId}
           openChannelId={teamFocus?.channelId}
+          onSwitchSurface={switchTo}
         />
       </Prim.Box>
 

@@ -26,6 +26,7 @@ export function TeamScreen({
   onMentionCount,
   openTeamId,
   openChannelId,
+  onSwitchSurface,
 }: {
   onMentionCount?: (count: number) => void
   /**
@@ -36,6 +37,7 @@ export function TeamScreen({
   openTeamId?: string | null
   /** Also select this channel once its team is open — set together with `openTeamId`. */
   openChannelId?: string | null
+  onSwitchSurface?: (surface: 'home' | 'chat' | 'teams') => void
 }) {
   const { getAccessToken } = useAuth()
   const [teams, setTeams] = React.useState<TeamSummary[] | null>(null)
@@ -285,6 +287,7 @@ export function TeamScreen({
         setActiveChannelId(null)
         setRail(null)
       }}
+      onSwitchSurface={onSwitchSurface}
     />
   )
 }

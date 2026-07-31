@@ -28,16 +28,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../elements/overlays/dialog'
+import { Badge } from '../elements/content/badge'
 import {
   ChevronDownIcon,
   ChevronRightIcon,
   CloseIcon,
+  FolderKanbanIcon,
   HashIcon,
   MoreVerticalIcon,
   PlusIcon,
+  UsersIcon,
 } from './icons'
 import { useMemo, useState } from 'react'
-import type { Category, Channel, ChannelUnread, MemberProfile } from './types'
+import { SurfaceSwitcher } from '../elements/nav/surface-switcher'
+import type { Category, Channel, ChannelUnread, DirectoryProject, MemberProfile } from './types'
 import { dmPartner, initials, memberLabel } from './format'
 
 export interface SidebarProps {
@@ -49,6 +53,7 @@ export interface SidebarProps {
   /** Every team the member is on, for the switcher. One entry hides the affordance. */
   teams?: readonly { id: string; name: string }[] | undefined
   onSwitchTeam?: ((teamId: string) => void) | undefined
+  onSwitchSurface?: ((surface: 'home' | 'chat' | 'teams') => void) | undefined
   channels: Channel[]
   categories: Category[]
   members: MemberProfile[]
@@ -62,6 +67,8 @@ export interface SidebarProps {
   onDeleteCategory: (categoryId: string) => void
   onMoveChannel: (channelId: string, categoryId: string | null) => void
   onOpenDm: (userId: string) => void
+  projects?: DirectoryProject[]
+  onOpenApp?: (projectId: string) => void
 }
 
 /**
@@ -98,6 +105,7 @@ export function ChannelSidebar(props: SidebarProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [adding, setAdding] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const [activeTab, setActiveTab] = useState<'channels' | 'projects' | 'members'>('channels')
 
   const named = useMemo(() => channels.filter((c) => c.kind !== 'dm'), [channels])
   const dms = useMemo(() => channels.filter((c) => c.kind === 'dm'), [channels])
@@ -127,10 +135,6 @@ export function ChannelSidebar(props: SidebarProps) {
       category,
       channels: byCategory.get(category.id) ?? [],
     }))
-    // The unfiled section is only worth a heading once there is something to
-    // contrast it with; with no categories at all it is just "the channels" — the two branches
-    // used to read the same either way, which said nothing distinct in the one case where a
-    // reader actually needs telling apart from a named category ("Marketing", "Support", …).
     if (loose.length || !categories.length) {
       out.push({
         key: '',
@@ -159,8 +163,6 @@ export function ChannelSidebar(props: SidebarProps) {
 
   return (
     <Prim.Col
-      // As a drawer it must paint over the conversation, so it needs its own
-      // background — as a column it inherits the page's and does not.
       width={compact ? 280 : 230}
       maxWidth="85%"
       flexShrink={0}
@@ -186,129 +188,344 @@ export function ChannelSidebar(props: SidebarProps) {
         {...(props.onDismiss ? { onDismiss: props.onDismiss } : {})}
       />
 
-      {/* Creating a channel used to live only inside a section's `⋮`, next to "Delete category" —
-          so the commonest thing an editor does here was two taps into a 24px menu, while the rarer
-          "New category" had a row of its own. On a phone that menu is the hardest target on the
-          screen. */}
-      {isEditor ? (
-        <Prim.Box paddingHorizontal="$2" marginBottom="$2">
-          <Button
-            size="sm"
-            variant="outline"
-            width="100%"
-            justifyContent="flex-start"
-            onClick={() => {
-              setAdding(sections[sections.length - 1]?.key ?? '')
-              setDraft('')
-            }}
-          >
-            <PlusIcon size={12} />
-            New channel
-          </Button>
-        </Prim.Box>
-      ) : null}
-
-      {sections.map((section) => (
-        <Prim.Col key={section.key} marginBottom="$2">
-          <Prim.Row alignItems="center" gap="$0.5" paddingHorizontal="$2" paddingRight="$1">
-            <Prim.Pressable
-              onClick={() => toggle(section.key)}
-              flex={1}
-              minWidth={0}
-              display="flex"
-              alignItems="center"
-              gap="$1"
-              paddingVertical="$1"
+      <Prim.Row paddingHorizontal="$2" marginBottom="$2.5" gap="$1">
+        <Prim.Pressable
+          flex={1}
+          paddingVertical="$1.5"
+          alignItems="center"
+          justifyContent="center"
+          borderRadius="$radius-md"
+          backgroundColor={activeTab === 'channels' ? '$muted' : 'transparent'}
+          hoverStyle={{ backgroundColor: activeTab === 'channels' ? '$muted' : 'color-mix(in srgb, var(--muted) 40%, transparent)' }}
+          onClick={() => setActiveTab('channels')}
+          aria-label="Channels tab"
+        >
+          <Prim.Row alignItems="center" gap="$1">
+            <HashIcon size={12} color={activeTab === 'channels' ? 'var(--foreground)' : 'var(--muted-foreground)'} />
+            <Prim.Text
+              fontSize="$xs"
+              fontWeight={activeTab === 'channels' ? '$semibold' : '$medium'}
+              color={activeTab === 'channels' ? '$foreground' : '$muted-foreground'}
             >
-              {collapsed.has(section.key) ? (
-                <ChevronRightIcon size={12} />
-              ) : (
-                <ChevronDownIcon size={12} />
-              )}
-              <Prim.Text
-                fontSize="$xs"
-                fontWeight="$semibold"
-                color="$muted-foreground"
-                textTransform="uppercase"
-                letterSpacing="0.04em"
-              >
-                {section.title}
-              </Prim.Text>
-            </Prim.Pressable>
-            {isEditor ? (
-              <SectionMenu
-                categoryId={section.category?.id ?? null}
-                categoryName={section.title}
-                onAddChannel={() => {
-                  setAdding(section.key)
+              Chat
+            </Prim.Text>
+          </Prim.Row>
+        </Prim.Pressable>
+
+        <Prim.Pressable
+          flex={1}
+          paddingVertical="$1.5"
+          alignItems="center"
+          justifyContent="center"
+          borderRadius="$radius-md"
+          backgroundColor={activeTab === 'projects' ? '$muted' : 'transparent'}
+          hoverStyle={{ backgroundColor: activeTab === 'projects' ? '$muted' : 'color-mix(in srgb, var(--muted) 40%, transparent)' }}
+          onClick={() => setActiveTab('projects')}
+          aria-label="Projects tab"
+        >
+          <Prim.Row alignItems="center" gap="$1">
+            <FolderKanbanIcon size={12} color={activeTab === 'projects' ? 'var(--foreground)' : 'var(--muted-foreground)'} />
+            <Prim.Text
+              fontSize="$xs"
+              fontWeight={activeTab === 'projects' ? '$semibold' : '$medium'}
+              color={activeTab === 'projects' ? '$foreground' : '$muted-foreground'}
+            >
+              Projects
+            </Prim.Text>
+          </Prim.Row>
+        </Prim.Pressable>
+
+        <Prim.Pressable
+          flex={1}
+          paddingVertical="$1.5"
+          alignItems="center"
+          justifyContent="center"
+          borderRadius="$radius-md"
+          backgroundColor={activeTab === 'members' ? '$muted' : 'transparent'}
+          hoverStyle={{ backgroundColor: activeTab === 'members' ? '$muted' : 'color-mix(in srgb, var(--muted) 40%, transparent)' }}
+          onClick={() => setActiveTab('members')}
+          aria-label="Members tab"
+        >
+          <Prim.Row alignItems="center" gap="$1">
+            <UsersIcon size={12} color={activeTab === 'members' ? 'var(--foreground)' : 'var(--muted-foreground)'} />
+            <Prim.Text
+              fontSize="$xs"
+              fontWeight={activeTab === 'members' ? '$semibold' : '$medium'}
+              color={activeTab === 'members' ? '$foreground' : '$muted-foreground'}
+            >
+              Roster
+            </Prim.Text>
+          </Prim.Row>
+        </Prim.Pressable>
+      </Prim.Row>
+
+      {activeTab === 'projects' ? (
+        <SidebarProjects
+          projects={props.projects}
+          onOpenApp={props.onOpenApp}
+          onDismiss={props.onDismiss}
+        />
+      ) : activeTab === 'members' ? (
+        <SidebarMembers
+          members={members}
+          meId={meId}
+          onOpenDm={props.onOpenDm}
+          onDismiss={props.onDismiss}
+        />
+      ) : (
+        <>
+          {isEditor ? (
+            <Prim.Box paddingHorizontal="$2" marginBottom="$2">
+              <Button
+                size="sm"
+                variant="outline"
+                width="100%"
+                justifyContent="flex-start"
+                onClick={() => {
+                  setAdding(sections[sections.length - 1]?.key ?? '')
                   setDraft('')
                 }}
-                onDelete={section.category ? () => props.onDeleteCategory(section.category.id) : null}
-              />
-            ) : null}
-          </Prim.Row>
+              >
+                <PlusIcon size={12} />
+                New channel
+              </Button>
+            </Prim.Box>
+          ) : null}
 
-          {collapsed.has(section.key) ? null : (
-            <Prim.Col paddingHorizontal="$2" gap="$0.5">
-              {section.channels.map((channel) => (
-                <ChannelRow
-                  key={channel.id}
-                  channel={channel}
-                  active={channel.id === activeId}
-                  categories={categories}
-                  isEditor={isEditor}
-                  unread={unread.get(channel.id)}
-                  onSelect={() => {
-                    props.onSelect(channel.id)
-                    props.onDismiss?.()
-                  }}
-                  onMove={(categoryId) => props.onMoveChannel(channel.id, categoryId)}
-                />
-              ))}
-              {section.channels.length === 0 && adding !== section.key ? (
-                <Prim.Box paddingHorizontal="$2" paddingVertical="$1">
-                  <Caption>No channels here.</Caption>
-                </Prim.Box>
-              ) : null}
-              {adding === section.key ? (
-                <Input
-                  size="sm"
-                  autoFocus
-                  value={draft}
-                  placeholder="Channel name"
-                  onChange={(e) => setDraft(e.target.value)}
-                  onBlur={() => submitNew(section.key)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') submitNew(section.key)
-                    if (e.key === 'Escape') {
+          {sections.map((section) => (
+            <Prim.Col key={section.key} marginBottom="$2">
+              <Prim.Row alignItems="center" gap="$0.5" paddingHorizontal="$2" paddingRight="$1">
+                <Prim.Pressable
+                  onClick={() => toggle(section.key)}
+                  flex={1}
+                  minWidth={0}
+                  display="flex"
+                  alignItems="center"
+                  gap="$1"
+                  paddingVertical="$1"
+                >
+                  {collapsed.has(section.key) ? (
+                    <ChevronRightIcon size={12} />
+                  ) : (
+                    <ChevronDownIcon size={12} />
+                  )}
+                  <Prim.Text
+                    fontSize="$xs"
+                    fontWeight="$semibold"
+                    color="$muted-foreground"
+                    textTransform="uppercase"
+                    letterSpacing="0.04em"
+                  >
+                    {section.title}
+                  </Prim.Text>
+                </Prim.Pressable>
+                {isEditor ? (
+                  <SectionMenu
+                    categoryId={section.category?.id ?? null}
+                    categoryName={section.title}
+                    onAddChannel={() => {
+                      setAdding(section.key)
                       setDraft('')
-                      setAdding(null)
-                    }
-                  }}
-                />
-              ) : null}
+                    }}
+                    onDelete={section.category ? () => props.onDeleteCategory(section.category.id) : null}
+                  />
+                ) : null}
+              </Prim.Row>
+
+              {collapsed.has(section.key) ? null : (
+                <Prim.Col paddingHorizontal="$2" gap="$0.5">
+                  {section.channels.map((channel) => (
+                    <ChannelRow
+                      key={channel.id}
+                      channel={channel}
+                      active={channel.id === activeId}
+                      categories={categories}
+                      isEditor={isEditor}
+                      unread={unread.get(channel.id)}
+                      onSelect={() => {
+                        props.onSelect(channel.id)
+                        props.onDismiss?.()
+                      }}
+                      onMove={(categoryId) => props.onMoveChannel(channel.id, categoryId)}
+                    />
+                  ))}
+                  {section.channels.length === 0 && adding !== section.key ? (
+                    <Prim.Box paddingHorizontal="$2" paddingVertical="$1">
+                      <Caption>No channels here.</Caption>
+                    </Prim.Box>
+                  ) : null}
+                  {adding === section.key ? (
+                    <Input
+                      size="sm"
+                      autoFocus
+                      value={draft}
+                      placeholder="Channel name"
+                      onChange={(e) => setDraft(e.target.value)}
+                      onBlur={() => submitNew(section.key)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') submitNew(section.key)
+                        if (e.key === 'Escape') {
+                          setDraft('')
+                          setAdding(null)
+                        }
+                      }}
+                    />
+                  ) : null}
+                </Prim.Col>
+              )}
             </Prim.Col>
-          )}
-        </Prim.Col>
-      ))}
+          ))}
 
-      {isEditor ? <NewCategory onCreate={props.onCreateCategory} /> : null}
+          {isEditor ? <NewCategory onCreate={props.onCreateCategory} /> : null}
 
-      <DirectMessages
-        dms={dms}
-        members={members}
-        meId={meId}
-        activeId={activeId}
-        unread={unread}
-        onSelect={(channelId) => {
-          props.onSelect(channelId)
-          props.onDismiss?.()
-        }}
-        onOpenDm={(userId) => {
-          props.onOpenDm(userId)
-          props.onDismiss?.()
-        }}
-      />
+          <DirectMessages
+            dms={dms}
+            members={members}
+            meId={meId}
+            activeId={activeId}
+            unread={unread}
+            onSelect={(channelId) => {
+              props.onSelect(channelId)
+              props.onDismiss?.()
+            }}
+            onOpenDm={(userId) => {
+              props.onOpenDm(userId)
+              props.onDismiss?.()
+            }}
+          />
+        </>
+      )}
+
+      {props.onSwitchSurface ? (
+        <SurfaceSwitcher
+          current="teams"
+          onSwitch={(surface) => {
+            props.onSwitchSurface?.(surface)
+            props.onDismiss?.()
+          }}
+          bordered
+        />
+      ) : null}
+    </Prim.Col>
+  )
+}
+
+function SidebarProjects({
+  projects = [],
+  onOpenApp,
+  onDismiss,
+}: {
+  projects?: DirectoryProject[]
+  onOpenApp?: (projectId: string) => void
+  onDismiss?: () => void
+}) {
+  return (
+    <Prim.Col paddingHorizontal="$2" gap="$1" flex={1}>
+      <Prim.Box paddingHorizontal="$2" paddingVertical="$1" marginBottom="$1">
+        <Prim.Text
+          fontSize="$xs"
+          fontWeight="$semibold"
+          color="$muted-foreground"
+          textTransform="uppercase"
+          letterSpacing="0.04em"
+        >
+          Projects ({projects.length})
+        </Prim.Text>
+      </Prim.Box>
+      {projects.length === 0 ? (
+        <Prim.Box paddingHorizontal="$2" paddingVertical="$2">
+          <Caption>No projects in this team yet.</Caption>
+        </Prim.Box>
+      ) : (
+        projects.map((project) => (
+          <ListItem
+            key={project.id}
+            onClick={() => {
+              if (project.hasApp && onOpenApp) {
+                onOpenApp(project.id)
+              }
+              onDismiss?.()
+            }}
+          >
+            <FolderKanbanIcon size={14} />
+            <Prim.Text
+              fontSize="$sm"
+              marginLeft="$1.5"
+              flex={1}
+              minWidth={0}
+              overflow="hidden"
+              textOverflow="ellipsis"
+              whiteSpace="nowrap"
+            >
+              {project.name}
+            </Prim.Text>
+            {project.hasApp ? <Badge variant="primary">App</Badge> : null}
+          </ListItem>
+        ))
+      )}
+    </Prim.Col>
+  )
+}
+
+function SidebarMembers({
+  members = [],
+  meId,
+  onOpenDm,
+  onDismiss,
+}: {
+  members: MemberProfile[]
+  meId: string
+  onOpenDm: (userId: string) => void
+  onDismiss?: () => void
+}) {
+  return (
+    <Prim.Col paddingHorizontal="$2" gap="$1" flex={1}>
+      <Prim.Box paddingHorizontal="$2" paddingVertical="$1" marginBottom="$1">
+        <Prim.Text
+          fontSize="$xs"
+          fontWeight="$semibold"
+          color="$muted-foreground"
+          textTransform="uppercase"
+          letterSpacing="0.04em"
+        >
+          Members ({members.length})
+        </Prim.Text>
+      </Prim.Box>
+      {members.length === 0 ? (
+        <Prim.Box paddingHorizontal="$2" paddingVertical="$2">
+          <Caption>No members found.</Caption>
+        </Prim.Box>
+      ) : (
+        members.map((member) => {
+          const label = memberLabel(member, member.userId)
+          const isMe = member.userId === meId
+          return (
+            <ListItem
+              key={member.userId}
+              onClick={() => {
+                if (!isMe) {
+                  onOpenDm(member.userId)
+                  onDismiss?.()
+                }
+              }}
+            >
+              <Avatar size="sm">
+                <AvatarFallback colorKey={member.userId}>{initials(label)}</AvatarFallback>
+              </Avatar>
+              <Prim.Col flex={1} minWidth={0} marginLeft="$1.5">
+                <Prim.Text fontSize="$sm" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+                  {label} {isMe ? '(you)' : ''}
+                </Prim.Text>
+                {member.email ? (
+                  <Caption overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+                    {member.email}
+                  </Caption>
+                ) : null}
+              </Prim.Col>
+            </ListItem>
+          )
+        })
+      )}
     </Prim.Col>
   )
 }

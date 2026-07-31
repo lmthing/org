@@ -108,6 +108,8 @@ function TeamChrome() {
         borderBottomWidth={1}
         borderColor="$border"
         flexShrink={0}
+        display={activeTab === 'channels' ? 'none' : 'flex'}
+        $md={{ display: 'flex' }}
       >
         <Link to="/team">
           <Prim.Row alignItems="center" gap="$1">
