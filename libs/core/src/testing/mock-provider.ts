@@ -1,4 +1,4 @@
-import type { StreamOpts, StreamSession } from '../eval/stream-types.js';
+import type { StreamOpts, StreamSession, StreamFinishReason } from '../eval/stream-types.js';
 
 /**
  * Mock LLM provider — a scripted `streamFn` drop-in that emits TypeScript instead
@@ -44,17 +44,24 @@ function isAsyncIterable(x: unknown): x is AsyncIterable<string> {
  */
 export function createMockStreamFn(
   handler: MockHandler,
+  /** Optional: the `finishReason` the scripted session reports once its chunks are
+   *  exhausted — e.g. `'length'` to simulate a provider cutting the response at its
+   *  output cap. Like a real provider it is only visible AFTER the stream ends, and
+   *  never after abort(). Defaults to unset (provider didn't say). */
+  finishReason?: StreamFinishReason,
 ): (opts: StreamOpts) => Promise<StreamSession> {
   let callIndex = 0;
   return async (opts: StreamOpts): Promise<StreamSession> => {
     const produced = handler(opts, { callIndex: callIndex++ });
     let aborted = false;
+    let finished = false;
     async function* gen(): AsyncIterable<string> {
       if (isAsyncIterable(produced)) {
         for await (const chunk of produced) {
           if (aborted) return;
           yield chunk;
         }
+        finished = true;
         return;
       }
       const chunks = Array.isArray(produced) ? produced : [produced];
@@ -62,11 +69,15 @@ export function createMockStreamFn(
         if (aborted) return;
         if (chunk) yield chunk;
       }
+      finished = true;
     }
     return {
       textStream: gen(),
       abort() {
         aborted = true;
+      },
+      get finishReason(): StreamFinishReason | undefined {
+        return finished ? finishReason : undefined;
       },
     };
   };

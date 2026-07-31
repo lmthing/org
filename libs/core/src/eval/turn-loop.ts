@@ -9,6 +9,7 @@ import { BoundaryDetector } from '../sandbox/boundary.js';
 import { sanitizeModelHabits } from './model-habits.js';
 import { runTsc } from '../typecheck/tsc.js';
 import { transpileStatement } from '../typecheck/transpile.js';
+import { lintMissingAwait, yieldingGlobalNames } from './await-lint.js';
 import { buildErrorBlock } from './error-rewind.js';
 import { emitVariables, extractBindingNames, extractBindingPattern, type BindingKind } from '../context/variables.js';
 import { formatInspectResult, type InspectQuery } from '../globals/inspect.js';
@@ -370,6 +371,50 @@ type StatementOutcome =
   | { kind: 'yielded'; yield: YieldRequest }
   | { kind: 'ok' };
 
+/**
+ * Is the VM global `name` currently holding a PROMISE object?
+ *
+ * The discriminator for a missing `await`, and it has to be asked BEFORE `vm.getVar`:
+ * `ctx.dump` CONSUMES a promise handle, so `getVar`'s own `handle.dispose()` then throws
+ * `QuickJSUseAfterFree: Lifetime not alive` straight out of the turn loop (the model's
+ * un-awaited binding took the whole turn down with it, having surfaced as `{}` in the
+ * versions where the dump survived). `ctx.getPromiseState` asks QuickJS itself and leaves
+ * the handle intact: a non-promise comes back `fulfilled` with `notAPromise`, a real
+ * promise as `pending`/`fulfilled`/`rejected` — which is also why a tool that genuinely
+ * returned `{}` is never mistaken for one. Handles from the state are disposed as in
+ * `sandbox/quickjs.ts#evalStatement` (for `notAPromise`, `state.value` IS the handle we
+ * already own, so it is left to the single dispose below).
+ *
+ * Defensive throughout: a disposed VM or an unavailable `getPromiseState` answers `false`,
+ * i.e. "keep the pre-existing vm-preference".
+ */
+function vmValueIsPromise(vm: VM, name: string): boolean {
+  if (!vm.isAlive()) return false;
+  let handle;
+  try {
+    handle = vm.ctx.getProp(vm.ctx.global, name);
+  } catch {
+    return false;
+  }
+  try {
+    const state = vm.ctx.getPromiseState(handle);
+    if (state.type === 'fulfilled') {
+      if (state.notAPromise) return false;
+      state.value.dispose();
+      return true;
+    }
+    if (state.type === 'rejected') {
+      state.error.dispose();
+      return true;
+    }
+    return true; // pending — the model never awaited it
+  } catch {
+    return false;
+  } finally {
+    handle.dispose();
+  }
+}
+
 /** Maps yield-resolved values onto the bound names of a yielding statement's binding
  *  pattern (simple/array/object), then prefers the VM's own computed value for each
  *  name over the raw resolved value where they diverge. They agree whenever the
@@ -380,6 +425,18 @@ type StatementOutcome =
  *  while the VM's own bytecode (continued via drivePendingJobs(), including the
  *  per-statement `globalThis[name] = name` propagation) has already computed the
  *  correct one. Falls back to the raw value when the VM reports the global as unset.
+ *
+ *  ONE exception to that preference: when the VM value is itself a PROMISE the model
+ *  forgot to `await` (`const r = ask("q");` — the yield registers at call time, so the
+ *  turn suspends and the host resolves the value regardless). Reading it back is not
+ *  merely useless but destructive: `getVar` cannot dump a promise without consuming its
+ *  handle, so the read throws `Lifetime not alive` and ends the turn (and where it did
+ *  return, it returned `{}` — "the tool gave me nothing"). The host-resolved value is
+ *  the real one there, so it wins without the VM ever being read — the runtime
+ *  safety net under `eval/await-lint.ts#lintMissingAwait`, which fails that statement
+ *  before it ever evaluates. The nested-async case above is untouched: after
+ *  `drivePendingJobs()` its global holds the wrapper's RESOLVED return, not a promise.
+ *
  *  Exported so a later phase (host-executed preludes) can reuse it. */
 export function bindYieldResults(
   vm: VM,
@@ -404,6 +461,10 @@ export function bindYieldResults(
     variables[pattern.names[0]!] = awaited;
   }
   for (const name of pattern.names) {
+    // A binding the model forgot to `await` holds the Promise itself — never the value.
+    // Asking QuickJS (getPromiseState) rather than inspecting the dump is what keeps a
+    // tool that genuinely returned `{}` from being mistaken for one.
+    if (vmValueIsPromise(vm, name)) continue;
     const vmValue = vm.getVar(name);
     if (vmValue !== undefined) variables[name] = vmValue;
   }
@@ -438,6 +499,11 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
   // globals (NOT in session context): a forward reference resolves against them, and
   // a re-emitted `const <name> = …` simply shadows them — no redeclare conflict.
   const yieldErrorNames = new Set<string>();
+  // Which globals THIS context can yield from, read off the ambient DTS the bootstrap
+  // built from its capability profile (see await-lint.ts#yieldingGlobalNames). Computed
+  // once per turn loop — `ambientDts` is fixed for the life of the VM; the names added by
+  // fullAmbient() are `declare const … : any`, never callable yielding declarations.
+  const yieldingNames = yieldingGlobalNames(ambientDts);
   const fullAmbient = (): string =>
     yieldErrorNames.size > 0
       ? ambientDts + '\n' + [...yieldErrorNames].map((n) => `declare const ${n}: any;`).join('\n')
@@ -561,6 +627,20 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         turnError = errMsg;
         failingStatement = stmt;
         return { kind: 'typecheck_error', message: errMsg };
+      }
+
+      // Missing-`await` lint. Typecheck passes a statement that BINDS a yielding call's
+      // Promise (only a property access on it errors), and at runtime the yield still
+      // registers, suspends the turn and resolves — leaving the model reading `{}` off
+      // its own binding. Fail it here, before eval, with the exact corrected line: a
+      // write-time error the model can copy, rather than a value it has to distrust.
+      // Same retry path as a typecheck error (the binding rule in bindYieldResults
+      // remains the safety net for every shape the lint deliberately lets through).
+      const awaitFinding = lintMissingAwait(stmt, yieldingNames);
+      if (awaitFinding) {
+        turnError = awaitFinding.message;
+        failingStatement = stmt;
+        return { kind: 'typecheck_error', message: awaitFinding.message };
       }
 
       // Transpile TS/JSX → JS, append globalThis bindings so the next module can
@@ -690,17 +770,30 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       }
     }
 
+    // `finishReason: 'length'` is a TRUNCATION, not a completion: the provider hit its
+    // output cap and cut the program mid-statement (cheap OpenAI-compatible endpoints
+    // apply low default caps). Left unhandled it either burns a retry on a misleading
+    // parse error or — worse — settles the turn 'done' halfway through the model's
+    // program. Treat it as a stream-level failure, exactly like a dropped connection.
+    // It is only meaningful when WE didn't abort: after abort() no finish part arrives.
+    const lengthCut = !aborted && stream.finishReason === 'length';
+    if (lengthCut) {
+      renderHost.log(`[turn ${attempt}] provider stopped at its output cap (finishReason=length) — response is truncated`);
+    }
+
     // A transient provider failure (dropped/terminated connection) that produced NO
     // usable output must be RETRIED — not silently treated as "the model finished".
     // Without this, one flaky stream ends the turn with 'done' and strands the whole
     // run (the exact failure that killed an optional research fork mid-pipeline).
-    if (streamErrored && !hadStatements && !aborted) {
-      tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'stream_error' });
+    // A length-cut with nothing usable is the same situation and takes the same path.
+    if ((streamErrored || lengthCut) && !hadStatements && !aborted) {
+      const failKind = streamErrored ? 'stream error' : 'length cut';
+      tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: streamErrored ? 'stream_error' : 'length_cut' });
       if (attempt >= maxRetries) {
-        renderHost.log(`[turn ${attempt}] stream error exhausted retries — giving up this turn`);
+        renderHost.log(`[turn ${attempt}] ${failKind} exhausted retries — giving up this turn`);
         return 'error';
       }
-      renderHost.log(`[turn ${attempt}] stream error with no output — retrying request`);
+      renderHost.log(`[turn ${attempt}] ${failKind} with no output — retrying request`);
       // Brief backoff so we don't hammer a provider that just dropped us.
       await new Promise((r) => setTimeout(r, Math.min(2000, 300 * attempt)));
       continue;
@@ -765,8 +858,42 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         ...(deps.model ? { model: deps.model } : {}),
         ...(inputTokens !== undefined ? { inputTokens } : {}),
         ...(outputTokens !== undefined ? { outputTokens } : {}),
+        // Why the provider stopped. Absent when it was us (abort on yield/error) or
+        // when the provider omits it; 'length' marks this response as truncated.
+        ...(!aborted && stream.finishReason ? { finishReason: stream.finishReason } : {}),
       });
       history.append({ role: 'assistant', content: historyContent, blockType: 'normal' });
+    }
+
+    // Truncated AFTER real statements ran. Re-issuing the request (the no-output path
+    // above) would re-execute everything that already ran — duplicate side effects — so
+    // the response is CONTINUED instead: the executed statements are in history (just
+    // appended), and the model is asked to resume from the cut. Bounded by the same
+    // maxContinueNudges budget as the non-yielding-binding nudge, so a model that keeps
+    // hitting the cap still terminates. Never fires when the turn is already headed for
+    // the error or yield path below (both of those abort the stream, so lengthCut is
+    // false there anyway — the guard is belt-and-braces).
+    if (lengthCut && !turnError && !pendingYield) {
+      if (continueNudges >= maxContinueNudges) {
+        renderHost.log(`[turn ${attempt}] output cap hit again after ${continueNudges} continuations — giving up this turn`);
+        tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'length_cut' });
+        return 'error';
+      }
+      continueNudges++;
+      renderHost.log(`[turn ${attempt}] truncated at the output cap — asking the model to continue (${continueNudges}/${maxContinueNudges})`);
+      tracer.write({ ts: Date.now(), type: 'turn_end', context: ctx, ...(nodeId ? { nodeId } : {}), reason: 'length_cut_continue' });
+      history.append({
+        role: 'user',
+        blockType: 'normal',
+        content:
+          'Your last response was cut off by the output limit — the final statement never ' +
+          'arrived. Everything shown above already ran. Continue from exactly where you ' +
+          'stopped, re-emitting only the statement that was cut, and keep responses shorter.',
+      });
+      // Same reasoning as the other nudges: a provider-side cap is not a model mistake,
+      // so it must not eat the model-error retry budget (continueNudges bounds this).
+      attempt = 0;
+      continue;
     }
 
     if (turnError && failingStatement) {
@@ -923,7 +1050,10 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
         renderHost.log(`[resumed]`);
       }
 
-      let varContent = emitVariables(variables, accumulatedContext);
+      // omitExecuted: the raw context snapshot is stored on the history message
+      // instead — getPromptMessages renders ONE bounded echo on the latest
+      // variables block, not one per yield (quadratic history, see history.ts).
+      let varContent = emitVariables(variables, accumulatedContext, { omitExecuted: true });
       if (inspectArgs.length > 0) {
         // Fold the inspected lines into the VARIABLES section the model already reads.
         // formatInspectResult returns "VARIABLES\ninspected[i]: …" — drop its header
@@ -946,7 +1076,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       if (knowledgeBlock) varContent += `\n\n${knowledgeBlock}`;
       const budgetWarning = deps.budget?.nearLimitWarning();
       if (budgetWarning) varContent += `\n\n${budgetWarning}`;
-      history.append({ role: 'user', content: varContent, blockType: 'variables' });
+      history.append({ role: 'user', content: varContent, blockType: 'variables', alreadyExecuted: accumulatedContext });
 
       // Reset the retry budget ONLY on a CLEAN resolution. If this turn's yields ERRORED and
       // we still reached here (attempt >= maxRetries → the fall-through above binds the failed

@@ -103,6 +103,8 @@ export type { YieldRouterContext, RouteResult } from './eval/yield-router.js';
 // Stream types
 export type {
   StreamOpts,
+  StreamParams,
+  StreamFinishReason,
   StreamSession,
   StreamMessage,
   MediaPart,
@@ -232,3 +234,6 @@ export type { RunDelegateOpts } from './delegate/delegate.js';
 // Testing — scripted mock provider (run end-to-end with no API keys)
 export { createMockStreamFn, mockScript, mockMatch } from './testing/mock-provider.js';
 export type { MockHandler, MockContext, MockRule } from './testing/mock-provider.js';
+// Testing — replay a recorded --trace transcript back through the host pipeline
+export { mockFromTrace, mockFromExchanges, readTraceExchanges, parseTraceExchanges, requestFingerprint } from './testing/trace-replay.js';
+export type { TraceExchange, MockFromTraceOpts } from './testing/trace-replay.js';

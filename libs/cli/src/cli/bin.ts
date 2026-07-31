@@ -41,7 +41,7 @@ function loadEnv() {
 applyCwd(process.argv.slice(2));
 loadEnv();
 
-import { Session, createMockStreamFn, mockScript, defaultSystemSpaceDirs } from '@lmthing/core';
+import { Session, createMockStreamFn, mockScript, mockFromTrace, defaultSystemSpaceDirs } from '@lmthing/core';
 import type { StreamOpts, StreamSession, MockHandler } from '@lmthing/core';
 import { parseArgs, type CliArgs } from './args.js';
 import { materializeRuntime, runtimeNeedsInit, syncSystemSpaces } from './runtime-init.js';
@@ -51,7 +51,7 @@ import { generateProjectContracts } from '../app/build/contracts.js';
 import { createProjectAuthoringGlobals } from '../app/authoring/index.js';
 import { resolveAlias } from '../providers/aliases.js';
 import { resolveModel } from '../providers/resolve.js';
-import { createStream } from '../stream/stream.js';
+import { createStream, parseStreamParams } from '../stream/stream.js';
 import { InkRenderHost } from '../render/ink-renderer.js';
 import { WebRenderHost } from '../rpc/server.js';
 import { startWebServer } from '../web/serve.js';
@@ -198,9 +198,19 @@ function readBudget(args: CliArgs): {
  * The module's default export is a `MockHandler`, or a `string[]` (wrapped in
  * `mockScript`). ESM `.mjs` so it loads with no transpile step. Resolved relative
  * to the cwd where the CLI runs.
+ *
+ * A `.ndjson` / `.jsonl` path is not a module but a RECORDED TRACE (what
+ * `--trace <file>` writes): it routes through `mockFromTrace`, which replays the
+ * recorded model responses back through the host pipeline. `LM_MOCK_MODE=fingerprint`
+ * switches the replay from recorded order to last-user-message matching.
  */
 async function loadMockStreamFn(mockPath: string): Promise<(opts: StreamOpts) => Promise<StreamSession>> {
-  const url = pathToFileURL(resolve(process.cwd(), mockPath)).href;
+  const abs = resolve(process.cwd(), mockPath);
+  if (/\.(ndjson|jsonl)$/i.test(abs)) {
+    const mode = process.env['LM_MOCK_MODE'] === 'fingerprint' ? 'fingerprint' : 'sequential';
+    return mockFromTrace(abs, { mode });
+  }
+  const url = pathToFileURL(abs).href;
   const mod = await import(url);
   const def = mod.default ?? mod.handler;
   if (def === undefined) {
@@ -353,6 +363,15 @@ async function main(): Promise<void> {
   } else {
     modelSpec = resolveAlias(args.model ?? process.env['LM_MODEL'] ?? 'M');
 
+    // Process-wide provider params (temperature / maxOutputTokens / stopSequences /
+    // providerOptions), parsed ONCE. This is the interim seam for per-model tuning:
+    // a future `profileFor(resolvedSpec).params` is merged in right here, under the
+    // env var (explicit env beats table) and under whatever the caller passed on the
+    // individual request (a fork's own params beat both).
+    const envParams = parseStreamParams(process.env['LM_STREAM_PARAMS'], (msg) =>
+      process.stderr.write(`${msg}\n`),
+    );
+
     // Resolve models LAZILY — never at startup — so the server boots even when no
     // valid model is configured yet (the custom-env endpoint PUT /api/env can then
     // supply credentials). Each call re-reads the current env / alias, so env
@@ -368,8 +387,13 @@ async function main(): Promise<void> {
     };
 
     streamFn = async (opts: StreamOpts) => {
-      const { model: modelOverride, ...rest } = opts;
-      return createStream({ model: await getModel(modelOverride), ...rest });
+      const { model: modelOverride, params, ...rest } = opts;
+      const merged = { ...envParams, ...params };
+      return createStream({
+        model: await getModel(modelOverride),
+        ...rest,
+        ...(Object.keys(merged).length > 0 ? { params: merged } : {}),
+      });
     };
   }
 
