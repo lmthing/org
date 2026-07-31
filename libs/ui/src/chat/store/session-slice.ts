@@ -26,6 +26,7 @@ export interface SessionSlice {
   agentSlug: string;
   sessionTitle: string;
   activity: string;
+  editDraft: { blockId: string; content: string } | null;
 
   feedLive: (events: WireEvent[]) => void;
   setConnection: (c: Connection) => void;
@@ -41,6 +42,9 @@ export interface SessionSlice {
   noteError: (message: string) => void;
   noteAskStart: (askId: string, descriptor: unknown) => void;
   noteAskEnd: (askId: string, value: unknown, cancelled?: boolean) => void;
+  startEditMessage: (blockId: string, content: string) => void;
+  clearEditDraft: () => void;
+  truncateFromBlock: (blockId: string) => void;
   resetSession: () => void;
 }
 
@@ -63,6 +67,7 @@ export function createSessionSlice(
     agentSlug: '',
     sessionTitle: '',
     activity: '',
+    editDraft: null,
 
     feedLive: (events) => {
       const s = get();
@@ -160,6 +165,19 @@ export function createSessionSlice(
     noteAskStart: (askId, descriptor) => set((s) => { pushAskBlock(s.model, askId, descriptor); return { version: s.version + 1 }; }),
     noteAskEnd: (askId, value, cancelled) => set((s) => { resolveAskBlock(s.model, askId, value, cancelled); return { version: s.version + 1 }; }),
 
+    startEditMessage: (blockId, content) => set({ editDraft: { blockId, content } }),
+    clearEditDraft: () => set({ editDraft: null }),
+    // `blocks` is mutated in place everywhere else in this file (`pushUserBlock` et al. — the
+    // model object's identity survives a whole session, see `Message.tsx`'s memoization note), so
+    // `splice` here rather than rebuilding the array keeps that convention instead of being the
+    // one place that swaps in a new one.
+    truncateFromBlock: (blockId) => set((s) => {
+      const idx = s.model.blocks.findIndex((b) => b.id === blockId);
+      if (idx === -1) return {};
+      s.model.blocks.splice(idx);
+      return { version: s.version + 1 };
+    }),
+
     resetSession: () => {
       inflightTurns.clear();
       set({
@@ -174,6 +192,7 @@ export function createSessionSlice(
         agentSlug: '',
         sessionTitle: '',
         activity: '',
+        editDraft: null,
         replay: null,
         mode: 'live',
         connection: 'connecting',

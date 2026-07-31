@@ -7,6 +7,7 @@ import type { UploadedAttachment } from '../store/model';
 import { BudgetWindows } from './BudgetWindows';
 import { authHeaders, withAuthToken } from './auth';
 import { apiUrl } from '../../platform/api-base';
+import { storage } from '../../platform/storage';
 
 interface ComposerProps {
   onSend: (text: string, attachments?: UploadedAttachment[]) => void;
@@ -65,9 +66,33 @@ const ATTACH_ACCEPT = [
  */
 const ONE_LINE_CEILING = 40;
 
+/** Where an in-progress draft is kept: per session, through the `platform/storage` seam (web
+ *  `localStorage`, native `AsyncStorage` — see `platform/storage.ts`/`storage.native.ts`) so an
+ *  accidental reload, a crash, or a phone killing the tab does not lose whatever was being typed.
+ *  `sessionId` is `null` for a `singleSession` mount (no project/session list, e.g. an embedded
+ *  panel) — `'single'` keeps those drafts distinct from a real session that happens to have no id
+ *  yet rather than colliding all embedded composers on one key. */
+function draftStorageKey(sessionId: string | null): string {
+  return `chat.composer-draft.${sessionId ?? 'single'}`;
+}
+
+/** Debounce for the draft write. `storage.setItem` is real async I/O on native (AsyncStorage), so
+ *  writing on every keystroke would queue a bridge call per character; 400ms loses at most the
+ *  last few characters typed before a crash, not the whole message. */
+const DRAFT_SAVE_DEBOUNCE_MS = 400;
+
 export function Composer({ onSend, projectId, className, disabled }: ComposerProps) {
   const mode = useStore((s) => s.mode);
   const budgetBlocked = useStore((s) => s.budgetBlocked);
+  // Only read to build the draft's storage key and to route an edit-and-resend back into the
+  // right session's draft slot — `Composer` is remounted whenever this changes (keyed at the
+  // `ChatView` call site), so it is fixed for this instance's whole lifetime.
+  const activeSessionId = useStore((s) => s.activeSessionId);
+  // Set by `Message`'s "Edit" action (see `EditButton`) — the block id + text of a sent message
+  // the reader wants to correct. Consumed once below, then cleared, rather than read continuously.
+  const editDraft = useStore((s) => s.editDraft);
+  const clearEditDraft = useStore((s) => s.clearEditDraft);
+  const truncateFromBlock = useStore((s) => s.truncateFromBlock);
   const [text, setText] = React.useState('');
   const [attachments, setAttachments] = React.useState<UploadedAttachment[]>([]);
   const [attaching, setAttaching] = React.useState(false);
@@ -87,11 +112,58 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
   const recordChunksRef = React.useRef<Blob[]>([]);
   const recordStreamRef = React.useRef<MediaStream | null>(null);
   const isDisabled = disabled || mode === 'replay' || budgetBlocked;
+  // The block being corrected, once an edit lands (see the `editDraft` effect below). Local, not
+  // in the store: it only matters to THIS composer instance, and only until the next send.
+  const [editingBlockId, setEditingBlockId] = React.useState<string | null>(null);
 
   // Stop any live mic track if the composer unmounts mid-recording.
   React.useEffect(() => () => {
     recordStreamRef.current?.getTracks().forEach((t) => t.stop());
   }, []);
+
+  // Restore this session's draft on mount. "On mount" already means "for this session": the
+  // composer is remounted (keyed on `activeSessionId`) whenever the session changes, so there is
+  // no later switch for a stale restore to race.
+  React.useEffect(() => {
+    let cancelled = false;
+    void storage.getItem(draftStorageKey(activeSessionId)).then((saved) => {
+      if (cancelled || !saved) return;
+      setText(saved);
+      // A programmatic `setText` bypasses `handleChange`, which is what normally calls
+      // `adjustHeight` — re-measure once the restored text has actually landed in the DOM (web
+      // only; native measures itself via `onContentHeight`, see `adjustHeight`'s own comment).
+      setTimeout(adjustHeight, 0);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist the draft as the user types — debounced, see `DRAFT_SAVE_DEBOUNCE_MS`. An empty box
+  // clears the stored draft rather than writing an empty string, so a session with nothing typed
+  // leaves no key behind.
+  React.useEffect(() => {
+    const key = draftStorageKey(activeSessionId);
+    const id = setTimeout(() => {
+      void (text ? storage.setItem(key, text) : storage.removeItem(key));
+    }, DRAFT_SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(id);
+  }, [text, activeSessionId]);
+
+  // An "Edit" tap on a sent message (`Message.tsx`'s `EditButton`) lands here as `editDraft` —
+  // reopen it in the field and remember which block it came from, then clear the store slot so
+  // it is consumed exactly once (a re-render must not re-apply it, e.g. after the user has since
+  // cleared the field by hand).
+  React.useEffect(() => {
+    if (!editDraft) return;
+    setText(editDraft.content);
+    setEditingBlockId(editDraft.blockId);
+    clearEditDraft();
+    setTimeout(() => {
+      adjustHeight();
+      textareaRef.current?.focus();
+    }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editDraft]);
 
   React.useEffect(() => {
     if (dropdownOpen && dropdownRef.current) {
@@ -137,6 +209,19 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
   const handleSend = () => {
     const t = text.trim();
     if ((!t && attachments.length === 0) || isDisabled || attaching || recording) return;
+    if (editingBlockId) {
+      // Drop the original question and everything the agent said after it from the LOCAL
+      // transcript, so an edited question is never followed by an answer to the OLD wording —
+      // that mismatch is its own bug (silently stale, and confusing about which question got
+      // answered). This is view-only: there is no rewind/truncate message in the WS protocol
+      // (`ClientMessage`, `libs/cli/src/rpc/events.ts`) and no server-side conversation surgery,
+      // so the agent's own memory of the original exchange is untouched — `sendMessage` below
+      // just appends the edited text as a new turn on top of it, same as any other message. A
+      // real edit (rewriting what the model itself remembers) would need a new protocol message
+      // and session-manager support; out of scope here. See `truncateFromBlock`.
+      truncateFromBlock(editingBlockId);
+      setEditingBlockId(null);
+    }
     onSend(t, attachments.length ? attachments : undefined);
     setText('');
     setAttachments([]);
@@ -146,6 +231,9 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
     // message that was just sent, with nothing in it.
     setContentHeight(0);
     if (textareaRef.current?.style) textareaRef.current.style.height = 'auto';
+    // Immediate, rather than waiting for the debounced save effect to notice the empty box —
+    // otherwise a reload inside that window restores a draft that was already sent.
+    void storage.removeItem(draftStorageKey(activeSessionId));
   };
 
   /** Upload one File to /api/uploads and stage it as a pending attachment. Audio

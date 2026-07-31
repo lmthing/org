@@ -161,7 +161,13 @@ function CopyButton({ text }: { text: string }) {
   return (
     <Prim.Pressable
       onClick={() => void copy()}
-      transition="quick" animateOnly={["opacity"]} flexShrink={0} opacity={0} color="$muted-foreground" padding="$1" borderRadius="$radius" $group-hover={{ opacity: 1 }} hoverStyle={{ color: "$foreground" }}
+      // Visible from the start, fading UP on hover rather than in from nothing. It used to be
+      // `opacity={0}` + `$group-hover={{ opacity: 1 }}`, and `$group-hover` only ever fires from a
+      // real `:hover` — which a touchscreen never sends. So on a phone this was not "subtle until
+      // you point at it", it was invisible AND untappable: there was no way to copy a message at
+      // all. A mouse still gets the reveal (0.45 → 1); a thumb gets a control it can actually see
+      // and hit, which is the whole point of the affordance.
+      transition="quick" animateOnly={["opacity"]} flexShrink={0} opacity={0.45} color="$muted-foreground" padding="$1" borderRadius="$radius" $group-hover={{ opacity: 1 }} hoverStyle={{ color: "$foreground" }}
       title="Copy"
       aria-label="Copy message"
     >
@@ -174,6 +180,36 @@ function CopyButton({ text }: { text: string }) {
           </Prim.Svg>
         )
       }
+    </Prim.Pressable>
+  );
+}
+
+// ─── Edit-and-resend button ────────────────────────────────────────────────────
+
+/**
+ * Reopens a sent user message in the composer for correction (`Composer`'s `editDraft` effect
+ * consumes `startEditMessage`'s result). On send, `Composer.handleSend` drops this block and
+ * everything the agent said after it from the LOCAL transcript — see the comment there for why
+ * that is a view-only fix, not a true edit of what the agent remembers.
+ *
+ * Deliberately NOT hover-revealed from nothing: `$group-hover` only fires from a real `:hover`,
+ * which a touchscreen never sends, so `opacity={0}` + `$group-hover={{ opacity: 1 }}` leaves a
+ * control invisible AND unreachable on a phone. `CopyButton` above had exactly that bug — there
+ * was no way to copy a message on a phone at all — and now starts visible and merely brightens on
+ * hover. Neither control should go back to revealing from zero.
+ */
+function EditButton({ blockId, text }: { blockId: string; text: string }) {
+  const startEdit = useStore((s) => s.startEditMessage);
+  return (
+    <Prim.Pressable
+      onClick={() => startEdit(blockId, text)}
+      transition="quick" animateOnly={["color"]} flexShrink={0} color="$muted-foreground" padding="$1" borderRadius="$radius" hoverStyle={{ color: "$foreground" }}
+      title="Edit and resend"
+      aria-label="Edit and resend message"
+    >
+      <Prim.Svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <Prim.Path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+      </Prim.Svg>
     </Prim.Pressable>
   );
 }
@@ -266,6 +302,7 @@ interface MessageProps {
  */
 function MessageImpl({ block }: MessageProps) {
   const node = useStore((s) => s.model.nodes[block.nodeId]);
+  const mode = useStore((s) => s.mode);
   const showAttribution = node && node.kind !== 'session' && node.kind !== 'run';
   const childNodeIds = node?.childIds ?? [];
 
@@ -279,6 +316,10 @@ function MessageImpl({ block }: MessageProps) {
             `paddingHorizontal` and ran under the right edge of the screen — the cap was never
             reached because the row simply overflowed instead. */}
         <Prim.Row maxWidth="75%" flexShrink={1} minWidth={0} gap="$1.5" alignItems="flex-start">
+          {/* Replay has no live composer to resend into (`Composer` renders its "input disabled"
+              branch there, never the text field an edit would land in — see that early return),
+              and an attachment-only message has no text worth reopening. */}
+          {mode !== 'replay' && block.content && <EditButton blockId={block.id} text={block.content} />}
           <CopyButton text={block.content} />
           <Prim.Col gap="$1.5" alignItems="flex-end" flexShrink={1} minWidth={0}>
             {attachments.length > 0 && (

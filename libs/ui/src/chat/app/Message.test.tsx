@@ -15,7 +15,7 @@
  */
 import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render } from '../../test-utils/index';
+import { render, fireEvent } from '../../test-utils/index';
 import { useStore } from '../store/store';
 import type { ConvoBlock, ExecNode } from '../store/model';
 import { Message, AssistantTurn } from './Message';
@@ -81,5 +81,36 @@ describe('Message — user/display/error blocks still render under memoization',
     rerender(<Message block={b2} />);
     expect(queryByText('first')).toBeNull();
     expect(getByText('second')).toBeTruthy();
+  });
+});
+
+/**
+ * Edit-and-resend. `Message.tsx` used to expose only Copy on a sent message — no way to correct
+ * a typo without retyping the whole thing. `EditButton` hands the block off to the composer via
+ * `startEditMessage`; see `Composer.test.tsx` for what the composer does with it.
+ */
+describe('Message — user bubble edit-and-resend', () => {
+  beforeEach(() => {
+    useStore.setState({ mode: 'live', editDraft: null });
+  });
+
+  it('clicking Edit populates editDraft with this block’s id and content', () => {
+    const block: ConvoBlock = { id: 'u1', ts: 0, nodeId: 'n1', type: 'user', content: 'fix this typo' };
+    const { getByLabelText } = render(<Message block={block} />);
+    fireEvent.click(getByLabelText('Edit and resend message'));
+    expect(useStore.getState().editDraft).toEqual({ blockId: 'u1', content: 'fix this typo' });
+  });
+
+  it('is not offered in replay mode — there is no live composer to resend into', () => {
+    useStore.setState({ mode: 'replay' });
+    const block: ConvoBlock = { id: 'u1', ts: 0, nodeId: 'n1', type: 'user', content: 'fix this typo' };
+    const { queryByLabelText } = render(<Message block={block} />);
+    expect(queryByLabelText('Edit and resend message')).toBeNull();
+  });
+
+  it('is not offered for an attachment-only message with no text to reopen', () => {
+    const block: ConvoBlock = { id: 'u1', ts: 0, nodeId: 'n1', type: 'user', content: '' };
+    const { queryByLabelText } = render(<Message block={block} />);
+    expect(queryByLabelText('Edit and resend message')).toBeNull();
   });
 });

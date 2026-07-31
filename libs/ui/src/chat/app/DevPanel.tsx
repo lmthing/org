@@ -47,17 +47,17 @@ export function DevPanel({ onClose, className, height }: DevPanelProps) {
     <Prim.Box as="aside"
       aria-label="developer tools"
       display="flex"
-      className={className} {...(height !== undefined ? { height } : {})} backgroundColor="var(--lm-panel)" borderColor="var(--lm-border)" position="relative" flexDirection="column" borderLeftWidth={1} overflow="hidden" flexShrink={0}
+      className={className} {...(height !== undefined ? { height } : {})} backgroundColor="var(--muted)" borderColor="var(--border)" position="relative" flexDirection="column" borderLeftWidth={1} overflow="hidden" flexShrink={0}
       style={{ width }}
     >
       <Resizer onDrag={(dx) => setWidth(w => Math.max(280, Math.min(700, w - dx)))} />
 
       {/* Header */}
-      <Prim.Row borderColor="var(--lm-border)" gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderBottomWidth={1} alignItems="center" flexShrink={0}>
-        <Prim.Text color="var(--lm-text)" fontSize="$xs" fontWeight="$semibold" flexGrow={1} flexShrink={1} flexBasis="0%">DevTools</Prim.Text>
+      <Prim.Row borderColor="var(--border)" gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderBottomWidth={1} alignItems="center" flexShrink={0}>
+        <Prim.Text color="var(--foreground)" fontSize="$xs" fontWeight="$semibold" flexGrow={1} flexShrink={1} flexBasis="0%">DevTools</Prim.Text>
         <Prim.Pressable
           onClick={onClose}
-          color="var(--lm-muted)" fontSize="$base" lineHeight={16} hoverStyle={{ color: "var(--lm-text)" }}
+          color="var(--muted-foreground)" fontSize="$base" lineHeight={16} hoverStyle={{ color: "var(--foreground)" }}
           aria-label="Close DevPanel"
         >
           <Prim.Text>×</Prim.Text>
@@ -71,7 +71,7 @@ export function DevPanel({ onClose, className, height }: DevPanelProps) {
 
       {/* Tree/inspector resizer */}
       <Prim.Box
-        height="$1" cursor="row-resize" backgroundColor="var(--lm-border)" flexShrink={0} hoverStyle={{ backgroundColor: "color-mix(in srgb, var(--lm-accent) 40%, transparent)" }}
+        height="$1" cursor="row-resize" backgroundColor="var(--border)" flexShrink={0} hoverStyle={{ backgroundColor: "color-mix(in srgb, var(--agent) 40%, transparent)" }}
         onMouseDown={(e) => {
           e.preventDefault();
           let last = e.clientY;
@@ -89,7 +89,7 @@ export function DevPanel({ onClose, className, height }: DevPanelProps) {
 
       {/* Replay bar */}
       {mode === 'replay' && (
-        <Prim.Box borderColor="var(--lm-border)" flexShrink={0} borderTopWidth={1}>
+        <Prim.Box borderColor="var(--border)" flexShrink={0} borderTopWidth={1}>
           <PlaybackBar />
         </Prim.Box>
       )}

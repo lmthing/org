@@ -46,18 +46,18 @@ function TreeRow({ node, depth, now }: { node: ExecNode; depth: number; now: num
         fontSize="12px"
         {...(selected
           ? {
-              backgroundColor: 'color-mix(in srgb, var(--lm-accent) 15%, transparent)',
+              backgroundColor: 'color-mix(in srgb, var(--agent) 15%, transparent)',
               outlineWidth: 1,
               outlineStyle: 'solid' as const,
-              outlineColor: 'color-mix(in srgb, var(--lm-accent) 40%, transparent)',
+              outlineColor: 'color-mix(in srgb, var(--agent) 40%, transparent)',
             }
-          : { hoverStyle: { backgroundColor: 'var(--lm-panel2)' } })}
+          : { hoverStyle: { backgroundColor: 'var(--accent)' } })}
         paddingLeft={`${depth * 14 + 8}px`}
       >
         {childIds.length > 0 ? (
           <Prim.Pressable
             onClick={(e) => { e.stopPropagation(); toggleExpand(node.id); }}
-            color="var(--lm-muted)" width="$3" textAlign="center" flexShrink={0}
+            color="var(--muted-foreground)" width="$3" textAlign="center" flexShrink={0}
             aria-label={expanded ? 'collapse' : 'expand'}
           >
             {expanded ? '▾' : '▸'}
@@ -66,10 +66,10 @@ function TreeRow({ node, depth, now }: { node: ExecNode; depth: number; now: num
           <Prim.Text width="$3" flexShrink={0} />
         )}
         <StatusIcon status={node.status} />
-        <Prim.Text color="var(--lm-text)" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.label}>{node.label}</Prim.Text>
+        <Prim.Text color="var(--foreground)" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.label}>{node.label}</Prim.Text>
         <KindBadge kind={node.kind} />
-        {dur && <Prim.Text color="var(--lm-muted)" fontSize="10px" fontFamily="$mono" flexShrink={0} marginLeft="auto">{dur}</Prim.Text>}
-        {retries > 0 && <Prim.Text color="var(--lm-amber)" fontSize="10px" fontFamily="$mono" flexShrink={0} title={`${retries} retries`}>×{retries}</Prim.Text>}
+        {dur && <Prim.Text color="var(--muted-foreground)" fontSize="10px" fontFamily="$mono" flexShrink={0} marginLeft="auto">{dur}</Prim.Text>}
+        {retries > 0 && <Prim.Text color="var(--warning)" fontSize="10px" fontFamily="$mono" flexShrink={0} title={`${retries} retries`}>×{retries}</Prim.Text>}
       </Prim.Box>
       {expanded && childIds.map((cid) => <TreeRowById key={cid} id={cid} depth={depth + 1} now={now} />)}
     </Prim.Box>
@@ -92,12 +92,12 @@ export function ExecutionTree(): React.ReactElement {
 
   return (
     <Prim.Box as="nav" aria-label="execution tree" height="100%" overflowY="auto" paddingVertical="$1">
-      <Prim.Row color="var(--lm-muted)" paddingHorizontal="$2" paddingVertical="$1" fontSize="10px" textTransform="uppercase" letterSpacing="$wider" justifyContent="space-between" alignItems="center">
+      <Prim.Row color="var(--muted-foreground)" paddingHorizontal="$2" paddingVertical="$1" fontSize="10px" textTransform="uppercase" letterSpacing="$wider" justifyContent="space-between" alignItems="center">
         <Prim.Text>Execution</Prim.Text>
         {queue && <Prim.Text fontFamily="$mono">q {queue.active}/{queue.max}</Prim.Text>}
       </Prim.Row>
       {rootId ? <TreeRowById id={rootId} depth={0} now={now} /> : (
-        <Prim.Box color="var(--lm-muted)" paddingHorizontal="$3" paddingVertical="$4" fontSize="12px"><Prim.Text>No activity yet. Send a message to start.</Prim.Text></Prim.Box>
+        <Prim.Box color="var(--muted-foreground)" paddingHorizontal="$3" paddingVertical="$4" fontSize="12px"><Prim.Text>No activity yet. Send a message to start.</Prim.Text></Prim.Box>
       )}
     </Prim.Box>
   );

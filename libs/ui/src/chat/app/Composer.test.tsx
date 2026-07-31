@@ -1,7 +1,8 @@
-import { render, fireEvent, act } from '@testing-library/react'
+import { render, fireEvent, act, waitFor } from '@testing-library/react'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { TamaguiProvider } from '@tamagui/core'
 import { tamaguiWebConfig } from '../../theme/tamagui.config'
+import { useStore } from '../store/store'
 import { Composer } from './Composer'
 
 /**
@@ -197,6 +198,171 @@ describe('Composer — touch target sizing', () => {
  * `onClick` (which `nativeSafeProps` maps to `onPress` on native) now selects a completion, the
  * same primitive every other control in this file already used.
  */
+/**
+ * Draft persistence. `text` used to be plain `useState` with nothing durable behind it — an
+ * accidental reload, a crash, or a phone killing the tab lost whatever was being written. Now
+ * backed by `platform/storage` (jsdom's `localStorage` here), keyed per session so a remount for
+ * one session never restores — or, worse, silently sends into — a DIFFERENT session's draft.
+ * `ChatView` already remounts `Composer` on a session switch (`ChatView.test.tsx`); these tests
+ * cover what a fresh mount does with what a previous one left behind.
+ */
+describe('Composer — draft persistence', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useStore.setState({ activeSessionId: 's-draft' });
+  });
+
+  /** The save is debounced (`DRAFT_SAVE_DEBOUNCE_MS`) — this file has no fake timers elsewhere, so
+   *  wait past it for real rather than introducing a second timer strategy into one suite. */
+  const waitPastDebounce = () => act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 450));
+  });
+
+  it('restores an unsent draft for this session on a fresh mount', async () => {
+    const first = render(
+      <P>
+        <Composer onSend={() => {}} />
+      </P>,
+    );
+    const field1 = first.container.querySelector('textarea')! as HTMLTextAreaElement;
+    act(() => {
+      fireEvent.change(field1, { target: { value: 'an unsent draft' } });
+    });
+    await waitPastDebounce();
+    first.unmount();
+
+    const second = render(
+      <P>
+        <Composer onSend={() => {}} />
+      </P>,
+    );
+    // The restore itself is async (`storage.getItem`) — poll rather than assume one microtask.
+    await waitFor(() => {
+      const field2 = second.container.querySelector('textarea') as HTMLTextAreaElement;
+      expect(field2.value).toBe('an unsent draft');
+    });
+  });
+
+  it('does not leak a draft into a DIFFERENT session', async () => {
+    const first = render(
+      <P>
+        <Composer onSend={() => {}} />
+      </P>,
+    );
+    const field1 = first.container.querySelector('textarea')! as HTMLTextAreaElement;
+    act(() => {
+      fireEvent.change(field1, { target: { value: "session one's draft" } });
+    });
+    await waitPastDebounce();
+    first.unmount();
+
+    useStore.setState({ activeSessionId: 'a-different-session' });
+    const second = render(
+      <P>
+        <Composer onSend={() => {}} />
+      </P>,
+    );
+    // Give the (empty) restore a moment to resolve, then confirm it stayed empty — it must not
+    // find anything under the OLD session's key.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const field2 = second.container.querySelector('textarea') as HTMLTextAreaElement;
+    expect(field2.value).toBe('');
+  });
+
+  it('clears the stored draft immediately once the message is sent', () => {
+    const sent: string[] = [];
+    const view = render(
+      <P>
+        <Composer onSend={(t) => sent.push(t)} />
+      </P>,
+    );
+    const field = view.container.querySelector('textarea')! as HTMLTextAreaElement;
+    act(() => {
+      fireEvent.change(field, { target: { value: 'go now' } });
+    });
+    act(() => {
+      fireEvent.click(view.container.querySelector('[aria-label="Send message"]')!);
+    });
+    expect(sent).toEqual(['go now']);
+    // No need to wait out the debounce — a send clears the draft synchronously (`handleSend`),
+    // precisely so a reload inside that window cannot resurrect an already-sent message.
+    expect(localStorage.getItem('chat.composer-draft.s-draft')).toBeNull();
+  });
+});
+
+/**
+ * Edit-and-resend, the composer half. `Message.tsx`'s `EditButton` hands the block off via
+ * `startEditMessage`; these cover what `Composer` does with it — reopen the text, and on resend
+ * truncate the local transcript at that block so a corrected question is never followed by the
+ * OLD answer (see the comment in `Composer.handleSend`).
+ */
+describe('Composer — edit-and-resend', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useStore.setState({ activeSessionId: 's-edit', editDraft: null });
+  });
+
+  it('reopens the edited message in the field and consumes editDraft', async () => {
+    const view = render(
+      <P>
+        <Composer onSend={() => {}} />
+      </P>,
+    );
+    act(() => {
+      useStore.getState().startEditMessage('u1', 'the original question');
+    });
+    await waitFor(() => {
+      const field = view.container.querySelector('textarea') as HTMLTextAreaElement;
+      expect(field.value).toBe('the original question');
+    });
+    expect(useStore.getState().editDraft).toBeNull();
+  });
+
+  it('truncates the local transcript at the edited block on resend', async () => {
+    useStore.setState({
+      model: {
+        nodes: {},
+        rootId: 'n1',
+        blocks: [
+          { id: 'u1', ts: 0, nodeId: 'n1', type: 'user', content: 'old question' },
+          { id: 'd1', ts: 0, nodeId: 'n1', type: 'display', descriptor: 'stale answer' },
+        ],
+        rawEvents: [],
+        lastSeq: 0,
+      },
+    });
+    const sent: string[] = [];
+    const view = render(
+      <P>
+        <Composer onSend={(t) => sent.push(t)} />
+      </P>,
+    );
+    act(() => {
+      useStore.getState().startEditMessage('u1', 'old question');
+    });
+    await waitFor(() => {
+      const field = view.container.querySelector('textarea') as HTMLTextAreaElement;
+      expect(field.value).toBe('old question');
+    });
+    const field = view.container.querySelector('textarea') as HTMLTextAreaElement;
+    act(() => {
+      fireEvent.change(field, { target: { value: 'corrected question' } });
+    });
+    act(() => {
+      fireEvent.click(view.container.querySelector('[aria-label="Send message"]')!);
+    });
+
+    expect(sent).toEqual(['corrected question']);
+    // Both the old question AND the stale answer under it are gone locally — `onSend` (mocked
+    // here) is what appends the NEW user block in the real app (`ChatView.handleSend` →
+    // `noteUserMessage`), so an empty array here is correct, not an oversight.
+    expect(useStore.getState().model.blocks).toEqual([]);
+  });
+});
+
 describe('Composer — @ completion dropdown selection', () => {
   const originalFetch = globalThis.fetch
   afterEach(() => {

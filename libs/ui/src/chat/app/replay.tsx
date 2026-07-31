@@ -31,7 +31,7 @@ export function TraceLoader(): React.ReactElement {
     loadReplay(parseTrace(text));
   };
   return (
-    <Prim.Text as="label" color="var(--lm-muted)" cursor="pointer" hoverStyle={{ color: "var(--lm-text)" }}>
+    <Prim.Text as="label" color="var(--muted-foreground)" cursor="pointer" hoverStyle={{ color: "var(--foreground)" }}>
       <Prim.TextField
         type="file"
         accept=".jsonl,.json,.ndjson"
@@ -67,8 +67,8 @@ export function PlaybackBar(): React.ReactElement | null {
   if (!replay) return null;
   const total = replay.events.length;
   return (
-    <Prim.Row borderColor="var(--lm-border)" backgroundColor="var(--lm-panel)" gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderTopWidth={1} alignItems="center">
-      <Prim.Pressable onClick={() => (replay.playing ? pause() : play())} color="var(--lm-accent)" fontSize="13px" width="$6">
+    <Prim.Row borderColor="var(--border)" backgroundColor="var(--muted)" gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderTopWidth={1} alignItems="center">
+      <Prim.Pressable onClick={() => (replay.playing ? pause() : play())} color="var(--agent)" fontSize="13px" width="$6">
         {replay.playing ? '⏸' : '▶'}
       </Prim.Pressable>
       <Prim.TextField
@@ -81,15 +81,15 @@ export function PlaybackBar(): React.ReactElement | null {
         style={{ accentColor: 'var(--agent)' }}
         data-testid="replay-scrubber"
       />
-      <Prim.Text color="var(--lm-muted)" fontSize="10px" fontFamily="$mono" width="$20" textAlign="right">{replay.cursor}/{total}</Prim.Text>
+      <Prim.Text color="var(--muted-foreground)" fontSize="10px" fontFamily="$mono" width="$20" textAlign="right">{replay.cursor}/{total}</Prim.Text>
       <Prim.Select
         value={replay.speed}
         onChange={(e) => setSpeed(Number(e.target.value))}
-        backgroundColor="var(--lm-bg)" borderWidth={1} borderColor="var(--lm-border)" borderRadius="$radius" fontSize="11px" color="var(--lm-text)" paddingHorizontal="$1" paddingVertical="$0.5"
+        backgroundColor="var(--background)" borderWidth={1} borderColor="var(--border)" borderRadius="$radius" fontSize="11px" color="var(--foreground)" paddingHorizontal="$1" paddingVertical="$0.5"
       >
         {[1, 2, 4, 8].map((s) => <Prim.Option key={s} value={s}>{s}×</Prim.Option>)}
       </Prim.Select>
-      <Prim.Pressable onClick={exitReplay} color="var(--lm-muted)" hoverStyle={{ color: "var(--lm-text)" }}><Prim.Text>✕ live</Prim.Text></Prim.Pressable>
+      <Prim.Pressable onClick={exitReplay} color="var(--muted-foreground)" hoverStyle={{ color: "var(--foreground)" }}><Prim.Text>✕ live</Prim.Text></Prim.Pressable>
     </Prim.Row>
   );
 }

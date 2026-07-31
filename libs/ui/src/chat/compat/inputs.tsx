@@ -109,7 +109,7 @@ export function SelectInput<V = unknown>({
               else if (e.key === 'ArrowUp') { e.preventDefault(); move(active - 1); }
               else if (e.key === 'Enter') { e.preventDefault(); const cur = items[active]; if (cur) onSelect?.(cur); }
             }}
-            cursor="pointer" display="flex" gap={6} alignItems="center" paddingVertical="2px" paddingHorizontal="4px" borderRadius={4} backgroundColor="selected ? 'color-mix(in srgb, var(--lm-accent, #58a6ff) 18%, transparent)' : undefined"
+            cursor="pointer" display="flex" gap={6} alignItems="center" paddingVertical="2px" paddingHorizontal="4px" borderRadius={4} backgroundColor={selected ? 'color-mix(in srgb, var(--lm-accent, #58a6ff) 18%, transparent)' : undefined}
           >
             <Text color={selected ? 'cyan' : undefined}>{selected ? '❯' : ' '}</Text>
             <Text color={selected ? 'cyan' : undefined}>{it.label}</Text>
@@ -150,7 +150,7 @@ export function MultiSelect<V = unknown>({
       })}
       <Prim.Pressable
         onClick={() => onSubmit?.(items.filter((it) => checked.has(it.value)))}
-        marginTop={6} alignSelf="flex-start" backgroundColor="inkColor('blue')" color="var(--lm-bg)" borderWidth={0} borderRadius={6} paddingVertical="4px" paddingHorizontal="10px" cursor="pointer"
+        marginTop={6} alignSelf="flex-start" backgroundColor={inkColor('blue')} color="var(--lm-bg)" borderWidth={0} borderRadius={6} paddingVertical="4px" paddingHorizontal="10px" cursor="pointer"
       >
         Submit
       </Prim.Pressable>

@@ -13,7 +13,17 @@ import { readLinkParams } from '../../platform/deep-link';
 import { getWindowSize, subscribeWindowSize } from '../../platform/dimensions';
 import { setAppTitle } from '../../platform/navigation';
 import { onKeyDown } from '../../platform/keyboard';
+import { startSession } from './session-control';
 import type { Surface } from '../../elements/nav/surface-switcher';
+
+/** Is `target` already an editable element? Guards the bare `/` shortcut below from hijacking a
+ *  `/` the user meant to TYPE somewhere else (the composer itself, a text field inside a drawer,
+ *  …). Reachable only from the web `/` handler (`onKeyDown` never fires on native — see
+ *  `platform/keyboard.native.ts` — so the DOM types here are never evaluated on a phone). */
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+}
 
 interface AppShellProps {
   singleSession?: boolean;
@@ -76,13 +86,41 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges }: AppS
       : 'THING');
   }, [running, done, mode]);
 
-  // Alt+I shortcut
+  // Alt+I shortcut — developer-only (toggles DevTools), left as-is.
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey && e.key === 'i') { e.preventDefault(); setDevPanelOpen(!devPanelOpen); }
     };
     return onKeyDown(onKey);
   }, [devPanelOpen, setDevPanelOpen]);
+
+  // The two shortcuts an everyday reader actually wants, as opposed to Alt+I above. Both no-op on
+  // native without any extra guard: `onKeyDown` (`platform/keyboard`) is a documented no-op there
+  // (no hardware keyboard — see `keyboard.native.ts`), which is also why this needs no `isWeb`
+  // check of its own to keep the native build from touching `document`.
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // New chat — Alt+N. Shares `Alt+I`'s modifier rather than `Ctrl`/`Cmd`+N, which every
+      // browser reserves for a new WINDOW and refuses to hand a page. Only meaningful where
+      // there is a project to hold the new session (the `singleSession` embeddings — a studio
+      // panel, say — have no session list for a fresh one to join).
+      if (e.altKey && e.key.toLowerCase() === 'n') {
+        if (!singleSession && activeProjectId) {
+          e.preventDefault();
+          void startSession(activeProjectId);
+        }
+        return;
+      }
+      // Focus the composer — bare `/`, the convention GitHub/Slack/Discord/Notion all use for
+      // "jump to the primary input". Left alone whenever it would otherwise TYPE a `/` into
+      // something already focused (the composer itself included).
+      if (e.key === '/' && !isEditableTarget(e.target)) {
+        const field = globalThis.document?.querySelector<HTMLTextAreaElement>('[data-testid="message-input"]');
+        if (field) { e.preventDefault(); field.focus(); }
+      }
+    };
+    return onKeyDown(onKey);
+  }, [singleSession, activeProjectId]);
 
   const showSidebar = !singleSession;
   const showDevPanel = devPanelOpen;

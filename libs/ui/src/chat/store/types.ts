@@ -57,6 +57,10 @@ export interface AppState {
    *  (`ExecNode.activity`), not here — the header `StatusLine` prefers a running
    *  sub-agent's sentence over this one while work is in flight. */
   activity: string;
+  /** Set by `Message`'s "Edit" action to reopen a sent user message in the composer for
+   *  edit-and-resend. Consumed once (`Composer`'s `editDraft` effect) then cleared — see
+   *  `startEditMessage`/`clearEditDraft`/`truncateFromBlock`. */
+  editDraft: { blockId: string; content: string } | null;
   replay: ReplayState | null;
   /** Running token cost for the current live session (resets on session switch). */
   sessionCostUsd: number;
@@ -92,6 +96,14 @@ export interface AppState {
   noteError: (message: string) => void;
   noteAskStart: (askId: string, descriptor: unknown) => void;
   noteAskEnd: (askId: string, value: unknown, cancelled?: boolean) => void;
+  /** Reopen a sent user message (identified by its `ConvoBlock.id`) in the composer. */
+  startEditMessage: (blockId: string, content: string) => void;
+  /** Consume `editDraft` after the composer has applied it. */
+  clearEditDraft: () => void;
+  /** Drop `blockId` and every block after it from the LOCAL transcript (edit-and-resend's
+   *  "no stale answer under an edited question" cleanup — see `Composer.handleSend`). A no-op
+   *  if the block is no longer present. */
+  truncateFromBlock: (blockId: string) => void;
   // replay
   loadReplay: (events: WireEvent[]) => void;
   seek: (cursor: number) => void;
