@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { callTool, type PageDriver } from './page-tools'
+import { callTool, sameTarget, type PageDriver } from './page-tools'
 
 /**
  * What the agent's tools actually ask the page to do.
@@ -132,6 +132,57 @@ describe('the desktop-browser catalogue', () => {
     }
     const r = await callTool(p, 'back', {})
     expect(r.isError).toBeFalsy()
+  })
+})
+
+describe('a url argument means go there first', () => {
+  it('navigates before reading, for a tool that is not goto', async () => {
+    // THE bug this suite exists for. Asked for markdown of google.com, an implementation that
+    // ignores `url` reads whatever is loaded and returns it as the answer. It happened in the
+    // product: the model got the default landing page, noticed it was not Google, and explained it
+    // away as a privacy extension redirecting the request — a coherent account of something that
+    // never occurred. Nothing errored, because from the DOM's side nothing was wrong.
+    const p = new FakePage([[/__lmthing\.text/, 'Google home'], READY, [/^location\.href$/, 'https://duckduckgo.com/']])
+    await callTool(p, 'markdown', { url: 'https://www.google.com' })
+    expect(p.navigated).toEqual(['https://www.google.com'])
+  })
+
+  it.each(['html', 'links', 'structuredData', 'elements'])('honours url on %s too', async (name) => {
+    const p = new FakePage([READY, [/^location\.href$/, 'https://elsewhere.test/']])
+    await callTool(p, name, { url: 'https://target.test/page' })
+    expect(p.navigated).toEqual(['https://target.test/page'])
+  })
+
+  it('does not re-navigate when it is already there', async () => {
+    // A redundant navigation is not harmless: it throws away the page state the previous calls
+    // built up — a filled form, a scroll position, an expanded menu.
+    const p = new FakePage([READY, [/^location\.href$/, 'https://example.test/']])
+    await callTool(p, 'markdown', { url: 'https://www.example.test' })
+    expect(p.navigated).toEqual([])
+  })
+
+  it('treats trailing slash and www as the same place, and a query as different', () => {
+    expect(sameTarget('https://example.com/', 'https://example.com')).toBe(true)
+    expect(sameTarget('https://www.example.com/', 'https://example.com/')).toBe(true)
+    expect(sameTarget('https://example.com/a', 'https://example.com/b')).toBe(false)
+    expect(sameTarget('https://example.com/?q=1', 'https://example.com/')).toBe(false)
+    expect(sameTarget('about:blank', 'https://example.com')).toBe(false)
+  })
+})
+
+describe('a selector argument means read THAT part', () => {
+  it('scopes markdown to the selector', async () => {
+    const p = page([[/querySelector/, 'just the article']])
+    const r = await callTool(p, 'markdown', { selector: 'article' })
+    expect(textOf(r)).toBe('just the article')
+  })
+
+  it('reports a selector that matches nothing instead of returning the whole page', async () => {
+    // Same family as the `url` bug: answered with something plausible, a model cannot tell it was
+    // not answered at all.
+    const p = page([[/querySelector/, '\u0000notfound']])
+    const r = await callTool(p, 'html', { selector: '#missing' })
+    expect(r.isError).toBe(true)
   })
 })
 

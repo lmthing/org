@@ -79,6 +79,20 @@ export async function callTool(
 
   void evaluate
 
+  // `url` means "go there first, then do this" — for EVERY tool that takes one, not just `goto`.
+  //
+  // Dropping it is the worst bug this file can have, and it is silent: asked to read
+  // `markdown({url: 'https://www.google.com'})`, an implementation that ignores the argument reads
+  // whatever page happens to be loaded and returns it as the answer. It happened. The model was
+  // handed the default landing page, noticed the mismatch, and explained it away as a privacy
+  // extension redirecting Google — a completely coherent story about something that never occurred.
+  // Nothing anywhere reported an error, because from the DOM's point of view nothing went wrong.
+  const wantedUrl = typeof args['url'] === 'string' ? String(args['url']).trim() : ''
+  if (wantedUrl && name !== 'open' && name !== 'goto') {
+    const here = await ev('location.href')
+    if (!sameTarget(here, wantedUrl)) await navigated(wantedUrl)
+  }
+
   switch (name) {
     // ---------------------------------------------------------------- desktop-browser catalogue
     case 'open':
@@ -172,14 +186,32 @@ export async function callTool(
       return text(`navigated to ${String(args['url'] ?? '')} — ${await navigated(String(args['url'] ?? ''))}`)
     case 'getUrl':
       return text(await ev('location.href'))
-    case 'html':
-      return text(await ev('document.documentElement.outerHTML'))
+    case 'html': {
+      const selector = String(args['selector'] ?? '')
+      if (!selector) return text(await ev('document.documentElement.outerHTML'))
+      const out = await ev(
+        `(()=>{const e=document.querySelector(${JSON.stringify(selector)});` +
+          `return e?e.outerHTML:'\u0000notfound'})()`,
+      )
+      return out === '\u0000notfound' ? text(`no element matches ${selector}`, true) : text(out)
+    }
     case 'markdown':
-    case 'extract':
+    case 'extract': {
       // `innerText` rather than a markdown conversion: it is what the person sees, already free of
       // script and style, and a second HTML→markdown implementation here would diverge from
       // `webFetch`'s.
-      return text(await ev(helper('text(40000)')))
+      //
+      // `selector` is honoured for the same reason `url` is: asked for one part of a page and
+      // handed the whole thing, a model has no way to tell it was not answered.
+      const max = Number(args['maxBytes'] ?? 40000)
+      const selector = String(args['selector'] ?? '')
+      if (!selector) return text(await ev(helper(`text(${max})`)))
+      const out = await ev(
+        `(()=>{const e=document.querySelector(${JSON.stringify(selector)});` +
+          `return e?e.innerText.slice(0,${max}):'\u0000notfound'})()`,
+      )
+      return out === '\u0000notfound' ? text(`no element matches ${selector}`, true) : text(out)
+    }
     case 'links':
       return text(
         await ev(
@@ -256,6 +288,30 @@ export async function callTool(
     default:
       return text(`unknown tool: ${name}`, true)
   }
+}
+
+/**
+ * Is the page already where the caller wants it?
+ *
+ * Compared loosely on purpose. A site answers `https://example.com` at `https://example.com/`, and
+ * often at `https://www.example.com/` — treating those as different means a redundant navigation
+ * that throws away the page state the previous call just built up. Anything beyond host and path
+ * (a query, a fragment) is a real difference and is not smoothed over.
+ */
+export function sameTarget(here: string, wanted: string): boolean {
+  const norm = (raw: string): string | null => {
+    try {
+      const u = new URL(raw.includes('://') ? raw : `https://${raw}`)
+      const host = u.host.replace(/^www\./, '')
+      const path = u.pathname.replace(/\/$/, '')
+      return `${host}${path}${u.search}`
+    } catch {
+      return null
+    }
+  }
+  const a = norm(here)
+  const b = norm(wanted)
+  return a !== null && b !== null && a === b
 }
 
 /** Poll `document.readyState` rather than trusting a fixed delay after navigation. */
