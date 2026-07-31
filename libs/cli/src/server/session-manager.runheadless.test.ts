@@ -159,6 +159,46 @@ describe('SessionManager.runHeadless (keyless, mock provider)', () => {
     expect(withGuard).toBeGreaterThan(withoutGuard);
   });
 
+  it('(i) a THREADED turn that gave up after its final retry is NOT reported as a success', async () => {
+    // Giving up does not throw. `runTurnLoop` returns 'error' when a statement
+    // fails its last retry, every call site in Session discarded that value, and
+    // `start()` resolves `void` — so the only failure a caller could observe was a
+    // throw. A team channel therefore drew a turn that had exhausted its retries
+    // as a finished answer (`thing_status: done`), and what it posted was the
+    // retry banner and the agent's own TypeScript.
+    const root = await makeRoot();
+    // Always emits a statement that cannot typecheck, so every attempt fails.
+    const broken = createMockStreamFn(() => `nonexistentGlobalFunction(1, 2, 3);`);
+    const manager = new SessionManager({
+      streamFn: broken,
+      lmthingRoot: root,
+      buildSession: (args: BuildSessionArgs) =>
+        new Session(
+          {
+            spaceDir: args.spaceDir,
+            agentSlug: args.agentSlug,
+            modelAlias: 'mock',
+            renderHost: args.renderHost,
+            systemSpaceDirs: [],
+            budget: args.budget,
+            maxRetries: 2,
+          },
+          { streamFn: broken },
+        ),
+    });
+
+    const res = await manager.runHeadlessThreaded({
+      sessionId: 'doomed-thread',
+      agentSlug: 'thing',
+      message: 'do the thing',
+    });
+
+    expect(res.ok, 'a turn that gave up is not a success').toBe(false);
+    expect(res.error).toBeTruthy();
+    // And the failure must not smuggle the agent's source out as the "answer".
+    expect(JSON.stringify(res)).not.toContain('nonexistentGlobalFunction');
+  });
+
   it('(h) a THREADED turn that displays nothing returns no result — never its own code', async () => {
     // Case (d) pinned this for `runHeadless`, and the fallback was removed there
     // because a team channel had posted the agent's own statements into a thread.

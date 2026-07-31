@@ -2207,6 +2207,23 @@ export class SessionManager {
         // `undefined` is the honest result for "it displayed nothing"; the channel
         // already renders that as a failure rather than as an answer.
         const result: unknown = displays.length ? displays[displays.length - 1] : undefined;
+
+        // A turn that gave up does not throw. `runTurnLoop` returns 'error' when a
+        // statement fails its final retry, and until now nothing carried that out
+        // of the session — so this path reported ok:true for a turn that had
+        // exhausted its retries, and a channel drew it as a finished answer.
+        // `ok:false` is what the caller already handles as "say it failed".
+        const outcome = typeof session.getLastTurnOutcome === 'function' ? session.getLastTurnOutcome() : null;
+        if (outcome === 'error') {
+          emitInternalSignal('session.completed', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId: opts.sessionId, ok: false, durationMs: Date.now() - threadedStartedAt });
+          this.sessionLedger.finalize(opts.sessionId, 'error');
+          return {
+            ok: false,
+            error: 'the turn could not complete — it gave up after its final retry',
+            displays: [...displays],
+            sessionId: opts.sessionId,
+          };
+        }
         emitInternalSignal('session.completed', { projectId: opts.projectId ?? DEFAULT_PROJECT_ID, agent: opts.agentSlug, ...(opts.spaceRef ? { spaceRef: opts.spaceRef } : {}), sessionId: opts.sessionId, ok: true, durationMs: Date.now() - threadedStartedAt });
         // Close the ledger record, as `runHeadless` does. Without it every threaded
         // turn stayed `running` forever, so the ledger could show what a channel

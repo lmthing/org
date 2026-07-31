@@ -201,6 +201,26 @@ export class Session {
    *  that did work yet showed the user nothing re-prompts once, then fails loud. */
   private displayedThisTurn = false;
 
+  /**
+   * How the LAST turn ended — the turn loop's own verdict, not an inference.
+   *
+   * `runTurnLoop` already answers `'done' | 'error'`, and it returns `'error'`
+   * when a statement fails its final retry (`eval/turn-loop.ts:757`). Every call
+   * site here discarded that value and `start()` resolves `void`, so the only
+   * thing a caller could observe was a THROW — and giving up after three attempts
+   * does not throw.
+   *
+   * The consequence was not academic. A team channel drew a turn that had
+   * exhausted its retries as a successful answer (`thing_status: done`), because
+   * `runHeadlessThreaded` had nothing else to go on.
+   */
+  private lastTurnOutcome: 'done' | 'error' | null = null;
+
+  /** The last turn's verdict, or `null` before any turn has run. See {@link lastTurnOutcome}. */
+  getLastTurnOutcome(): 'done' | 'error' | null {
+    return this.lastTurnOutcome;
+  }
+
   constructor(opts: SessionOpts, deps: SessionDeps) {
     this.opts = opts;
     this.deps = deps;
@@ -274,7 +294,7 @@ export class Session {
     const runScope = this.mintRunScope();
     try {
       this.displayedThisTurn = false; // fresh turn — reset the no-visible-output tracking
-      await runTurnLoop({
+      this.lastTurnOutcome = await runTurnLoop({
         vm: this.vm,
         history: this.history,
         systemBlock: this.systemBlock,
@@ -452,7 +472,7 @@ export class Session {
 
     try {
       this.displayedThisTurn = false; // fresh turn — reset the no-visible-output tracking
-      await runTurnLoop({
+      this.lastTurnOutcome = await runTurnLoop({
         vm: this.vm,
         history: this.history,
         systemBlock,
@@ -620,7 +640,7 @@ export class Session {
     const runScope = this.mintRunScope();
     try {
       this.displayedThisTurn = false; // fresh turn — reset the no-visible-output tracking
-      await runTurnLoop({
+      this.lastTurnOutcome = await runTurnLoop({
         vm: this.vm,
         history: this.history,
         systemBlock,
