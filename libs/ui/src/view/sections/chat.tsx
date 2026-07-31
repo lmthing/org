@@ -20,6 +20,7 @@
  */
 
 import * as React from 'react'
+import { podOrigin } from '../client.js'
 import * as Prim from '../../elements/primitives/index'
 import { ReplChatView } from '../../chat'
 import type { ChatSection } from '../types'
@@ -57,7 +58,8 @@ export function ChatSectionView({ section, scope }: { section: ChatSection; scop
       try {
         const bearer = (await client.getToken?.()) ?? ''
         setToken(bearer)
-        const res = await fetch(`${client.baseUrl}/api/sessions`, {
+        // A POD route, not an app route — see podOrigin. `client.baseUrl` is the APP base on web.
+        const res = await fetch(`${podOrigin(client.baseUrl)}/api/sessions`, {
           method: 'POST',
           headers: {
             'content-type': 'application/json',

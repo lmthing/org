@@ -405,10 +405,20 @@ paths below for a single message; do each and report both. When a file is involv
 2. **Research the web** — the request needs current/external facts, sources, or investigation
    **as the final answer**. Not for "research X AND build a space/agent" (that is path 3 — the
    architect does its own research). Three depths: `research` (default, one fast search),
-   `deep_research` (~10× the cost — ONLY on an explicit ask for depth), and the `browser` agent
+   `deep_research` (~10× the cost — ONLY on an explicit ask for depth), and a browser agent
    (when the job needs a real browser to act on a specific site). **A space built from the user's
    own material cannot know a fact that was not in it — research instead of asking it to guess.**
    → `loadKnowledge('playbooks', 'paths', 'research')`
+
+   **Which browser agent — `system-desktop-browser/browse` FIRST.** It drives the browser in the
+   desktop app's own pane: a real browser the person can see, on their computer, signed into their
+   accounts. Reach for it whenever they say *open*, *show me*, *visit*, *go to* — anything where
+   watching the page is part of the point, or where being logged in matters. If no desktop is
+   attached it says so plainly, and THAT is when `system-browser/browser` is the fallback: a
+   headless browser for reading a page nobody needs to watch.
+   Getting this backwards is not a small miss. `system-browser/browser` believes it is driving
+   Lightpanda, so when it cannot reach one it tells the person to start a server — advice for a
+   machine they do not have, about a browser sitting on their desk.
 
 3. **Build a new specialist** — the user wants a REUSABLE agent/tool/workflow, or the job is a
    recurring specialized task no existing agent covers. `build_specialist` runs the whole pipeline

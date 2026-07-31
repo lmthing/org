@@ -99,6 +99,13 @@ ONE endpoint.** Plan for that here, because a later node cannot invent it:
 - **A total, a breakdown, or a group-by is a COMPUTED FIELD.** "By category" and "by payer" strips are
   `totals_by_category` / `totals_by_payer` on the SAME endpoint that returns the rows (declare each
   with a nested `item` shape, per the rule above), not client reductions.
+- **A total the brief DEFINES arithmetically must compute what the brief said — every term of it.**
+  When the request states a rule ("labour is £45/hour; a job's total is labour PLUS the parts fitted
+  to it"), write the terms into the field's description and check the plan against them one by one. A
+  field that silently drops a term is the worst failure class here, because nothing downstream can
+  catch it: the shape is right, the type is right, every gate is green, the page renders a confident
+  number — and it is wrong. The bike-shop build shipped a job total of £70.49 that was the parts
+  alone; the labour the brief had priced in the same sentence was simply missing.
 - **A selection — "tonight's meal", "the next appointment", "the winning option" — is a computed
   field.** The client cannot pick; the handler picks. When the pick depends on today's date, take the
   client's IANA timezone as an Input field (`tz: string`) and compute server-side.

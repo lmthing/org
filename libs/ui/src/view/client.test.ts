@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { buildViewRequest, createViewClient, ViewHttpError, type EndpointManifest } from './client'
+import { buildViewRequest, createViewClient, podOrigin, ViewHttpError, type EndpointManifest } from './client'
 
 /**
  * The client, in BOTH configurations.
@@ -132,5 +132,30 @@ describe('host capabilities degrade rather than crash', () => {
   it('and a supplied confirm is honoured', async () => {
     const client = createViewClient({ endpoints: MANIFEST, confirm: () => false })
     expect(await client.confirm('really?')).toBe(false)
+  })
+})
+
+// ── podOrigin: the assistant dock 404'd on every page of every app ───────────────────────────────
+// `baseUrl` is the APP base on web and the absolute POD url on native, and `POST /api/sessions` is a
+// POD route. Resolving it against the app base gave `…/app/<project>/api/sessions`, which the app
+// router does not serve — so the one control present in the shell of every page answered 404. It was
+// invisible on native, where baseUrl already IS the pod origin.
+describe('podOrigin', () => {
+  it('strips the /app/<project> suffix from a web app base', () => {
+    expect(podOrigin('http://localhost:4321/app/bike-workshop')).toBe('http://localhost:4321')
+    expect(podOrigin('http://localhost:4321/app/bike-workshop/')).toBe('http://localhost:4321')
+  })
+
+  it('leaves an absolute POD url alone — the native configuration must not be rewritten', () => {
+    expect(podOrigin('https://pod.example.com')).toBe('https://pod.example.com')
+    expect(podOrigin('https://pod.example.com/')).toBe('https://pod.example.com')
+  })
+
+  it('handles a RELATIVE app base, which is what the web wrapper actually passes', () => {
+    expect(podOrigin('/app/bike-workshop')).toBe('')
+  })
+
+  it('only strips a trailing /app/<id> — a project literally called "app" elsewhere is untouched', () => {
+    expect(podOrigin('http://h/app/x/deeper')).toBe('http://h/app/x/deeper')
   })
 })

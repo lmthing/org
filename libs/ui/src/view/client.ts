@@ -153,6 +153,24 @@ function isQueryMethod(method: string): boolean {
 }
 
 /** Assemble `{ method, url, init }` for one endpoint call. Pure and unit-testable. */
+/**
+ * The POD origin, derived from whatever `baseUrl` this client was given.
+ *
+ * `baseUrl` is deliberately two different things (see the table above): on web it is the APP base
+ * (`…/app/<project>`, often relative), on native the absolute pod URL. Endpoint calls want the app
+ * base, but a few routes are POD routes and live outside it — `POST /api/sessions`, which the
+ * assistant dock opens, is one.
+ *
+ * Getting this wrong is invisible on native and fatal on web, which is exactly how it shipped: the
+ * dock resolved `…/app/<project>/api/sessions`, the app router had no such route, and every page in
+ * the app answered 404 on the one control present in the shell of all of them.
+ */
+export function podOrigin(baseUrl: string): string {
+  const trimmed = baseUrl.replace(/\/+$/, '')
+  const cut = trimmed.replace(/\/app\/[^/]+$/, '')
+  return cut === trimmed ? trimmed : cut
+}
+
 export function buildViewRequest(
   entry: EndpointManifestEntry,
   input: Record<string, unknown>,
