@@ -29,9 +29,20 @@ export interface ScrollProps extends Omit<BoxProps, 'overflow'> {
    * native — the conversation opened on its OLDEST message.
    */
   stickToEnd?: boolean
+  /**
+   * Pull down to reload. NATIVE ONLY, and deliberately ignored here.
+   *
+   * Pull-to-refresh is a touch idiom the browser does not have and does not want: desktop has a
+   * reload button, and mobile browsers bind the gesture themselves. Accepting the props on both
+   * targets means a surface states "this list can be refreshed" once, in one place, instead of
+   * growing a native-only branch at the call site.
+   */
+  onRefresh?: () => void
+  refreshing?: boolean
 }
 
-const Scroll = React.forwardRef<any, ScrollProps>(({ stickToEnd, children, ...props }, ref) => {
+const Scroll = React.forwardRef<any, ScrollProps>(
+  ({ stickToEnd, onRefresh: _onRefresh, refreshing: _refreshing, children, ...props }, ref) => {
   const own = React.useRef<HTMLDivElement | null>(null)
 
   React.useLayoutEffect(() => {
@@ -72,7 +83,8 @@ const Scroll = React.forwardRef<any, ScrollProps>(({ stickToEnd, children, ...pr
       {children}
     </Box>
   )
-})
+  },
+)
 Scroll.displayName = 'Scroll'
 
 export { Scroll }

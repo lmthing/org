@@ -57,6 +57,13 @@ const ALLOWED = {
   'libs/ui/src/elements/primitives/misc.native.tsx': 'primitive',
   'libs/ui/src/elements/primitives/pressable/index.native.tsx': 'primitive',
   'libs/ui/src/elements/primitives/row/index.native.tsx': 'primitive',
+  // `primitive` — a real `KeyboardAvoidingView` host, because React Native does not move a
+  // layout out of the soft keyboard's way: a composer pinned to the bottom stays put and the
+  // keyboard is drawn on top of it, so you cannot see what you are typing. Web needs nothing
+  // (the browser resizes its own viewport), which is exactly what makes this a fork rather
+  // than shared code. iOS and Android also disagree — Android has already resized the window
+  // by then — and that difference belongs in the fork, not at every call site.
+  'libs/ui/src/elements/primitives/keyboard-avoiding/index.native.tsx': 'primitive',
   // `primitive` — Yoga has no overflow scrolling, so a scrolling region is an RN `ScrollView`
   // host component rather than a `View` with a style. See the fork's own header.
   'libs/ui/src/elements/primitives/scroll/index.native.tsx': 'primitive',

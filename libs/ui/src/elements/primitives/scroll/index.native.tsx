@@ -12,7 +12,7 @@
  * time, which for a freshly-opened transcript is roughly half of it.
  */
 import * as React from 'react'
-import { ScrollView } from 'react-native'
+import { RefreshControl, ScrollView } from 'react-native'
 
 import { NativeView, nativeSafeProps, styled } from '../_native'
 import type { BoxProps } from '../box/index'
@@ -20,6 +20,15 @@ import type { BoxProps } from '../box/index'
 export interface ScrollProps extends Omit<BoxProps, 'overflow'> {
   /** Keep the region pinned to its end as content arrives — what a transcript wants. */
   stickToEnd?: boolean
+  /**
+   * Pull down to reload — the gesture a phone user reaches for first when a list looks stale.
+   *
+   * The web fork accepts these and ignores them: the browser has no such gesture to bind (and
+   * mobile browsers bind it themselves), so a surface declares "this list can be refreshed" once
+   * and does not grow a native-only branch at the call site.
+   */
+  onRefresh?: () => void
+  refreshing?: boolean
 }
 
 /** Tamagui-styled so `$`-token style props resolve, same as every other native primitive. */
@@ -92,7 +101,8 @@ export function toWebScrollEvent(e: {
   }
 }
 
-const Scroll = React.forwardRef<any, ScrollProps>(({ stickToEnd, onScroll, children, ...props }, ref) => {
+const Scroll = React.forwardRef<any, ScrollProps>(
+  ({ stickToEnd, onScroll, onRefresh, refreshing, children, ...props }, ref) => {
   const own = React.useRef<{ scrollToEnd?: (o?: object) => void } | null>(null)
 
   const region: Record<string, unknown> = {}
@@ -113,6 +123,13 @@ const Scroll = React.forwardRef<any, ScrollProps>(({ stickToEnd, onScroll, child
       // Without this a tap that lands on a message while the keyboard is up is swallowed by the
       // dismiss gesture instead of reaching what was tapped.
       keyboardShouldPersistTaps="handled"
+      {...(onRefresh
+        ? {
+            refreshControl: (
+              <RefreshControl refreshing={refreshing === true} onRefresh={onRefresh} />
+            ),
+          }
+        : null)}
       onContentSizeChange={stickToEnd ? () => own.current?.scrollToEnd?.({ animated: false }) : undefined}
       {...(onScroll
         ? {
@@ -135,7 +152,8 @@ const Scroll = React.forwardRef<any, ScrollProps>(({ stickToEnd, onScroll, child
       </NativeView>
     </NativeScrollView>
   )
-})
+  },
+)
 Scroll.displayName = 'Scroll'
 
 export { Scroll }

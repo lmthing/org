@@ -35,6 +35,7 @@ import {
 } from '../render'
 import {
   Box,
+  KeyboardAvoiding,
   Scroll,
   Text,
   Row,
@@ -59,6 +60,7 @@ import {
   Path,
   IFrame,
 } from '../../src/elements/primitives'
+import { keyboardBehavior } from '../../src/elements/primitives/keyboard-avoiding/index.native'
 // The scroll-event translation, reached directly: `ScrollView` substitutes its own handler on the
 // host node, so driving it through the rendered tree would test RN's plumbing instead.
 import { toWebScrollEvent } from '../../src/elements/primitives/scroll/index.native'
@@ -429,4 +431,37 @@ test('Scroll stickToEnd MERGES its anchoring into the content style, never repla
   expect(Boolean(anchored), 'still anchored').toBe(true)
   const padded = Object.keys(anchored ?? {}).some((k) => /^padding/i.test(k))
   expect(padded, `the caller's padding survives (saw ${Object.keys(anchored ?? {}).join()})`).toBe(true)
+})
+
+test('Scroll offers a RefreshControl only when the caller asked for one', () => {
+  // Pull-to-refresh is the gesture a phone user reaches for first when a list looks stale, and
+  // there was none anywhere in the app. The props are accepted on BOTH targets — the web fork
+  // ignores them, since the browser has no such gesture to bind — so a surface says "this list
+  // can be refreshed" once instead of growing a native-only branch at its call site.
+  const withIt = find(render(<Scroll flex={1} onRefresh={() => {}} />).tree, (t) => /ScrollView/.test(t))
+  expect(Boolean(withIt?.props.refreshControl), 'a refreshControl is attached').toBe(true)
+
+  const without = find(render(<Scroll flex={1} />).tree, (t) => /ScrollView/.test(t))
+  expect(without?.props.refreshControl, 'and nothing is attached otherwise').toBe(undefined)
+})
+
+test('KeyboardAvoiding mounts, and pads only where the OS does not already resize', () => {
+  // React Native does not move a layout out of the soft keyboard's way: a composer pinned to the
+  // bottom stays put and the keyboard is drawn ON TOP of it, so you cannot see what you are
+  // typing. Nothing in this package did anything about that.
+  //
+  // The `behavior` split is the load-bearing part. Android has ALREADY resized the window by the
+  // time this component runs (`windowSoftInputMode: adjustResize`), so padding there subtracts the
+  // keyboard's height a second time and leaves the composer floating a keyboard's height up the
+  // screen. `undefined` is RN's documented answer for Android, not an omission.
+  //
+  // Asserted as a decision rather than through the tree: `KeyboardAvoidingView` renders a plain
+  // View host and only applies padding once a keyboard is actually up, so a render suite sees
+  // nothing either way on either platform.
+  expect(keyboardBehavior('ios'), 'iOS must inset itself').toBe('padding')
+  expect(keyboardBehavior('android'), 'Android already resized — padding would double-count').toBe(undefined)
+
+  const { tree } = render(<KeyboardAvoiding flex={1} keyboardOffset={44} />)
+  const hosts = hostTypes(tree)
+  expect(hosts.length > 0, `it mounts something (saw ${hosts.join()})`).toBe(true)
 })

@@ -174,7 +174,19 @@ export function DashboardHome({
     // immediately — and on native a `Box` CLIPS instead of scrolling, so the projects section was
     // simply unreachable. Worse than invisible: a swipe over a conversation card was delivered as a
     // TAP, so trying to scroll navigated you into a chat.
-    <Prim.Scroll className={className} flexGrow={1} flexShrink={1} flexBasis="0%" backgroundColor="$background">
+    // `onRefresh` — pull down to reload. Home is the first screen on a phone and the one most
+    // likely to be stale (a team invite accepted elsewhere, a conversation continued on the web),
+    // and until now the only way to refetch was to kill the app: the data loads once on mount and
+    // nothing else asks again. The props are inert on web, where the browser owns the gesture.
+    <Prim.Scroll
+      className={className}
+      flexGrow={1}
+      flexShrink={1}
+      flexBasis="0%"
+      backgroundColor="$background"
+      onRefresh={reload}
+      refreshing={loading}
+    >
       <Prim.Col paddingHorizontal="$4" paddingVertical="$6" gap="$2" maxWidth={768} width="100%" alignSelf="center">
         <Prim.Text fontFamily="$heading" fontSize="$2xl" fontWeight="$bold" color="$foreground">
           {greeting(new Date().getHours())}, {name}
