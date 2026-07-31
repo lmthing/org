@@ -156,3 +156,78 @@ describe.each(SPLIT_AGENTS)('$label — the instruct/knowledge split holds toget
     expect(flat).toMatch(/Load in the SAME statement you decide/i);
   });
 });
+
+/**
+ * Knowledge is LAZY BY DEFAULT — a 2-part `knowledge:` ref puts a field's overview and its aspect
+ * NAMES in the `# Knowledge` menu, and nothing else ever injects an aspect body. So any space can
+ * ship a correct, expensive aspect that no prompt ever tells its agent to load: the file is on disk,
+ * the menu names it, and it is never once in a prompt. That is the same failure the split guards
+ * catch, except it predates the split and applies to every shipped space, so it is swept here rather
+ * than per-agent.
+ *
+ * TWO shapes count as reaching an aspect, and only counting the first is what produces false
+ * orphans:
+ *
+ *  - a LITERAL triple — `loadKnowledge('playbooks', 'paths', 'research')`. The split agents' routing
+ *    tables are all of this shape, because the aspect a route needs is known when the route is
+ *    picked.
+ *  - a MENU load — a 2-part `loadKnowledge('documents', 'formats')` that returns the real option
+ *    list off disk, followed by a 3-part call whose third argument comes FROM that list. This is the
+ *    right shape when the aspect is keyed on something only the request knows: `system-files` picks
+ *    a format by what was actually attached, THING's `organize_material` picks a life-area split by
+ *    what the material turned out to be about (20 aspects), and a synthesized specialist's `answer`
+ *    task is BUILT to do exactly this (`system-architect/.../05-write_tasks.md`). Reading only for
+ *    literal triples would flag all 26 of those as dead prose and invite someone to delete them.
+ */
+describe('shipped system spaces — no knowledge aspect is unreachable', () => {
+  const TRIPLE = /\(\s*'([\w-]+)'\s*,\s*'([\w-]+)'\s*,\s*'([\w-]+)'\s*\)/g;
+  const MENU = /loadKnowledge\(\s*'([\w-]+)'\s*,\s*'([\w-]+)'\s*\)/g;
+
+  /** Every `.md` under `dir`, recursively; [] when absent. */
+  function mdUnder(dir: string): string[] {
+    let entries: import('node:fs').Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+    return entries.flatMap((e) =>
+      e.isDirectory() ? mdUnder(join(dir, e.name)) : e.name.endsWith('.md') ? [join(dir, e.name)] : [],
+    );
+  }
+
+  const spaces = readdirSync(SYSTEM_SPACES, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .filter((name) => mdUnder(join(SYSTEM_SPACES, name, 'knowledge')).length > 0);
+
+  it.each(spaces)('%s', (name) => {
+    const spaceDir = join(SYSTEM_SPACES, name);
+    const kdir = join(spaceDir, 'knowledge');
+
+    // `<domain>/<field>/<aspect>` for every loadable option. `index.md` is the field OVERVIEW —
+    // rendered inline in the menu, never offered as a `loadKnowledge` option — so it is not an aspect.
+    const aspects = mdUnder(kdir)
+      .map((f) => f.slice(kdir.length + 1).split(/[/\\]/))
+      .filter((parts) => parts.length === 3 && parts[2] !== 'index.md')
+      .map((parts) => `${parts[0]}/${parts[1]}/${parts[2]!.replace(/\.md$/, '')}`);
+    if (aspects.length === 0) return;
+
+    // Everything an agent in this space can actually be reading: its instructs and its task nodes.
+    const corpus = [...mdUnder(join(spaceDir, 'agents')), ...mdUnder(join(spaceDir, 'tasklists'))]
+      .map((f) => readFileSync(f, 'utf8'))
+      .join('\n');
+    const named = new Set([...corpus.matchAll(TRIPLE)].map((m) => `${m[1]}/${m[2]}/${m[3]}`));
+    const menus = new Set([...corpus.matchAll(MENU)].map((m) => `${m[1]}/${m[2]}`));
+
+    const unreachable = aspects.filter(
+      (a) => !named.has(a) && !menus.has(a.slice(0, a.lastIndexOf('/'))),
+    );
+    expect(
+      unreachable,
+      `${name} ships knowledge no prompt can reach: neither a literal loadKnowledge triple nor a ` +
+        'menu load of its field appears in any instruct or task node. Name it where it is actionable, ' +
+        'or delete it — an aspect nothing reads is prose that costs review and buys nothing.',
+    ).toEqual([]);
+  });
+});

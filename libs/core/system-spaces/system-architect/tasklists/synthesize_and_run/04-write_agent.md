@@ -52,3 +52,17 @@ const w = writeAgentFile(design.slug, {
   defaultAction: design.actionId,
 });
 currentTask.resolve({ ok: w.ok, agentSlug: design.slug });
+
+**If `w.ok` is false, the frontmatter you wrote was REJECTED — read why before you retry.** The
+top-level keys are checked against a fixed allow-list and an unrecognized one fails the space LOAD
+rather than being silently dropped, so a single stray key costs the whole build. `capabilities:`
+has its own shape, and a capability that is not listed is not injected AND is stripped from the
+agent's DTS. Both are one load away — pull the one the error names and re-emit the SAME call with
+that one field corrected, rather than guessing a second spelling:
+
+```typescript
+const help = await loadKnowledge('space_format', 'frontmatter', 'allow-list');   // an unrecognized key
+```
+```typescript
+const help = await loadKnowledge('space_format', 'frontmatter', 'capabilities'); // a bad capabilities: entry
+```
