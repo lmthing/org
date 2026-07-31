@@ -18,6 +18,8 @@ import {
   PROJECT_MANAGE_DTS,
   PROJECT_TABLE_DTS,
   STORE_READ_DTS,
+  TEAM_READ_DTS,
+  TEAM_POST_DTS,
   STORE_INSTALL_DTS,
   EVENTS_EMIT_DTS,
   KNOWLEDGE_WRITE_DTS,
@@ -249,6 +251,10 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
       'store:install': STORE_INSTALL_DTS,
       'events:emit': EVENTS_EMIT_DTS,
       'knowledge:write': KNOWLEDGE_WRITE_DTS,
+      // The team workspace this pod belongs to. Two ids on purpose — reading the channels and
+      // the roster is not the same grant as posting into them.
+      'team:read': TEAM_READ_DTS,
+      'team:post': TEAM_POST_DTS,
     });
     // db:schema is composed onto the `db` object, but ALSO earns the standalone
     // writeTableSchema authoring global (emitted directly in buildAppCapabilityDts),
