@@ -55,6 +55,41 @@ function toNumber(value: unknown): number | null {
   return null
 }
 
+/**
+ * The default ISO-4217 code a `format: 'currency'` falls back to.
+ *
+ * The renderer cannot INVENT a currency: nothing in a spec, a row or a schema names one
+ * unless the app says so (`currencyField`, or a conventional `currency` column — see
+ * {@link currencyCodeFor}). But it must not therefore render money as a bare number
+ * either, so `currency` resolves to one documented, stable code with exactly two fraction
+ * digits. Declared here as a named constant rather than inline so an app that is not
+ * dollar-denominated has ONE place to look, and so nothing downstream mistakes a rendered
+ * `$` for a design decision.
+ */
+export const DEFAULT_CURRENCY = 'USD'
+
+/**
+ * Row fields that carry an ISO currency code by CONVENTION, tried in order when a
+ * {@link Formatted.currencyField} was not declared.
+ *
+ * Same shape as S2's prefill rule (match by field name, do not ask the model to restate
+ * what the data already says): a multi-currency row that already ships `currency` should
+ * not need the binding spelled out on every value that reads it.
+ */
+const CURRENCY_FIELDS = ['currency', 'currency_code', 'currencyCode'] as const
+
+/**
+ * The label a BOOLEAN gets in a text slot.
+ *
+ * A boolean reaching a text or badge slot used to render `String(value)` — the literal
+ * strings "true"/"false" in a pill, which is what scenario 30's job list shipped. There is
+ * no format the model could have declared to fix it (`humanize` produced "True"), so this
+ * is a DEFAULT rather than an option: a boolean is a yes/no fact and reads as one.
+ */
+export function booleanLabel(value: boolean): string {
+  return value ? 'Yes' : 'No'
+}
+
 /** `snake_case` / `kebab-case` / `camelCase` ⇒ `Title Case`. */
 export function humanize(value: unknown): string {
   const s = String(value ?? '')
@@ -111,22 +146,38 @@ function intlNumber(n: number, options: Intl.NumberFormatOptions, fallback: stri
  */
 export function applyFormat(value: unknown, format?: Format, currencyCode?: string): string {
   if (value === null || value === undefined) return ''
+  // Before the format switch, and before the no-format passthrough: NO format turns a
+  // boolean into something a person reads, so the rule has to live above both branches.
+  if (typeof value === 'boolean') return booleanLabel(value)
   if (!format) return typeof value === 'string' ? value : stringify(value)
 
   switch (format) {
     case 'currency': {
       const n = toNumber(value)
       if (n === null) return stringify(value)
-      const code = currencyCode && /^[A-Za-z]{3}$/.test(currencyCode) ? currencyCode.toUpperCase() : 'USD'
+      // A DECLARED code keeps its own currency's conventions (JPY has no minor unit, so
+      // pinning two digits there would be wrong). An UNDECLARED one is the default code,
+      // and there the two digits are the point: a column holding 70.49 and 78 must not
+      // render as "70.49" beside "78".
+      const declared = currencyCode && /^[A-Za-z]{3}$/.test(currencyCode) ? currencyCode.toUpperCase() : undefined
+      const code = declared ?? DEFAULT_CURRENCY
+      const digits: Intl.NumberFormatOptions = declared
+        ? { maximumFractionDigits: 2 }
+        : { minimumFractionDigits: 2, maximumFractionDigits: 2 }
       return intlNumber(
         n,
-        { style: 'currency', currency: code, maximumFractionDigits: 2 },
+        { style: 'currency', currency: code, ...digits },
+        // The degrade path is held to the same two digits — a reduced Hermes `Intl` must
+        // not be the reason one row shows cents and the next does not.
         `${code} ${n.toFixed(2)}`,
       )
     }
     case 'number': {
       const n = toNumber(value)
-      return n === null ? stringify(value) : intlNumber(n, {}, String(n))
+      // Capped at two fraction digits (`Intl`'s own default is three): these figures are
+      // computed sums, and `70.48999999999999` is a float artefact, not a precision the
+      // app meant to publish.
+      return n === null ? stringify(value) : intlNumber(n, { maximumFractionDigits: 2 }, String(n))
     }
     case 'percent': {
       const n = toNumber(value)
@@ -179,10 +230,31 @@ export function stringify(value: unknown): string {
   }
 }
 
+/**
+ * The ISO code for a bound value: the declared {@link Formatted.currencyField} first, then
+ * the row's own conventional field ({@link CURRENCY_FIELDS}), then nothing.
+ *
+ * The convention step is what stops a multi-currency app having to repeat
+ * `currencyField: '$.currency'` on every one of its money values; it only ever reads a
+ * field the row already carries, so a single-currency app is unaffected.
+ */
+function currencyCodeFor(fmt: Formatted | undefined, scope: Scope): string | undefined {
+  if (fmt?.currencyField) {
+    const declared = resolveBinding(fmt.currencyField, scope)
+    return typeof declared === 'string' ? declared : undefined
+  }
+  const row = scope.self
+  if (!row || typeof row !== 'object') return undefined
+  for (const field of CURRENCY_FIELDS) {
+    const candidate = (row as Record<string, unknown>)[field]
+    if (typeof candidate === 'string' && /^[A-Za-z]{3}$/.test(candidate)) return candidate
+  }
+  return undefined
+}
+
 /** Resolve {@link Formatted.currencyField} against a scope and apply the format. */
 export function formatBound(value: unknown, fmt: Formatted | undefined, scope: Scope): string {
-  const code = fmt?.currencyField ? resolveBinding(fmt.currencyField, scope) : undefined
-  return applyFormat(value, fmt?.format, typeof code === 'string' ? code : undefined)
+  return applyFormat(value, fmt?.format, currencyCodeFor(fmt, scope))
 }
 
 // ── tone ─────────────────────────────────────────────────────────────────────

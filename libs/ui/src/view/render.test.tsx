@@ -40,6 +40,9 @@ const MANIFEST: EndpointManifest = {
     routePath: '/plan/:planId/meals',
     inputSchema: { type: 'object', properties: { planId: { type: 'string' } }, additionalProperties: false },
   },
+  // The bike-workshop dashboard: ONE computed record, returned in the `{ items: [...] }`
+  // envelope every generated handler uses. Two sections read it — see the suite below.
+  shopDashboard: { method: 'GET', routePath: '/shop-dashboard' },
 }
 
 /** A client whose every endpoint is a stub, recording what was called. */
@@ -249,6 +252,105 @@ describe('stats', () => {
     )
     await waitFor(() => expect(screen.getByText('Meals')).toBeInTheDocument())
     expect(screen.queryByText('Waste')).toBeNull()
+  })
+})
+
+/**
+ * The measured failure this suite exists for: `30-bike-workshop` run 202 step-02 rendered its
+ * whole front page as two headings — no stat cards, no detail fields, no empty state — with
+ * `appBuild built=true`, `appCheck ok=true`, HTTP 200, zero console errors and zero failed
+ * requests. Every gate was green and the page showed nothing.
+ *
+ * The endpoint answered `{ items: [ { …one computed record… } ] }` — the envelope EVERY generated
+ * handler returns — and a RECORD section (`stats`, `detail`) bound `$.field` straight through it.
+ * `useSectionSource` unwrapped `items` for a collection and not for a record, so every `$.field`
+ * resolved against the envelope, S1 dropped every card and every keyvalue row (a stats card takes
+ * its LITERAL label with it), and `isEmpty` was false because the envelope object is not null —
+ * so not even the authored empty state drew. The list pages on the same app were fine, which is
+ * exactly why nothing caught it.
+ */
+describe('a record section against an `{ items: [record] }` envelope (bike-workshop, run 202)', () => {
+  /** The endpoint's real Output, one uncollected-jobs snapshot of it. */
+  const BODY = {
+    items: [
+      {
+        in_shop_count: 3,
+        total_parts_gbp: 148.49,
+        longest_waiting_id: 'j1',
+        longest_waiting_bike_label: 'Specialized Allez',
+        longest_waiting_customer_name: 'Aoife Brennan',
+        longest_waiting_days: 17,
+        longest_waiting_work_description: 'full service',
+      },
+    ],
+  }
+
+  /** `pages/index.view.json`, verbatim from the run's snapshot. */
+  const DASHBOARD: ViewSpec = {
+    route: 'index',
+    title: 'Workshop',
+    sections: [
+      {
+        kind: 'stats',
+        id: 'shopStats',
+        query: 'shopDashboard',
+        cards: [
+          { label: 'Bikes in shop', value: '$.in_shop_count' },
+          { label: 'Total parts', value: '$.total_parts_gbp', format: 'currency' },
+        ],
+      },
+      {
+        kind: 'detail',
+        id: 'longestWaiting',
+        query: 'shopDashboard',
+        fields: [
+          { label: 'Bike', value: '$.longest_waiting_bike_label' },
+          { label: 'Work', value: '$.longest_waiting_work_description' },
+          { label: 'Customer', value: '$.longest_waiting_customer_name' },
+          { label: 'Days waiting', value: '$.longest_waiting_days' },
+        ],
+        empty: { title: 'No bikes waiting', message: 'All jobs are collected — nothing in the shop.' },
+      },
+    ],
+  }
+
+  it('draws the stat cards and the detail rows, not just the headings', async () => {
+    const { client } = stubClient({ shopDashboard: BODY })
+    render(<ViewRenderer spec={DASHBOARD} client={client as never} />)
+
+    await waitFor(() => expect(screen.getByText('Bikes in shop')).toBeInTheDocument())
+    expect(screen.getByText('3')).toBeInTheDocument()
+    expect(screen.getByText(/148[.,]49/)).toBeInTheDocument()
+    // The detail half — a label is only on screen when S1 kept its value.
+    expect(screen.getByText('Bike')).toBeInTheDocument()
+    expect(screen.getByText('Specialized Allez')).toBeInTheDocument()
+    expect(screen.getByText('Aoife Brennan')).toBeInTheDocument()
+    expect(screen.getByText('full service')).toBeInTheDocument()
+  })
+
+  it('shows the authored empty state when the envelope carries NO record', async () => {
+    // `{ items: [] }` was indistinguishable from a record before: the envelope object is not
+    // null, so `isEmpty` was false and the section drew an empty box under its heading.
+    const { client } = stubClient({ shopDashboard: { items: [] } })
+    render(<ViewRenderer spec={DASHBOARD} client={client as never} />)
+    await waitFor(() => expect(screen.getByText('No bikes waiting')).toBeInTheDocument())
+  })
+
+  it('does NOT unwrap a record that merely EMBEDS an array', async () => {
+    // `{ plan, tonight, mealsByDay: [...] }` is a record with an embedded array, not an
+    // envelope. Unwrapping it would bind every `$.tonight.*` against a meal row.
+    const { client } = stubClient({
+      currentPlan: { plan: { id: 'p1' }, weekStart: '2026-07-27', mealsByDay: [{ id: 'm1', title: 'Soup' }] },
+    })
+    render(
+      <ViewRenderer
+        spec={page([
+          { kind: 'stats', query: 'currentPlan', cards: [{ label: 'Week', value: '$.weekStart' }] },
+        ])}
+        client={client as never}
+      />,
+    )
+    await waitFor(() => expect(screen.getByText('2026-07-27')).toBeInTheDocument())
   })
 })
 

@@ -59,7 +59,7 @@ import {
   lastSegment,
   type Scope,
 } from './bind'
-import { formatBound, resolveTone, stringify, toneTokens } from './format'
+import { applyFormat, formatBound, resolveTone, stringify, toneTokens } from './format'
 import { ViewIcon, StarGlyph } from './icons'
 import { HScroll } from './hscroll'
 import { ActionButton, ActionRow, useDispatch } from './actions'
@@ -134,14 +134,31 @@ function flatParts(fv: FlatValue): { value: string; mods: FlatMods } {
  * (`suffix: '$.unit'`) works — and S1 applies to it independently: an unresolved suffix
  * appends nothing rather than printing "20 undefined".
  */
-function flatText(fv: FlatValue | undefined, scope: Scope): { text: string; mods: FlatMods } | undefined {
+function flatText(fv: FlatValue | undefined, scope: Scope): { text: string; mods: FlatMods; raw: unknown } | undefined {
   if (fv === undefined) return undefined
   const { value, mods } = flatParts(fv)
   const r = resolveValue(value, scope)
   if (!r.present) return undefined
   const text = formatBound(r.value, mods, scope)
   const unit = mods.suffix === undefined ? undefined : resolveOptional(mods.suffix, scope)
-  return { text: unit === undefined || unit === '' ? text : `${text} ${stringify(unit)}`, mods }
+  // `raw` rides along because TONE must be keyed on the value, not on its rendering: a
+  // boolean `true` formatted to "Yes" is unrecognisable to `autoTone`, and keying the map
+  // on the rendered string would make `format` silently change a pill's colour.
+  return { text: unit === undefined || unit === '' ? text : `${text} ${stringify(unit)}`, mods, raw: r.value }
+}
+
+/**
+ * The tone for a pill, defaulting to `auto` where the VALUE carries its own meaning.
+ *
+ * A bare `badge: '$.is_collected'` declares no tone, and a boolean has exactly two states
+ * the renderer can read without guessing — so it gets {@link autoTone} (true ⇒ success,
+ * false ⇒ neutral) rather than one flat colour for both. A string badge keeps the old
+ * behaviour: `auto`'s vocabulary is deliberately small and a domain word it does not know
+ * would silently pick a colour the model never asked for.
+ */
+function pillTone(part: { text: string; mods: FlatMods; raw: unknown }, scope: Scope): Exclude<Tone, 'auto'> {
+  const toned = typeof part.raw === 'boolean' ? { tone: 'auto' as const, ...part.mods } : part.mods
+  return resolveTone(toned, part.raw, scope)
 }
 
 /**
@@ -169,9 +186,9 @@ export function FlatItemView({ item, scope }: { item: FlatItem; scope: Scope }):
   const image = flatText(item.image, scope)
   const badges = item.badges ? resolveArray(item.badges, scope) : []
 
-  const line = (part: { text: string; mods: FlatMods } | undefined, props: Record<string, unknown>) => {
+  const line = (part: { text: string; mods: FlatMods; raw: unknown } | undefined, props: Record<string, unknown>) => {
     if (!part) return null
-    const tone = part.mods.tone || part.mods.toneMap ? resolveTone(part.mods, part.text, scope) : undefined
+    const tone = part.mods.tone || part.mods.toneMap ? resolveTone(part.mods, part.raw, scope) : undefined
     return (
       <Prim.Text
         {...props}
@@ -191,8 +208,8 @@ export function FlatItemView({ item, scope }: { item: FlatItem; scope: Scope }):
       {markdown ? <Markdown source={markdown.text} preset="prose" /> : null}
       {badge || status || badges.length > 0 || meta ? (
         <Prim.Row gap="$1.5" flexWrap="wrap" alignItems="center">
-          {badge ? <Pill text={badge.text} tone={resolveTone(badge.mods, badge.text, scope)} /> : null}
-          {status ? <Pill text={status.text} tone={resolveTone({ tone: 'auto', ...status.mods }, status.text, scope)} /> : null}
+          {badge ? <Pill text={badge.text} tone={pillTone(badge, scope)} /> : null}
+          {status ? <Pill text={status.text} tone={resolveTone({ tone: 'auto', ...status.mods }, status.raw, scope)} /> : null}
           {badges.map((b, i) => (
             <Pill key={i} text={stringify(b)} tone="neutral" />
           ))}
@@ -502,8 +519,11 @@ export function renderElement(node: ElementNode, scope: Scope, key?: React.Key):
     case 'badge': {
       const r = resolveValue(node.text, scope)
       if (!r.present) return null
-      const text = stringify(r.value)
-      return <Pill key={key} text={text} tone={resolveTone(node, r.value, scope)} shape={node.shape} icon={node.icon} />
+      // `applyFormat` with no format, so a boolean pill reads "Yes"/"No" rather than
+      // "true"/"false"; `BadgeEl` carries no `format` of its own to declare instead.
+      const text = applyFormat(r.value)
+      const toned = typeof r.value === 'boolean' && !node.tone && !node.toneMap ? { ...node, tone: 'auto' as const } : node
+      return <Pill key={key} text={text} tone={resolveTone(toned, r.value, scope)} shape={node.shape} icon={node.icon} />
     }
     case 'statcard':
       return <StatcardElement key={key} node={node} scope={scope} />

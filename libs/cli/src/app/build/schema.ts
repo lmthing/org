@@ -60,6 +60,15 @@ export interface EndpointContract {
   inputTsType: string;
   /** Compact TS-type text for `Output`, e.g. `{ ok: boolean }`. */
   outputTsType: string;
+  /**
+   * Present ONLY when `ts-json-schema-generator` could not derive this handler's `Input`/`Output`
+   * — a handler whose `export type Output = FooOutput` names a type nothing declares, which is
+   * exactly what an appbuilder follow-up edit produces when it drops a contract declaration the
+   * handler still references. The schemas degrade to the empty-object shape and the endpoint keeps
+   * its route, so the failure costs THAT endpoint's typed form and input validation, never the
+   * whole app. See {@link buildContract}.
+   */
+  schemaError?: string;
 }
 
 /** Result of {@link generateAppTypes}. */
@@ -201,12 +210,38 @@ async function buildContract(ep: Endpoint, contractDtsPath: string | undefined):
   const hasInput = hasExportedType(source, INPUT_TYPE);
   const hasOutput = hasExportedType(source, OUTPUT_TYPE);
 
-  // One generator per handler file (heavy) — reused for both Input and Output.
-  const generator =
-    hasInput || hasOutput ? createGenerator(buildGeneratorConfig(ep.file, contractDtsPath)) : null;
+  let inputRaw: unknown = null;
+  let outputRaw: unknown = null;
+  let schemaError = '';
+  try {
+    // One generator per handler file (heavy) — reused for both Input and Output.
+    const generator =
+      hasInput || hasOutput ? createGenerator(buildGeneratorConfig(ep.file, contractDtsPath)) : null;
 
-  const inputRaw = hasInput && generator ? generator.createSchema(INPUT_TYPE) : null;
-  const outputRaw = hasOutput && generator ? generator.createSchema(OUTPUT_TYPE) : null;
+    inputRaw = hasInput && generator ? generator.createSchema(INPUT_TYPE) : null;
+    outputRaw = hasOutput && generator ? generator.createSchema(OUTPUT_TYPE) : null;
+  } catch (err) {
+    /**
+     * **A handler the generator cannot read degrades to a permissive contract — it does NOT abort
+     * the app.**
+     *
+     * `createSchema` throws (`UnknownNodeError`, "Unhandled error while creating Base Type.") for a
+     * type it cannot resolve, and this whole pass runs under one `Promise.all`, so before this
+     * catch a SINGLE handler naming an undeclared type took down `generateAppTypes` — and with it
+     * `types/generated.d.ts`, the endpoint manifest, `/api/apps/:id/views` and the entire page
+     * build, all reporting one message that named no file. Measured live: an appbuilder follow-up
+     * edit re-emitted `types/contract.d.ts` from a plan that no longer covered six already-shipped
+     * endpoints, and the app went from working to `POST …/app/build → 400` with the root route
+     * 404ing. The typecheck gate had the real, per-file diagnostics all along
+     * (`Cannot find name 'BikesListInput'`); the build just refused to run alongside them.
+     *
+     * The degraded endpoint keeps its name, method and route, so every OTHER page still builds and
+     * every other endpoint still validates. What it loses is precise: ajv input validation for
+     * this one route and the derived form fields for a `create` bound to it. `schemaError` carries
+     * the reason so a gate can name the handler instead of the app.
+     */
+    schemaError = err instanceof Error ? err.message : String(err);
+  }
 
   const inputSchema = inputRaw ? resolveRootSchema(inputRaw as JsonSchema) : emptyObjectSchema();
   const outputSchema = outputRaw ? resolveRootSchema(outputRaw as JsonSchema) : emptyObjectSchema();
@@ -220,6 +255,7 @@ async function buildContract(ep: Endpoint, contractDtsPath: string | undefined):
     outputSchema,
     inputTsType: schemaToTs(inputSchema),
     outputTsType: schemaToTs(outputSchema),
+    ...(schemaError ? { schemaError } : {}),
   };
 }
 
@@ -444,6 +480,14 @@ export async function generateAppTypes(projectRoot: string): Promise<GeneratedAp
 
   const [app, routes] = await Promise.all([loadProjectApp(projectRoot), loadApiRoutes(projectRoot)]);
   const endpoints = await generateEndpointContracts(projectRoot, routes.endpoints);
+
+  // Fill in the `x-options` a foreign-key form field needs, from the table schemas the
+  // handler sources cannot see. Runs HERE rather than in `./contracts.ts` because the
+  // browser endpoint manifest is built straight off this function's result
+  // (`./pages.ts:endpointManifest`) and never goes through `generateProjectContracts` —
+  // annotating there would fix the native form and leave the web one a UUID text box.
+  const { deriveFormOptions } = await import('./fk-options.js');
+  deriveFormOptions(app.tables, endpoints);
 
   const generatedDts = renderGeneratedDts(app.tables, endpoints);
 

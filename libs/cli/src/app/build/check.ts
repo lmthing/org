@@ -82,7 +82,25 @@ export async function runProjectAppCheck(projectRoot: string): Promise<AppCheckR
  */
 async function checkProjectContracts(projectRoot: string): Promise<AppCheckError | null> {
   try {
-    await generateProjectContracts(projectRoot);
+    const contracts = await generateProjectContracts(projectRoot);
+    /**
+     * A per-endpoint schema failure no longer throws — `schema.ts#buildContract` degrades that ONE
+     * endpoint to a permissive contract so a single unreadable handler cannot take the whole app
+     * build down with it. The CHECK must stay honest about it: the degraded endpoint has lost its
+     * ajv input validation and its derived form fields, and reporting nothing here would turn a
+     * loud 400 into a silent half-working app. So the build survives and the gate still names the
+     * offending endpoint.
+     */
+    const degraded = contracts.endpoints.find((ep) => ep.schemaError);
+    if (degraded) {
+      // `routePath` is the matcher form (`/jobs/:id`); the handler lives in the bracketed dir.
+      const dir = degraded.routePath.replace(/\/:([A-Za-z0-9_]+)/g, '/[$1]');
+      return {
+        phase: 'contract',
+        file: `api${dir}/${degraded.method}.ts`,
+        message: `endpoint "${degraded.name}": ${degraded.schemaError}`,
+      };
+    }
     return null;
   } catch (err) {
     return contractErrorToAppCheckError(err, projectRoot);

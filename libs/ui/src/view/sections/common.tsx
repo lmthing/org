@@ -68,6 +68,37 @@ export interface SourceArgs {
 }
 
 /**
+ * The conventional keys an Output wraps its array in, in preference order.
+ *
+ * `{ items: T[] }` is what every generated handler returns, so this list is the whole of the
+ * envelope convention — shared by {@link extractRows} and {@link extractRecord} so the two can
+ * never disagree about which key is the payload.
+ */
+const ROW_KEYS = ['items', 'rows', 'results', 'data', 'records', 'list'] as const
+
+/**
+ * Keys an ENVELOPE may carry beside its array without ceasing to be one.
+ *
+ * The discriminant for {@link extractRecord}: `{ items: [...], total: 12 }` is an envelope
+ * around rows, while `{ plan, tonight, mealsByDay: [...] }` is a RECORD that happens to embed
+ * an array — and unwrapping the second would bind its `$.tonight.*` against a meal.
+ */
+const ENVELOPE_META = new Set([
+  'total',
+  'count',
+  'page',
+  'pageSize',
+  'per_page',
+  'limit',
+  'offset',
+  'cursor',
+  'nextCursor',
+  'next_cursor',
+  'hasMore',
+  'has_more',
+])
+
+/**
  * Find the array inside an Output.
  *
  * An endpoint may return the array itself, or wrap it. Preferring the conventional key
@@ -79,11 +110,39 @@ export function extractRows(data: unknown): unknown[] {
   if (Array.isArray(data)) return data
   if (!data || typeof data !== 'object') return []
   const obj = data as Record<string, unknown>
-  for (const key of ['items', 'rows', 'results', 'data', 'records', 'list']) {
+  for (const key of ROW_KEYS) {
     if (Array.isArray(obj[key])) return obj[key] as unknown[]
   }
   for (const value of Object.values(obj)) if (Array.isArray(value)) return value
   return []
+}
+
+/**
+ * Find the ONE record inside an Output — {@link extractRows}' twin, for the sections that draw
+ * a record rather than rows (`stats`, `detail`, `markdown`).
+ *
+ * **An endpoint that answers `{ items: [record] }` is answering with a record.** That envelope is
+ * what every generated handler returns, including the ones that compute a single dashboard row,
+ * so a record section reading `$.field` straight off the Output resolved NOTHING: S1 then dropped
+ * every stats card (literal label included) and every keyvalue row, and `isEmpty` stayed false
+ * because an envelope object is not null — a page of headings, with every gate green
+ * (`30-bike-workshop` run 202). Unwrapping here is the same convention the collection half has
+ * always applied, applied to the record half.
+ *
+ * The unwrap is deliberately NARROW: only a conventional key, and only when every OTHER key is
+ * pagination metadata. `{ plan, tonight, mealsByDay: [...] }` is a record that embeds an array and
+ * stays exactly as it is — the kitchen shape whose `$.tonight.*` bindings a wider rule would break.
+ */
+export function extractRecord(data: unknown): unknown {
+  if (Array.isArray(data)) return data[0]
+  if (!data || typeof data !== 'object') return data
+  const obj = data as Record<string, unknown>
+  const key = ROW_KEYS.find((k) => Array.isArray(obj[k]))
+  if (!key) return data
+  if (!Object.keys(obj).every((k) => k === key || ENVELOPE_META.has(k))) return data
+  // `{ items: [] }` ⇒ `undefined`, which is the record section's "not found" — so an authored
+  // `empty:` finally fires on the case it was written for.
+  return (obj[key] as unknown[])[0]
 }
 
 /**
@@ -147,7 +206,7 @@ export function useSectionSource(args: SourceArgs): SectionSource {
     return args.limit ? base.slice(0, args.limit) : base
   }, [fromOther, args.from, args.limit, query.data, scope.data])
 
-  const record = fromOther ? undefined : Array.isArray(query.data) ? query.data[0] : query.data
+  const record = fromOther ? undefined : extractRecord(query.data)
 
   return { query, rows, record, ready: inputs.ready && (fromOther || query.enabled) }
 }

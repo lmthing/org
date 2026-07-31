@@ -1050,6 +1050,118 @@ describe('renderSmokeViews — an error body is not data (S4)', () => {
   });
 });
 
+/**
+ * The gate half of the `30-bike-workshop` run-202 defect (the renderer half is
+ * `libs/ui/src/view/render.test.tsx`, "a record section against an `{ items: [record] }` envelope").
+ *
+ * Two claims, and they pull in opposite directions — which is why both are pinned:
+ *  - the gate must AGREE with the renderer about what a record section draws, or it reports a
+ *    working page as broken and names the endpoint as the culprit;
+ *  - one section that draws must never conceal a sibling that draws NOTHING, which is how a
+ *    two-heading page can pass a whole-page emptiness check.
+ */
+describe('renderSmokeViews — a record section reads the `{ items: [record] }` envelope (S5)', () => {
+  const CONTRACTS = {
+    endpoints: [
+      {
+        name: 'shopDashboard',
+        method: 'GET',
+        routePath: '/shop-dashboard',
+        outputFields: ['items', 'in_shop_count', 'total_parts_gbp', 'longest_waiting_bike_label'],
+        inputKeys: [],
+      },
+      {
+        name: 'listJobs',
+        method: 'GET',
+        routePath: '/jobs',
+        outputFields: ['items', 'id', 'title'],
+        inputKeys: [],
+      },
+    ],
+  } as never;
+
+  const dashboard = () =>
+    project({
+      'pages/index.view.json': JSON.stringify({
+        route: 'index',
+        sections: [
+          {
+            kind: 'stats',
+            query: 'shopDashboard',
+            cards: [
+              { label: 'Bikes in shop', value: '$.in_shop_count' },
+              { label: 'Total parts', value: '$.total_parts_gbp' },
+            ],
+          },
+        ],
+      }),
+    });
+
+  it('does not report a record the endpoint DID compute as an always-null binding', async () => {
+    // The endpoint returns the envelope every generated handler returns. Measuring the bindings
+    // against the ENVELOPE made both of them null, and `alwaysNullBinding` names the handler — so
+    // `17-fix` would be sent to "fix" an endpoint that is already correct.
+    const res = await renderSmokeViews(await dashboard(), {
+      contracts: CONTRACTS,
+      call: async () => ({ status: 200, body: { items: [{ in_shop_count: 3, total_parts_gbp: 148.49 }] } }),
+    });
+    expect(res.errors).toEqual([]);
+    expect(res.pages[0]).toMatchObject({ bindingsChecked: 2, bindingsCovered: 2, coverage: 1, empty: false });
+  });
+
+  it('still reports a page whose only section draws nothing', async () => {
+    const res = await renderSmokeViews(await dashboard(), {
+      contracts: CONTRACTS,
+      call: async () => ({ status: 200, body: { items: [{ in_shop_count: null, total_parts_gbp: null }] } }),
+    });
+    expect(res.pages[0].empty).toBe(true);
+  });
+
+  it('names the SECTION that drew nothing, even when a sibling section drew rows', async () => {
+    // The masking case, and the reason a page-level verdict is not enough: `listJobs` returns
+    // rows, so `bindingsCovered > 0` and the page is "not empty" — while the stats strip above it
+    // renders as a bare heading, exactly what run 202's screenshot shows.
+    const root = await project({
+      'pages/index.view.json': JSON.stringify({
+        route: 'index',
+        sections: [
+          { kind: 'stats', query: 'shopDashboard', cards: [{ label: 'Bikes in shop', value: '$.in_shop_count' }] },
+          { kind: 'list', query: 'listJobs', item: { title: '$.title' } },
+        ],
+      }),
+    });
+    const res = await renderSmokeViews(root, {
+      contracts: CONTRACTS,
+      call: async (name) =>
+        name === 'listJobs'
+          ? { status: 200, body: { items: [{ id: 'j1', title: 'full service' }] } }
+          : { status: 200, body: { items: [{ in_shop_count: null }] } },
+    });
+    expect(res.pages[0].empty).toBe(false); // the page as a whole is NOT empty…
+    const finding = res.errors.find((e) => e.code === 'empty-render');
+    expect(finding?.path).toBe('sections[0]'); // …and the dead section is still named
+    expect(finding?.message).toBe(
+      'pages/index sections[0]: this stats section draws NOTHING against live data — ' +
+        '1 bound field(s), none of which had a value. Its heading is all a user sees. A bound value ' +
+        'that resolves to nothing renders nothing, label and wrapper included (S1), so a section ' +
+        'whose every binding is null is a heading over an empty box.',
+    );
+    expect(res.pages[0].emptySections).toEqual([
+      { section: 0, kind: 'stats', reason: '1 bound field(s), none of which had a value' },
+    ]);
+  });
+
+  it('does not call a section empty when the page is already reported empty as a whole', async () => {
+    // One page, one finding: the page-level `empty-render` already says everything.
+    const res = await renderSmokeViews(await dashboard(), {
+      contracts: CONTRACTS,
+      call: async () => ({ status: 200, body: { items: [] } }),
+    });
+    expect(res.errors.filter((e) => e.code === 'empty-render')).toHaveLength(1);
+    expect(res.errors[0].path).toBe('');
+  });
+});
+
 describe('chat.agent — the check a pattern cannot do', () => {
   /** `spaces/<space>/agents/<slug>/` is what the pod resolves a `spaceRef` against. */
   const withAgents = () =>

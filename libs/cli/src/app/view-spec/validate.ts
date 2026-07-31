@@ -48,6 +48,7 @@ import {
   classifyBadBinding,
   deadComponent,
   emptyRender,
+  emptySection,
   expressionAttempt,
   malformedArtifact,
   orphanRoute,
@@ -1208,6 +1209,20 @@ export interface UnmeasuredSection {
 }
 
 /**
+ * One section that DID get its data and still drew nothing but its heading.
+ *
+ * The opposite of {@link UnmeasuredSection}: the endpoint answered, the section mounted, and S1
+ * dropped every element it contains. A page-level verdict cannot see this — one populated list
+ * beside it makes the page "not empty".
+ */
+export interface EmptySection {
+  /** Index into `spec.sections`. */
+  section: number;
+  kind: string;
+  reason: string;
+}
+
+/**
  * What one page's smoke run found.
  *
  * `coverage` and `empty` are **nullable on purpose**: `null` is "not measured", which is a third
@@ -1228,6 +1243,8 @@ export interface ViewSmokeReport {
   empty: boolean | null;
   /** Sections whose data never arrived — a non-2xx, or a dependency that could not be resolved. */
   unmeasured: UnmeasuredSection[];
+  /** Sections that got their data and still drew nothing. Empty when the whole PAGE is empty. */
+  emptySections: EmptySection[];
 }
 
 /** {@link renderSmokeViews}'s result — a validation result plus the per-page evidence. */
@@ -1260,15 +1277,52 @@ const ROW_KINDS = new Set(['list', 'timeline']);
  * why this is a copy and not a rewrite: the renderer decides what a list draws, and a gate that
  * decides differently reports on rows the user never sees.
  */
+const ROW_KEYS = ['items', 'rows', 'results', 'data', 'records', 'list'] as const;
+
+/** Keys an envelope may carry beside its array — `sections/common.tsx#ENVELOPE_META`, kept in step. */
+const ENVELOPE_META = new Set([
+  'total',
+  'count',
+  'page',
+  'pageSize',
+  'per_page',
+  'limit',
+  'offset',
+  'cursor',
+  'nextCursor',
+  'next_cursor',
+  'hasMore',
+  'has_more',
+]);
+
 function extractRows(body: unknown): unknown[] {
   if (Array.isArray(body)) return body;
   if (!body || typeof body !== 'object') return [];
   const obj = body as Record<string, unknown>;
-  for (const key of ['items', 'rows', 'results', 'data', 'records', 'list']) {
+  for (const key of ROW_KEYS) {
     if (Array.isArray(obj[key])) return obj[key] as unknown[];
   }
   for (const value of Object.values(obj)) if (Array.isArray(value)) return value;
   return [];
+}
+
+/**
+ * The ONE record a non-collection section binds — `sections/common.tsx#extractRecord`, kept in step.
+ *
+ * `{ items: [record] }` is the envelope every generated handler returns, including the ones that
+ * compute a single dashboard row, so a record section's `$.field` resolves INSIDE it. A gate that
+ * read the envelope instead reported every one of those bindings as null and named the ENDPOINT —
+ * routing `17-fix` at a handler that was already correct.
+ */
+function extractRecord(body: unknown): unknown {
+  if (Array.isArray(body)) return body[0];
+  if (!body || typeof body !== 'object') return body;
+  const obj = body as Record<string, unknown>;
+  const key = ROW_KEYS.find((k) => Array.isArray(obj[k]));
+  if (!key) return body;
+  // Narrow on purpose: `{ plan, tonight, mealsByDay: [...] }` is a RECORD that embeds an array.
+  if (!Object.keys(obj).every((k) => k === key || ENVELOPE_META.has(k))) return body;
+  return (obj[key] as unknown[])[0];
 }
 
 /** Keep only the objects — a row of `null`s or strings carries no bindable field. */
@@ -1303,8 +1357,8 @@ function sectionRows(
     return Array.isArray(source) ? objectRows(source) : objectRows(source === undefined ? [] : [source]);
   }
   if (ROW_KINDS.has(String(section['kind']))) return objectRows(extractRows(body));
-  // The renderer's `record`: the Output itself, or its first element when the Output IS an array.
-  const record = Array.isArray(body) ? body[0] : body;
+  // The renderer's `record` — see {@link extractRecord}.
+  const record = extractRecord(body);
   return objectRows(record === undefined ? [] : [record]);
 }
 
@@ -1538,7 +1592,12 @@ export async function renderSmokeViews(
     return { ready: false };
   }
 
-  /** Count one section's `$.field` bindings against the rows it will actually draw. */
+  /**
+   * Count one section's `$.field` bindings against the rows it will actually draw.
+   *
+   * Returns this SECTION's own tally, which is what {@link drewNothing} judges: the page totals
+   * cannot answer "did section 0 draw?" once section 1 has contributed to them.
+   */
   function checkBindings(
     report: ViewSmokeReport,
     file: string,
@@ -1547,12 +1606,15 @@ export async function renderSmokeViews(
     rows: Record<string, unknown>[],
     ep: ViewEndpoint | undefined,
     name: string | undefined,
-  ): void {
-    if (rows.length === 0) return;
+  ): { checked: number; covered: number } {
+    const own = { checked: 0, covered: 0 };
+    if (rows.length === 0) return own;
     for (const { path: bindPath, binding } of boundPaths(rec, `sections[${i}]`, [], NON_ROW_SECTION_KEYS)) {
       report.bindingsChecked++;
+      own.checked++;
       if (rows.some((row) => !isEmptyValue(readPath(row, binding)))) {
         report.bindingsCovered++;
+        own.covered++;
         continue;
       }
       // Declared but never produced: the endpoint's problem, not the page's.
@@ -1561,6 +1623,33 @@ export async function renderSmokeViews(
         errors.push(alwaysNullBinding(bindPath, binding, name, rows.length, file));
       }
     }
+    return own;
+  }
+
+  /**
+   * Did this section draw anything a user would see?
+   *
+   * Two ways to draw nothing, and neither is a lie the page total can tell:
+   *  - **every binding null.** S1 omits a bound value that resolves to nothing — its label and its
+   *    wrapper with it (a stats card takes its LITERAL label along) — so a section whose bindings
+   *    are all null is a heading over an empty box, whatever kind it is.
+   *  - **a `stats` strip with no record.** Every other kind has a renderer-supplied empty state
+   *    (`sections/common.tsx#SectionFrame`), which is content: "No jobs yet" is an honest answer
+   *    and must never be reported as a blank. `stats` has none — no record means no tiles and
+   *    nothing else, which is precisely what `30-bike-workshop`'s front page showed.
+   *
+   * Returns the reason, or `undefined` when the section drew.
+   */
+  function drewNothing(
+    kind: string,
+    rows: Record<string, unknown>[],
+    own: { checked: number; covered: number },
+  ): string | undefined {
+    if (own.checked > 0) {
+      return own.covered === 0 ? `${own.checked} bound field(s), none of which had a value` : undefined;
+    }
+    if (kind === 'stats' && rows.length === 0) return 'its endpoint returned no record, and a stats strip has no empty state';
+    return undefined;
   }
 
   // Two sweeps: parameterless routes first, so a collection has been fetched before a detail page
@@ -1576,6 +1665,7 @@ export async function renderSmokeViews(
       coverage: null,
       empty: null,
       unmeasured: [],
+      emptySections: [],
     };
     const params = [...route.matchAll(/\[([A-Za-z][A-Za-z0-9]*)\]/g)].map((m) => m[1]!);
     /** `$data.<id>` — each section publishes its WHOLE Output, exactly as `usePublish` does. */
@@ -1591,7 +1681,9 @@ export async function renderSmokeViews(
       if (!name && from?.startsWith('$data.')) {
         const rows = sectionRows(rec, undefined, published);
         if (rows.length) measuredSections++;
-        checkBindings(report, path, rec, i, rows, undefined, undefined);
+        const own = checkBindings(report, path, rec, i, rows, undefined, undefined);
+        const why = drewNothing(String(rec['kind']), rows, own);
+        if (why) report.emptySections.push({ section: i, kind: String(rec['kind']), reason: why });
         continue;
       }
       if (!name) continue;
@@ -1648,7 +1740,9 @@ export async function renderSmokeViews(
       }
       if (rec['id']) published.set(String(rec['id']), res.body);
       measuredSections++;
-      checkBindings(report, path, rec, i, rows, ep, name);
+      const own = checkBindings(report, path, rec, i, rows, ep, name);
+      const why = drewNothing(String(rec['kind']), rows, own);
+      if (why) report.emptySections.push({ section: i, kind: String(rec['kind']), reason: why });
     }
 
     // NOT MEASURED is a third answer. A page whose sections never produced data has no coverage to
@@ -1668,6 +1762,11 @@ export async function renderSmokeViews(
         errors.push(emptyRender(route, path, detail));
       }
     }
+
+    // A dead section beside a live one. Only when the PAGE is not already reported empty: one
+    // finding per page is the whole story there, and N more would just be its parts.
+    if (report.empty === true) report.emptySections = [];
+    for (const s of report.emptySections) errors.push(emptySection(route, path, s.section, s.kind, s.reason));
     pages.push(report);
   }
 

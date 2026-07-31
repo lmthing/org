@@ -547,6 +547,32 @@ export function emptyRender(route: string, file: string, detail: string): ViewEr
   );
 }
 
+/**
+ * One SECTION that mounted over real data and drew nothing but its heading.
+ *
+ * The page-level {@link emptyRender} is all-or-nothing, so a single populated list conceals every
+ * dead section beside it — which is how `30-bike-workshop` shipped a front page of two headings
+ * with every gate green. The finding is per section because the fix is: one endpoint, or one
+ * binding, and `17-fix` needs to know which.
+ */
+export function emptySection(
+  route: string,
+  file: string,
+  index: number,
+  kind: string,
+  detail: string,
+): ViewError {
+  return err(
+    'empty-render',
+    `sections[${index}]`,
+    `pages/${route} sections[${index}]: this ${kind} section draws NOTHING against live data — ` +
+      `${detail}. Its heading is all a user sees. A bound value that resolves to nothing renders ` +
+      `nothing, label and wrapper included (S1), so a section whose every binding is null is a ` +
+      `heading over an empty box.`,
+    { file },
+  );
+}
+
 /** The renderer threw. */
 export function renderThrew(route: string, file: string, message: string): ViewError {
   return err('render-error', '', `pages/${route}: the renderer threw while mounting — ${message}`, { file });

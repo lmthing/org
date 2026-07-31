@@ -94,7 +94,7 @@ export type { ViewRuntime, QueryState, MutationState, Selection } from './runtim
 
 export { renderSlot, renderSlots, renderElement, FlatItemView, KeyValueRows, Pill } from './elements'
 export { SectionView } from './sections'
-export { deriveItem, extractRows, rowKey, useSectionSource, SectionFrame } from './sections/common'
+export { deriveItem, extractRows, extractRecord, rowKey, useSectionSource, SectionFrame } from './sections/common'
 export type { SectionSource } from './sections/common'
 
 export { ViewIcon, StarGlyph, isIconName, ICON_MENU, ICON_SIZES } from './icons'
