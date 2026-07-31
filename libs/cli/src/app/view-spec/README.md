@@ -8,7 +8,7 @@
 
 ## What this is
 
-A page in a `system-viewbuilder` app is not TSX — it is a **spec**: a plain object the
+A page the app builder writes is not TSX — it is a **spec**: a plain object the
 model emits as a TypeScript object literal, validated at save time and rendered by the
 shared `ViewRenderer` on **both** targets (the web bundle and the native mobile app, no
 WebView). Data and behaviour stay real code — tables, endpoints, automations, handlers —
@@ -40,7 +40,7 @@ not name the finite valid set costs a fork per retry.
 The writers that call all of this live in [`../authoring/globals.ts`](../authoring/globals.ts)
 (`writeProjectView` · `writeProjectViewComponent` · `writeProjectViewShell`), gated on
 **`views:write`** — a separate capability from `pages:write`, which is what makes freehand TSX in
-a viewbuilder agent a typecheck error rather than a policed instruction.
+every `system-appbuilder` agent a typecheck error rather than a policed instruction.
 
 `schema.ts` is **shape only**. It does not know the project: whether `query: 'listRecipes'`
 is a real endpoint, whether `$.title` is a real Output field, whether `{ use: 'RecipeCard' }`
@@ -50,10 +50,11 @@ cross-checks against `ProjectContracts`
 
 ## The non-negotiables
 
-1. **No `custom` kind. No escape hatch.** The section union is capped at 8 (all pinned);
-   the element catalogue is the ceiling. A surface that cannot be expressed is *reported*
-   as such by the planner — never approximated with a wrong section, never smuggled in as
-   code. The escape hatch is one level up: `system-appbuilder`, which stays frozen.
+1. **No `custom` kind. No escape hatch — and nowhere to escape to.** The section union is
+   capped at 8 (all pinned); the element catalogue is the ceiling. `system-appbuilder` is the
+   only app builder and this is its only medium, so a surface that cannot be expressed is
+   *reported* as such by the planner and carried out to the user — never approximated with a
+   wrong section, never smuggled in as code, never handed to some other builder.
 2. **Bindings are PATHS, never expressions.** `$`, `$.field`, `$props.x`, `$route.id`,
    `$data.<sectionId>.<path>`, `$result.field`, `$form.field`, `$client.timezone` — and
    nothing else. No conditionals, no arithmetic, no interpolation, no eval. An expression
