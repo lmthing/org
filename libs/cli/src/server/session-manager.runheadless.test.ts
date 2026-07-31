@@ -159,6 +159,77 @@ describe('SessionManager.runHeadless (keyless, mock provider)', () => {
     expect(withGuard).toBeGreaterThan(withoutGuard);
   });
 
+  it('(j) the two headless paths AGREE about a silent turn — the drift this suite exists to stop', async () => {
+    // Three bugs in this family, each the same shape: a fix landed on one of two
+    // near-identical tails and not the other, and a team channel is the only
+    // caller of the one that keeps being missed.
+    //
+    //   - the history fallback was removed from runHeadless, not runHeadlessThreaded
+    //     → a channel posted the agent's TypeScript as the answer;
+    //   - the ledger was tracked in runHeadless, not runHeadlessThreaded
+    //     → every channel turn spent tokens and left no record;
+    //   - the ledger was finalized in one, not the other
+    //     → every threaded turn sat at `running` for ever.
+    //
+    // So this asserts the two AGREE rather than testing each alone, which is what
+    // the parallel per-path tests above could never catch: they both passed
+    // throughout, on opposite sides of a divergence.
+    const root = await makeRoot();
+    const silent = createMockStreamFn((opts: StreamOpts) => {
+      const hasAssistant = opts.messages.some((m) => m.role === 'assistant');
+      if (hasAssistant) return '';
+      return `// working it out\nconst step = 1;`;
+    });
+    const mk = () =>
+      new SessionManager({
+        streamFn: silent,
+        lmthingRoot: root,
+        buildSession: (args: BuildSessionArgs) =>
+          new Session(
+            {
+              spaceDir: args.spaceDir,
+              agentSlug: args.agentSlug,
+              modelAlias: 'mock',
+              renderHost: args.renderHost,
+              systemSpaceDirs: [],
+              budget: args.budget,
+            },
+            { streamFn: silent },
+          ),
+      });
+
+    const plainMgr = mk();
+    const plain = await plainMgr.runHeadless({ agentSlug: 'thing', message: 'go' });
+    const threadedMgr = mk();
+    const threaded = await threadedMgr.runHeadlessThreaded({
+      sessionId: 'agree-thread',
+      agentSlug: 'thing',
+      message: 'go',
+    });
+
+    // 1. Neither hands back the agent's own source as the answer.
+    expect(plain.result).toBeUndefined();
+    expect(threaded.result).toBeUndefined();
+    for (const r of [plain, threaded]) expect(JSON.stringify(r)).not.toContain('const step');
+
+    // 2. Both leave a ledger record. A turn nobody can account for is the same
+    //    defect whichever entry point produced it.
+    expect(plainMgr.listSessionLedger().find((r) => r.sessionId === plain.sessionId)).toBeDefined();
+    expect(threadedMgr.listSessionLedger().find((r) => r.sessionId === 'agree-thread')).toBeDefined();
+
+    // 3. Both close that record rather than leaving it `running` for ever.
+    const plainRec = plainMgr.listSessionLedger().find((r) => r.sessionId === plain.sessionId);
+    const threadedRec = threadedMgr.listSessionLedger().find((r) => r.sessionId === 'agree-thread');
+    expect(plainRec!.status).not.toBe('running');
+    expect(threadedRec!.status).not.toBe('running');
+
+    // The ONE place they deliberately differ is recorded here so it is a decision
+    // and not another drift: only the threaded path reports ok:false for a turn
+    // that gave up (case (i)). runHeadless carries hooks, emitters and webhook
+    // dispatch, where flipping that could change retry behaviour, so it keeps the
+    // old semantics until someone takes it on with those tests.
+  });
+
   it('(i) a THREADED turn that gave up after its final retry is NOT reported as a success', async () => {
     // Giving up does not throw. `runTurnLoop` returns 'error' when a statement
     // fails its last retry, every call site in Session discarded that value, and
