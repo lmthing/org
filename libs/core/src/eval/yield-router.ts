@@ -83,6 +83,8 @@ export interface YieldRouterContext {
    * absent ⇒ a structured "no desktop bridge" result rather than a bound `undefined`.
    */
   hostFsResolver?: import('./host-fs-yield.js').HostFsResolver;
+  /** Forwards a `hostCdp` yield to the desktop's browser. Host-supplied by `libs/cli`. */
+  hostCdpResolver?: (op: string, args: unknown[]) => Promise<unknown>;
   apiCallResolver?: ApiCallFn;
   /** The running agent's `api:call: { allow: [...] }` grant — the endpoints it may
    *  enter. Enforced in the `apiCall` yield (a name outside the list is refused with a
@@ -216,6 +218,17 @@ export async function routeCommonYield(
       const [op, ...rest] = req.args as [string, ...unknown[]];
       const { resolveHostFsYield } = await import('./host-fs-yield.js');
       const value = await resolveHostFsYield(ctx.hostFsResolver, op, rest);
+      return { handled: true, value };
+    }
+    case 'hostCdp': {
+      // Raw DevTools Protocol against the desktop's visible browser. Reaches here only after the
+      // consent gate at the top of this function has approved it — `hostCdp` is in
+      // CONSENT_MARKED_YIELD_KINDS, which fails closed with no prompter.
+      const [op, ...rest] = req.args as [string, ...unknown[]];
+      if (!ctx.hostCdpResolver) {
+        throw new Error('cdp is not available here: this pod has no desktop bridge');
+      }
+      const value = await ctx.hostCdpResolver(op, rest);
       return { handled: true, value };
     }
     case 'apiCall': {

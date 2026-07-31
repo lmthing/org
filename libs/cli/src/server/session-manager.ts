@@ -11,7 +11,7 @@ import { SessionLedger } from './session-ledger.js';
 import { emitInternalSignal } from './internal-signals.js';
 import { integrationStatusFor } from './routes/store-spaces.js';
 import { createStoreResolver } from './store-resolver.js';
-import { createHostFsResolver } from './host-fs-resolver.js';
+import { createHostFsResolver, createHostCdpResolver } from './host-fs-resolver.js';
 import type { HostBridge } from '../rpc/host-bridge.js';
 import { createEmitEventResolver, type ManualEmitDepth } from './emit-event.js';
 import { transcribeAudio } from '../providers/transcribe.js';
@@ -418,7 +418,12 @@ export class SessionManager {
       // POD-wide: a desktop attaches to the workspace, not to a project, so a session outside a
       // project should still reach it. Absent when no bridge is configured (a team pod), which the
       // router reports as a structured "no desktop bridge" result.
-      ...(bridge ? { hostFs: appGlobals?.hostFs ?? createHostFsResolver(bridge) } : {}),
+      ...(bridge
+        ? {
+            hostFs: appGlobals?.hostFs ?? createHostFsResolver(bridge),
+            hostCdp: appGlobals?.hostCdp ?? createHostCdpResolver(bridge),
+          }
+        : {}),
     };
   }
 

@@ -1264,6 +1264,7 @@ export class Session {
       // Store + manual-emit resolvers (plan S10) ride appGlobals like callConnection.
       storeResolver: this.opts.appGlobals?.store,
       hostFsResolver: this.opts.appGlobals?.hostFs,
+      hostCdpResolver: this.opts.appGlobals?.hostCdp,
       emitEventResolver: this.opts.appGlobals?.emitEvent,
       // The team resolver rides appGlobals too, but the host rebuilds it per TURN
       // (it carries the caller/channel/thread), so it is read here rather than

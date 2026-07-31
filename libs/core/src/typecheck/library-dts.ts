@@ -154,6 +154,22 @@ declare function localRead(rootId: string, path: string, opts?: { offset?: numbe
 /** Search a granted folder. Prefer this to walking the tree yourself — one round trip instead of many. */
 declare function localSearch(rootId: string, query: string, opts?: { path?: string }): Promise<{ ok: boolean; hits: Array<{ path: string; line: number; text: string }>; truncated: boolean; error?: string }>;`;
 
+/**
+ * Raw DevTools Protocol — emitted only under `browser:cdp`, the narrowest grant in the system.
+ *
+ * Declared with the danger stated, because the model reads this and nothing else about the tool:
+ * an agent that knows `Runtime.evaluate` runs inside the person's signed-in session will reach for
+ * the 27 curated `system-browser` functions first, which is the intended order.
+ */
+export const HOST_CDP_DTS = `/** Send one Chrome DevTools Protocol command to the browser shown in the LMThing desktop app.
+ *  This browser is signed into the person's real accounts — prefer the \`browser\` agent's goto/click/extract
+ *  functions, and use this only for what they cannot express. Each call asks the person for approval. */
+declare function cdp(method: string, params?: Record<string, unknown>): Promise<{ ok: boolean; result?: unknown; error?: string }>;
+/** Start collecting events from a CDP domain ('Network', 'Console', 'Page', …). */
+declare function cdpSubscribe(domain: string): Promise<{ ok: boolean; error?: string }>;
+/** Drain the CDP events collected since the last call. */
+declare function cdpEvents(): Promise<{ ok: boolean; events: Array<{ method: string; params?: unknown }>; error?: string }>;`;
+
 /** The write half — emitted only under `fs:local:write`, and refused by roots granted read-only. */
 export const LOCAL_FS_WRITE_DTS = `/** Create or replace a file inside a granted folder. Fails when the grant is read-only. */
 declare function localWrite(rootId: string, path: string, content: string): Promise<{ ok: boolean; bytes: number; error?: string }>;`;

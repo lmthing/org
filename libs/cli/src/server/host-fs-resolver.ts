@@ -75,3 +75,30 @@ export function createHostFsResolver(bridge: HostBridge) {
     }
   };
 }
+
+/**
+ * The CDP half. Separate from the filesystem resolver because it is a separate capability and a
+ * separate danger — and because the yield router has already made a person approve each call by the
+ * time this runs (`hostCdp` is consent-marked, and fails closed with no prompter).
+ *
+ * A generous timeout: a `Page.navigate` on somebody's laptop can involve a real page load over a
+ * real network, on top of the WAN hop to get there.
+ */
+export function createHostCdpResolver(bridge: HostBridge) {
+  return async function hostCdpResolver(op: string, args: unknown[]): Promise<unknown> {
+    const [a, b] = args as [unknown, unknown];
+    return bridge.request(
+      {
+        type: 'cdp.request',
+        method: op === 'command' ? String(a) : op,
+        params:
+          op === 'command'
+            ? ((b ?? {}) as Record<string, unknown>)
+            : op === 'subscribe'
+              ? { domain: String(a) }
+              : {},
+      },
+      { timeoutMs: 60_000 },
+    );
+  };
+}

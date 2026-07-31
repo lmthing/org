@@ -40,6 +40,7 @@ export type CapabilityId =
   | 'fs:scratch'
   | 'fs:local:read'
   | 'fs:local:write'
+  | 'browser:cdp'
   | 'team:read'
   | 'team:post';
 
@@ -62,6 +63,7 @@ export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
   'fs:scratch',
   'fs:local:read',
   'fs:local:write',
+  'browser:cdp',
   'team:read',
   'team:post',
 ]);
@@ -93,6 +95,7 @@ export const TEAM_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<Capability
 export const DESKTOP_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
   'fs:local:read',
   'fs:local:write',
+  'browser:cdp',
 ]);
 
 /**
@@ -163,6 +166,7 @@ const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId
   'fs:scratch',
   'fs:local:read',
   'fs:local:write',
+  'browser:cdp',
   'team:read',
   'team:post',
 ]);
@@ -241,6 +245,18 @@ export interface AppCapabilities {
   'fs:local:read'?: true;
   /** As `fs:local:read`, plus creating and modifying files in a grant marked read-write. */
   'fs:local:write'?: true;
+  /**
+   * RAW Chrome DevTools Protocol against the browser the LMThing desktop app is showing.
+   *
+   * The sharpest capability in the system, and gated hardest because of it. `Runtime.evaluate` on
+   * an arbitrary target is total account takeover of every site the person is signed into, and
+   * `Network.*` reads every request body including bearer tokens — so unlike the 27 curated
+   * `system-browser` functions, this one is ALSO routed through the host-enforced consent gate
+   * (`CONSENT_MARKED_YIELD_KINDS`), which fails closed where there is no prompter.
+   *
+   * Desktop-only: dropped on a team pod alongside `fs:local:*`.
+   */
+  'browser:cdp'?: true;
   'team:read'?: true;
   'team:post'?: true;
 }

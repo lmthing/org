@@ -5,6 +5,7 @@ import { injectSpaceFunctions } from '../sandbox/inject-functions.js';
 import { injectHostTools } from '../globals/host-tools.js';
 import { createScratchTools } from '../globals/scratch.js';
 import { createHostFsGlobals } from '../globals/host-fs.js';
+import { createHostCdpGlobals } from '../globals/host-cdp.js';
 import { createAskGlobal } from '../globals/ask.js';
 import { createDisplayGlobal } from '../globals/display.js';
 import { createInspectGlobal } from '../globals/inspect.js';
@@ -39,7 +40,8 @@ import {
   ASK_DTS, TASKLIST_DTS, FORK_DTS, DELEGATE_DTS, COMMON_DTS, SET_SESSION_META_DTS,
   EXEC_SHELL_DTS, SCRATCH_DTS,
   LOCAL_FS_READ_DTS,
-  LOCAL_FS_WRITE_DTS, composeDbDts, CAPABILITY_DTS_FRAGMENTS,
+  LOCAL_FS_WRITE_DTS,
+  HOST_CDP_DTS, composeDbDts, CAPABILITY_DTS_FRAGMENTS,
   PROJECT_TABLE_DTS, PROJECT_READ_DTS, composeConnectionsDts, type DbTableSchema,
   PROCESS_EXIT_DTS,
 } from '../typecheck/library-dts.js';
@@ -237,6 +239,17 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
     }
   }
 
+  // 5c. Raw DevTools Protocol (`browser:cdp`). Separate from the local filesystem because it is a
+  //     separate grant and a sharper one: this is script execution inside a browser signed into the
+  //     person's accounts. The consent gate in the yield router is what puts a human in the loop
+  //     per call; the capability only decides whether the verb exists at all.
+  if (caps.browserCdp) {
+    const cdpGlobals = createHostCdpGlobals(pushYield);
+    injectGlobal(ctx, 'cdp', cdpGlobals.cdp as (...a: unknown[]) => unknown);
+    injectGlobal(ctx, 'cdpSubscribe', cdpGlobals.cdpSubscribe as (...a: unknown[]) => unknown);
+    injectGlobal(ctx, 'cdpEvents', cdpGlobals.cdpEvents as (...a: unknown[]) => unknown);
+  }
+
   // readDocument: universal (like fetch), NOT capability-gated — any agent/fork/
   // delegate can read an attached upload's text by id. The host resolver is threaded
   // via the yield router (documentResolver); absent ⇒ a clear retryable error.
@@ -370,7 +383,7 @@ export interface AmbientDtsOpts {
    *  internal-only, and `execShell` + `createScratch` are emitted ONLY under `scratchFs`
    *  (the engineer's sandbox). The project-app globals are gated on the `app` grants. Pass
    *  the full CapabilityProfile (it satisfies this Pick). */
-  capabilities: Pick<CapabilityProfile, 'ask' | 'orchestrate' | 'delegate' | 'setSessionMeta' | 'allowWrite' | 'scratchFs' | 'localFsRead' | 'localFsWrite' | 'app'>;
+  capabilities: Pick<CapabilityProfile, 'ask' | 'orchestrate' | 'delegate' | 'setSessionMeta' | 'allowWrite' | 'scratchFs' | 'localFsRead' | 'localFsWrite' | 'browserCdp' | 'app'>;
   /** Function/component overlay (buildOverlay output). Empty/omitted → none. */
   overlay?: string;
   /** Declare the `currentTask` capture global (fork + delegate contexts). */
@@ -466,6 +479,7 @@ export function buildAmbientDts(opts: AmbientDtsOpts): string {
     // keeps the readers — see `intersectAppCaps`.
     caps.localFsRead ? LOCAL_FS_READ_DTS : '',
     caps.localFsWrite ? LOCAL_FS_WRITE_DTS : '',
+    caps.browserCdp ? HOST_CDP_DTS : '',
     buildAppCapabilityDts(caps.app, opts.appDts, opts.projectRoot, opts.dbSchema),
     opts.overlay ?? '',
     opts.currentTask ? CURRENT_TASK_DTS : '',

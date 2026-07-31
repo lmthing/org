@@ -37,6 +37,8 @@ export interface AppGlobalImpls {
    *  host (libs/cli) supplies a resolver bound to its `HostBridge`; absent ⇒ a structured
    *  "no desktop bridge" result rather than a bound `undefined`. */
   hostFs?: import('../eval/host-fs-yield.js').HostFsResolver;
+  /** Forwards a `hostCdp` yield to the browser the desktop app is showing. */
+  hostCdp?: (op: string, args: unknown[]) => Promise<unknown>;
   /** Agent-facing `apiCall` — enter the project's own `api/` endpoints by name.
    *  Value-yielding (Promise-returning): unlike the synchronous globals below it is
    *  NOT injected here but wired through the yield router (`createApiCallGlobal` +

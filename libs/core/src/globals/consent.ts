@@ -51,7 +51,7 @@ export type ConsentPrompter = (card: ConsentCard) => Promise<boolean>;
  * definition" — the single seam the yield router consults. `installSpace` is
  * consumer #1 (plan S10); add a kind here to consent-mark another global.
  */
-export const CONSENT_MARKED_YIELD_KINDS: ReadonlySet<string> = new Set(['installSpace']);
+export const CONSENT_MARKED_YIELD_KINDS: ReadonlySet<string> = new Set(['installSpace', 'hostCdp']);
 
 /** Cap the rendered argument summary so a hostile/huge payload can't flood the
  *  consent card (approval must stay reviewable at a glance). */

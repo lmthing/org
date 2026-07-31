@@ -8,6 +8,7 @@
 //! jail — and that one IS the security boundary. Nothing else here is load-bearing
 //! for safety, which is the point: the surface that has to be right is one function.
 
+mod browser;
 mod commands;
 mod config;
 mod fsops;
@@ -55,6 +56,9 @@ pub fn run() {
             commands::grant_add,
             commands::grant_remove,
             commands::fs_op,
+            commands::browser_start,
+            commands::browser_stop,
+            commands::browser_status,
         ])
         .setup(move |app| {
             // The grant list, restored from disk. Empty on a fresh install: the bridge can reach

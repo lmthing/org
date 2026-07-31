@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { wsUrl } from '@lmthing/ui/platform'
+import { CdpClient, callTool, type CdpEndpoint } from './cdp'
 
 /**
  * The desktop half of the host bridge: dial the pod, answer its requests.
@@ -77,6 +78,8 @@ export class DesktopHostBridge {
   private attempt = 0
   private timer: ReturnType<typeof setTimeout> | null = null
   private state: HostBridgeState = { status: 'idle', activity: [] }
+  /** Attached lazily: the browser is only started when an agent actually asks for it. */
+  private cdp: CdpClient | null = null
   private listeners = new Set<(s: HostBridgeState) => void>()
 
   constructor(private getAccessToken: () => Promise<string>) {}
@@ -108,6 +111,11 @@ export class DesktopHostBridge {
     this.timer = null
     this.socket?.close()
     this.socket = null
+    // The browser goes with it. Leaving a signed-in browser running after the person said "stop
+    // reaching my computer" would answer a narrower question than the one they asked.
+    this.cdp?.close()
+    this.cdp = null
+    void invoke('browser_stop').catch(() => {})
     this.set({ status: 'idle' })
   }
 
@@ -217,10 +225,85 @@ export class DesktopHostBridge {
         await this.handleFs(frame)
         return
       }
-      default:
-        // `browser.request` / `cdp.request` arrive with the browser work; ignoring an unknown
-        // frame is always safe, and answering one we do not understand is not.
+      case 'browser.request': {
+        await this.handleBrowser(frame.id, frame.body)
         return
+      }
+      case 'cdp.request': {
+        await this.handleCdp(frame.id, frame.method, frame.params)
+        return
+      }
+      default:
+        // Ignoring an unknown frame is always safe; answering one we do not understand is not.
+        return
+    }
+  }
+
+  /**
+   * Ensure the agent's browser is running and attached.
+   *
+   * Started on FIRST USE rather than at connect: a browser signed into somebody's accounts should
+   * appear because an agent needed one, at a moment the person can see in the activity log — not
+   * quietly, at launch, forever.
+   */
+  private async ensureCdp(): Promise<CdpClient> {
+    if (this.cdp?.connected()) return this.cdp
+    const endpoint = await invoke<CdpEndpoint>('browser_start')
+    const client = new CdpClient()
+    await client.connect(endpoint)
+    this.cdp = client
+    return client
+  }
+
+  /**
+   * A `tools/call` from one of the 27 `system-browser` functions.
+   *
+   * The reply is a JSON-RPC envelope because that is exactly what those wrappers parse — they were
+   * written against Lightpanda's MCP server and have not been touched.
+   */
+  private async handleBrowser(id: string, body: unknown): Promise<void> {
+    const rpc = body as { id?: unknown; params?: { name?: string; arguments?: Record<string, unknown> } }
+    const name = rpc?.params?.name ?? ''
+    try {
+      const client = await this.ensureCdp()
+      const result = await callTool(client, name, rpc?.params?.arguments ?? {})
+      this.log({ at: Date.now(), op: `browser.${name}`, ok: result.isError !== true })
+      this.send({ type: 'result', id, ok: true, value: { jsonrpc: '2.0', id: rpc?.id ?? 1, result } })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.log({ at: Date.now(), op: `browser.${name}`, ok: false, error: message })
+      // A JSON-RPC error, not a transport failure: the wrappers surface `error.message` to the
+      // model, so this arrives as something it can act on.
+      this.send({
+        type: 'result',
+        id,
+        ok: true,
+        value: { jsonrpc: '2.0', id: rpc?.id ?? 1, error: { code: -32000, message } },
+      })
+    }
+  }
+
+  /** A raw protocol command from the desktop-only devtools agent. Consent already granted. */
+  private async handleCdp(id: string, method: string, params?: Record<string, unknown>): Promise<void> {
+    try {
+      const client = await this.ensureCdp()
+      if (method === 'subscribe') {
+        await client.subscribe(String(params?.['domain'] ?? ''))
+        this.log({ at: Date.now(), op: `cdp.subscribe ${String(params?.['domain'] ?? '')}`, ok: true })
+        this.send({ type: 'result', id, ok: true, value: { ok: true } })
+        return
+      }
+      if (method === 'events') {
+        this.send({ type: 'result', id, ok: true, value: { ok: true, events: client.drainEvents() } })
+        return
+      }
+      const result = await client.send(method, params ?? {})
+      this.log({ at: Date.now(), op: `cdp ${method}`, ok: true })
+      this.send({ type: 'result', id, ok: true, value: { ok: true, result } })
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err)
+      this.log({ at: Date.now(), op: `cdp ${method}`, ok: false, error })
+      this.send({ type: 'result', id, ok: true, value: { ok: false, error } })
     }
   }
 

@@ -62,6 +62,7 @@ import { handleTerminalWsUpgrade } from './ws/terminal.js';
 import { handleChannelWsUpgrade } from './ws/team-channels.js';
 import { handleHostWsUpgrade } from './ws/host.js';
 import { HostBridge } from '../rpc/host-bridge.js';
+import { startBrowserEndpoint } from '../host/browser-endpoint.js';
 
 export interface SessionServerOpts {
   port: number;
@@ -466,6 +467,11 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // Handed to the manager so `localRead`/`localWrite` reach it from any session.
   const hostBridge = new HostBridge({ log: (m) => console.log(m) });
   manager.setHostBridge(hostBridge);
+  // Publishes LIGHTPANDA_MCP_URL, which is the entire integration for the 27 `system-browser`
+  // functions: they POST a JSON-RPC `tools/call` to that URL and this forwards it to the desktop's
+  // browser untouched. Not one of those files changes.
+  const browserEndpoint = await startBrowserEndpoint(hostBridge);
+  console.log(`[serve] desktop browser endpoint on ${browserEndpoint.url}`);
 
   httpServer.on('upgrade', (req, socket, head) => {
     // Dev: let Vite's own upgrade listener handle its HMR socket (identified by

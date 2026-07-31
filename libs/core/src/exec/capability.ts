@@ -111,6 +111,8 @@ export interface CapabilityProfile {
   localFsRead: boolean;
   /** …and modify them, where the grant is read-write. */
   localFsWrite: boolean;
+  /** Raw CDP against the desktop's visible browser. Consent-gated on top of the capability. */
+  browserCdp: boolean;
   /** Project-app capability grants (`capabilities:` frontmatter → parsed `AppCapabilities`).
    *  Drives BOTH which app globals `createChildVM` injects (`db.*`/`apiCall`/`writeProjectPage`/…)
    *  AND which capability fragments `buildAmbientDts` emits — kept in lockstep exactly like
@@ -124,7 +126,7 @@ export interface CapabilityProfile {
  *  `canDelegate` comes from the session agent's `canDelegateTo` policy
  *  (`evaluateDelegatePolicy(...).mode !== 'none'`); defaults to true. */
 export function sessionCapabilities(canDelegate = true, app: AppCapabilities = {}): CapabilityProfile {
-  return { kind: 'session', ask: true, orchestrate: true, delegate: canDelegate, registerSpace: true, setSessionMeta: true, allowWrite: true, scratchFs: !!app['fs:scratch'], localFsRead: !!app['fs:local:read'], localFsWrite: !!app['fs:local:write'], app };
+  return { kind: 'session', ask: true, orchestrate: true, delegate: canDelegate, registerSpace: true, setSessionMeta: true, allowWrite: true, scratchFs: !!app['fs:scratch'], localFsRead: !!app['fs:local:read'], localFsWrite: !!app['fs:local:write'], browserCdp: !!app['browser:cdp'], app };
 }
 
 /**
@@ -136,7 +138,7 @@ export function sessionCapabilities(canDelegate = true, app: AppCapabilities = {
 export function forkCapabilities(role: string | undefined, canDelegate: boolean, app: AppCapabilities = {}): CapabilityProfile {
   const allowWrite = roleProfile(role).allowWrite !== false;
   const forkApp = intersectAppCaps(app, allowWrite);
-  return { kind: 'fork', ask: false, orchestrate: false, delegate: canDelegate, registerSpace: allowWrite, setSessionMeta: false, allowWrite, scratchFs: !!forkApp['fs:scratch'], localFsRead: !!forkApp['fs:local:read'], localFsWrite: !!forkApp['fs:local:write'], app: forkApp };
+  return { kind: 'fork', ask: false, orchestrate: false, delegate: canDelegate, registerSpace: allowWrite, setSessionMeta: false, allowWrite, scratchFs: !!forkApp['fs:scratch'], localFsRead: !!forkApp['fs:local:read'], localFsWrite: !!forkApp['fs:local:write'], browserCdp: !!forkApp['browser:cdp'], app: forkApp };
 }
 
 /**
@@ -147,5 +149,5 @@ export function forkCapabilities(role: string | undefined, canDelegate: boolean,
  * are registered by the session or by write-capable forks).
  */
 export function delegateCapabilities(canDelegate = true, app: AppCapabilities = {}): CapabilityProfile {
-  return { kind: 'delegate', ask: false, orchestrate: true, delegate: canDelegate, registerSpace: false, setSessionMeta: false, allowWrite: true, scratchFs: !!app['fs:scratch'], localFsRead: !!app['fs:local:read'], localFsWrite: !!app['fs:local:write'], app };
+  return { kind: 'delegate', ask: false, orchestrate: true, delegate: canDelegate, registerSpace: false, setSessionMeta: false, allowWrite: true, scratchFs: !!app['fs:scratch'], localFsRead: !!app['fs:local:read'], localFsWrite: !!app['fs:local:write'], browserCdp: !!app['browser:cdp'], app };
 }

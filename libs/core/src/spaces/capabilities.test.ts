@@ -146,13 +146,15 @@ describe('system-space smoke: the new frontmatter allow-list gate breaks nothing
     // authoring grants), the integration-* spaces (connections:use), system-engineer/engineer
     // (fs:scratch → its scratch sandbox), system-store/finder (store:read),
     // user-thing/thing (db:read+db:write+store:install+api:call — the routing rebuild), and
-    // user-memory/memory (db:write ceiling for its migrate_to_app_db action). Every other
-    // system agent parses to {}.
+    // user-memory/memory (db:write ceiling for its migrate_to_app_db action), and
+    // system-desktop-browser/devtools (browser:cdp — raw DevTools Protocol against the desktop's
+    // browser, the narrowest grant in the system). Every other system agent parses to {}.
     const capBearing = (dir: string): boolean =>
       dir.endsWith('system-appbuilder') ||
       dir.endsWith('system-viewbuilder') ||
       dir.includes('integration-') ||
       dir.endsWith('system-engineer') ||
+      dir.endsWith('system-desktop-browser') ||
       dir.endsWith('system-store') ||
       dir.endsWith('user-thing') ||
       dir.endsWith('user-memory');

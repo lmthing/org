@@ -495,6 +495,7 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             // headless), so the router's consent gate refuses before install.
             storeResolver: opts.appGlobals?.store,
             hostFsResolver: opts.appGlobals?.hostFs,
+            hostCdpResolver: opts.appGlobals?.hostCdp,
             emitEventResolver: opts.appGlobals?.emitEvent,
             // A delegate acts for the SAME caller in the SAME channel, so it gets
             // the parent's turn-bound team resolver unchanged — including its

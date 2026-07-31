@@ -59,7 +59,7 @@ describe('system spaces', () => {
   it('defaultSystemSpaceDirs points under libs/core/system-spaces', () => {
     const dirs = defaultSystemSpaceDirs();
     expect(dirs.some((d) => d.endsWith('system-spaces/system-global'))).toBe(true);
-    expect(dirs.length).toBe(12);
+    expect(dirs.length).toBe(13);
     expect(dirs.some((d) => d.endsWith('system-spaces/solver'))).toBe(false);
     expect(dirs.some((d) => d.endsWith('system-spaces/system-research'))).toBe(true);
     expect(dirs.some((d) => d.endsWith('system-spaces/system-browser'))).toBe(true);

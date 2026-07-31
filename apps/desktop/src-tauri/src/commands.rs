@@ -17,6 +17,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
+use crate::browser::{self, BrowserEndpoint};
 use crate::fsops;
 use crate::grants::{Grant, Grants, Mode};
 
@@ -43,6 +44,55 @@ pub struct PublicGrant {
 
 #[derive(Default)]
 pub struct GrantState(pub Mutex<Vec<StoredGrant>>);
+
+/// The launched browser, if any. Held so it can be killed with the app rather than outliving it —
+/// a browser the person did not open and cannot see is exactly the wrong thing to leave behind.
+#[derive(Default)]
+pub struct BrowserState(pub Mutex<Option<browser::BrowserProcess>>);
+
+/// Start the agent's browser (or return the running one's endpoint).
+///
+/// Explicit, like connecting the bridge: a browser signed into somebody's accounts, reachable by a
+/// cloud agent, must not appear because an app was launched.
+#[tauri::command]
+pub fn browser_start(
+    app: AppHandle,
+    state: State<'_, BrowserState>,
+) -> Result<BrowserEndpoint, String> {
+    let mut slot = state.0.lock().map_err(|_| "browser state is poisoned")?;
+    if let Some(p) = slot.as_ref() {
+        return Ok(p.endpoint.clone());
+    }
+    // Its OWN profile directory, never the person's everyday one: the cookie jar an agent can
+    // reach should be something they opted into and can throw away.
+    let dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("agent-browser");
+    let proc = browser::launch(dir)?;
+    let endpoint = proc.endpoint.clone();
+    *slot = Some(proc);
+    Ok(endpoint)
+}
+
+#[tauri::command]
+pub fn browser_stop(state: State<'_, BrowserState>) -> Result<(), String> {
+    let mut slot = state.0.lock().map_err(|_| "browser state is poisoned")?;
+    if let Some(mut p) = slot.take() {
+        let _ = p.child.kill();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn browser_status(state: State<'_, BrowserState>) -> Option<BrowserEndpoint> {
+    state
+        .0
+        .lock()
+        .ok()
+        .and_then(|s| s.as_ref().map(|p| p.endpoint.clone()))
+}
 
 fn store_path(app: &AppHandle) -> Option<std::path::PathBuf> {
     let dir = app.path().app_config_dir().ok()?;
