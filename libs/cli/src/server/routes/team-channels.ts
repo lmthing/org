@@ -803,6 +803,41 @@ async function deliver(root: string, channel: Channel, message: ChannelMessage):
 }
 
 /**
+ * What a channel says when a turn fails.
+ *
+ * A channel is shared and permanent, so its failure text is read by colleagues
+ * who did not ask and is quoted by a push notification. It went out raw: a live
+ * run posted **"THING could not answer: Lifetime not alive"** — QuickJS's wording
+ * for an operation on a disposed handle — into a newsroom's channel.
+ *
+ * The rule is not "hide errors". A member needs to know it failed, and whether
+ * trying again is worth anything. What they cannot use is the internals: a
+ * sandbox lifetime string, a stack, a TypeScript diagnostic, an HTTP status from
+ * something they have never heard of. Those go to the server log, which is where
+ * somebody who can act on them will look.
+ *
+ * Kept deliberately small. Anything not recognised is reported as an unexpected
+ * failure rather than passed through, because passing through is how the last one
+ * reached a user.
+ */
+export function channelFailureText(raw: string): string {
+  const e = raw.toLowerCase();
+  if (/lifetime not alive|disposed|vm|sandbox/.test(e)) {
+    return 'THING could not finish that — its workspace was restarted mid-answer. Ask again and it will pick up where the thread left off.';
+  }
+  if (/budget|quota|limit reached|429/.test(e)) {
+    return "THING could not finish that — the team's usage limit was reached. It will work again once the limit resets.";
+  }
+  if (/timeout|timed out|etimedout|aborted/.test(e)) {
+    return 'THING could not finish that — it ran out of time. Asking for a smaller piece of it usually works.';
+  }
+  if (/econnrefused|enotfound|econnreset|fetch failed|socket hang up|network/.test(e)) {
+    return 'THING could not finish that — it could not reach a service it needed. Worth trying again shortly.';
+  }
+  return 'THING could not finish that. Trying again is worth a go; if it keeps happening, the workspace log has the detail.';
+}
+
+/**
  * Answer a mention in the thread it was asked in.
  *
  * The session id is stable per (channel, thread), so every message in a thread
@@ -978,7 +1013,11 @@ async function runThingReply(
 
     const answer = result.ok
       ? renderResult(result)
-      : { text: `THING could not answer: ${result.error ?? 'unknown error'}` };
+      : (() => {
+          const raw = result.error ?? 'unknown error';
+          console.error(`[team-channel] turn failed in #${message.channelId}: ${raw}`);
+          return { text: channelFailureText(raw) };
+        })();
 
     const reply = await appendMessage(root, {
       channelId: message.channelId,
@@ -1006,10 +1045,11 @@ async function runThingReply(
 
     if (result.ok) await announceNewApps(root, message, threadId, appsBefore, to, fingerprintsBefore);
   } catch (err) {
+    console.error(`[team-channel] turn threw in #${message.channelId}:`, err);
     const reply = await appendMessage(root, {
       channelId: message.channelId,
       kind: 'system',
-      text: `THING could not answer: ${err instanceof Error ? err.message : String(err)}`,
+      text: channelFailureText(err instanceof Error ? err.message : String(err)),
       threadId,
       // Reach the asker on a FAILURE too. The success path stamps this and the
       // crash path did not, so the one outcome you most need to be told about was

@@ -462,7 +462,13 @@ describe('THING in a thread', () => {
 
     const { messages } = await readMessages(root, 'general');
     expect(messages[1]).toMatchObject({ kind: 'system' });
-    expect(messages[1]!.text).toContain('budget exhausted');
+    // The point of this test is that the failure is REPORTED, not swallowed. It
+    // used to assert the raw provider string appeared verbatim; a channel is
+    // shared and permanent, so the raw text now goes to the server log and the
+    // member gets something they can act on. The failure is still announced, and
+    // still says which kind of failure it was.
+    expect(messages[1]!.text.toLowerCase()).toContain('could not finish');
+    expect(messages[1]!.text.toLowerCase()).toContain('usage limit');
   });
 
   describe('the app card', () => {
@@ -591,6 +597,50 @@ describe('THING in a thread', () => {
     expect(seen[1]).toBe(false);
   });
 
+  it('never shows a member a sandbox-internal error string', async () => {
+    // A live run posted "THING could not answer: Lifetime not alive" — QuickJS's
+    // wording for an operation on a disposed handle — into a newsroom's channel,
+    // where it was read by colleagues who had not asked and quoted by a push.
+    //
+    // The rule is not "hide errors": the member is still told it failed and
+    // whether retrying is worth anything. What they cannot use is the internals.
+    const manager = {
+      runHeadlessThreaded: vi.fn(async () => {
+        throw new Error('Lifetime not alive');
+      }),
+    } as any;
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing where are we' }),
+      mkRes(), { channelId: 'general' }, {} as any,
+    );
+    await settle();
+
+    const { messages } = await readMessages(root, 'general');
+    const failure = messages[1]!;
+    expect(failure.kind).toBe('system');
+    expect(failure.text).not.toContain('Lifetime not alive');
+    // It still says it failed, and what to do.
+    expect(failure.text.toLowerCase()).toContain('could not finish');
+    expect(failure.text.toLowerCase()).toContain('ask again');
+  });
+
+  it('maps a failure the pod RETURNS, not only one it throws', async () => {
+    const manager = {
+      runHeadlessThreaded: vi.fn(async (opts: any) => ({
+        ok: false, error: 'ETIMEDOUT: socket hang up', sessionId: opts.sessionId,
+      })),
+    } as any;
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing hi' }),
+      mkRes(), { channelId: 'general' }, {} as any,
+    );
+    await settle();
+
+    const { messages } = await readMessages(root, 'general');
+    expect(messages[1]!.text).not.toContain('ETIMEDOUT');
+    expect(messages[1]!.text.toLowerCase()).toContain('could not finish');
+  });
+
   it('a CRASHED turn still reaches the person who asked', async () => {
     // The success path stamps `mentions: [asker]` and calls `deliver` (badge +
     // push). The crash path did neither, so the one outcome you most need to be
@@ -616,7 +666,10 @@ describe('THING in a thread', () => {
     const asker = messages[0]!.userId;
     expect(asker, 'the test caller must have an identity for this to mean anything').toBeTruthy();
     expect(messages[1]).toMatchObject({ kind: 'system' });
-    expect(messages[1]!.text).toContain('the pod fell over');
+    // The subject here is the ADDRESSING, not the wording — the raw throw text is
+    // deliberately no longer shown in a channel (see the sandbox-internal test).
+    expect(messages[1]!.text).not.toContain('the pod fell over');
+    expect(messages[1]!.text.toLowerCase()).toContain('could not finish');
     expect(messages[1]!.mentions, 'a crash must be addressed to whoever asked').toContain(asker);
   });
 
