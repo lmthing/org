@@ -152,6 +152,9 @@ export interface BuildSessionArgs {
     maxWallClockMs?: number;
   };
   renderHost: WebRenderHost;
+  /** Withhold every WRITE capability for this session, whatever the agent holds —
+   *  see `SessionOpts.readOnly`. Set for a team-channel turn started by a viewer. */
+  readOnly?: boolean;
   /** Optional NDJSON trace file (headless runs may want a trace on disk). */
   traceFile?: string;
   /** Override the always-loaded system space dirs (absolute paths). */
@@ -1965,6 +1968,8 @@ export class SessionManager {
     /** Per-turn team resolver — merged onto the project's `appGlobals` below.
      *  See {@link runHeadlessThreaded}'s `team`. */
     team?: TeamResolver;
+    /** Withhold every write grant for this session — see `BuildSessionArgs.readOnly`. */
+    readOnly?: boolean;
   }): Promise<BuildSessionArgs> {
     const root = this.lmthingRoot;
     if (!root) {
@@ -1980,6 +1985,7 @@ export class SessionManager {
         traceFile: opts.traceFile,
         renderHost: opts.renderHost ?? new WebRenderHost(),
         ...(opts.visibleToUser ? { visibleToUser: true } : {}),
+        ...(opts.readOnly ? { readOnly: true } : {}),
       };
     }
 
@@ -2013,6 +2019,7 @@ export class SessionManager {
       traceFile: opts.traceFile,
       renderHost: opts.renderHost ?? new WebRenderHost(),
       ...(opts.visibleToUser ? { visibleToUser: true } : {}),
+        ...(opts.readOnly ? { readOnly: true } : {}),
       systemSpaceDirs,
       preloadSpaceDirs,
       projectSpacesDir,
@@ -2103,6 +2110,10 @@ export class SessionManager {
      *  inbound-webhook turn is absent from `GET /api/session-ledger` — the team
      *  can spend real tokens on work it can never see accounted for. */
     origin?: { source?: string };
+    /** The caller may talk to the agent but may not change anything — a team
+     *  `viewer`. Withholds every write grant for this turn, so a write is a
+     *  typecheck error rather than a rule the agent might not follow. */
+    readOnly?: boolean;
   }): Promise<HeadlessRunResult> {
     return this.runExclusive(opts.sessionId, async () => {
       let session: Session | undefined;
@@ -2135,8 +2146,10 @@ export class SessionManager {
           agentSlug: opts.agentSlug,
           budget: opts.budget,
           ...(opts.visibleToUser ? { visibleToUser: true } : {}),
+        ...(opts.readOnly ? { readOnly: true } : {}),
           ...(opts.renderHost ? { renderHost: opts.renderHost } : {}),
           ...(opts.team ? { team: opts.team } : {}),
+          ...(opts.readOnly ? { readOnly: true } : {}),
         });
         session = this.buildSessionFn(args);
 

@@ -30,7 +30,7 @@ import { getAgentComponents } from '../spaces/components.js';
 import { loadSnapshot } from './snapshot.js';
 import { Tracer } from '../sandbox/trace.js';
 import type { TraceScope } from '../sandbox/trace.js';
-import { sessionCapabilities } from '../exec/capability.js';
+import { intersectAppCaps, sessionCapabilities } from '../exec/capability.js';
 import type { AppCapabilities } from '../spaces/capabilities.js';
 import { createChildVM, buildAmbientDts } from '../exec/bootstrap.js';
 import type { DbTableSchema } from '../typecheck/library-dts.js';
@@ -385,7 +385,7 @@ export class Session {
     const overlay = buildOverlay(agentFunctions, agentComponents, (name, message) => {
       this.opts.renderHost.log(`[warn] ${name}: ${message}`);
     });
-    this.appCapabilities = agent.capabilities ?? {};
+    this.appCapabilities = intersectAppCaps(agent.capabilities ?? {}, this.opts.readOnly !== true);
     const sessionCaps = sessionCapabilities(this.delegatePolicy.mode !== 'none', this.appCapabilities);
     // Bake the ambient DTS through a captured closure so continue() can re-bake it with a fresh
     // schema (targeted freshness) without re-deriving overlay/caps.
@@ -534,7 +534,7 @@ export class Session {
     const overlay = buildOverlay(agentFunctions, agentComponents, (name, message) => {
       this.opts.renderHost.log(`[warn] ${name}: ${message}`);
     });
-    this.appCapabilities = agent.capabilities ?? {};
+    this.appCapabilities = intersectAppCaps(agent.capabilities ?? {}, this.opts.readOnly !== true);
     const ambientDts = buildAmbientDts({ capabilities: sessionCapabilities(delegatePolicy.mode !== 'none', this.appCapabilities), overlay, appDts: this.opts.appDts, projectRoot: !!this.opts.projectRoot, dbSchema: this.opts.resolveDbSchema?.() ?? this.opts.dbSchema });
     return { agentSlug: resolvedSlug, systemBlock, ambientDts };
   }
@@ -609,7 +609,7 @@ export class Session {
     const overlay = buildOverlay(agentFunctions, agentComponents, (name, message2) => {
       this.opts.renderHost.log(`[warn] ${name}: ${message2}`);
     });
-    this.appCapabilities = agent.capabilities ?? {};
+    this.appCapabilities = intersectAppCaps(agent.capabilities ?? {}, this.opts.readOnly !== true);
     const sessionCaps = sessionCapabilities(this.delegatePolicy.mode !== 'none', this.appCapabilities);
     // Mirror start()'s bake so continue() after a resume() has a live re-bake closure + the
     // current schema/revision (targeted freshness). resume() also sets this.systemBlock/

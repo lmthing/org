@@ -45,6 +45,23 @@ export interface SessionOpts {
   modelAlias: string;
   renderHost: RenderHost;
   maxRetries?: number;
+  /**
+   * Run this session with WRITE capabilities withheld, whatever the agent was
+   * granted — the same intersection a read-only fork role gets
+   * (`exec/capability.ts#intersectAppCaps`).
+   *
+   * The case this exists for: on a team pod a turn is started BY somebody, and a
+   * `viewer` may talk to the agent but may not change the workspace. The caller's
+   * role arrives as data (`teamContext().caller.role`), and data is advice — the
+   * agent held `db:write` regardless and a viewer's request was refused only when
+   * the agent chose to refuse it. Live, one simply was not: the turn read the
+   * role, ignored it, and settled `done`.
+   *
+   * Withholding the grants makes it structural instead: not granted means not
+   * injected AND absent from the DTS, so a write becomes a typecheck error the
+   * model sees and works around, rather than a rule it may or may not follow.
+   */
+  readOnly?: boolean;
   maxConcurrentForks?: number;
   /** Inactivity watchdog for the model stream (ms). A turn whose stream emits no token
    *  for this long is retried as a transient failure. Default 60000. */
