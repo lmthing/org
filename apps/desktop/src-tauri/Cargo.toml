@@ -66,3 +66,10 @@ custom-protocol = ["tauri/custom-protocol"]
 # `kill(pid, 0)` — asks whether a pid exists without signalling it. Used to tell a Chromium
 # SingletonLock left by a crashed browser from one that is doing its job.
 libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Pinned to the version Tauri itself uses (`Window::gtk_window` returns `gtk::ApplicationWindow`,
+# so this is the same crate, not a second one). Needed because Tauri's `add_child` discards the
+# position it is given on Linux — see `gtk_pane.rs` for the exact path — and the widgets have to be
+# rearranged by hand for the pane to sit anywhere but full width.
+gtk = "0.18"

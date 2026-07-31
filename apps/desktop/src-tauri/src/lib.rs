@@ -9,6 +9,8 @@
 //! for safety, which is the point: the surface that has to be right is one function.
 
 mod browser_view;
+#[cfg(target_os = "linux")]
+mod gtk_pane;
 mod commands;
 mod config;
 mod fsops;
@@ -172,6 +174,29 @@ pub fn run() {
             #[cfg(debug_assertions)]
             if std::env::var("LMTHING_DEVTOOLS").is_ok() {
                 window.open_devtools();
+            }
+
+            // Open the browser pane on launch, for developing the pane itself. The layout only
+            // exists once a person has asked for it, which makes every change to it a manual
+            // click away — and on a platform where the pane has to be positioned by hand, that
+            // is the loop you are in all day.
+            if std::env::var("LMTHING_OPEN_BROWSER").is_ok() {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    // Retried until it takes. The event is fire-and-forget, so one emitted before
+                    // the page has mounted its listener is simply lost — and how long the dev
+                    // server takes to boot varies enough that a fixed delay works most times and
+                    // not all, which is the worst kind of flake to debug.
+                    for _ in 0..30 {
+                        std::thread::sleep(std::time::Duration::from_secs(1));
+                        if handle.get_webview(crate::browser_view::BROWSER_LABEL).is_some() {
+                            break;
+                        }
+                        if let Some(w) = handle.get_webview_window("main") {
+                            let _ = w.emit("lmthing://toggle-browser", ());
+                        }
+                    }
+                });
             }
 
             Ok(())

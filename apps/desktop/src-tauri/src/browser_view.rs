@@ -89,11 +89,13 @@ pub fn open(app: &AppHandle, url: &str, rect: PaneRect) -> Result<ViewState, Str
         // Without this the pane cannot be typed into on some platforms: a webview that never takes
         // focus receives no key events, and the failure looks like a broken keyboard rather than a
         // focus problem.
-        .focused(true)
-        // A page that navigates the pane somewhere is doing its job. The APP's window has the
-        // opposite rule (`navigation::allow_navigation`), and conflating the two would either trap
-        // the person on one page or let a link replace the whole application.
-        .auto_resize();
+        .focused(true);
+
+    // NO `auto_resize()`. It sounds like exactly what a pane wants and is the opposite: it ties the
+    // view to the WINDOW's size rather than to the rectangle it was given, so the page renders full
+    // width, at the wrong offset, spilling past the bottom edge — over the app and over whatever is
+    // behind it. The pane's geometry is the SPLIT's, which Rust cannot know: the divider is
+    // draggable and the toolbar is laid out by CSS. The renderer measures and calls `set_bounds`.
 
     window
         .add_child(
@@ -102,16 +104,42 @@ pub fn open(app: &AppHandle, url: &str, rect: PaneRect) -> Result<ViewState, Str
             LogicalSize::new(rect.width.max(1.0), rect.height.max(1.0)),
         )
         .map_err(|e| format!("could not open the browser pane: {e}"))?;
+    // Linux needs its widgets rearranged before ANY position will stick. Done here rather than in
+    // `set_bounds` so it happens exactly once, on the one call that just created the view.
+    #[cfg(target_os = "linux")]
+    crate::gtk_pane::install(app)?;
+
+    // Set again, straight away. `add_child` takes a position and size and platforms do not all
+    // honour them identically at creation time; going through the same path the resize observer
+    // uses means there is ONE definition of where the pane is rather than two that can disagree.
+    set_bounds(app, rect)?;
     state(app)
 }
 
 /// Move and resize the pane. Called on every divider drag and window resize.
+///
+/// One rectangle, one meaning, two mechanisms. On Windows and macOS a child webview is a real child
+/// view and Tauri positions it; on Linux it is a `GtkBox` child whose position Tauri discards, so
+/// the widgets were rearranged into an overlay at creation and the placement is by margin. The
+/// LAYOUT is identical on all three — the renderer measures the same pane and sends the same
+/// numbers — which is the point: a browser that sits somewhere different depending on the OS is a
+/// different product on each.
 pub fn set_bounds(app: &AppHandle, rect: PaneRect) -> Result<(), String> {
-    let Some(view) = find(app) else { return Ok(()) };
-    view.set_position(LogicalPosition::new(rect.x, rect.y))
-        .map_err(|e| e.to_string())?;
-    view.set_size(LogicalSize::new(rect.width.max(1.0), rect.height.max(1.0)))
-        .map_err(|e| e.to_string())
+    #[cfg(target_os = "linux")]
+    {
+        if find(app).is_none() {
+            return Ok(());
+        }
+        return crate::gtk_pane::place(app, rect);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let Some(view) = find(app) else { return Ok(()) };
+        view.set_position(LogicalPosition::new(rect.x, rect.y))
+            .map_err(|e| e.to_string())?;
+        view.set_size(LogicalSize::new(rect.width.max(1.0), rect.height.max(1.0)))
+            .map_err(|e| e.to_string())
+    }
 }
 
 /// Hide without destroying.

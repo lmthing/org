@@ -85,6 +85,14 @@ export function WebviewPane({ visible }: { visible: boolean }) {
       try {
         await place(opened.current ? address || HOME : HOME, rect)
         if (!cancelled) opened.current = true
+        // Measure again once the browser has laid out. The first measurement happens in the same
+        // frame the split opens, when the divider has not settled and the toolbar has not been
+        // sized — so the rectangle is real but already stale, and the page lands where the pane
+        // was rather than where it is.
+        requestAnimationFrame(() => {
+          const settled = measure()
+          if (settled && !cancelled) void invoke('browserview_bounds', { rect: settled }).catch(() => {})
+        })
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       }
