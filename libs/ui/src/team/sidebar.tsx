@@ -622,7 +622,46 @@ function DirectMessages({
     return map
   }, [dms, meId])
 
-  const others = members.filter((m) => m.userId !== meId)
+  /**
+   * Named-channel rows are already ordered by whoever set up the sidebar's categories, and carry
+   * bold/mention treatment on top of that ({@link MentionBadge}) — this list had neither: whatever
+   * order `directory()` happened to return members in, which is not a fact about the team, just an
+   * accident of how the roster file was walked.
+   *
+   * Ranked instead, most in need of attention first — mentions, then anything unread, then an
+   * existing (read) conversation, then someone never messaged — with an alphabetical tiebreak
+   * inside each tier so the order does not jitter between renders for two people in the same tier.
+   *
+   * Deliberately NOT "most recently active": the pod hands the client a boolean `hasUnread` and an
+   * exact mention count, never a timestamp (`team-reads.ts#ChannelUnread`) — the same reason a
+   * previous pass declined to draw an unread DIVIDER (`design/team-chat-ux-progress.md`). A
+   * recency guess built from whichever messages happened to arrive over THIS socket since mount
+   * would be wrong for anyone who was not watching the whole time, and unstable to boot — the kind
+   * of bug that only shows up as "why did Bo jump to the top, nobody said anything".
+   */
+  const others = useMemo(() => {
+    const rank = (userId: string): number => {
+      const channel = channelByPartner.get(userId)
+      if (!channel) return 3
+      const badge = unread.get(channel.id)
+      if (badge?.mentions) return 0
+      if (badge?.hasUnread) return 1
+      return 2
+    }
+    return members
+      .filter((m) => m.userId !== meId)
+      .sort((a, b) => {
+        const ra = rank(a.userId)
+        const rb = rank(b.userId)
+        if (ra !== rb) return ra - rb
+        if (ra === 0) {
+          const ma = unread.get(channelByPartner.get(a.userId)!.id)?.mentions ?? 0
+          const mb = unread.get(channelByPartner.get(b.userId)!.id)?.mentions ?? 0
+          if (ma !== mb) return mb - ma
+        }
+        return memberLabel(a, a.userId).localeCompare(memberLabel(b, b.userId))
+      })
+  }, [members, meId, channelByPartner, unread])
 
   return (
     <Prim.Col marginTop="$1">

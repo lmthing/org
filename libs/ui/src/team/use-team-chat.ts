@@ -64,6 +64,20 @@ export interface TeamChat {
   /** True while the active channel's history is in flight — `messages` is stale (the previous
    *  channel's, or empty) and should not be read as "this channel has nothing in it yet". */
   loading: boolean
+  /** Whether the pod has more history before the oldest message currently loaded — the server's
+   *  own `hasMore`, carried through rather than guessed from a page length. */
+  hasMore: boolean
+  /** True while a `loadOlder` fetch is in flight, so the affordance can say so and not be tapped
+   *  twice into two overlapping requests. */
+  loadingOlder: boolean
+  /**
+   * Fetch the page immediately before the oldest message currently loaded, and prepend it.
+   *
+   * A no-op with nothing to page from (no active channel, no messages yet) or while a fetch is
+   * already running. Safe to call again after the channel has changed mid-flight: the result is
+   * discarded rather than spliced into whatever is on screen by then.
+   */
+  loadOlder: () => Promise<void>
   /** The channel socket's health. `reconnecting` is distinct from the initial `connecting`: it
    *  means the surface WAS live and dropped, which is the case worth telling a member about. */
   connection: ConnectionState
@@ -108,6 +122,8 @@ export function useTeamChat(client: TeamClient, activeId: string | null): TeamCh
   // boolean flip in the effect would still leave one render where `activeId` has already moved
   // on but the flag has not caught up yet, which is exactly the flash this exists to remove.
   const [historyChannelId, setHistoryChannelId] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [connection, setConnection] = useState<ConnectionState>('connecting')
   const [thinking, setThinking] = useState<Set<string>>(new Set())
@@ -176,11 +192,13 @@ export function useTeamChat(client: TeamClient, activeId: string | null): TeamCh
     if (!activeId) return
     let cancelled = false
     setMessages([])
+    setHasMore(false)
     void (async () => {
       try {
-        const { messages: history } = await client.messages(activeId)
+        const { messages: history, hasMore: more } = await client.messages(activeId)
         if (cancelled) return
         setMessages(history)
+        setHasMore(more)
         setUnread((prev) => {
           if (!prev.get(activeId)?.hasUnread && !prev.get(activeId)?.mentions) return prev
           const next = new Map(prev)
@@ -395,6 +413,35 @@ export function useTeamChat(client: TeamClient, activeId: string | null): TeamCh
     [activeId, client, fail],
   )
 
+  const loadOlder = useCallback(async () => {
+    const forId = activeIdRef.current
+    if (!forId || loadingOlder) return
+    // The oldest message CURRENTLY LOADED for this channel — the pod pages backwards from an id
+    // already on screen, not from a timestamp the client would have to reconstruct. `messages`
+    // can hold stray arrivals for OTHER channels too (the socket handler appends regardless of
+    // which channel is active), so this filters rather than reading `messages[0]` directly.
+    const oldest = messages.find((m) => m.channelId === forId)?.id
+    if (!oldest) return
+    setLoadingOlder(true)
+    try {
+      const { messages: older, hasMore: more } = await client.messages(forId, { before: oldest })
+      // The channel on screen moved on while this was in flight — the channel-switch effect has
+      // already reset `messages`/`hasMore` for wherever the member is now, and splicing a stale
+      // page in on top of that would show them someone else's history.
+      if (activeIdRef.current !== forId) return
+      setMessages((prev) => {
+        const known = new Set(prev.map((m) => m.id))
+        const fresh = older.filter((m) => !known.has(m.id))
+        return [...fresh, ...prev]
+      })
+      setHasMore(more)
+    } catch (err) {
+      if (activeIdRef.current === forId) fail(err)
+    } finally {
+      setLoadingOlder(false)
+    }
+  }, [messages, client, fail, loadingOlder])
+
   const createChannel = useCallback(
     async (name: string, categoryId?: string) => {
       try {
@@ -523,6 +570,9 @@ export function useTeamChat(client: TeamClient, activeId: string | null): TeamCh
     messages: visible,
     // `null` activeId means there is nothing to load rather than something in flight.
     loading: activeId !== null && historyChannelId !== activeId,
+    hasMore,
+    loadingOlder,
+    loadOlder,
     connection,
     error,
     thinking,

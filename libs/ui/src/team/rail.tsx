@@ -13,6 +13,7 @@ import * as Prim from '../elements/primitives/index'
 import { Button } from '../elements/forms/button'
 import { Caption } from '../elements/typography/caption'
 import { Separator } from '../elements/content/separator'
+import { onDismiss } from '../platform/keyboard'
 import {
   Dropdown,
   DropdownContent,
@@ -209,6 +210,12 @@ export function RailPane({
   onWidthChange: (width: number) => void
 }) {
   const dragging = useRef(false)
+
+  // Escape on web, the Android back gesture on native — same seam `Drawer`/`Dialog` already close
+  // on. No `open` guard needed the way theirs have: this component only exists while `rail` is
+  // non-null (`channels-view.tsx` renders it conditionally and it unmounts on close), so being
+  // mounted at all IS "open" here.
+  useEffect(() => onDismiss(onClose), [onClose])
 
   const onMove = useCallback(
     (e: MouseEvent) => {

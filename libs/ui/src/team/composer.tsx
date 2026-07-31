@@ -218,6 +218,13 @@ export function Composer({
       }
       if (e.key === 'Escape') {
         e.preventDefault()
+        // The rail (`rail.tsx#RailPane`) and the compact drawer (`channels-view.tsx`) both close
+        // on Escape now, via the same `document`-level seam `Drawer`/`Dialog` already used
+        // (`platform/keyboard#onDismiss`). Without `stopPropagation` this keydown reaches that
+        // listener too — so dismissing the picker while replying in an open thread would ALSO
+        // throw the whole rail closed, one keystroke after the member only meant to close the
+        // picker.
+        e.stopPropagation()
         setMention(null)
         return
       }

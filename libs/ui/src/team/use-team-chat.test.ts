@@ -172,6 +172,61 @@ describe('useTeamChat — send (item 4: optimistic append + socket-echo dedupe)'
     expect(result.current.messages).toHaveLength(1)
   })
 
+  it('a socket echo that arrives BEFORE the REST response settles is not duplicated, and lands in order', async () => {
+    // Round 2 check (item 5): is there a window where the optimistic send and the socket's own
+    // broadcast of it can both land? The previous test proved the REST-then-socket direction; the
+    // realistic race is usually the other way round — the pod appends to the log and fans out to
+    // every open socket, including the sender's OWN, before the HTTP response for the POST that
+    // triggered it necessarily returns. This pins that direction too.
+    const posted = deferred<{ message: ChannelMessage }>()
+    const client = makeClient({
+      messages: vi.fn().mockResolvedValue({
+        messages: [
+          { id: 'm0', ts: new Date().toISOString(), channelId: 'general', kind: 'user', text: 'already here' },
+        ],
+        hasMore: false,
+      }),
+      postMessage: vi.fn(() => posted.promise),
+    })
+    const { result } = renderHook(() => useTeamChat(client, 'general'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.messages.map((m) => m.id)).toEqual(['m0'])
+
+    const sent: ChannelMessage = {
+      id: 'srv-3',
+      ts: new Date().toISOString(),
+      channelId: 'general',
+      kind: 'user',
+      text: 'racing the REST response',
+      userId: 'me',
+    }
+
+    // Fire the send but do not await it — its REST promise is still pending.
+    let sendDone!: Promise<void>
+    act(() => {
+      sendDone = result.current.send('racing the REST response')
+    })
+    // Let the socket connect (same async gap the other tests wait out).
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!
+    act(() => {
+      ws.onmessage?.({ data: JSON.stringify({ type: 'message', message: sent }) })
+    })
+    expect(result.current.messages.map((m) => m.id)).toEqual(['m0', 'srv-3'])
+
+    // The REST response for the SAME send now resolves — it must be a no-op, not a second copy
+    // or a reordering.
+    await act(async () => {
+      posted.resolve({ message: sent })
+      await sendDone
+    })
+    expect(result.current.messages.map((m) => m.id)).toEqual(['m0', 'srv-3'])
+  })
+
   it('surfaces a failed send as a visible error and still rethrows so the composer restores the draft', async () => {
     const client = makeClient({ postMessage: vi.fn().mockRejectedValue(new Error('offline')) })
     const { result } = renderHook(() => useTeamChat(client, 'general'))
@@ -194,6 +249,91 @@ describe('useTeamChat — send (item 4: optimistic append + socket-echo dedupe)'
     expect((caught as Error).message).toBe('offline')
     expect(result.current.error).toBe('offline')
     // Not appended optimistically — there is nothing to dedupe against, and the message never sent.
+    expect(result.current.messages).toHaveLength(0)
+  })
+})
+
+describe('useTeamChat — loadOlder (round 2, item 1: older history was unreachable)', () => {
+  it('carries the server hasMore through, unfetched — the pod already returns it and it was being discarded', async () => {
+    const client = makeClient({
+      messages: vi.fn().mockResolvedValue({
+        messages: [{ id: 'm9', ts: new Date().toISOString(), channelId: 'general', kind: 'user', text: 'newest' }],
+        hasMore: true,
+      }),
+    })
+    const { result } = renderHook(() => useTeamChat(client, 'general'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.hasMore).toBe(true)
+  })
+
+  it('pages backwards from the oldest loaded message and prepends the result', async () => {
+    const client = makeClient({
+      messages: vi.fn((channelId: string, opts?: { before?: string }) => {
+        if (!opts?.before) {
+          return Promise.resolve({
+            messages: [{ id: 'm5', ts: '2026-01-01T00:05:00.000Z', channelId, kind: 'user', text: 'five' }],
+            hasMore: true,
+          })
+        }
+        expect(opts.before).toBe('m5')
+        return Promise.resolve({
+          messages: [{ id: 'm4', ts: '2026-01-01T00:04:00.000Z', channelId, kind: 'user', text: 'four' }],
+          hasMore: false,
+        })
+      }),
+    })
+    const { result } = renderHook(() => useTeamChat(client, 'general'))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.messages.map((m) => m.id)).toEqual(['m5'])
+    expect(result.current.hasMore).toBe(true)
+
+    await act(async () => {
+      await result.current.loadOlder()
+    })
+
+    expect(result.current.messages.map((m) => m.id)).toEqual(['m4', 'm5'])
+    expect(result.current.hasMore).toBe(false)
+    expect(result.current.loadingOlder).toBe(false)
+  })
+
+  it('discards an in-flight page if the channel changes before it resolves', async () => {
+    const older = deferred<{ messages: ChannelMessage[]; hasMore: boolean }>()
+    const messagesFor = (channelId: string, opts?: { before?: string }) => {
+      if (channelId === 'general' && opts?.before) return older.promise
+      if (channelId === 'general') {
+        return Promise.resolve({
+          messages: [{ id: 'g1', ts: new Date().toISOString(), channelId, kind: 'user', text: 'g' }],
+          hasMore: true,
+        })
+      }
+      return Promise.resolve({ messages: [], hasMore: false })
+    }
+    const client = makeClient({ messages: vi.fn(messagesFor) })
+
+    const { result, rerender } = renderHook(({ activeId }) => useTeamChat(client, activeId), {
+      initialProps: { activeId: 'general' as string | null },
+    })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.messages.map((m) => m.id)).toEqual(['g1'])
+
+    let loadDone!: Promise<void>
+    act(() => {
+      loadDone = result.current.loadOlder()
+    })
+
+    // The member switches to #random while the older page for #general is still in flight.
+    rerender({ activeId: 'random' })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.messages).toHaveLength(0)
+
+    // The #general page now resolves — it must not splice its messages into #random's view.
+    await act(async () => {
+      older.resolve({
+        messages: [{ id: 'g0', ts: new Date().toISOString(), channelId: 'general', kind: 'user', text: 'older g' }],
+        hasMore: false,
+      })
+      await loadDone
+    })
     expect(result.current.messages).toHaveLength(0)
   })
 })

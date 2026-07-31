@@ -13,10 +13,11 @@
  * turn produces an app, the app is pinned to the channel and opens beside it.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import * as Prim from '../elements/primitives/index'
 import { Button } from '../elements/forms/button'
 import { Caption } from '../elements/typography/caption'
+import { onDismiss } from '../platform/keyboard'
 import { AppIcon, CloseIcon, ThreadIcon } from './icons'
 import { useTeamChat } from './use-team-chat'
 import { useTeamLayout } from './use-layout'
@@ -61,6 +62,68 @@ function useScrollBottom() {
     el?.scrollTo?.({ top: el.scrollHeight, behavior: 'smooth' })
   }, [])
   return { ref, atBottom, onScroll, jumpToBottom }
+}
+
+/**
+ * Preserves visual scroll position across a PREPEND to a `Scroll` region — what "Load earlier
+ * messages" needs, and what it does not get for free.
+ *
+ * Without this, growing the top of the transcript pushes everything below it down by the height
+ * of what was just added, so the reader's eye lands on a random spot mid-page — or, if
+ * `stickToEnd` happened to be true, gets yanked to the live edge they were nowhere near reading.
+ *
+ * `capture()` must run synchronously, BEFORE the state update that will grow the region: it
+ * records the anchor as (how tall the region is right now, how far down the reader is in it). The
+ * restoring `useLayoutEffect` below then fires once the DOM has the new content — and, because
+ * React runs a child's layout effects before its parent's and `Scroll` is a descendant of
+ * whatever calls this hook, it fires AFTER `Scroll`'s own `stickToEnd` layout effect. That
+ * ordering is what lets it win over a stray snap-to-bottom rather than racing it.
+ */
+function useScrollAnchor(ref: React.RefObject<HTMLDivElement | null>, dep: unknown) {
+  const pending = useRef<{ scrollHeight: number; scrollTop: number } | null>(null)
+  const capture = useCallback(() => {
+    const el = ref.current
+    // DOM metrics — absent on a React Native host instance, same guard `useScrollBottom` uses.
+    // Leaving `pending` unset just means the restore below is a no-op: native has no equivalent
+    // "jump" to fight in the first place, since `Scroll`'s native fork re-measures on its own
+    // `onContentSizeChange` rather than a synchronous `scrollTop` write.
+    if (el && typeof el.scrollHeight === 'number') {
+      pending.current = { scrollHeight: el.scrollHeight, scrollTop: el.scrollTop }
+    }
+  }, [ref])
+  useLayoutEffect(() => {
+    const anchor = pending.current
+    if (!anchor) return
+    pending.current = null
+    const el = ref.current
+    if (!el || typeof el.scrollHeight !== 'number') return
+    el.scrollTop = anchor.scrollTop + (el.scrollHeight - anchor.scrollHeight)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dep])
+  return capture
+}
+
+/** "Load earlier messages" — the only way back to history older than the pod's first page. */
+function LoadEarlierButton({ loading, onClick }: { loading: boolean; onClick: () => void }) {
+  return (
+    <Prim.Pressable
+      onClick={onClick}
+      disabled={loading}
+      alignSelf="center"
+      borderRadius="$radius-md"
+      borderWidth={1}
+      borderColor="$border"
+      paddingVertical="$1.5"
+      paddingHorizontal="$3"
+      opacity={loading ? 0.6 : 1}
+      hoverStyle={{ backgroundColor: '$muted' }}
+      pressStyle={{ opacity: 0.7 }}
+    >
+      <Prim.Text fontSize="$xs" fontWeight="$medium" color="$muted-foreground">
+        {loading ? 'Loading…' : 'Load earlier messages'}
+      </Prim.Text>
+    </Prim.Pressable>
+  )
 }
 
 /** The floating "back to the live edge" control `useScrollBottom` exists to drive. */
@@ -227,6 +290,15 @@ export function TeamChannelsView({
     if (!compact) setDrawerOpen(false)
   }, [compact])
 
+  // Escape on web, the Android back gesture on native — same seam `Drawer`/`Dialog` already
+  // dismiss on (`platform/keyboard`). This drawer is hand-rolled rather than one of those (it
+  // slides the whole sidebar over, not a generic panel), so it had never been wired to either —
+  // the only way out was finding and tapping the header's close button.
+  useEffect(() => {
+    if (!compact || !drawerOpen) return
+    return onDismiss(() => setDrawerOpen(false))
+  }, [compact, drawerOpen])
+
   // Reported, not applied: a browser tab title and an app-icon badge are the
   // same fact told to two very different hosts.
   useEffect(() => {
@@ -240,6 +312,11 @@ export function TeamChannelsView({
   )
 
   const transcriptScroll = useScrollBottom()
+  const anchorTranscript = useScrollAnchor(transcriptScroll.ref, chat.messages)
+  const loadOlder = useCallback(() => {
+    anchorTranscript()
+    void chat.loadOlder()
+  }, [anchorTranscript, chat])
 
   const title = channelTitle(channel, chat.directory.members, meId)
   const closeRail = onCloseRail
@@ -377,6 +454,15 @@ export function TeamChannelsView({
                 renders in its place while loading rather than a spinner: one was tried and it
                 only ever flashed for the ~30ms a fetch usually takes, which read as a glitch
                 rather than as feedback. */}
+            {/* At the TOP, above every root message — this is where older history reappears.
+                Hidden while `chat.loading` for the same reason the empty state is: the fetch for
+                a freshly-selected channel has not settled yet, and `hasMore` is still the
+                PREVIOUS channel's until it does (or `false`, right after the switch — see
+                `use-team-chat.ts`'s reset). Showing it then would offer to page a channel that
+                is not even on screen yet. */}
+            {!chat.loading && chat.hasMore ? (
+              <LoadEarlierButton loading={chat.loadingOlder} onClick={loadOlder} />
+            ) : null}
             {!chat.loading && roots.length === 0 ? (
               <ChannelEmptyState
                 title={title}

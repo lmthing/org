@@ -15,7 +15,9 @@ import { Markdown } from '../elements/content/markdown'
 import { Avatar, AvatarFallback } from '../elements/content/avatar'
 import { Button } from '../elements/forms/button'
 import { Caption } from '../elements/typography/caption'
-import { AppIcon, ThreadIcon } from './icons'
+import { clipboard } from '../platform/clipboard'
+import { onDismiss } from '../platform/keyboard'
+import { AppIcon, CopyIcon, ThreadIcon } from './icons'
 import type { ChannelMessage, MemberProfile } from './types'
 import { absoluteTime, initials, memberLabel, relativeTime } from './format'
 
@@ -396,7 +398,7 @@ export function MessageRow({
   if (message.kind === 'system') return <SystemMessage message={message} ctx={ctx} />
   if (!showHeader) {
     return (
-      <MessageActions onReply={onReply}>
+      <MessageActions onReply={onReply} message={message}>
         <Prim.Box paddingLeft={BODY_GUTTER}>
           <MessageBody message={message} ctx={ctx} />
         </Prim.Box>
@@ -405,7 +407,7 @@ export function MessageRow({
   }
   const who = labelFor(ctx.members, message.userId, message.email)
   return (
-    <MessageActions onReply={onReply}>
+    <MessageActions onReply={onReply} message={message}>
       <Prim.Row gap="$3" alignItems="flex-start">
         <SenderAvatar kind={message.kind} senderId={senderKey(message)} label={who} />
         <Prim.Col flex={1} minWidth={0} gap="$1">
@@ -423,45 +425,117 @@ export function MessageRow({
  *
  * The two targets reveal it by the only gesture each one has. Web hovers — `onMouseEnter` is
  * mapped to Tamagui's `onHoverIn` by `nativeSafeProps`, which is inert on a touch device, so the
- * same two props are correct on both and the toolbar simply never appears on a phone. A phone
- * long-presses instead, which is what Slack does there too.
+ * same two props are correct on both and the toolbar simply never appears on a phone unprompted.
+ * A phone long-presses instead — but ONLY where `onReply` is offered: the touch-responder system
+ * is how a device tells "this is interactive" from "this is not", so wiring `onLongPress`
+ * unconditionally would make every message on screen (including ones with nothing to offer)
+ * announce itself as pressable for no reason. That is also a pinned behaviour outside this
+ * package's own tests — `libs/ui/metro/suites/team.tsx#"a long press is what offers the thread
+ * on a touch device"` asserts a message with no `onReply` carries NO touch responder at all.
+ *
+ * The consequence: on native, Copy is reachable only on a message that can also be replied to
+ * (a channel's root messages) — a thread's own messages have no long-press gesture free to give
+ * it. On web there is no such constraint, since hover costs nothing extra; Copy is offered there
+ * on every message this component wraps.
  *
  * The toolbar is absolutely positioned so that revealing it does not reflow the transcript —
  * a hover that moves the text under the pointer is its own bug.
  */
-function MessageActions({ onReply, children }: { onReply?: () => void; children: React.ReactNode }) {
+function MessageActions({
+  onReply,
+  message,
+  children,
+}: {
+  onReply?: () => void
+  /** What Copy puts on the clipboard. */
+  message: ChannelMessage
+  children: React.ReactNode
+}) {
   const [shown, setShown] = React.useState(false)
-  if (!onReply) return <>{children}</>
+
+  // A revealed toolbar must be dismissable, and on a phone NOTHING dismissed it. `onMouseLeave`
+  // below is the web's answer and is inert on touch, so once a long-press revealed this it stayed
+  // on screen for the rest of the session — on every message you had ever pressed. Escape on web,
+  // the Android back gesture on native, via the same seam the rail and the drawer use. Registered
+  // only WHILE shown, so a transient toolbar claims the gesture ahead of the rail underneath it,
+  // which is the right precedence: back closes the topmost thing.
+  React.useEffect(() => {
+    if (!shown) return
+    return onDismiss(() => setShown(false))
+  }, [shown])
+
+  const [copied, setCopied] = React.useState(false)
+  // Copy closes the toolbar — but only AFTER its own "Copied" has been seen. Closing on the click
+  // would take the one piece of feedback the action has away with it, which is worse than leaving
+  // it open. A touch device has no "move the pointer away", so something has to do this.
+  React.useEffect(() => {
+    if (!copied) return
+    const t = setTimeout(() => setShown(false), 1200)
+    return () => clearTimeout(t)
+  }, [copied])
+  const copy = React.useCallback(() => {
+    void clipboard.writeText(message.text).then((ok) => {
+      if (!ok) return
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }, [message.text])
   return (
     <Prim.Box
       position="relative"
       onMouseEnter={() => setShown(true)}
       onMouseLeave={() => setShown(false)}
-      onLongPress={onReply}
-      // A long-press on a phone had no press feedback at all — nothing acknowledged the gesture
-      // between the touch and the toolbar appearing. `rail.tsx` and `sidebar.tsx` both already
-      // dim on press for exactly this reason; matching that here rather than inventing a second
-      // convention for the same kind of feedback.
-      pressStyle={{ opacity: 0.7 }}
+      // Long-press REVEALS the toolbar rather than firing `onReply` directly, so Copy is reachable
+      // by the same gesture on a phone — a second tap on "Reply in thread" inside it is what the
+      // old single-gesture instant-reply used to be. A long-press on a phone had no press feedback
+      // at all before this existed — nothing acknowledged the gesture between the touch and the
+      // toolbar appearing. `rail.tsx` and `sidebar.tsx` both already dim on press for exactly this
+      // reason; matching that here rather than inventing a second convention for the same kind of
+      // feedback.
+      {...(onReply ? { onLongPress: () => setShown(true), pressStyle: { opacity: 0.7 } } : {})}
     >
       {children}
       {shown ? (
         <Prim.Box position="absolute" top={0} right={0}>
-          <Prim.Pressable
-            onClick={onReply}
+          <Prim.Row
+            gap="$0.5"
             backgroundColor="$background"
             borderWidth={1}
             borderColor="$border"
             borderRadius="$radius-md"
-            paddingVertical="$1"
-            paddingHorizontal="$2"
-            hoverStyle={{ backgroundColor: '$muted' }}
+            padding="$0.5"
           >
-            <Prim.Row alignItems="center" gap="$1.5">
-              <ThreadIcon size={12} />
-              <Caption>Reply in thread</Caption>
-            </Prim.Row>
-          </Prim.Pressable>
+            <Prim.Pressable
+              onClick={copy}
+              borderRadius="$radius-sm"
+              paddingVertical="$1"
+              paddingHorizontal="$1.5"
+              hoverStyle={{ backgroundColor: '$muted' }}
+              aria-label="Copy message"
+            >
+              <Prim.Row alignItems="center" gap="$1.5">
+                <CopyIcon size={12} />
+                <Caption>{copied ? 'Copied' : 'Copy'}</Caption>
+              </Prim.Row>
+            </Prim.Pressable>
+            {onReply ? (
+              <Prim.Pressable
+                onClick={() => {
+                  onReply()
+                  setShown(false)
+                }}
+                borderRadius="$radius-sm"
+                paddingVertical="$1"
+                paddingHorizontal="$1.5"
+                hoverStyle={{ backgroundColor: '$muted' }}
+              >
+                <Prim.Row alignItems="center" gap="$1.5">
+                  <ThreadIcon size={12} />
+                  <Caption>Reply in thread</Caption>
+                </Prim.Row>
+              </Prim.Pressable>
+            ) : null}
+          </Prim.Row>
         </Prim.Box>
       ) : null}
     </Prim.Box>
@@ -498,7 +572,7 @@ export function MessageGroupView({
         {group.messages.map((m) => (
           // Per MESSAGE, not per run: pointing at the third line of somebody's paragraph and
           // getting a reply action for their first is how a thread ends up under the wrong thing.
-          <MessageActions key={m.id} onReply={onReply ? () => onReply(m) : undefined}>
+          <MessageActions key={m.id} onReply={onReply ? () => onReply(m) : undefined} message={m}>
             <MessageBody message={m} ctx={ctx} />
           </MessageActions>
         ))}

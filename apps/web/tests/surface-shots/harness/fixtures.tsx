@@ -19,6 +19,7 @@ import * as React from 'react'
 import { TeamChannelsView } from '@lmthing/ui/team'
 import type { TeamClient } from '@lmthing/ui/team'
 import { ChatView } from '@lmthing/ui/chat/app/ChatView'
+import { DevPanel } from '@lmthing/ui/chat/app/DevPanel'
 import { useStore } from '@lmthing/ui/chat/store/store'
 import type { ConvoBlock } from '@lmthing/ui/chat/store/model'
 
@@ -94,14 +95,24 @@ const MESSAGES: Record<string, unknown[]> = {
 }
 
 /** An in-memory `TeamClient`. Every method resolves; none of them touch the network. */
-export function fakeTeamClient(overrides: { messages?: Record<string, unknown[]> } = {}): TeamClient {
+export function fakeTeamClient(
+  overrides: { messages?: Record<string, unknown[]>; hasMore?: boolean } = {},
+): TeamClient {
   const messages = { ...MESSAGES, ...(overrides.messages ?? {}) }
   const ok = <T,>(v: T) => Promise.resolve(v)
   return {
     channels: () => ok({ channels: CHANNELS, categories: CATEGORIES, unread: UNREAD }),
     createChannel: (name: string) => ok({ channel: { ...CHANNELS[0], id: `c-${name}`, name }, created: true }),
     patchChannel: (id: string) => ok({ channel: CHANNELS.find((c) => c.id === id) ?? CHANNELS[0] }),
-    messages: (channelId: string) => ok({ messages: (messages[channelId] ?? []) as never, hasMore: false }),
+    // `before` is the pod's real paging cursor; answering it with an older page is what makes the
+    // "Load earlier messages" affordance appear AND do something, rather than just render.
+    messages: (channelId: string, opts?: { limit?: number; before?: string }) =>
+      ok({
+        messages: (opts?.before
+          ? OLDER
+          : (messages[channelId] ?? [])) as never,
+        hasMore: opts?.before ? false : overrides.hasMore === true,
+      }),
     postMessage: (channelId: string, text: string) =>
       ok({ message: { id: `new-${text.length}`, ts: at(0), channelId, kind: 'user', text, userId: ME } as never }),
     markRead: () => ok({ ok: true as const }),
@@ -193,6 +204,79 @@ function ChatEmpty() {
   return <ChatView />
 }
 
+/**
+ * `DevPanel` (execution tree + inspector + replay bar) — the one part of the chat surface this
+ * gate had never photographed. Round 2 of the `--lm-*` → shared-token migration finished it off
+ * (`app/tree.tsx`, `app/inspector.tsx`, `app/replay.tsx`, `app/DevPanel.tsx` all used the bridged
+ * alias before; see `org/docs/design-system/README.md`), and every color in it changed as a
+ * result — a mechanical `var(--lm-x)` → `var(--x)` rename, but this is the only gate that can
+ * actually SEE whether the rename kept every token resolving to a real colour instead of an
+ * absent one. Seeded with one node of each interesting status (done/running/error) and one
+ * retried statement, so the tree's status/kind colours and the inspector's error/result/retry
+ * colours all paint. `mode: 'replay'` so the playback bar (the fourth migrated file) shows too.
+ */
+function seedDevPanel() {
+  useStore.setState({
+    mode: 'replay',
+    connection: 'closed',
+    selectedNodeId: 'n2',
+    tab: 'statements',
+    expanded: new Set(['n1']),
+    replay: { events: [], cursor: 3, playing: false, speed: 1 },
+    model: {
+      rootId: 'n1',
+      rawEvents: [],
+      lastSeq: 0,
+      blocks: [],
+      nodes: {
+        n1: {
+          id: 'n1', parentId: null, kind: 'session', label: 'THING', status: 'done',
+          childIds: ['n2', 'n3'], depTaskIds: [], llmCalls: [], statements: [], yields: [],
+          variables: {}, eventSeqs: [], durationMs: 4200,
+        },
+        n2: {
+          id: 'n2', parentId: 'n1', kind: 'fork', label: 'audit team surface', status: 'error',
+          childIds: [], depTaskIds: [], eventSeqs: [], durationMs: 1800,
+          error: 'typecheck: Property \'threadId\' does not exist on type \'Channel\'.',
+          llmCalls: [{
+            ts: NOW - 4000, model: 'gpt-5', system: 'You are THING.',
+            messages: [{ role: 'user', content: 'Audit the team surface for regressions.' }],
+            responses: [{ attempt: 1, ts: NOW - 3800, text: 'Checking thread locking…' }],
+          }],
+          statements: [{
+            ts: NOW - 3900, code: 'const t = channel.threadId;',
+            errors: [{ phase: 'typecheck', message: "Property 'threadId' does not exist on type 'Channel'.", attempt: 1 }],
+          }],
+          yields: [
+            { ts: NOW - 3700, kind: 'db.query', args: { table: 'channels' }, resolved: true, value: { rows: 3 } },
+            { ts: NOW - 3600, kind: 'ask', args: { prompt: 'confirm?' }, resolved: false },
+          ],
+          variables: { channel: '{ id: "c-general" }' },
+        },
+        n3: {
+          id: 'n3', parentId: 'n1', kind: 'delegate', label: 'write the fix', status: 'running',
+          childIds: [], depTaskIds: [], llmCalls: [], statements: [], yields: [],
+          variables: {}, eventSeqs: [], startTs: NOW - 1000,
+        },
+      },
+    } as never,
+  } as never)
+}
+
+function ChatDevPanel() {
+  const [ready, setReady] = React.useState(false)
+  React.useEffect(() => {
+    seedDevPanel()
+    setReady(true)
+  }, [])
+  if (!ready) return null
+  return (
+    <div style={{ height: '100vh', display: 'flex' }}>
+      <DevPanel onClose={() => {}} height="100%" />
+    </div>
+  )
+}
+
 // ─── registry ────────────────────────────────────────────────────────────────
 
 // A conversation taller than any viewport. Its job is to prove the bottom-anchoring in
@@ -211,6 +295,19 @@ const LONG: unknown[] = [
     email: i % 2 ? 'bo@lmthing.org' : 'kim@lmthing.org',
   })),
 ]
+
+// One page further back, returned when the view asks with a `before` cursor. Its first line says
+// so, because the only way to know paging WORKED — rather than merely offering a button — is to
+// see older content arrive above what was already there.
+const OLDER: unknown[] = Array.from({ length: 8 }, (_, i) => ({
+  id: `old${i}`,
+  ts: at(2000 - i * 10),
+  channelId: 'c-general',
+  kind: 'user' as const,
+  text: i === 0 ? 'OLDER PAGE — this only exists behind the paging cursor.' : `Older message ${i}.`,
+  userId: i % 2 ? 'u-ana' : 'u-kim',
+  email: i % 2 ? 'ana@lmthing.org' : 'kim@lmthing.org',
+}))
 
 export const FIXTURES: Record<string, () => React.ReactElement> = {
   team: () => <Team />,
@@ -233,8 +330,29 @@ export const FIXTURES: Record<string, () => React.ReactElement> = {
   },
   'team-thread': () => <Team rail={{ kind: 'thread', threadId: 'm4' }} />,
   'team-dm': () => <Team channel="c-dm-ana" />,
+  // A channel the pod says has MORE history behind it. Exists to photograph the "Load earlier
+  // messages" affordance, which is invisible in every other fixture because they all report
+  // `hasMore: false` — a feature nobody can see is a feature nobody can review.
+  'team-paging': () => {
+    const client = React.useMemo(() => fakeTeamClient({ hasMore: true }), [])
+    return (
+      <TeamChannelsView
+        client={client}
+        isEditor
+        activeChannelId="c-general"
+        rail={null}
+        onSelectChannel={() => {}}
+        onOpenThread={() => {}}
+        onOpenApp={() => {}}
+        onCloseRail={() => {}}
+        appUrl={(id) => `/app/${id}`}
+        team={{ id: 't1', name: 'lmthing' }}
+      />
+    )
+  },
   chat: () => <Chat />,
   'chat-empty': () => <ChatEmpty />,
+  'chat-devpanel': () => <ChatDevPanel />,
 }
 
 export const FIXTURE_NAMES = Object.keys(FIXTURES)

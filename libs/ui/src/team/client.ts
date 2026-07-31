@@ -37,7 +37,15 @@ export interface TeamClient {
     channelId: string,
     patch: { name?: string; categoryId?: string | null; apps?: string[] },
   ): Promise<{ channel: Channel }>
-  messages(channelId: string): Promise<{ messages: ChannelMessage[]; hasMore: boolean }>
+  /**
+   * History, newest last. With no `opts` this is the live tail (the pod's own default page size).
+   * `before` pages backwards from a message id already on screen — the pod resolves it against the
+   * log itself, so the client never has to reconstruct a cursor from a timestamp.
+   */
+  messages(
+    channelId: string,
+    opts?: { limit?: number; before?: string },
+  ): Promise<{ messages: ChannelMessage[]; hasMore: boolean }>
   postMessage(channelId: string, text: string, threadId?: string): Promise<{ message: ChannelMessage }>
   markRead(channelId: string): Promise<{ ok: true }>
   openDm(userId: string): Promise<{ channel: Channel; created: boolean }>
@@ -85,7 +93,13 @@ export function createTeamClient(transport: TeamTransport): TeamClient {
       call('/channels', { method: 'POST', ...body({ name, ...(categoryId ? { categoryId } : {}) }) }),
     patchChannel: (channelId, patch) =>
       call(`/channels/${channelId}`, { method: 'PATCH', ...body(patch) }),
-    messages: (channelId) => call(`/channels/${channelId}/messages`),
+    messages: (channelId, opts) => {
+      const params = new URLSearchParams()
+      if (opts?.limit) params.set('limit', String(opts.limit))
+      if (opts?.before) params.set('before', opts.before)
+      const qs = params.toString()
+      return call(`/channels/${channelId}/messages${qs ? `?${qs}` : ''}`)
+    },
     postMessage: (channelId, text, threadId) =>
       call(`/channels/${channelId}/messages`, {
         method: 'POST',
