@@ -1,5 +1,5 @@
 ---
-description: How the browser connects to Lightpanda, the LIGHTPANDA_MCP_URL endpoint, and what to do when a call reports the browser is unreachable.
+description: LOAD WHEN a call comes back with an unreachable/HTTP-level error and you have to say what is actually wrong with the browser backend, rather than reporting the page.
 ---
 
 # Connecting to Lightpanda

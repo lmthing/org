@@ -1,5 +1,5 @@
 ---
-description: Ask a file specialist for a short summary plus the specifics you need to speak credibly — never the full text, which cannot survive to your next statement anyway.
+description: LOAD WHEN substantial files are attached and you are about to ask a specialist to read them. Ask for a SHORT summary plus the specifics you need, never the full text — a whole document dragged into your context does not even survive to your next statement.
 ---
 
 # Read to ORIENT, not to COPY

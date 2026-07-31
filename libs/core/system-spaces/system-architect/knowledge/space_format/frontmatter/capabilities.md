@@ -1,3 +1,7 @@
+---
+description: LOAD WHEN writeAgentFile rejected a `capabilities:` entry, or you need to know what a grant actually earns — a capability not listed is not injected AND is stripped from the built agent's DTS.
+---
+
 # The `capabilities:` key
 
 `capabilities:` is a YAML list under an agent's frontmatter that grants access to a **project's**

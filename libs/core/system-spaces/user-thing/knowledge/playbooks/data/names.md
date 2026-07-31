@@ -1,5 +1,5 @@
 ---
-description: Table and field names are unchecked strings — how a guessed name silently reads as "no data", and how to recover a throw or an empty result in the same reply.
+description: LOAD WHEN a query THREW, or came back unexpectedly EMPTY. Table and field names are unchecked strings, so a guessed one reads exactly like 'there is nothing here' — how to tell the two apart and recover in the same reply.
 ---
 
 # Verify the name before you conclude anything from the result

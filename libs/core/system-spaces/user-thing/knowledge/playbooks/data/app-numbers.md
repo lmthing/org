@@ -1,5 +1,5 @@
 ---
-description: When the app already computes a figure, call its own endpoint with apiCall instead of re-deriving it — two numbers for one question is a bug the user will notice.
+description: LOAD WHEN the user asks for a figure the APP itself computes and shows them — a total, a count, a balance. Call the app's own endpoint instead of re-deriving it, because two numbers for one question is a bug they will notice.
 ---
 
 # Ask the app for its own numbers — do not re-derive them

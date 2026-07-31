@@ -1,5 +1,5 @@
 ---
-description: Adding data, events or automation to THIS project — the direct automator delegate, when it must be add_area instead, and checking the change actually landed.
+description: LOAD WHEN adding to the project you are ALREADY in — a table, a page, a rule over its data. The direct automator delegate, when it must be `add_area` instead because a genuinely new life area deserves its own specialist, and confirming the change actually landed.
 ---
 
 # Adding data, events, or automation to THIS project (the LIVE-project path)

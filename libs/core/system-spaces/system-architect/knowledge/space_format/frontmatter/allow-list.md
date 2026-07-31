@@ -1,3 +1,7 @@
+---
+description: LOAD WHEN writeAgentFile REJECTED your frontmatter over an unrecognized top-level key — an unknown key fails the whole space LOAD, so fix the one field rather than guessing a second spelling.
+---
+
 # The frontmatter key allow-list
 
 An agent `instruct.md`'s YAML frontmatter is checked against a fixed set of top-level keys; any

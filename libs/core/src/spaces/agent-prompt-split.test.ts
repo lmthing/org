@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -55,6 +56,14 @@ const SPLIT_AGENTS = [
     maxBodyLines: 230,
     priorLines: 781,
   },
+  {
+    label: 'system-viewbuilder/automator',
+    space: 'system-viewbuilder',
+    agent: 'automator',
+    domains: ['app_building'],
+    maxBodyLines: 175,
+    priorLines: 184,
+  },
 ] as const;
 
 describe.each(SPLIT_AGENTS)('$label — the instruct/knowledge split holds together', (subject) => {
@@ -79,16 +88,36 @@ describe.each(SPLIT_AGENTS)('$label — the instruct/knowledge split holds toget
 
   /**
    * The reverse direction, and the one a split actually loses work to: an aspect can be written,
-   * be correct, and never be read, because nothing in the always-on body tells the agent it exists.
-   * Knowledge is lazy — an aspect no load point names is dead prose.
+   * be correct, and never be read, because nothing tells the agent it exists or when to want it.
+   *
+   * What carries that is NOT a table in the instruct — it is the `# Knowledge` menu, which
+   * `context/system-block.ts` renders from the frontmatter refs on EVERY turn and which lists every
+   * aspect with its own `description:`. That is the stronger contract of the two: an instruct table
+   * is prose that can silently omit a row, while the menu is generated from what is actually on
+   * disk, so a new aspect appears in it the moment the file lands.
+   *
+   * The description therefore has to be the WHEN, not the what. `LOAD WHEN …` is the shape: a bare
+   * "here is what this file covers" cannot carry a load decision, and an agent reading one either
+   * loads everything — paying the turn the split exists to save — or guesses from the slug.
    */
-  it('every aspect on disk is named by a load point in the instruct', () => {
-    const points = loadPointsIn(instruct());
-    const orphans = splitAspectsOnDisk(spaceDir, [...subject.domains]).filter((a) => !points.has(a));
-    expect(
-      orphans,
-      'an aspect nothing tells the agent to load is unreachable — the detail is on disk and never in a prompt',
-    ).toEqual([]);
+  it('every aspect is in the always-rendered menu, and its description says WHEN to load it', async () => {
+    const space = await loadSpace(spaceDir, { requireAgents: false });
+    const declared = new Set(space.agents[subject.agent]!.config.knowledge);
+
+    for (const aspect of splitAspectsOnDisk(spaceDir, [...subject.domains])) {
+      const [domain, fieldSlug, slug] = aspect.split('/') as [string, string, string];
+      expect(
+        declared.has(`${domain}/${fieldSlug}`),
+        `${aspect} is unreachable: its field is not in the agent's knowledge: frontmatter, so it never appears in the # Knowledge menu`,
+      ).toBe(true);
+
+      const desc = space.knowledge.domains[domain]?.fields[fieldSlug]?.optionDescriptions[slug];
+      expect(desc, `${aspect} has no description: frontmatter — the menu can only show its bare slug`).toBeTruthy();
+      expect(
+        desc,
+        `${aspect}'s description must open with LOAD WHEN and name the SITUATION — a description of the contents cannot carry a load decision`,
+      ).toMatch(/^LOAD WHEN /);
+    }
   });
 
   /**
@@ -179,6 +208,52 @@ describe.each(SPLIT_AGENTS)('$label — the instruct/knowledge split holds toget
  *    task is BUILT to do exactly this (`system-architect/.../05-write_tasks.md`). Reading only for
  *    literal triples would flag all 26 of those as dead prose and invite someone to delete them.
  */
+/**
+ * Every knowledge file a prompt can load must be TRACKED BY GIT, not merely present on disk.
+ *
+ * This is a real failure that shipped: `git commit --only <dir>` does NOT add untracked files inside
+ * that directory, so a commit whose message described seven new aspects contained none of them. The
+ * working tree was fine, so every other check here passed — they all read from disk — and every live
+ * run passed too, because a live run also reads from disk. On a fresh clone the automator's body
+ * still said `loadKnowledge('app_building','authoring','seeding-data')` and the file was not there:
+ * the call yields, misses, and the agent carries on believing the detail was unavailable. That is the
+ * same silent degradation this suite exists to prevent, arriving through source control instead of
+ * through a typo.
+ */
+describe('shipped system spaces — every knowledge file is committed, not just on disk', () => {
+  it('git tracks every knowledge/**.md under system-spaces', () => {
+    const tracked = new Set(
+      execFileSync('git', ['ls-files', 'libs/core/system-spaces'], {
+        cwd: join(SYSTEM_SPACES, '..', '..', '..'),
+        encoding: 'utf8',
+        maxBuffer: 32 * 1024 * 1024,
+      })
+        .split('\n')
+        .filter(Boolean),
+    );
+
+    const onDisk: string[] = [];
+    const walk = (dir: string, rel: string): void => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        if (e.isDirectory()) walk(join(dir, e.name), `${rel}/${e.name}`);
+        else if (e.name.endsWith('.md')) onDisk.push(`${rel}/${e.name}`);
+      }
+    };
+    for (const space of readdirSync(SYSTEM_SPACES, { withFileTypes: true })) {
+      if (!space.isDirectory()) continue;
+      const kdir = join(SYSTEM_SPACES, space.name, 'knowledge');
+      if (existsSync(kdir)) walk(kdir, `libs/core/system-spaces/${space.name}/knowledge`);
+    }
+
+    const untracked = onDisk.filter((f) => !tracked.has(f)).sort();
+    expect(
+      untracked,
+      'these knowledge files exist on disk but are NOT committed — a fresh clone gets an agent whose ' +
+        'loadKnowledge calls miss, silently, while every disk-reading check here still passes',
+    ).toEqual([]);
+  });
+});
+
 describe('shipped system spaces — no knowledge aspect is unreachable', () => {
   const TRIPLE = /\(\s*'([\w-]+)'\s*,\s*'([\w-]+)'\s*,\s*'([\w-]+)'\s*\)/g;
   const MENU = /loadKnowledge\(\s*'([\w-]+)'\s*,\s*'([\w-]+)'\s*\)/g;
@@ -220,9 +295,25 @@ describe('shipped system spaces — no knowledge aspect is unreachable', () => {
     const named = new Set([...corpus.matchAll(TRIPLE)].map((m) => `${m[1]}/${m[2]}/${m[3]}`));
     const menus = new Set([...corpus.matchAll(MENU)].map((m) => `${m[1]}/${m[2]}`));
 
-    const unreachable = aspects.filter(
-      (a) => !named.has(a) && !menus.has(a.slice(0, a.lastIndexOf('/'))),
+    // The THIRD and strongest way an aspect is reached: its field is declared 2-part in an agent's
+    // `knowledge:` frontmatter, so `context/system-block.ts` renders the whole field — overview,
+    // every aspect NAME, and every aspect's `description:` — into the `# Knowledge` section of that
+    // agent's system prompt on EVERY turn. Nothing in an instruct has to mention it: the menu is
+    // generated from disk, so the aspect is visible the moment the file lands, and its description
+    // is what tells the agent when to spend a turn on the body.
+    const declaredFields = new Set(
+      mdUnder(join(spaceDir, 'agents'))
+        .filter((f) => f.endsWith('instruct.md'))
+        .flatMap((f) => {
+          const fm = readFileSync(f, 'utf8').match(/^---\r?\n([\s\S]*?)\r?\n---/);
+          return fm ? [...fm[1]!.matchAll(/^\s*-\s*([\w-]+\/[\w-]+)\s*$/gm)].map((m) => m[1]!) : [];
+        }),
     );
+
+    const unreachable = aspects.filter((a) => {
+      const field = a.slice(0, a.lastIndexOf('/'));
+      return !named.has(a) && !menus.has(field) && !declaredFields.has(field);
+    });
     expect(
       unreachable,
       `${name} ships knowledge no prompt can reach: neither a literal loadKnowledge triple nor a ` +

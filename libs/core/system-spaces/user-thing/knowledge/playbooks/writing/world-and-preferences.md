@@ -1,5 +1,5 @@
 ---
-description: A world fact the user volunteers goes to the owning space; a preference goes to memory — and any "keep this front of mind" phrasing is the ambiguous case that must be asked.
+description: LOAD WHEN the user volunteers a fact about the WORLD, or a preference/standing instruction. Where each goes, and why anything meaning 'keep this front of mind' is ambiguous enough that it must be ASKED rather than assumed.
 ---
 
 # A world fact the user volunteers

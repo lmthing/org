@@ -1,5 +1,5 @@
 ---
-description: The three team jobs that have their own tasklists — tell_the_team, answer_from_team_record, settle_team_decision — with what to pass and what to do with each result.
+description: LOAD WHEN a team asks you to TELL people something, to say what was DECIDED or where something got to, or when carrying out the request would make a choice that is genuinely the team's. Their inputs, their result shapes, and what to do with each.
 ---
 
 # Three team jobs that are workflows, not improvisations

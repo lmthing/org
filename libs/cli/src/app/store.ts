@@ -101,7 +101,7 @@ function changeCount(info: { changes: number | bigint }): number {
   return typeof info.changes === 'bigint' ? Number(info.changes) : info.changes;
 }
 
-function transaction<T>(db: DatabaseSync, fn: () => T): T {
+function transaction<T>(db: DatabaseSyncType, fn: () => T): T {
   db.exec('BEGIN');
   try {
     const out = fn();
@@ -138,7 +138,7 @@ export interface ProjectDb {
    */
   async: AsyncDbApi;
   /** The underlying `node:sqlite` handle (boot reconcile inspects it). */
-  raw: DatabaseSync;
+  raw: DatabaseSyncType;
   /** Full schema + data `.sql` dump (deterministic; for the GitHub backup). */
   dumpToSql(): string;
   /** The user tables present in the live db (excludes `sqlite_*` internal). */

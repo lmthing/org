@@ -1,5 +1,5 @@
 ---
-description: How to distill a finished browsing session into ONE reusable Lightpanda agent script (.js) — the equivalent of Lightpanda's own /save. Load when asked to produce a replayable script.
+description: LOAD WHEN the user asks you to SAVE, record, or hand back a reusable script for what you just did. The script has a required shape and is meant to run on its own later — do not improvise it from memory.
 ---
 
 # Distilling a session into a replayable script

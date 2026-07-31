@@ -1,5 +1,5 @@
 ---
-description: Path 7 — act on or automate an external service; the find → consent-install → keys → automate flow, and the storeInspect guard.
+description: LOAD WHEN the request touches an external SERVICE (path 7) — Gmail, Calendar, Slack, GitHub — or asks to automate 'when X happens, do Y'. The find -> consent-install -> keys -> automate flow, and the storeInspect guard that stops an unfulfillable consent card.
 ---
 
 # Path 7 — act on / automate a service (Gmail / Google Calendar / Slack / GitHub / …)

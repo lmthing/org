@@ -154,22 +154,53 @@ async function listKnowledgeOptions(dir: string): Promise<string | undefined> {
 export function createLoadKnowledgeGlobal(
   pushYield: (req: YieldRequest) => void,
   knowledgeBaseDirs: string[],
-): (...path: string[]) => Promise<unknown> {
-  return function loadKnowledge(...pathParts: string[]): Promise<unknown> {
-    return new Promise<unknown>((resolve, reject) => {
-      const normalizedPath = pathParts.join('/');
+): (...args: (string | string[])[]) => Promise<unknown> {
+  return function loadKnowledge(...args: (string | string[])[]): Promise<unknown> {
+    const paths = normalizeLoadKnowledgeArgs(args);
+    // The CALL SHAPE decides the RESULT SHAPE, and nothing else does: bare strings are one path and
+    // resolve to the value; the array form resolves to an array, even for a single aspect. The
+    // alternative — unwrap when there happens to be one — means adding a second aspect silently
+    // turns a value into an array, so a working `const k = await loadKnowledge([...])` breaks the
+    // moment the agent needs one more file. That is exactly the edit this API exists to make cheap.
+    const multi = args.some(Array.isArray) || paths.length > 1;
 
+    return new Promise<unknown>((resolve, reject) => {
       pushYield({
         kind: 'loadKnowledge',
-        args: [normalizedPath],
-        deferred: {
-          resolve,
-          reject,
-        },
+        args: paths.map((p) => p.join('/')),
+        deferred: { resolve, reject },
         vmPromiseHandle: undefined,
       });
 
-      loadKnowledgeFileFromDirs(knowledgeBaseDirs, pathParts).then(resolve, reject);
+      // ONE yield, N reads. A load costs a turn, so an agent that needs three aspects
+      // must not be made to spend three turns — that is the cost the split exists to
+      // avoid, and it is why the array form resolves them together.
+      Promise.all(paths.map((p) => loadKnowledgeFileFromDirs(knowledgeBaseDirs, p)))
+        .then((results) => resolve(multi ? results : results[0]), reject);
     });
   };
+}
+
+/**
+ * Both call shapes, normalized to a list of path-part arrays.
+ *
+ *   loadKnowledge('playbooks', 'paths', 'research')                    → ONE path
+ *   loadKnowledge(['playbooks','paths','research'], ['playbooks','data','names'])
+ *   loadKnowledge('playbooks/paths/research', 'playbooks/data/names')  → TWO paths
+ *
+ * The disambiguation is: **any array argument, or any argument containing a `/`, means
+ * every argument is its own path.** Otherwise the bare strings are the segments of a
+ * single path, which is the long-standing form every shipped prompt and every
+ * synthesized specialist already emits — so this stays additive, and a 2-part menu load
+ * (`loadKnowledge('documents','formats')`) keeps meaning exactly what it meant.
+ *
+ * A single path returns its value; several return an array in the SAME order, so a
+ * destructuring bind (`const [a, b] = await loadKnowledge(…)`) lines up positionally.
+ */
+export function normalizeLoadKnowledgeArgs(args: (string | string[])[]): string[][] {
+  const multi = args.some((a) => Array.isArray(a) || (typeof a === 'string' && a.includes('/')));
+  if (!multi) return [args as string[]];
+  return args.map((a) =>
+    Array.isArray(a) ? a : a.split('/').filter(Boolean),
+  );
 }

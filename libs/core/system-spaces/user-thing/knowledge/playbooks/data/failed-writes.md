@@ -1,5 +1,5 @@
 ---
-description: A write that keeps failing — recover it against the real schema, and if it still cannot land, say so plainly rather than ending the turn on silence.
+description: LOAD WHEN a write will not land after you have already retried it. How to recover it against the real schema, and what to say if you genuinely cannot — an empty reply after a failed write is the worst outcome there is.
 ---
 
 # A write that keeps failing is never a reason to fall silent

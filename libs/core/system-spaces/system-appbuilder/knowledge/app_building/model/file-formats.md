@@ -1,3 +1,7 @@
+---
+description: LOAD WHEN you are hand-authoring a file kind freeform and want its exact required shape rather than your memory of it — database/*.json, api/<path>/<METHOD>.ts, pages/*.tsx, hooks/*, events/*.
+---
+
 # File formats
 
 The exact on-disk shapes each authoring global writes.

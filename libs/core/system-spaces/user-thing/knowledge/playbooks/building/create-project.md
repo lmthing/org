@@ -1,5 +1,5 @@
 ---
-description: createProject/selectProject — where an app gets built, why `user` is never it, and why creating without building is a failure.
+description: LOAD WHEN an app needs a PROJECT to live in — you are in `user`, or the user wants a new one. Where an app gets built, why `user` is never it, and why createProject is step 1 of 2 rather than the finish line.
 ---
 
 # Creating projects — you CAN, via `createProject`

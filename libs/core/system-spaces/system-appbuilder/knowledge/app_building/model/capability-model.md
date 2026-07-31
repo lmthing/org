@@ -1,3 +1,7 @@
+---
+description: LOAD WHEN a writer you reached for is not in your types and you need to know why — a grant you do not hold is not a rule you can bend.
+---
+
 # Capability model
 
 The authoring globals are not ambient — each is host-injected ONLY for an agent that holds the

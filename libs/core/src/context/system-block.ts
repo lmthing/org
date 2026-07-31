@@ -293,12 +293,24 @@ export function buildSystemBlock(opts: SystemBlockOpts): string {
           `- **${domainSlug}/${fieldSlug}** is preloaded with option \`${preload.optionSlug}\` — you do NOT have access to its other options:\n\n${body}`,
         );
       } else {
-        const options = Object.keys(field.options).join(', ');
         // The field's index.md body is its OVERVIEW — surface it inline so the agent
         // always has the summary, then list the option files (specific aspects) to
         // load on demand for detail.
         const overview = field.description ? `\n    overview: ${field.description.replace(/\s+/g, ' ').trim()}` : '';
-        onDemandLines.push(`  - \`${domainSlug}/${fieldSlug}\` (${field.type})${overview}\n    aspects (load on demand): ${options || '(none)'}`);
+        // EVERY option is listed, ALWAYS, each with its own `description:` — which is
+        // the WHEN. A bare slug cannot carry a load decision: the agent either loads
+        // everything (paying the turn the split exists to save) or guesses from the
+        // name. Options with no description degrade to a plain comma list, which is
+        // what an un-frontmattered knowledge file can offer.
+        const described = Object.keys(field.options)
+          .filter((slug) => field.optionDescriptions?.[slug])
+          .map((slug) => `      · \`${slug}\` — ${field.optionDescriptions![slug]!.replace(/\s+/g, ' ').trim()}`);
+        const bare = Object.keys(field.options).filter((slug) => !field.optionDescriptions?.[slug]);
+        const aspectLines = described.length > 0
+          ? `\n    aspects (load on demand — \`loadKnowledge('${domainSlug}', '${fieldSlug}', '<aspect>')\`):\n${described.join('\n')}`
+              + (bare.length > 0 ? `\n      · ${bare.join(', ')}` : '')
+          : `\n    aspects (load on demand): ${bare.join(', ') || '(none)'}`;
+        onDemandLines.push(`  - \`${domainSlug}/${fieldSlug}\` (${field.type})${overview}${aspectLines}`);
       }
     }
 

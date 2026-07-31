@@ -45,12 +45,20 @@ export function agentPromptCorpus(spaceDir: string, agentSlug: string): string {
   return [instruct, ...knowledge.map((f) => readFileSync(f, 'utf8'))].join('\n\n');
 }
 
-/** The `loadKnowledge(domain, field, aspect)` triples an instruct body names, as
- *  `domain/field/aspect` strings. Matches both the call form and the bare-tuple form the
- *  routing table uses (`('playbooks','paths','research')`). */
+/**
+ * The `loadKnowledge` triples an instruct body names, as `domain/field/aspect` strings.
+ *
+ * BOTH bracketings count, and missing the second is a real way this guard goes quietly blind:
+ *   - `loadKnowledge('playbooks','paths','research')` — and the bare parenthesised tuple a routing
+ *     table writes, `('playbooks','paths','research')`;
+ *   - `loadKnowledge(['playbooks','paths','research'], ['playbooks','data','names'])` — the ARRAY
+ *     form, which loads several aspects for the cost of one turn and is therefore what a prompt
+ *     reaches for the moment it needs two. A guard that only matched parens would report an agent
+ *     using the array form as naming NO load points at all, and its aspects as orphans.
+ */
 export function loadPointsIn(instructBody: string): Set<string> {
   const found = new Set<string>();
-  const re = /\(\s*'([\w-]+)'\s*,\s*'([\w-]+)'\s*,\s*'([\w-]+)'\s*\)/g;
+  const re = /[([]\s*'([\w-]+)'\s*,\s*'([\w-]+)'\s*,\s*'([\w-]+)'\s*[)\]]/g;
   for (const m of instructBody.matchAll(re)) found.add(`${m[1]}/${m[2]}/${m[3]}`);
   return found;
 }

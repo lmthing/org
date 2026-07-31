@@ -1,5 +1,5 @@
 ---
-description: Path 3 — build a reusable specialist agent; the two-turn build_specialist pipeline and the cheaper already-provided-material shortcut.
+description: LOAD WHEN you have decided to build a REUSABLE agent/tool/workflow (path 3) — before the first turn of it. The two-turn build_specialist pipeline, and the much cheaper direct-architect route for when the user ALREADY gave you the material.
 ---
 
 # Path 3 — build a new specialist

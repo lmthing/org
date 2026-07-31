@@ -1,5 +1,5 @@
 ---
-description: Your summary is for you — the builder seeds from the source; and every distinct dataset in the material must have a home in the plan.
+description: LOAD WHEN attached material is about to become an app. Pass the IDS, never your summary — a summary was lossy the moment you wrote it — and inventory the material so no distinct dataset is left without a home.
 ---
 
 # Your summary is for YOU. The builder seeds from the SOURCE.

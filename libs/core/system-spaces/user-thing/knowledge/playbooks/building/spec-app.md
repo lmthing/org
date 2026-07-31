@@ -1,5 +1,5 @@
 ---
-description: The second builder (system-viewbuilder) — spec-based pages that render natively on the phone, and the narrow rule for routing to it.
+description: LOAD WHEN the user asked for a phone-native / spec-based app, OR before ANY build into a project that already has pages. Which builder to route to and why almost nobody asks for it in our words — and that an app which already exists KEEPS the builder that made it.
 ---
 
 # There is a SECOND builder, and you use it ONLY when the user explicitly asks for it

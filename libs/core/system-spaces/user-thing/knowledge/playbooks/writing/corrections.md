@@ -1,5 +1,5 @@
 ---
-description: Retracting a fact, reconciling two disagreeing sources, and fixing a flagged total — the three tasklists that repair stored data rather than re-explain it.
+description: LOAD WHEN the user RETRACTS something, disputes a value, or flags a figure as wrong ('that looks too high', 'check the maths'). The three repair tasklists, and why re-explaining a wrong number without fixing the stored one is the failure this route exists to prevent.
 ---
 
 # A retraction

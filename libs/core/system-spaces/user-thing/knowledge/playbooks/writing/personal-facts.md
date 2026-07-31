@@ -1,5 +1,5 @@
 ---
-description: A personal fact the user states — memory vs a DB row, why a newly-reported amount is a NEW row, when a value earns its own column, and changed facts in any language.
+description: LOAD WHEN the user STATES a fact about themselves or their data, or CHANGES one, in any language. Memory vs a DB row, why a newly-reported amount is a NEW row rather than an edit to an existing one, and why a changed value never goes to the domain space.
 ---
 
 # A personal fact ("I paid $30, receipt no. A-118", "the rent is now €900")

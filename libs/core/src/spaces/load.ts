@@ -121,6 +121,15 @@ export interface KnowledgeField {
   variableName: string;
   default?: unknown;
   options: Record<string, string>; // option slug -> file path
+  /** Option slug -> that option file's `description:` frontmatter, when it has one.
+   *
+   *  Knowledge is LAZY: the system prompt lists an option's NAME and the agent decides
+   *  whether to spend a turn loading it. A bare name cannot carry that decision — the
+   *  agent either loads everything (and pays the turn it was trying to save) or guesses
+   *  from the slug. The description is the WHEN, and it is free to collect: the option
+   *  file is already read here to validate its frontmatter. Rendered per option by
+   *  `context/system-block.ts`. */
+  optionDescriptions: Record<string, string>;
   /** Body of knowledge/<domain>/<field>/index.md — the field's OVERVIEW. Surfaced in
    *  the system prompt so the agent always has the field summary; the option files
    *  (aspects) are loaded on demand. */
@@ -289,13 +298,17 @@ async function loadKnowledge(dir: string): Promise<KnowledgeTree> {
 
       // Collect options (all .md files except index.md)
       const options: Record<string, string> = {};
+      const optionDescriptions: Record<string, string> = {};
       const optionFiles = await listDir(fieldDir);
       for (const optFile of optionFiles) {
         if (!optFile.endsWith('.md') || optFile === 'index.md') continue;
         const optionSlug = basename(optFile, '.md');
         const optionPath = join(fieldDir, optFile);
-        validateKnowledgeOptionFrontmatter(await readFile(optionPath, 'utf8'), optionPath);
+        // Validation already parses this file's frontmatter, so the description costs
+        // nothing extra — and without it the prompt can only show a bare slug.
+        const desc = validateKnowledgeOptionFrontmatter(await readFile(optionPath, 'utf8'), optionPath);
         options[optionSlug] = optionPath;
+        if (desc) optionDescriptions[optionSlug] = desc;
       }
 
       const field: KnowledgeField = {
@@ -303,6 +316,7 @@ async function loadKnowledge(dir: string): Promise<KnowledgeTree> {
         type,
         variableName,
         options,
+        optionDescriptions,
       };
       if (defaultValue !== undefined) {
         field.default = defaultValue;
@@ -335,10 +349,14 @@ const KNOWLEDGE_OPTION_ALLOWED_KEYS = new Set(['description', 'icon', 'color', '
  * `description` is required when frontmatter is present; `icon`/`color`/`label`
  * are optional; no other keys are allowed. Plain markdown (no frontmatter) is
  * always valid. Throws (fail-loud, matching parseFrontmatter's YAML errors).
+ *
+ * RETURNS the validated `description` (undefined for a plain-markdown option), so the
+ * caller can put it in the prompt without reading the file a second time — see
+ * `KnowledgeField.optionDescriptions`.
  */
-export function validateKnowledgeOptionFrontmatter(raw: string, source: string): void {
+export function validateKnowledgeOptionFrontmatter(raw: string, source: string): string | undefined {
   const { data } = parseFrontmatter(raw, source);
-  if (Object.keys(data).length === 0) return; // plain markdown option, no frontmatter
+  if (Object.keys(data).length === 0) return undefined; // plain markdown option, no frontmatter
 
   if (typeof data['description'] !== 'string' || data['description'].length === 0) {
     throw new Error(`Knowledge option "${source}" has frontmatter but is missing required key "description"`);
@@ -350,6 +368,7 @@ export function validateKnowledgeOptionFrontmatter(raw: string, source: string):
       `Knowledge option "${source}" has disallowed frontmatter key(s): ${unknownKeys.join(', ')}. Allowed keys: description (required), icon, color, label`,
     );
   }
+  return data['description'];
 }
 
 async function loadTasklists(dir: string): Promise<Record<string, TasklistDir>> {

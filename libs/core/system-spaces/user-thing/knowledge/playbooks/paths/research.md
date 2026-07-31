@@ -1,5 +1,5 @@
 ---
-description: Path 2 — research the web; picking research vs deep_research vs the browser, and when a space cannot know the answer.
+description: LOAD WHEN you have decided the answer needs the WEB (path 2) — before the delegate. Picks research vs deep_research (~10x) vs the browser agent, and warns that a space built from the user's own material cannot know a fact that was not in it.
 ---
 
 # Path 2 — research the web

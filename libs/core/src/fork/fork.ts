@@ -493,7 +493,7 @@ export class ForkEngine {
           '# Available Built-in Globals (already provided — do NOT redefine any of these):',
           '- sleep(duration: string) — pause for a duration, e.g. `await sleep("2s")`',
           '- display(content: string | JSXDescriptor) — render output',
-          '- loadKnowledge(domain: string, field: string, option: string) → Promise<string> — load a knowledge file shipped with this space, e.g. `const k = await loadKnowledge("espresso", "fundamentals", "overview.md");`',
+          '- loadKnowledge(domain, field, option) → Promise<string> — load a knowledge file shipped with this space, e.g. `const k = await loadKnowledge("espresso", "fundamentals", "overview");`. Need SEVERAL? Pass one ARRAY per aspect and they come back in the same order, for the cost of ONE load: `const [a, b] = await loadKnowledge(["espresso","fundamentals","overview"], ["espresso","gear","grinders"]);`',
           '- inspect(...values) — inspect variables',
           shellLine,
           '- fetch(url, opts?) → Promise<{ ok, status, text(), json() }> — `await fetch(...)` (real, non-blocking HTTP)',

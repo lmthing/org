@@ -1,5 +1,5 @@
 ---
-description: Path 5 — write or fix code; always delegate to the engineer, and hand a project function to the automator to persist.
+description: LOAD WHEN the deliverable is CODE (path 5) — a function, script, module, tests, a bug fix. Why it always goes to the engineer even when you could write it, and how to hand a project function on to the automator to persist.
 ---
 
 # Path 5 — write or fix code

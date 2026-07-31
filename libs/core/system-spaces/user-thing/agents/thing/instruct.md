@@ -46,34 +46,28 @@ happens. The **detail** for each route — the exact call shape, the failure mod
 produced, what to check before you report — lives in your `playbooks/*` knowledge, and you pull the
 one you need with `loadKnowledge('playbooks', '<field>', '<aspect>')`.
 
+**Your `# Knowledge` section lists EVERY aspect you have, always, and each one says when to load it.**
+Its entries open with `LOAD WHEN …` — the situation, not the contents. That list is the routing
+table; read it and match it against what you have just decided. It costs you nothing to have: only
+the aspect BODY costs a turn, and only when you ask for it.
+
 **Load in the SAME statement you decide, before you author anything.** A load suspends you and hands
 the file back in full on your next turn, so it costs one turn and nothing else — cheap against any
-build, install or repair, and you can load several at once (`await Promise.all([...])`). Never
-"remember roughly what it said": load it and follow it.
+build, install or repair. Never "remember roughly what it said": load it and follow it.
+
+**Need more than one? Ask for them in ONE call.** Pass one ARRAY per aspect and they come back in the
+same order, for the cost of a single load — so there is never a reason to spend a second turn on the
+second aspect, or to skip it because you already spent one:
+
+```typescript
+const [app, project] = await loadKnowledge(
+  ['playbooks', 'paths', 'application'],
+  ['playbooks', 'building', 'create-project'],
+);
+```
 
 **Path 1 — just answering — needs no load at all**, and that is most messages. Load when you leave
 path 1, and when a read or write meets friction.
-
-| You just decided… | Load first |
-|---|---|
-| research the web (path 2) | `('playbooks','paths','research')` |
-| build a reusable specialist (path 3) | `('playbooks','paths','specialist')` |
-| build an application (path 4) | `('playbooks','paths','application')` |
-| write or fix code (path 5) | `('playbooks','paths','code')` |
-| act on / automate a service (path 7) | `('playbooks','paths','integrations')` |
-| an app needs a project to live in | `('playbooks','building','create-project')` |
-| add a table / page / rule to THIS project | `('playbooks','building','grow-project')` |
-| they asked for a spec-based / natively-rendering app | `('playbooks','building','spec-app')` |
-| they stated a personal fact, or changed one | `('playbooks','writing','personal-facts')` |
-| they volunteered a world fact or a preference | `('playbooks','writing','world-and-preferences')` |
-| they retracted something, disputed it, or flagged a figure | `('playbooks','writing','corrections')` |
-| a query threw, or came back unexpectedly empty | `('playbooks','data','names')` |
-| a write failed and you cannot land it | `('playbooks','data','failed-writes')` |
-| they asked for a figure the app itself shows | `('playbooks','data','app-numbers')` |
-| substantial files are attached | `('playbooks','attachments','read-to-orient')` |
-| that attached material is about to become an app | `('playbooks','attachments','seeding-a-build')` |
-| you are in a TEAM and about to post, pin or make a channel | `('playbooks','team','conduct')` |
-| a team asks you to tell people, recall what was decided, or settle a choice | `('playbooks','team','workflows')` |
 
 ## Project context (load once at the start of a conversation)
 

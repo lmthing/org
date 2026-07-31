@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loadKnowledgeFile, createLoadKnowledgeGlobal } from './load-knowledge.js';
+import { loadKnowledgeFile, createLoadKnowledgeGlobal, normalizeLoadKnowledgeArgs } from './load-knowledge.js';
 import type { YieldRequest } from '../eval/yield.js';
 import { Session } from '../session/session.js';
 import { createMockStreamFn } from '../testing/mock-provider.js';
@@ -135,6 +135,86 @@ describe('createLoadKnowledgeGlobal (multi-dir fallback)', () => {
   it('throws naming every directory it tried when NO candidate has the domain', async () => {
     const loadKnowledge = createLoadKnowledgeGlobal(pushYield, [ownDir, systemDir]);
     await expect(loadKnowledge('organizing', 'split', 'nope')).rejects.toThrow(/tried:/);
+  });
+});
+
+/**
+ * A load costs a TURN. So an agent that needs three aspects to act correctly is, with a one-per-call
+ * global, choosing between three turns and acting on one aspect — and it will pick the second.
+ * Passing one ARRAY per aspect resolves them together for the cost of a single load, which is what
+ * makes "load the aspects that match what you just decided" advice an agent can actually follow.
+ */
+describe('createLoadKnowledgeGlobal (several aspects, ONE load)', () => {
+  let dir: string;
+  const yields: YieldRequest[] = [];
+  const pushYield = (req: YieldRequest): void => { yields.push(req); };
+
+  beforeEach(() => {
+    yields.length = 0;
+    dir = mkdtempSync(join(tmpdir(), 'kn-multi-'));
+    mkdirSync(join(dir, 'playbooks', 'paths'), { recursive: true });
+    mkdirSync(join(dir, 'playbooks', 'building'), { recursive: true });
+    writeFileSync(join(dir, 'playbooks', 'paths', 'application.md'), 'APP.', 'utf8');
+    writeFileSync(join(dir, 'playbooks', 'building', 'create-project.md'), 'PROJECT.', 'utf8');
+  });
+  afterEach(() => { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
+
+  it('resolves an array-per-aspect call to results in the SAME order', async () => {
+    const loadKnowledge = createLoadKnowledgeGlobal(pushYield, [dir]);
+    const result = await loadKnowledge(
+      ['playbooks', 'paths', 'application'],
+      ['playbooks', 'building', 'create-project'],
+    );
+    // Positional, so a destructuring bind in the prompt's own example lines up.
+    expect(result).toEqual(['APP.', 'PROJECT.']);
+  });
+
+  it('spends ONE yield for the whole batch — the turn cost is what is being saved', async () => {
+    const loadKnowledge = createLoadKnowledgeGlobal(pushYield, [dir]);
+    await loadKnowledge(['playbooks', 'paths', 'application'], ['playbooks', 'building', 'create-project']);
+    expect(yields).toHaveLength(1);
+    expect(yields[0]!.args).toEqual(['playbooks/paths/application', 'playbooks/building/create-project']);
+  });
+
+  it('accepts slash-joined paths as the same multi form', async () => {
+    const loadKnowledge = createLoadKnowledgeGlobal(pushYield, [dir]);
+    expect(await loadKnowledge('playbooks/paths/application', 'playbooks/building/create-project'))
+      .toEqual(['APP.', 'PROJECT.']);
+  });
+
+  /**
+   * The CALL SHAPE decides the RESULT SHAPE. A single array returns a ONE-ELEMENT ARRAY, not the
+   * bare value — because the alternative (unwrap when there happens to be one) means adding a
+   * second aspect silently turns a value into an array, breaking a working call at exactly the
+   * moment the agent needs one more file. That edit is the one this API exists to make cheap.
+   */
+  it('a SINGLE array returns a one-element array, so adding a second aspect changes nothing', async () => {
+    const loadKnowledge = createLoadKnowledgeGlobal(pushYield, [dir]);
+    const [one] = await loadKnowledge(['playbooks', 'paths', 'application']) as string[];
+    expect(one).toBe('APP.');
+    const [a, b] = await loadKnowledge(
+      ['playbooks', 'paths', 'application'],
+      ['playbooks', 'building', 'create-project'],
+    ) as string[];
+    expect([a, b]).toEqual(['APP.', 'PROJECT.']);
+  });
+
+  /**
+   * The whole point of the array form is that it is ADDITIVE. Every shipped prompt, and every
+   * specialist the architect synthesizes, emits the bare-string form — including the 2-part MENU
+   * load, which must keep meaning "one path, no option" and not "two paths".
+   */
+  it('leaves the long-standing bare-string forms meaning exactly what they meant', () => {
+    expect(normalizeLoadKnowledgeArgs(['playbooks', 'paths', 'research'])).toEqual([['playbooks', 'paths', 'research']]);
+    expect(normalizeLoadKnowledgeArgs(['documents', 'formats'])).toEqual([['documents', 'formats']]);
+    expect(normalizeLoadKnowledgeArgs(['organizing'])).toEqual([['organizing']]);
+  });
+
+  it('rejects the whole batch when ONE aspect is missing, naming what it tried', async () => {
+    const loadKnowledge = createLoadKnowledgeGlobal(pushYield, [dir]);
+    await expect(
+      loadKnowledge(['playbooks', 'paths', 'application'], ['playbooks', 'paths', 'nope']),
+    ).rejects.toThrow(/tried:/);
   });
 });
 

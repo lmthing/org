@@ -1,5 +1,5 @@
 ---
-description: Path 4 — build an application; the did-they-ask gate, the offer turn, organize_material, seeding from attachments, and checking before you announce.
+description: LOAD WHEN you are about to build an APP, or about to OFFER one (path 4) — before any authoring delegate. The did-they-ask gate, what an offer turn may contain, the organize_material call, seeding from attachments, and checking before you announce.
 ---
 
 # Path 4 — build an APPLICATION

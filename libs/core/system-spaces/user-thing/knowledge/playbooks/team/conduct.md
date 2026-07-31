@@ -1,5 +1,5 @@
 ---
-description: The team globals (directory, channels, history, the three writers) and the ten points of conduct a permanent shared log demands.
+description: LOAD WHEN a request in a TEAM reaches past the thread you are in — telling someone else, pinning an app, making a channel, or looking up who is who. The directory, the channel list, the history reader, the three writers, and the ten points of conduct a permanent shared log demands.
 ---
 
 # In a TEAM workspace — you know the team
