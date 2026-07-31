@@ -308,6 +308,10 @@ export class SessionManager {
   private streamFn: (opts: StreamOpts) => Promise<StreamSession>;
   private defaultSpaceDir?: string;
   private defaultModelAlias?: string;
+  /** The resolved `provider:modelId` every agent in this pod runs on unless it overrides `model:`.
+   *  Read by `serve.ts` to run the external zerostack agent on the same model, through the same
+   *  key, so its spend lands on the same budget as everything else. */
+  get defaultModel(): string | undefined { return this.defaultModelAlias; }
   readonly maxSessions: number;
   readonly snapshotsDir: string;
   readonly idleTtlMs: number;
