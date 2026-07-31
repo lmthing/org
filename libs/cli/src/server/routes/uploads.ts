@@ -1,5 +1,6 @@
 import { readBody, sendJson } from './utils.js';
 import type { RouteHandler } from '../router.js';
+import { readCaller } from '../team-guard.js';
 
 /** Cap a single upload to keep base64 payloads (read fully into memory) bounded. */
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB
@@ -40,15 +41,49 @@ export const handleUpload: RouteHandler = async (req, res, _params, ctx) => {
     sendJson(res, 413, { error: `upload exceeds ${MAX_UPLOAD_BYTES} bytes` });
     return;
   }
-  const ref = await ctx.manager.saveUpload({ bytes, mediaType, ...(filename ? { filename } : {}) });
+  // On a team pod, remember WHO uploaded this. `readCaller` is null on a personal
+  // pod (single-tenant, one principal), so nothing changes there.
+  const owner = readCaller(req)?.userId;
+  const ref = await ctx.manager.saveUpload({
+    bytes, mediaType,
+    ...(filename ? { filename } : {}),
+    ...(owner ? { ownerUserId: owner } : {}),
+  });
   sendJson(res, 201, ref);
 };
 
-/** GET /api/uploads/:id — serve a stored upload's raw bytes for `<img>`/`<audio>`. */
-export const handleServeUpload: RouteHandler = async (_req, res, params, ctx) => {
+/**
+ * GET /api/uploads/:id — serve a stored upload's raw bytes for `<img>`/`<audio>`.
+ *
+ * On a TEAM pod this is a per-resource authorization point, and it had none: the
+ * request was discarded (`_req`), so the caller was never read, and the team guard
+ * lets every read-only method through before any per-resource rule could apply —
+ * correctly, since it gates route SHAPES, not resources.
+ *
+ * Nothing published an id to anyone but its uploader and ids are `randomUUID`, so
+ * this was not exploitable; the protection was that a member could not learn
+ * another member's id. A channel attachment puts an id into a message body every
+ * member reads, which ends that the moment the feature ships.
+ *
+ * A **404, not a 403**, for someone else's upload — the same choice the DM routes
+ * make. "You may not read this" and "there is no such thing" must be
+ * indistinguishable, or the error itself becomes a way to test which ids exist.
+ */
+export const handleServeUpload: RouteHandler = async (req, res, params, ctx) => {
   const id = params['id']!;
   const found = await ctx.manager.readUpload(id);
   if (!found) {
+    sendJson(res, 404, { error: 'upload not found' });
+    return;
+  }
+  const caller = readCaller(req);
+  // An upload with NO owner is served to any member, deliberately. Those are
+  // pre-existing files from before the field existed, and on a team pod they can
+  // only have come from a member of that same team's workspace — refusing them
+  // would break already-rendered images in already-sent messages to close a hole
+  // that the unguessable id is still covering for them. New uploads all carry an
+  // owner, so the ownerless set is closed and shrinks to nothing.
+  if (caller && found.ownerUserId && found.ownerUserId !== caller.userId) {
     sendJson(res, 404, { error: 'upload not found' });
     return;
   }

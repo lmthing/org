@@ -11,6 +11,19 @@ export type AttachmentKind = 'image' | 'audio' | 'file';
 /** Persisted metadata for a stored upload (sidecar `<id>.json`). */
 export interface UploadMeta {
   id: string;
+  /**
+   * The team member who uploaded this, on a TEAM pod. Absent on a personal pod,
+   * which is single-tenant and has exactly one principal, and absent on anything
+   * stored before this field existed.
+   *
+   * Without it no authorization was POSSIBLE: `GET /api/uploads/:id` had nothing
+   * to check the caller against, so the only thing keeping one member's upload
+   * from another was that ids are unguessable. That is a capability URL, which is
+   * a legitimate design but was arrived at by accident — and it stops being safe
+   * the moment an id appears in a message body other members read, which is the
+   * whole point of the attachment feature.
+   */
+  ownerUserId?: string;
   kind: AttachmentKind;
   mediaType: string;
   filename?: string;
@@ -239,7 +252,7 @@ export async function saveUpload(
   uploadsDir: string,
   input: {
     bytes: Uint8Array; mediaType: string; filename?: string;
-    transcript?: string; text?: string; pages?: string[];
+    transcript?: string; text?: string; pages?: string[]; ownerUserId?: string;
   },
 ): Promise<UploadMeta> {
   await mkdir(uploadsDir, { recursive: true });
@@ -248,6 +261,7 @@ export async function saveUpload(
     id,
     kind: classifyKind(input.mediaType),
     mediaType: input.mediaType,
+    ...(input.ownerUserId ? { ownerUserId: input.ownerUserId } : {}),
     ...(input.filename ? { filename: input.filename } : {}),
     ...(input.transcript ? { transcript: input.transcript } : {}),
     ...(input.text ? { text: input.text } : {}),

@@ -1623,7 +1623,7 @@ export class SessionManager {
   /** Store an uploaded file. Audio is transcribed on the way in (best-effort —
    *  a transcription failure still stores the file, just without a transcript).
    *  Returns a reference the chat client sends back with `sendMessage`. */
-  async saveUpload(input: { bytes: Uint8Array; mediaType: string; filename?: string }): Promise<AttachmentRef> {
+  async saveUpload(input: { bytes: Uint8Array; mediaType: string; filename?: string; ownerUserId?: string }): Promise<AttachmentRef> {
     let transcript: string | undefined;
     let text: string | undefined;
     const kind = classifyKind(input.mediaType);
@@ -1660,6 +1660,10 @@ export class SessionManager {
               bytes: png,
               mediaType: 'image/png',
               filename: `${input.filename ?? 'scan'} — page ${i + 1}`,
+              // A page image derived from someone's scan belongs to them too —
+              // otherwise the pages of a private document are unowned and
+              // therefore unguarded.
+              ...(input.ownerUserId ? { ownerUserId: input.ownerUserId } : {}),
             }),
           ),
         );
@@ -1679,12 +1683,13 @@ export class SessionManager {
   }
 
   /** Read a stored upload's bytes + metadata for the serving route. */
-  async readUpload(id: string): Promise<{ bytes: Uint8Array; mediaType: string } | null> {
+  async readUpload(id: string): Promise<{ bytes: Uint8Array; mediaType: string; ownerUserId?: string } | null> {
     const meta = await readUploadMeta(this.uploadsDir, id);
     if (!meta) return null;
     const bytes = await readUploadBytes(this.uploadsDir, id);
     if (!bytes) return null;
-    return { bytes, mediaType: meta.mediaType };
+    // The owner rides along so the serve route can authorize without a second read.
+    return { bytes, mediaType: meta.mediaType, ...(meta.ownerUserId ? { ownerUserId: meta.ownerUserId } : {}) };
   }
 
   /** Assemble the model input (text + image/file parts) and the trace-facing
