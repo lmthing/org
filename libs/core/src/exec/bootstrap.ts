@@ -30,7 +30,7 @@ import {
   createTeamChannelsGlobal,
   createTeamHistoryGlobal,
   createTeamPostGlobal,
-  createTeamPinAppGlobal,
+  createTeamPinAppGlobal, createTeamCreateChannelGlobal,
 } from '../globals/team.js';
 import { createConsentRequestGlobal } from '../globals/consent.js';
 import { CATALOG_NAMES } from '../ui/catalog.js';
@@ -283,6 +283,7 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   if (caps.app['team:post']) {
     injectGlobal(ctx, 'teamPost', createTeamPostGlobal(pushYield) as AnyFn);
     injectGlobal(ctx, 'teamPinApp', createTeamPinAppGlobal(pushYield) as AnyFn);
+    injectGlobal(ctx, 'teamCreateChannel', createTeamCreateChannelGlobal(pushYield) as AnyFn);
   }
   // __requestConsent: the internal seam consent-wrapped SPACE FUNCTIONS yield
   // through (sandbox/inject-functions.ts wrapWithConsentGate). Injected into EVERY

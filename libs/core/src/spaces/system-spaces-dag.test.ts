@@ -355,6 +355,8 @@ describe('shipped system spaces load + validate', () => {
    * Any new node that grants itself the writers (or a node that omits `capabilities:` entirely and
    * therefore INHERITS THING's `team:post`) turns this RED, which is the point: a read step that can
    * also broadcast is how a "let the others know" turn ends up posting three times.
+   * `teamCreateChannel` counts as one of the writers here: it is under the same capability and
+   * leaves the same kind of permanent, everybody-can-see-it artifact.
    */
   it('team:post is reachable from exactly one shipped tasklist node', async () => {
     const holders: string[] = [];
@@ -363,7 +365,7 @@ describe('shipped system spaces load + validate', () => {
       for (const tlName of Object.keys(space.tasklists)) {
         const tl = await loadTasklistFromSpace(space, tlName);
         for (const [id, node] of Object.entries(tl)) {
-          if (!/\bteamPost\(|\bteamPinApp\(/.test(node.instruction)) continue;
+          if (!/\bteamPost\(|\bteamPinApp\(|\bteamCreateChannel\(/.test(node.instruction)) continue;
           holders.push(`${spaceName}/${tlName}#${id}`);
           // A node that calls the writers must DECLARE them, and must be write-capable to keep them
           // (intersectAppCaps drops team:post for explore/plan).

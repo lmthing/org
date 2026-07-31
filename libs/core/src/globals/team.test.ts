@@ -5,7 +5,7 @@
  *   - the two ids are separately gated (read without post, post without read) and
  *     drive their own DTS fragments,
  *   - a read-only fork role keeps `team:read` and loses `team:post`,
- *   - the six globals push their kinds with the right args and the router
+ *   - the seven globals push their kinds with the right args and the router
  *     forwards each to the matching resolver method (clear error when absent).
  *
  * The identity half — who may read a DM, who may post — is enforced HOST-side and
@@ -19,7 +19,7 @@ import { routeCommonYield, type YieldRouterContext } from '../eval/yield-router.
 import type { YieldRequest } from '../eval/yield.js';
 import type { Space } from '../spaces/load.js';
 import { buildAmbientDts } from '../exec/bootstrap.js';
-import { sessionCapabilities, forkCapabilities } from '../exec/capability.js';
+import { sessionCapabilities, forkCapabilities, intersectAppCaps } from '../exec/capability.js';
 import { parseCapabilities, isTeamPod } from '../spaces/capabilities.js';
 import {
   createTeamContextGlobal,
@@ -28,6 +28,7 @@ import {
   createTeamHistoryGlobal,
   createTeamPostGlobal,
   createTeamPinAppGlobal,
+  createTeamCreateChannelGlobal,
   type TeamResolver,
 } from './team.js';
 
@@ -56,6 +57,7 @@ function recordingResolver(): { resolver: TeamResolver; calls: Array<[string, un
     history: async (...a: unknown[]) => (calls.push(['history', a]), { messages: [], hasMore: false, channelId: 'general', channelName: 'general', returned: 0, limit: 30 }),
     post: async (...a: unknown[]) => (calls.push(['post', a]), { ok: true, channelId: 'general', messageId: 'm1' }),
     pinApp: async (...a: unknown[]) => (calls.push(['pinApp', a]), { ok: true, channelId: 'general', apps: ['blog'] }),
+    createChannel: async (...a: unknown[]) => (calls.push(['createChannel', a]), { ok: true, channelId: 'design', name: 'design', created: true }),
   } as unknown as TeamResolver;
   return { resolver, calls };
 }
@@ -120,12 +122,17 @@ describe('team DTS — not granted ⇒ not declared', () => {
     expect(dts).toContain('declare function teamHistory');
     expect(dts).not.toContain('declare function teamPost');
     expect(dts).not.toContain('declare function teamPinApp');
+    expect(dts).not.toContain('declare function teamCreateChannel');
   });
 
   it('declares the WRITERS only under team:post', () => {
     const dts = buildAmbientDts({ capabilities: sessionCapabilities(true, { 'team:post': true }) });
     expect(dts).toContain('declare function teamPost');
     expect(dts).toContain('declare function teamPinApp');
+    // Creating a channel is a WRITER, under the same id: it is the same authority
+    // as speaking in one, and a third capability would have to be intersected,
+    // dropped and reasoned about everywhere these two already are.
+    expect(dts).toContain('declare function teamCreateChannel');
     // No DM writer exists on the model surface at all — THING has no user id, so
     // there is no honest way for it to be a participant in a direct message.
     expect(dts).not.toContain('teamDM');
@@ -134,7 +141,7 @@ describe('team DTS — not granted ⇒ not declared', () => {
 
   it('declares NONE of them with no grant — a personal pod DTS', () => {
     const dts = buildAmbientDts({ capabilities: sessionCapabilities(true, {}) });
-    for (const name of ['teamContext', 'teamMembers', 'teamChannels', 'teamHistory', 'teamPost', 'teamPinApp']) {
+    for (const name of ['teamContext', 'teamMembers', 'teamChannels', 'teamHistory', 'teamPost', 'teamPinApp', 'teamCreateChannel']) {
       expect(dts).not.toContain(name);
     }
   });
@@ -146,6 +153,29 @@ describe('team DTS — not granted ⇒ not declared', () => {
     const dts = buildAmbientDts({ capabilities: caps });
     expect(dts).toContain('declare function teamHistory');
     expect(dts).not.toContain('declare function teamPost');
+    expect(dts).not.toContain('declare function teamCreateChannel');
+  });
+
+  /**
+   * The FIRST line of defence against a viewer creating a channel is not the
+   * resolver's refusal — it is that the global is never declared for them. A
+   * channel turn started by a viewer is built with `SessionOpts.readOnly`
+   * (`libs/cli/src/server/routes/team-channels.ts` → `Session`'s
+   * `intersectAppCaps(caps, opts.readOnly !== true)`), which drops `team:post`
+   * whole. So `teamCreateChannel(...)` in a viewer's turn is `Cannot find name` —
+   * a typecheck error the model corrects — and never a call that reaches the host.
+   * The host refusal is tested too (`libs/cli/src/server/team-globals.test.ts`);
+   * both exist because the resolver is reachable from paths that are not a
+   * channel turn.
+   */
+  it("a READ-ONLY turn (a viewer's) has no writer in its DTS at all, not even a refusable one", () => {
+    const readOnly = intersectAppCaps({ 'team:read': true, 'team:post': true }, false);
+    expect(readOnly['team:post']).toBeUndefined();
+    const dts = buildAmbientDts({ capabilities: sessionCapabilities(true, readOnly) });
+    expect(dts).not.toContain('teamCreateChannel');
+    expect(dts).not.toContain('teamPost');
+    // …while every reader survives: a viewer may still look the workspace up.
+    expect(dts).toContain('declare function teamChannels');
   });
 
   it('a general fork keeps both', () => {
@@ -167,6 +197,7 @@ describe('team yields route to the resolver', () => {
     void createTeamHistoryGlobal(push)('general', { limit: 10 });
     void createTeamPostGlobal(push)('design', 'hello', { threadId: 'thr' });
     void createTeamPinAppGlobal(push)('general', 'blog');
+    void createTeamCreateChannelGlobal(push)('Product Design', { categoryId: 'work' });
 
     expect(pushed.map((p) => p.kind)).toEqual([
       'teamContext',
@@ -175,6 +206,7 @@ describe('team yields route to the resolver', () => {
       'teamHistory',
       'teamPost',
       'teamPinApp',
+      'teamCreateChannel',
     ]);
     for (const p of pushed) await routeCommonYield(p, ctx);
 
@@ -185,10 +217,12 @@ describe('team yields route to the resolver', () => {
       'history',
       'post',
       'pinApp',
+      'createChannel',
     ]);
     expect(calls[3]).toEqual(['history', ['general', { limit: 10 }]]);
     expect(calls[4]).toEqual(['post', ['design', 'hello', { threadId: 'thr' }]]);
     expect(calls[5]).toEqual(['pinApp', ['general', 'blog']]);
+    expect(calls[6]).toEqual(['createChannel', ['Product Design', { categoryId: 'work' }]]);
   });
 
   it('carries NO identity in its args — the caller is never sandbox-supplied', () => {
@@ -196,15 +230,19 @@ describe('team yields route to the resolver', () => {
     const push = (r: YieldRequest): void => void pushed.push(r);
     void createTeamContextGlobal(push)();
     void createTeamPostGlobal(push)('design', 'hello');
+    void createTeamCreateChannelGlobal(push)('design');
     // Nothing a model writes can name a user, a role or a team: the globals take
     // channel/text/ids only, so the resolver's closed-over caller is the ONLY
     // identity in play.
     expect(pushed[0]!.args).toEqual([]);
     expect(pushed[1]!.args).toEqual(['design', 'hello', undefined]);
+    // Creating carries a NAME and nothing else — no members list, no owner, no
+    // role: who may see a named channel is not the sandbox's to decide.
+    expect(pushed[2]!.args).toEqual(['design', undefined]);
   });
 
   it('says WHY when the turn has no team context, instead of failing obscurely', async () => {
-    for (const kind of ['teamContext', 'teamHistory', 'teamPost'] as const) {
+    for (const kind of ['teamContext', 'teamHistory', 'teamPost', 'teamCreateChannel'] as const) {
       await expect(routeCommonYield(req(kind, ['general']), baseCtx())).rejects.toThrow(
         /not running in a team channel/,
       );

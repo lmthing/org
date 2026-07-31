@@ -125,7 +125,7 @@ export interface YieldRouterContext {
    *  libs/cli on `AppGlobalImpls.emitEvent`). Absent ⇒ a clear error. */
   emitEventResolver?: EmitEventResolver;
   /** Resolve the team-global yields (`teamContext`/`teamMembers`/`teamChannels`/
-   *  `teamHistory`/`teamPost`/`teamPinApp`) — host-supplied by libs/cli on
+   *  `teamHistory`/`teamPost`/`teamPinApp`/`teamCreateChannel`) — host-supplied by libs/cli on
    *  `AppGlobalImpls.team`, built PER TURN and closed over the verified caller +
    *  channel that started it. Absent for any turn that is not a team-channel turn
    *  (a personal pod, or Studio/chat on a team pod) ⇒ a clear error naming why. */
@@ -373,7 +373,8 @@ export async function routeCommonYield(
     case 'teamChannels':
     case 'teamHistory':
     case 'teamPost':
-    case 'teamPinApp': {
+    case 'teamPinApp':
+    case 'teamCreateChannel': {
       // The team workspace globals (`team:read` / `team:post`). One arm for all
       // seven: the resolver is bound HOST-side to this turn's verified caller and
       // channel, so the only thing routed from the sandbox is the arguments — never
@@ -404,6 +405,10 @@ export async function routeCommonYield(
         case 'teamPost': {
           const [channelId, text, opts] = req.args as [string, string, { threadId?: string } | undefined];
           return { handled: true, value: await team.post(channelId, text, opts) };
+        }
+        case 'teamCreateChannel': {
+          const [name, opts] = req.args as [string, { categoryId?: string } | undefined];
+          return { handled: true, value: await team.createChannel(name, opts) };
         }
         default: {
           const [channelId, projectId] = req.args as [string, string];

@@ -390,7 +390,7 @@ declare function teamChannels(): Promise<Array<{ id: string; name: string; kind:
 /** A page of a channel's history, newest last — how you answer "what did we decide about X". Rejects for a channel the caller cannot see. At most 100 messages (default 30); \`returned\`/\`channelName\` are there so you can SAY what you read. */
 declare function teamHistory(channelId: string, opts?: { limit?: number; before?: string }): Promise<{ messages: Array<{ id: string; ts: string; channelId: string; kind: 'user' | 'thing' | 'system'; text: string; author: string; userId?: string; threadId?: string }>; hasMore: boolean; channelId: string; channelName: string; returned: number; limit: number }>;`;
 
-// `team:post` earns the two WRITERS. Deliberately a separate id from `team:read`:
+// `team:post` earns the three WRITERS. Deliberately a separate id from `team:read`:
 // these leave records in a shared log and raise other people's badges, and they are the
 // grant a read-only fork role loses (`exec/capability.ts#intersectAppCaps`).
 //
@@ -404,10 +404,18 @@ declare function teamHistory(channelId: string, opts?: { limit?: number; before?
 // implementations are impersonating the asker or inventing an identity the addressing
 // scheme has no room for. Reaching one person is `teamPost` + an `@handle`, which
 // rides the existing mention/badge/push path.
+//
+// `teamCreateChannel` is here rather than under an id of its own because making a
+// room the whole team can see is the same authority as speaking in one, and it is
+// the grant a read-only fork role must lose for exactly the same reason. It takes
+// no `members`: a named channel is the whole team's, and a private conversation is
+// a DM, addressed by who is in it.
 export const TEAM_POST_DTS = `/** Post into a channel the caller can see (optionally in a thread). Posts AS THING, attributed to the member who asked; \`@handle\` in the text notifies that person. Editor callers only. A post to another channel leaves a receipt in this thread. */
 declare function teamPost(channelId: string, text: string, opts?: { threadId?: string }): Promise<{ ok: boolean; channelId: string; messageId?: string; receipt?: boolean }>;
 /** Pin a project's app beside a channel so it can be opened next to the conversation. Editor callers only. */
-declare function teamPinApp(channelId: string, projectId: string): Promise<{ ok: boolean; channelId: string; apps: string[] }>;`;
+declare function teamPinApp(channelId: string, projectId: string): Promise<{ ok: boolean; channelId: string; apps: string[] }>;
+/** Give a subject a channel of its own, visible to the whole team (there is no members list — a private conversation is a DM). Editor callers only. Get-or-create on the name: \`created: false\` means one already existed and you were handed THAT one, so say so rather than announcing a new one. Use the returned \`channelId\` to \`teamPost\` the first message in there — a channel nobody was told about is a room nobody opens. */
+declare function teamCreateChannel(name: string, opts?: { categoryId?: string }): Promise<{ ok: boolean; channelId: string; name: string; created: boolean }>;`;
 
 /**
  * Registry of the STANDALONE app-capability fragments, keyed by capability id, for

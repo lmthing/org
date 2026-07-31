@@ -161,12 +161,12 @@ const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId
  *   - team:read      → `true` (bare; TEAM PODS ONLY — grants teamContext/teamMembers/
  *                      teamChannels/teamHistory. Dropped on a personal pod, so the
  *                      globals are neither injected nor declared there.)
- *   - team:post      → `true` (bare; TEAM PODS ONLY — grants teamPost/teamPinApp.
- *                      A separate id from `team:read` because posting into a channel
- *                      creates a permanent record and raises other people's badges,
- *                      where reading the directory discloses only what the caller
- *                      already sees; the split is also what lets a read-only fork role
- *                      keep the readers and lose the writers.)
+ *   - team:post      → `true` (bare; TEAM PODS ONLY — grants teamPost/teamPinApp/
+ *                      teamCreateChannel: every way a turn changes the shared workspace,
+ *                      under ONE id. A separate id from `team:read` because writing into
+ *                      a channel leaves a permanent record and raises other people's
+ *                      badges, where reading discloses only what the caller already sees;
+ *                      the split is what lets a read-only fork role keep the readers.)
  *   - fs:scratch     → `true` (bare; grants createScratch + a sandboxed generic
  *                      fs/shell surface rooted at a throwaway .lmthing/scratch dir —
  *                      the engineer's code sandbox. The ONLY grant that earns any

@@ -6,8 +6,9 @@
  *
  *  - **Viewer escalation.** `team-guard.ts` keeps a viewer out of the mutating
  *    REST surface. If a viewer could say "THING, announce this in #general" and
- *    have it happen, the agent would be a way around the guard. So both writers
- *    refuse a viewer and both work for an editor.
+ *    have it happen, the agent would be a way around the guard. So EVERY writer —
+ *    posting, pinning, creating a channel — refuses a viewer and works for an
+ *    editor.
  *
  *  - **DM visibility.** A direct message is visible only to its participants
  *    (`isVisibleTo`). THING answers for whoever asked, so a member must not be
@@ -26,6 +27,7 @@ import {
   dmChannelId,
   ensureDefaultChannel,
   ensureDmChannel,
+  listChannels,
   readMessages,
   type Channel,
   type ChannelMessage,
@@ -474,5 +476,109 @@ describe('teamPinApp', () => {
     const { team, changed } = resolverFor(VIC, general);
     await expect(team.pinApp('general', 'blog')).rejects.toThrow(/viewer/);
     expect(changed).toHaveLength(0);
+  });
+});
+
+/**
+ * `teamCreateChannel` — "give this its own room", the request THING could read the
+ * channel list for and never answer. Three things have to hold or a created
+ * channel is worse than none:
+ *
+ *  - the caller gets the ID BACK, or it cannot say the first word in there,
+ *  - it is ANNOUNCED, or it appears in nobody's sidebar until they reload,
+ *  - asking twice does not make two rooms about the same subject — which is
+ *    exactly the mess the request was trying to end.
+ */
+describe('teamCreateChannel — giving a subject its own room', () => {
+  it('an EDITOR creates one, gets its id back, and it is announced to the team', async () => {
+    const general = (await ensureDefaultChannel(root))[0]!;
+    const { team, changed } = resolverFor(ANA, general, 'thr-1');
+
+    const r = await team.createChannel('Website Redesign');
+    expect(r).toEqual({ ok: true, channelId: 'website-redesign', name: 'Website Redesign', created: true });
+
+    // Announced through the same hook a pin uses — the route turns it into the
+    // `{ type:'channel' }` broadcast `handleCreateChannel` sends, so it lands in
+    // every connected member's sidebar without a reload.
+    expect(changed.map((c) => c.id)).toEqual(['website-redesign']);
+
+    // On disk, and byte-identical to a channel a person made: same slug id, same
+    // record shape, filed by the member who asked.
+    const stored = (await listChannels(root)).find((c) => c.id === 'website-redesign')!;
+    expect(stored.kind).toBe('channel');
+    expect(stored.createdBy).toBe(ANA.userId);
+    // No members allowlist — a named channel is the whole team's.
+    expect(stored.members).toBeUndefined();
+  });
+
+  it('the id it returns is immediately usable — the caller can SAY the first thing in there', async () => {
+    const general = (await ensureDefaultChannel(root))[0]!;
+    const { team, posted } = resolverFor(ANA, general, 'thr-1');
+
+    const { channelId } = await team.createChannel('Budget 2031');
+    const post = await team.post(channelId, 'this is where the budget lives now, @bo');
+    expect(post.ok).toBe(true);
+    // And because the turn is running elsewhere, the thread that asked gets the receipt.
+    expect(post.receipt).toBe(true);
+    expect(posted.map((m) => m.channelId)).toEqual(['budget-2031', 'general']);
+    expect(posted[0]!.mentions).toEqual(['u-bo']);
+
+    // It is also in the caller's channel list from that moment on.
+    expect((await team.channels()).map((c) => c.id)).toContain('budget-2031');
+  });
+
+  it('a name already taken returns THAT channel and creates nothing — no near-duplicate, no second announcement', async () => {
+    const general = (await ensureDefaultChannel(root))[0]!;
+    await createChannel(root, 'Design', 'u-bo');
+    const { team, changed } = resolverFor(ANA, general);
+
+    // Same slug, different case — a person would call these one channel and so do we.
+    const r = await team.createChannel('design');
+    expect(r).toEqual({ ok: true, channelId: 'design', name: 'Design', created: false });
+    // The stored display name wins: the answer must name the channel as it appears
+    // in the sidebar, not as it was asked for.
+    expect((await listChannels(root)).filter((c) => c.id.startsWith('design'))).toHaveLength(1);
+    // Nothing changed, so nothing is broadcast — a re-ask must not redraw sidebars.
+    expect(changed).toHaveLength(0);
+  });
+
+  it('a VIEWER cannot create one — the agent is not a way around the REST guard', async () => {
+    const general = (await ensureDefaultChannel(root))[0]!;
+    const { team, changed } = resolverFor(VIC, general);
+
+    await expect(team.createChannel('viewer channel')).rejects.toThrow(/viewer/);
+    // Refused BEFORE anything happened: no record, no broadcast.
+    expect(changed).toHaveLength(0);
+    expect((await listChannels(root)).map((c) => c.id)).toEqual(['general']);
+  });
+
+  it('refuses a name that cannot become a channel, instead of a low-level throw', async () => {
+    const general = (await ensureDefaultChannel(root))[0]!;
+    const { team } = resolverFor(ANA, general);
+    await expect(team.createChannel('   ')).rejects.toThrow(/needs a name/);
+    await expect(team.createChannel('!!!')).rejects.toThrow(/usable channel name/);
+    expect((await listChannels(root)).map((c) => c.id)).toEqual(['general']);
+  });
+
+  it('files it under a category when asked, so it lands where the team expects it', async () => {
+    const general = (await ensureDefaultChannel(root))[0]!;
+    const { team } = resolverFor(ANA, general);
+    await team.createChannel('Q3 Planning', { categoryId: 'work' });
+    expect((await listChannels(root)).find((c) => c.id === 'q3-planning')?.categoryId).toBe('work');
+  });
+
+  /**
+   * There is no `members` parameter and no invite verb: who can see a named
+   * channel is not a thing an agent turn decides, and a DM is addressed by the set
+   * of people in it. If this ever grows one, it is a product decision about the
+   * team surface, not a resolver argument.
+   */
+  it('exposes no membership verbs at all', async () => {
+    const general = (await ensureDefaultChannel(root))[0]!;
+    const { team } = resolverFor(ANA, general);
+    const surface = team as unknown as Record<string, unknown>;
+    for (const verb of ['invite', 'addMember', 'removeMember', 'deleteChannel', 'renameChannel']) {
+      expect(surface[verb]).toBeUndefined();
+    }
   });
 });

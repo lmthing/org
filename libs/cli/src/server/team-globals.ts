@@ -45,6 +45,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
   TeamChannelInfo,
+  TeamCreateChannelResult,
   TeamHistoryPage,
   TeamMemberInfo,
   TeamMessageInfo,
@@ -55,6 +56,8 @@ import type {
 } from '@lmthing/core';
 import {
   appendMessage,
+  channelIdFromName,
+  createChannel,
   ensureDefaultChannel,
   isValidChannelId,
   isVisibleTo,
@@ -92,7 +95,16 @@ export interface TeamTurnContext {
 export interface TeamGlobalsHooks {
   /** A message THING just appended, with the channel it landed in. */
   onPost?: (message: ChannelMessage, channel: Channel) => void;
-  /** A channel record THING just changed (a pin). */
+  /**
+   * A channel record THING just wrote — a pin, or a channel it just CREATED.
+   *
+   * One hook for both because the announcement is the same one either way: the
+   * route turns it into `broadcastChannelEvent({ type:'channel', channel })`,
+   * which is exactly what `handleCreateChannel` sends when a person makes a
+   * channel from the UI. Without it the channel exists on disk and appears in
+   * nobody's sidebar until they happen to reload — an answer only the asker can
+   * see is not an answer in a shared workspace.
+   */
   onChannelChanged?: (channel: Channel) => void;
 }
 
@@ -326,6 +338,52 @@ export function createTeamResolver(
       });
       hooks.onChannelChanged?.(updated);
       return { ok: true, channelId, apps: [...(updated.apps ?? [])] };
+    },
+
+    /**
+     * Make a channel — the same {@link createChannel} the REST route calls, so
+     * there is ONE creation path and an agent-made channel is byte-identical to a
+     * person-made one (same slugified id, same `#general` seeding, same
+     * get-or-create on a name already taken).
+     *
+     * Get-or-create rather than refuse-or-suffix: the request behind this is
+     * always "put this subject somewhere of its own", and answering it with a
+     * second channel of nearly the same name creates precisely the confusion it
+     * was meant to end. `created` distinguishes the two outcomes so the turn can
+     * say which happened instead of announcing a channel it did not make.
+     *
+     * No `members` parameter, deliberately. A named channel is visible to the
+     * whole team ({@link isVisibleTo}), and a private conversation is a DM
+     * addressed by the sorted set of its participants — a members list here would
+     * be a third visibility model invented in a resolver.
+     */
+    async createChannel(name, opts): Promise<TeamCreateChannelResult> {
+      if (caller.role !== 'editor') refuseViewer('creating a channel');
+      const wanted = typeof name === 'string' ? name.trim() : '';
+      if (!wanted) throw new TeamGlobalError('a channel needs a name');
+      // Validate the name the way the store will derive the id, so a bad name is
+      // refused with something the model can act on rather than surfacing as a
+      // low-level throw from the writer.
+      if (!isValidChannelId(channelIdFromName(wanted))) {
+        throw new TeamGlobalError(
+          `${JSON.stringify(wanted)} does not make a usable channel name — use letters and numbers`,
+        );
+      }
+      const { channel, created } = await createChannel(
+        root,
+        wanted,
+        caller.userId,
+        opts?.categoryId,
+      );
+      // The invariant every other method here keeps: never hand back a channel the
+      // caller cannot see. Only reachable if a name slugified onto a DM's id.
+      if (!isVisibleTo(channel, caller.userId)) {
+        throw new TeamGlobalError(`cannot create a channel called ${JSON.stringify(wanted)}`);
+      }
+      // Announce it exactly as the REST route does — and only when it is NEW, or a
+      // second ask would redraw everyone's sidebar for nothing.
+      if (created) hooks.onChannelChanged?.(channel);
+      return { ok: true, channelId: channel.id, name: channel.name, created };
     },
   };
 }

@@ -72,6 +72,7 @@ export type {
   TeamHistoryPage,
   TeamPostResult,
   TeamPinResult,
+  TeamCreateChannelResult,
 } from './globals/team.js';
 export {
   CONSENT_MARKED_YIELD_KINDS,
