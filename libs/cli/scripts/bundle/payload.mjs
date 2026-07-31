@@ -102,14 +102,23 @@ function jsFilesUnder(dir, out = []) {
   return out;
 }
 
-/** First file named `name` anywhere under `dir`, or undefined. */
+/**
+ * First file under `dir` whose name is `name` or `name-<something>`, ignoring
+ * archives.
+ *
+ * The prefix match is load-bearing, not defensive: upstream's archives do not
+ * agree with each other. The gnu tarball contains a plain `zerostack`, while the
+ * musl one contains `zerostack-x86_64-unknown-linux-musl`. An exact-name search
+ * works until the day the triple changes, then fails with "no zerostack file
+ * inside <url>" about an archive that plainly contains one.
+ */
 function findFileNamed(dir, name) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
     if (e.isDirectory()) {
       const hit = findFileNamed(p, name);
       if (hit) return hit;
-    } else if (e.name === name) {
+    } else if ((e.name === name || e.name.startsWith(`${name}-`)) && !/\.(tar\.gz|tgz|zip)$/.test(e.name)) {
       return p;
     }
   }

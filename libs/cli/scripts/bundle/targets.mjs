@@ -49,14 +49,25 @@ export const ZEROSTACK_VERSION = 'v1.7.2';
  */
 
 /**
- * `-gnu` rather than `-musl` for zerostack on Linux: the binary is spawned by a
- * Node process on whatever distro the person runs, and the gnu build is the one
- * upstream tests. musl would be the right choice only if we controlled the base
- * image, which is the compute pod's situation and not this one.
+ * `-musl` on Linux, NOT `-gnu` — the opposite of what the compute image uses, and
+ * for a reason that only applies here.
+ *
+ * The gnu build is dynamically linked against a very recent glibc: it needs
+ * **2.39**, which is Ubuntu 24.04. The bundle is built on ubuntu-22.04 (glibc
+ * 2.35) precisely so the executable runs on older distros, so the gnu binary
+ * fails its own `--version` probe on the build machine, and would have failed at
+ * exec on every user older than 24.04:
+ *
+ *     zerostack: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.39' not found
+ *
+ * The musl build is statically linked and has no libc dependency at all. The
+ * compute image can prefer gnu because it controls its own base (Debian, one
+ * known glibc); a downloadable bundle controls nothing about where it lands,
+ * which is exactly the case static linking exists for.
  */
 const ZS_TRIPLE = {
-  'linux-x64': 'x86_64-unknown-linux-gnu',
-  'linux-arm64': 'aarch64-unknown-linux-gnu',
+  'linux-x64': 'x86_64-unknown-linux-musl',
+  'linux-arm64': 'aarch64-unknown-linux-musl',
   'darwin-x64': 'x86_64-apple-darwin',
   'darwin-arm64': 'aarch64-apple-darwin',
   // No upstream Windows asset. Null, not missing, so a reader sees the decision.
