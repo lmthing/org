@@ -29,7 +29,7 @@
 //! the default is `--headless=new`, which is the same Chromium with the same engine, profile and
 //! cookie jar, drawing to a surface the pane can read instead of to a desktop window.
 //!
-//! `headless: false` is a real mode, not a debug flag: [`crate::commands::browser_popout`] uses it
+//! `headless: false` is a real mode, not a debug flag: [`crate::commands::browser_relaunch`] uses it
 //! to hand the person a normal window when the pane is not the right tool — a file upload dialog,
 //! a video call, anything where a streamed image is a poor substitute for the real thing.
 
@@ -279,6 +279,9 @@ mod tests {
         // Accepting the port alone yields `ws://127.0.0.1:41234`, which connects to nothing.
         assert_eq!(parse_devtools_active_port("41234\n"), None);
         assert_eq!(parse_devtools_active_port(""), None);
-        assert_eq!(parse_devtools_active_port("not-a-port\n/devtools/browser/x"), None);
+        assert_eq!(
+            parse_devtools_active_port("not-a-port\n/devtools/browser/x"),
+            None
+        );
     }
 }

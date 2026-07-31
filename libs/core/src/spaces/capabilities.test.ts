@@ -149,25 +149,35 @@ describe('system-space smoke: the new frontmatter allow-list gate breaks nothing
     // user-memory/memory (db:write ceiling for its migrate_to_app_db action), and
     // system-desktop-browser/devtools (browser:cdp — raw DevTools Protocol against the desktop's
     // browser, the narrowest grant in the system). Every other system agent parses to {}.
-    const capBearing = (dir: string): boolean =>
-      dir.endsWith('system-appbuilder') ||
-      dir.endsWith('system-viewbuilder') ||
-      dir.includes('integration-') ||
-      dir.endsWith('system-engineer') ||
-      dir.endsWith('system-desktop-browser') ||
-      dir.endsWith('system-store') ||
-      dir.endsWith('user-thing') ||
-      dir.endsWith('user-memory');
-    for (const space of spaces) {
-      const hasCaps = capBearing(space.dir);
-      for (const agent of Object.values(space.agents)) {
-        if (hasCaps) {
-          expect(Object.keys(agent.capabilities ?? {}).length).toBeGreaterThan(0);
-        } else {
-          expect(agent.capabilities).toEqual({});
-        }
-      }
-    }
+    // Asserted PER AGENT rather than per space. A space is not uniformly capability-bearing:
+    // `system-desktop-browser` ships `devtools`, which holds `browser:cdp`, alongside `browse`,
+    // which holds nothing because its own function list is its gate. Grouping by directory made
+    // the second one look like a mistake.
+    const holders = spaces
+      .flatMap((space) =>
+        Object.entries(space.agents).map(([name, agent]) => ({
+          ref: `${space.dir.split('/').pop()}/${name}`,
+          caps: Object.keys(agent.capabilities ?? {}),
+        })),
+      )
+      .filter((a) => a.caps.length > 0)
+      .map((a) => a.ref)
+      .sort();
+    expect(holders).toEqual([
+      'system-appbuilder/api-author',
+      'system-appbuilder/automator',
+      'system-appbuilder/data-modeler',
+      'system-appbuilder/page-builder',
+      'system-desktop-browser/devtools',
+      'system-engineer/engineer',
+      'system-store/finder',
+      'system-viewbuilder/api-author',
+      'system-viewbuilder/automator',
+      'system-viewbuilder/data-modeler',
+      'system-viewbuilder/spec-builder',
+      'user-memory/memory',
+      'user-thing/thing',
+    ]);
   });
 
   it("system-appbuilder's automator holds the full authoring capability set", async () => {
