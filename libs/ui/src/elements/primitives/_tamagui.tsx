@@ -426,10 +426,14 @@ const PRESSABLE_COMPONENTS: Record<PressableAs, React.ComponentType<any>> = {
   div: makePressableTag('div'),
 }
 
-export const Pressable = React.forwardRef<HTMLElement, PressablePrimitiveProps>(({ as, ...props }, ref) => {
-  const Comp = PRESSABLE_COMPONENTS[as ?? 'button'] ?? PRESSABLE_COMPONENTS.button
-  return React.createElement(Comp, { ...withFontScale(props), ref })
-})
+export const Pressable = React.forwardRef<HTMLElement, PressablePrimitiveProps>(
+  // `hitSlop` is dropped here rather than forwarded: it means nothing to a mouse, and passing it
+  // on would reach the DOM as an unknown attribute and warn on every render.
+  ({ as, hitSlop: _hitSlop, ...props }, ref) => {
+    const Comp = PRESSABLE_COMPONENTS[as ?? 'button'] ?? PRESSABLE_COMPONENTS.button
+    return React.createElement(Comp, { ...withFontScale(props), ref })
+  },
+)
 Pressable.displayName = 'Pressable'
 
 // ── Box (block container) ─────────────────────────────────────────────────────────────────────────
@@ -460,6 +464,16 @@ export type BoxAs =
  */
 export interface GestureProps {
   onLongPress?: () => void
+  /**
+   * Extra TOUCHABLE area around the control, in points, without changing how big it looks.
+   *
+   * NATIVE ONLY — stripped on web, where the pointer is precise and the idiom does not exist.
+   * It is here because the alternative is padding, and padding moves everything around it: a
+   * 16px icon that must be reachable at 44pt either pushes its neighbours apart or cannot be
+   * made reachable at all. Several controls in this app are 24-32pt against a 44pt/48dp
+   * minimum for exactly that reason.
+   */
+  hitSlop?: number
 }
 
 export type BoxPrimitiveProps = React.HTMLAttributes<HTMLElement> &

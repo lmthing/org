@@ -465,3 +465,13 @@ test('KeyboardAvoiding mounts, and pads only where the OS does not already resiz
   const hosts = hostTypes(tree)
   expect(hosts.length > 0, `it mounts something (saw ${hosts.join()})`).toBe(true)
 })
+
+test('Pressable forwards hitSlop on native, so a small control can still be reachable', () => {
+  // The alternative is padding, and padding moves everything around it: a 16pt icon that must be
+  // reachable at 44pt either pushes its neighbours apart or cannot be made reachable at all.
+  // Several controls in this app sit at 24-32pt against a 44pt/48dp minimum for exactly that
+  // reason. `nativeSafeProps` forwards any non-`on*` prop, so this only had to exist in the type.
+  const { tree } = render(<Pressable hitSlop={12} onClick={() => {}} />)
+  const host = find(tree, (t) => /View|Text/.test(t))
+  expect(host?.props.hitSlop, 'reaches the native host').toBe(12)
+})
