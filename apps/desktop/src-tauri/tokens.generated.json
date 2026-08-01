@@ -1,5 +1,5 @@
 {
   "$generated": "pnpm generate:tauri-conf — do not edit; source is libs/css/src/tokens/tokens.json",
-  "backgroundLight": "#fffdfb",
-  "backgroundDark": "#1a1512"
+  "backgroundLight": "#fcfcfd",
+  "backgroundDark": "#101317"
 }
