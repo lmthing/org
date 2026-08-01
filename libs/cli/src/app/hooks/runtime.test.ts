@@ -169,8 +169,13 @@ describe('ProjectHookRuntime — db emitter defs + synthetic event (real worker)
     new ProjectHookRuntime(PROJECT, root, {} as never, fakeDb, [rawSub, typedSub]);
 
     listener?.({ table: 'orders', event: 'insert', rows: [{ id: 'o1', total: 42 }] });
-    // Allow the synchronous synthetic drain + the async worker-emit drain to complete.
-    await new Promise((r) => setTimeout(r, 400));
+    // POLL for the second hook, do not sleep for it. This was `setTimeout(…, 400)`, and 400 ms is a
+    // guess about how long a real worker_thread takes to boot, transform `events/order-emitter.ts`
+    // and emit — which is fine on an idle machine and not fine when the other 250 test files are
+    // running. It failed in the full suite only, with `['raw-sub']` instead of both slugs: the
+    // SYNTHETIC drain is synchronous so it always landed, and the worker one had simply not arrived
+    // yet. A test that measures the machine rather than the code is a gate nobody can trust.
+    for (let i = 0; i < 400 && fired.length < 2; i++) await new Promise((r) => setTimeout(r, 25));
 
     const bySlug = Object.fromEntries(fired.map((f) => [f.slug, f.input]));
     expect(Object.keys(bySlug).sort()).toEqual(['raw-sub', 'typed-sub']);

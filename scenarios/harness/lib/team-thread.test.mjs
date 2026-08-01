@@ -71,7 +71,13 @@ describe('ThreadSession completion signal', () => {
     const thread = new ThreadSession(pod, { channelId: 'general' });
     await thread.open();
 
-    const turn = thread.ask('ana', '@thing hello', FAST);
+    // `askGraceMs` is raised OUT of the way — this test is about the terminal, and `FAST`'s 60 ms put
+    // it in a race with the test's own 40 ms probe below. Overshoot that window and the driver
+    // INFERS the `thing` message is a question (`#drain`'s `parkedNow`), which moves it from
+    // `replies` to `asks`, and `#turn` filters asks out of the answer — so `text` came back `''`
+    // with `status:'done'`, which reads as a product bug and is a stopwatch losing to a loaded
+    // machine. The two `pod SAYS it is parked` cases below already override it for the same reason.
+    const turn = thread.ask('ana', '@thing hello', { ...FAST, askGraceMs: 60_000 });
     await new Promise((r) => setTimeout(r, 20));
     const threadId = pod.posted[0].id;
     pod.status('general', threadId, 'running');

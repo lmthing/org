@@ -96,16 +96,32 @@ async function waitReady(mgr: SessionManager, id: string): Promise<void> {
   throw new Error('session did not initialize in time');
 }
 
-/** Send one message and wait for the turn (idle) to settle + persist. */
-async function sendAndSettle(mgr: SessionManager, id: string, msg: string): Promise<void> {
+/**
+ * Send one message and wait for the turn (idle) to settle + persist.
+ *
+ * `persisted` is how the caller says WHAT it is waiting for. The status poll below only proves the
+ * turn stopped running; `persistSession` is fire-and-forget after that, and this used to close the
+ * gap with `setTimeout(…, 30)` — a guess that held on an idle machine and did not hold in the full
+ * 250-file suite, where `snapshot.json` was simply not on disk yet and the test read `expected false
+ * to be true` with nothing wrong in the code under test.
+ */
+async function sendAndSettle(
+  mgr: SessionManager,
+  id: string,
+  msg: string,
+  persisted?: () => boolean,
+): Promise<void> {
   mgr.sendMessage(id, msg);
   for (let i = 0; i < 300; i++) {
     const e = mgr.getSession(id);
     if (e && e.status !== 'running') break;
     await new Promise((r) => setTimeout(r, 10));
   }
-  // Give the fire-and-forget persistSession a tick to flush.
-  await new Promise((r) => setTimeout(r, 30));
+  for (let i = 0; i < 200 && !(persisted?.() ?? true); i++) {
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  // A caller with nothing specific to wait for still gets the old flush tick.
+  if (!persisted) await new Promise((r) => setTimeout(r, 30));
 }
 
 describe('SessionManager spaceRef chat sessions', () => {
@@ -137,10 +153,10 @@ describe('SessionManager spaceRef chat sessions', () => {
 
     const { sessionId } = mgr.createSession({ spaceRef: 'curation/curator', projectId: PROJECT });
     await waitReady(mgr, sessionId);
-    await sendAndSettle(mgr, sessionId, 'hello');
 
     const spaceSnap = join(root, PROJECT, 'spaces', 'curation', 'sessions', sessionId, 'snapshot.json');
     const projSnap = join(root, PROJECT, 'sessions', sessionId, 'snapshot.json');
+    await sendAndSettle(mgr, sessionId, 'hello', () => existsSync(spaceSnap));
     expect(existsSync(spaceSnap)).toBe(true);
     expect(existsSync(projSnap)).toBe(false);
 
@@ -159,7 +175,12 @@ describe('SessionManager spaceRef chat sessions', () => {
     const mgr1 = recordingManager(root, captured1);
     const { sessionId } = mgr1.createSession({ spaceRef: 'curation/curator', projectId: PROJECT });
     await waitReady(mgr1, sessionId);
-    await sendAndSettle(mgr1, sessionId, 'hello');
+    // The whole point of this test is the RESUME, so the snapshot must actually be on disk before
+    // the "restart" — otherwise a slow persist makes mgr2 resume from nothing and the failure lands
+    // several assertions later, on a symptom.
+    await sendAndSettle(mgr1, sessionId, 'hello', () =>
+      existsSync(join(root, PROJECT, 'spaces', 'curation', 'sessions', sessionId, 'snapshot.json')),
+    );
     await mgr1.disposeSession(sessionId);
 
     // Simulated restart: brand-new manager, same root.
@@ -196,8 +217,9 @@ describe('SessionManager spaceRef chat sessions', () => {
     await waitReady(mgr, sessionId);
 
     expect(mgr.getSession(sessionId)!.spaceId).toBeUndefined();
-    await sendAndSettle(mgr, sessionId, 'hi');
+    const snap = join(root, PROJECT, 'sessions', sessionId, 'snapshot.json');
+    await sendAndSettle(mgr, sessionId, 'hi', () => existsSync(snap));
 
-    expect(existsSync(join(root, PROJECT, 'sessions', sessionId, 'snapshot.json'))).toBe(true);
+    expect(existsSync(snap)).toBe(true);
   });
 });
