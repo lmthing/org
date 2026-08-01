@@ -279,9 +279,10 @@ function Chat() {
     setReady(true)
   }, [])
   if (!ready) return null
-  // A project id, because the app-pages row above the composer is a property of the SELECTED
-  // project — with none there is nothing to link to and the row is absent by design. The manifest
-  // it reads is answered by the harness's `fetch` stub (see `entry.tsx`).
+  // A project id, because the Composer's project-scoped reads (completions, integrations) hang
+  // off the SELECTED project. The app's pages are no longer shown here at all — they live in the
+  // sidebar's `APP` section, which this fixture does not mount (see `entry.tsx`'s manifest stub,
+  // which the chat SHELL shots still exercise).
   return <ChatView projectId="trips" />
 }
 

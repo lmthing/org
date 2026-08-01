@@ -5,10 +5,11 @@ import { useStore } from '../store/store';
 import type { Project, ModelPricing } from '../store/store';
 import { apiGet, apiPost, apiDelete } from './api';
 import { closeActiveSession, resumeSession as resumeLiveSession, startSession } from './session-control';
-import { AppSidebar } from '../../elements/nav/app-sidebar';
+import { AppSidebar, type AppSidebarPage } from '../../elements/nav/app-sidebar';
 import { SurfaceSwitcher, type Surface } from '../../elements/nav/surface-switcher';
-import { crossAppOrigin } from '../../lib/app-urls';
+import { crossAppOrigin, projectAppUrl } from '../../lib/app-urls';
 import { openUrl } from '../../platform/navigation';
+import { useAppPages, pageLabel } from './use-app-pages';
 
 interface PersistedSessionMeta {
   sessionId: string; projectId?: string; agentSlug: string; spaceDir: string;
@@ -129,6 +130,22 @@ export function Sidebar({ onProjectSettings, className, width, height, collapsib
   }, [activeProjectId, loadSessions, loadSpaces]);
 
   const activeProject = projects.find(p => p.id === activeProjectId);
+
+  // When the selected project IS an application, its pages are listed in the sidebar so the
+  // reader can open the page they want directly, rather than the index and then navigate — or,
+  // as before, leave for Studio / type the `/app/<project>/…` URL by hand.
+  const appPageRoutes = useAppPages(activeProjectId);
+  const appPages = React.useMemo<AppSidebarPage[]>(
+    () =>
+      activeProjectId
+        ? appPageRoutes.map(routePath => ({
+            routePath,
+            label: pageLabel(routePath),
+            href: projectAppUrl(activeProjectId, routePath),
+          }))
+        : [],
+    [activeProjectId, appPageRoutes],
+  );
 
   const createProject = async (name: string) => {
     await apiPost<{ id: string }>('/api/projects', { name });
@@ -264,6 +281,7 @@ export function Sidebar({ onProjectSettings, className, width, height, collapsib
       spaces={spaces}
       onSelectSpace={openSpaceInStudio}
       spacesLoading={spacesLoading}
+      appPages={appPages}
       onNewChat={() => void createSession()}
       newChatBusy={creatingSession}
       conversations={conversations}

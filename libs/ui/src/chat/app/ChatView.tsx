@@ -5,7 +5,6 @@ import type { ConvoBlock, UploadedAttachment } from '../store/model';
 import { Message, AssistantTurn } from './Message';
 import { Composer } from './Composer';
 import { StatusLine } from './StatusLine';
-import { AppPages } from './AppPages';
 import { EmptyState } from './EmptyState';
 import { useTheme } from '../../theme/theme';
 import { TraceLoader } from './replay';
@@ -360,13 +359,11 @@ export function ChatView({
         </Prim.Pressable>
       )}
 
-      {/* Between the transcript and the input — the two things a reader wants within a glance of
-          the box they are typing into, in the order of how often they change. */}
-
-      {/* Where this project's app lives, when it has one. Rendered outside the transcript so it
-          does not scroll away with it: the pages are a property of the PROJECT, not of any one
-          turn, and they are wanted most right after the turn that built them. */}
-      <AppPages projectId={projectId} />
+      {/* Between the transcript and the input — what a reader wants within a glance of the box
+          they are typing into. Where this project's app LIVES used to be a chip row here; it is
+          a property of the project, not of any one turn, so it moved to the sidebar's `APP`
+          section beside that project's spaces and conversations
+          (`elements/nav/app-sidebar`, fed by `chat/app/use-app-pages.ts`). */}
 
       {/* The one live "currently doing" sentence — a running sub-agent's narration when one is in
           flight, otherwise THING's own setActivity line. */}

@@ -130,6 +130,21 @@ const ITEM = {
   },
 } as const
 const ITEM_ACTIVE = { backgroundColor: '$muted', color: '$foreground', fontWeight: '$medium' } as const
+/**
+ * `ITEM` as an anchor. `Prim.Link` is a TEXT leaf — `display: inline` by default and underlined by
+ * the UA — so `ITEM`'s row shape (full width, one truncating line) does not hold until it is given
+ * a display of its own. `flex`, NOT `block`: React Native accepts only `flex`/`none`/`contents`, so
+ * `block` would reach Yoga as garbage on the phone (see `primitives/_native.tsx#nativeSafeProps`),
+ * and `flex` is the one value that means the same thing on both targets. The label goes in a child
+ * `Text` because the ellipsis belongs to the text box, not to the flex container.
+ */
+const ITEM_LINK = { ...ITEM, display: 'flex', alignItems: 'center', textDecorationLine: 'none' } as const
+/** The label inside `ITEM_LINK` — a flex item, so it is blockified and can actually ellipsize. */
+const ITEM_LINK_LABEL = {
+  flexGrow: 1, flexShrink: 1, flexBasis: '0%',
+  minWidth: 0,
+  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+} as const
 
 const FOOTER = { flexShrink: 0, borderTopWidth: 1, borderTopColor: '$sidebar-border' } as const
 
@@ -269,6 +284,21 @@ export interface AppSidebarSpace {
   name: string
 }
 
+/**
+ * One openable page of the active project's application — see `org/docs/app/`.
+ *
+ * The surface resolves both the label and the URL (the served mount differs per host, and only
+ * the surface knows which project is selected); the sidebar just renders links.
+ */
+export interface AppSidebarPage {
+  /** The manifest route — `/`, `/trips`, `/settings/profile`. Identity of the row. */
+  routePath: string
+  /** What the row reads as (`/settings/profile` → `Settings / Profile`). */
+  label: string
+  /** Where the page is served — `projectAppUrl(projectId, routePath)`. */
+  href: string
+}
+
 export interface AppSidebarProps {
   /** Projects for the top-of-sidebar dropdown. */
   projects: AppSidebarProject[]
@@ -290,6 +320,14 @@ export interface AppSidebarProps {
   spacesLoading?: boolean
   /** Whether the `SPACES` section starts expanded (per-surface). Defaults to true. */
   spacesDefaultExpanded?: boolean
+
+  /**
+   * The active project's app pages — the collapsible `APP` section, rendered ONLY when the
+   * project has an application with openable pages. An absent/empty list is not an empty state
+   * to explain: most projects are not applications, and a permanent "no app" row would be noise
+   * in the one place the reader scans for their conversations.
+   */
+  appPages?: AppSidebarPage[]
 
   /** Chat-only `+ New chat` button (rendered under the dropdown when provided). */
   onNewChat?: () => void
@@ -501,6 +539,7 @@ export function AppSidebar({
   onSelectSpace,
   spacesLoading,
   spacesDefaultExpanded = true,
+  appPages,
   onNewChat,
   newChatBusy,
   conversations,
@@ -518,6 +557,7 @@ export function AppSidebar({
     spacesDefaultExpanded,
   )
   const [convExpanded, toggleConv] = usePersistentBool(`${storageKey}.conversations.expanded`, true)
+  const [appExpanded, toggleApp] = usePersistentBool(`${storageKey}.app.expanded`, true)
   const [collapsed, toggleCollapsed] = usePersistentBool(`${storageKey}.collapsed`, defaultCollapsed)
   const isCollapsed = collapsible && collapsed
 
@@ -600,6 +640,40 @@ export function AppSidebar({
 
       {/* Scrollable content */}
       <Prim.Box {...CONTENT}>
+        {/* App pages — only when the active project IS an application. Above `Spaces` because it
+            is the one section that leaves the surface for the thing the project actually is. */}
+        {appPages && appPages.length > 0 && (
+          <Prim.Box {...SECTION} data-testid="sidebar-app-pages">
+            <SectionHeader
+              label="App"
+              count={appPages.length}
+              expanded={appExpanded}
+              onToggle={toggleApp}
+            />
+            {appExpanded && (
+              <Prim.Box {...SECTION_BODY}>
+                {appPages.map((p) => (
+                  // A real anchor, not a `Pressable` + navigate: the app is served from another
+                  // mount (`/app/<project>/…`) and opening it must not take the reader's chat
+                  // with it — `target="_blank"` on web, `Linking.openURL` on native (the `Link`
+                  // primitive's own fork).
+                  <Prim.Link
+                    key={p.routePath}
+                    href={p.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-route={p.routePath}
+                    {...ITEM_LINK}
+                    title={`Open ${p.routePath}`}
+                  >
+                    <Prim.Text {...ITEM_LINK_LABEL}>{p.label}</Prim.Text>
+                  </Prim.Link>
+                ))}
+              </Prim.Box>
+            )}
+          </Prim.Box>
+        )}
+
         {/* Spaces */}
         <Prim.Box {...SECTION}>
           <SectionHeader
@@ -657,7 +731,7 @@ export function AppSidebar({
 export const __styles = {
   SIDEBAR_SHELL, SHELL_FIXED, SHELL_COLLAPSED, ICON_BTN, RAIL, RAIL_BTN, BRAND, RAIL_BRAND,
   HEADER, COLLAPSE_BTN, TOP, PROJECT_ROW, PROJECT_ROW_DROPDOWN, PROJECT_SETTINGS, NEW_CHAT,
-  CONTENT, SECTION, SECTION_BODY, EMPTY, ITEM, ITEM_ACTIVE, FOOTER, SECTION_HEADER, SECTION_LABEL,
+  CONTENT, SECTION, SECTION_BODY, EMPTY, ITEM, ITEM_ACTIVE, ITEM_LINK, ITEM_LINK_LABEL, FOOTER, SECTION_HEADER, SECTION_LABEL,
   SECTION_COUNT, DROPDOWN, DROPDOWN_TRIGGER, DROPDOWN_MENU, DROPDOWN_LIST, DROPDOWN_ROW,
   DROPDOWN_ITEM, DROPDOWN_ITEM_ACTIVE, DROPDOWN_DELETE, DROPDOWN_CREATE,
 } as const

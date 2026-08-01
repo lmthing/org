@@ -68,9 +68,10 @@ if (name === 'team-thread') {
 }
 
 /**
- * The chat surface asks the pod for the selected project's app manifest, to list its pages above
- * the composer (`chat/app/AppPages.tsx`). No pod here — answer the one route it calls so the row
- * paints, and let everything else fail as it already did (nothing else on these surfaces fetches).
+ * The chat surface asks the pod for the selected project's app manifest, to list its pages in the
+ * sidebar's `APP` section (`chat/app/use-app-pages.ts`). No pod here — answer the one route it
+ * calls so the section paints, and let everything else fail as it already did (nothing else on
+ * these surfaces fetches).
  */
 const realFetch = globalThis.fetch?.bind(globalThis)
 globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
