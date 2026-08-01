@@ -12,8 +12,6 @@ import { SurfaceSwitcher, type Surface as NavTab } from '@lmthing/ui/elements/na
 import * as Prim from '@lmthing/ui/elements/primitives'
 import { onDismiss } from '@lmthing/ui/platform'
 import { ensureComputePod, waitForPodEdge } from '@lmthing/ui/lib/pod-boot'
-import { useFonts } from 'expo-font'
-import { FONT_ASSETS } from './src/fonts'
 import { TeamScreen } from './src/TeamScreen'
 import { AppScreen } from './src/AppScreen'
 import { unregisterPush, watchPushDeepLinks, type PushDeepLink } from './src/push'
@@ -47,11 +45,6 @@ export default function App() {
   // app.config.js locks the native chrome (status bar, system dialogs) to match.
   const scheme = 'light'
   const [authReady, setAuthReady] = React.useState(false)
-  // Bundled faces (see src/fonts.ts). Held in the same gate as auth below: painting before they
-  // resolve shows one frame of Roboto/SF and then reflows the whole tree when the real metrics
-  // arrive. `useFonts` never rejects — on failure it resolves with `error` set and the platform
-  // default is used, which is degraded but not a boot loop, so it must not block forever.
-  const [fontsReady, fontError] = useFonts(FONT_ASSETS)
 
   React.useEffect(() => {
     // Never rejects — an unreadable keystore entry is treated as "logged out", not a boot loop.
@@ -110,10 +103,7 @@ export default function App() {
             style={{ flex: 1 }}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           >
-            {/* Fonts join auth in the SAME gate. `fontError` counts as ready on purpose: a face that
-                fails to decode must degrade to the platform default, not hold the app on a blank
-                screen forever. */}
-            {authReady && (fontsReady || fontError) ? (
+            {authReady ? (
               <AuthProvider appName="mobile">
                 <AuthGate />
               </AuthProvider>
