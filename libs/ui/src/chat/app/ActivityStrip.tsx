@@ -54,7 +54,10 @@ export function ActivityStrip({ nodeIds, className }: ActivityStripProps) {
           onClick={() => setExpanded(true)}
           fontSize="$xs" color="$muted-foreground" paddingHorizontal="$2" paddingVertical="$0.5" borderRadius="$radius-full" borderWidth={1} borderColor="$border" hoverStyle={{ color: "$foreground" }}
         >
-          +{hidden} more
+          {/* `Prim.Pressable` is an RN `View` — its `fontSize`/`color` above style the button, not
+              this bare label, so both are restated on the wrapped `Prim.Text` directly (see
+              `primitives/_native.tsx#NativeText`'s unconditional `$body`/`$foreground` defaults). */}
+          <Prim.Text fontSize="$xs" color="$muted-foreground">+{hidden} more</Prim.Text>
         </Prim.Pressable>
       )}
     </Prim.Box>

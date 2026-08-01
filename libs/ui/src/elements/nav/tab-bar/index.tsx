@@ -1,5 +1,6 @@
 import * as React from 'react'
 import * as Prim from '../../primitives/index'
+import { labelled } from '../../primitives/labelled'
 
 /**
  * TabBar — the idiomatic `.tab-bar`. Renders `Prim.Box` / `Prim.Pressable` (a real `<button>` at
@@ -69,7 +70,21 @@ function TabBar({ tabs, activeTab, onTabChange, ...props }: TabBarProps) {
           {...(activeTab === tab.id ? TAB_ACTIVE : {})}
           onClick={() => onTabChange?.(tab.id)}
         >
-          {tab.label}
+          {/*
+            `tab.label` is `React.ReactNode`, not always a plain string — but every caller in this
+            codebase passes a string (`SubjectList`'s `label: f.slug`, `AgentBuilder`'s tab names),
+            so on native this was the same class of drop the AST gate catches for a LITERAL child:
+            `Prim.Pressable` is a View with no cascade to a bare string. `labelled()` is the right
+            tool precisely because the type is `ReactNode` — it wraps a string/number and passes
+            anything else (an icon a caller might one day pass) through untouched. `color`/
+            `fontSize`/`fontWeight` are `TAB`'s own defaults, resolved through the SAME active/idle
+            branch the tab's own background/underline already use — see `primitives/labelled.tsx`.
+          */}
+          {labelled(tab.label, {
+            color: (activeTab === tab.id ? TAB_ACTIVE.color : TAB.color) as Prim.TextProps['color'],
+            fontSize: TAB.fontSize as Prim.TextProps['fontSize'],
+            fontWeight: (activeTab === tab.id ? TAB_ACTIVE.fontWeight : undefined) as Prim.TextProps['fontWeight'],
+          })}
         </Prim.Pressable>
       ))}
     </Prim.Box>

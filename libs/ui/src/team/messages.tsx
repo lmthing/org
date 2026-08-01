@@ -261,12 +261,15 @@ function MessageAttachment({ att, ctx }: { att: ChannelAttachment; ctx: MessageC
   if (att.kind === 'audio') {
     return (
       <Prim.Col gap="$1" alignItems="flex-start">
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        {/* No `jsx-a11y` disable: the plugin is not a dependency, so the rule never ran and the
+            directive itself was an error. See the same note in `chat/app/Message.tsx`. */}
         {/* `Prim.Audio` is a host passthrough — it IGNORES style props, so this is a `style`. */}
         <Prim.Audio controls src={url} style={{ maxWidth: 280 }} />
         {att.transcript ? (
+          // `Prim.Box` is an RN `View` — its `fontSize`/`color`/`fontStyle` below style the box,
+          // not the quoted transcript, so all three are restated on the wrapped `Prim.Text`.
           <Prim.Box maxWidth="280px" fontSize="$xs" color="$muted-foreground" fontStyle="italic">
-            “{att.transcript}”
+            <Prim.Text fontSize="$xs" color="$muted-foreground" fontStyle="italic">“{att.transcript}”</Prim.Text>
           </Prim.Box>
         ) : null}
       </Prim.Col>

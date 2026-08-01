@@ -18,7 +18,11 @@ function LlmTab({ node }: { node: ExecNode }): React.ReactElement {
             {c.responses.length > 1 && <Badge tone="amber">×{c.responses.length} attempts</Badge>}
           </Prim.Row>
           <Prim.Box as="details" paddingHorizontal="$2" paddingVertical="$1">
-            <Prim.Box as="summary" color="var(--muted-foreground)" cursor="pointer" fontSize="11px">system + {c.messages.length} messages</Prim.Box>
+            {/* `Prim.Box` is an RN `View` — its `color`/`fontSize` below style the summary row, not
+                this label, so both are restated on the wrapped `Prim.Text`. */}
+            <Prim.Box as="summary" color="var(--muted-foreground)" cursor="pointer" fontSize="11px">
+              <Prim.Text color="var(--muted-foreground)" fontSize="11px">system + {c.messages.length} messages</Prim.Text>
+            </Prim.Box>
             <Prim.Pre fontFamily="$mono" fontSize="10px" whiteSpace="pre-wrap" color="var(--muted-foreground)" marginTop="$1" maxHeight="$48" overflowY="auto">{c.system}</Prim.Pre>
             {c.messages.map((m, j) => (
               <Prim.Box key={j} marginTop="0.25rem">
@@ -47,8 +51,12 @@ function StatementsTab({ node }: { node: ExecNode }): React.ReactElement {
         <Prim.Box key={i}>
           <CodeBlock code={s.code} />
           {s.errors.map((e, j) => (
+            // `Prim.Box` is an RN `View` — its `color`/`fontSize`/`fontFamily` below style the row,
+            // not this message, so all three are restated on the wrapped `Prim.Text`.
             <Prim.Box key={j} color="var(--destructive)" fontSize="11px" fontFamily="$mono" paddingLeft="$2" marginTop="0.25rem">
-              {e.phase} error{e.attempt ? ` (attempt ${e.attempt})` : ''}: {e.message}
+              <Prim.Text color="var(--destructive)" fontSize="11px" fontFamily="$mono">
+                {e.phase} error{e.attempt ? ` (attempt ${e.attempt})` : ''}: {e.message}
+              </Prim.Text>
             </Prim.Box>
           ))}
         </Prim.Box>
@@ -72,8 +80,16 @@ function YieldsTab({ node }: { node: ExecNode }): React.ReactElement {
             >{y.resolved ? '✓' : '⟳'}</Prim.Text>
             <Prim.Text color="var(--knowledge)" fontFamily="$mono" fontSize="11px">{y.kind}</Prim.Text>
           </Prim.Row>
-          <Prim.Box color="var(--muted-foreground)" fontSize="10px" fontFamily="$mono" marginTop="0.25rem">args: {preview(y.args, 300)}</Prim.Box>
-          {y.resolved && <Prim.Box color="var(--foreground)" fontSize="10px" fontFamily="$mono" marginTop="0.25rem">→ {preview(y.value, 400)}</Prim.Box>}
+          {/* Both `Prim.Box`es below are RN `View`s — their `color`/`fontSize`/`fontFamily` style the
+              row, not the bare label, so each is restated on its wrapped `Prim.Text`. */}
+          <Prim.Box color="var(--muted-foreground)" fontSize="10px" fontFamily="$mono" marginTop="0.25rem">
+            <Prim.Text color="var(--muted-foreground)" fontSize="10px" fontFamily="$mono">args: {preview(y.args, 300)}</Prim.Text>
+          </Prim.Box>
+          {y.resolved && (
+            <Prim.Box color="var(--foreground)" fontSize="10px" fontFamily="$mono" marginTop="0.25rem">
+              <Prim.Text color="var(--foreground)" fontSize="10px" fontFamily="$mono">→ {preview(y.value, 400)}</Prim.Text>
+            </Prim.Box>
+          )}
         </Prim.Box>
       ))}
     </Prim.Box>
@@ -87,7 +103,9 @@ function VariablesTab({ node }: { node: ExecNode }): React.ReactElement {
     <Prim.Box display="flex" flexDirection="column" gap="$1" fontFamily="$mono" fontSize="11px">
       {entries.map(([k, v]) => (
         <Prim.Box key={k} borderColor="color-mix(in srgb, var(--border) 50%, transparent)" borderBottomWidth={1} paddingVertical="$1">
-          <Prim.Text color="var(--agent)">{k}</Prim.Text>: <Prim.Text color="var(--success)" wordWrap="break-word">{preview(v, 600)}</Prim.Text>
+          {/* The `: ` separator needs a text host of its own, or it drops on native between the two
+              `Prim.Text` siblings either side of it. */}
+          <Prim.Text color="var(--agent)">{k}</Prim.Text><Prim.Text>: </Prim.Text><Prim.Text color="var(--success)" wordWrap="break-word">{preview(v, 600)}</Prim.Text>
         </Prim.Box>
       ))}
     </Prim.Box>
@@ -138,7 +156,13 @@ export function Inspector(): React.ReactElement {
           <Prim.Box color="var(--muted-foreground)" fontSize="10px" fontFamily="$mono" marginTop="0.25rem"><Prim.Text color="var(--muted-foreground)" fontSize="10px" fontFamily="$mono">{preview(node.detail, 200)}</Prim.Text></Prim.Box>
         )}
         {node.error && <Prim.Box color="var(--destructive)" fontSize="11px" fontFamily="$mono" marginTop="0.25rem"><Prim.Text color="var(--destructive)" fontSize="11px" fontFamily="$mono">{preview(node.error, 300)}</Prim.Text></Prim.Box>}
-        {node.result !== undefined && <Prim.Box color="var(--success)" fontSize="10px" fontFamily="$mono" marginTop="0.25rem">result: {preview(node.result, 200)}</Prim.Box>}
+        {/* `Prim.Box` is an RN `View` — its `color`/`fontSize`/`fontFamily` style the row, not this
+            label, so all three are restated on the wrapped `Prim.Text`. */}
+        {node.result !== undefined && (
+          <Prim.Box color="var(--success)" fontSize="10px" fontFamily="$mono" marginTop="0.25rem">
+            <Prim.Text color="var(--success)" fontSize="10px" fontFamily="$mono">result: {preview(node.result, 200)}</Prim.Text>
+          </Prim.Box>
+        )}
       </Prim.Box>
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
       <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" overflowY="auto" padding="$2">

@@ -152,7 +152,9 @@ export function MultiSelect<V = unknown>({
         onClick={() => onSubmit?.(items.filter((it) => checked.has(it.value)))}
         marginTop={6} alignSelf="flex-start" backgroundColor={inkColor('blue')} color="var(--lm-bg)" borderWidth={0} borderRadius={6} paddingVertical="4px" paddingHorizontal="10px" cursor="pointer"
       >
-        Submit
+        {/* `Prim.Pressable` is an RN `View` — its `color` above styles the button fill, not this
+            label, so it is restated on the wrapped `Prim.Text`. */}
+        <Prim.Text color="var(--lm-bg)">Submit</Prim.Text>
       </Prim.Pressable>
     </Box>
   );
@@ -171,8 +173,15 @@ export function ConfirmInput({
 }): React.ReactElement {
   return (
     <Box gap={2}>
-      <Prim.Pressable onClick={() => onConfirm?.()} style={btn(defaultChoice === 'confirm')}>Yes</Prim.Pressable>
-      <Prim.Pressable onClick={() => onCancel?.()} style={btn(defaultChoice === 'cancel')}>No</Prim.Pressable>
+      {/* `Prim.Pressable` is an RN `View` — the `color` inside `style={btn(...)}` styles the
+          button's own host node, which has no text to colour, so it is restated on the wrapped
+          `Prim.Text` (a raw `color` in a View's style is simply inert on native, not inherited). */}
+      <Prim.Pressable onClick={() => onConfirm?.()} style={btn(defaultChoice === 'confirm')}>
+        <Prim.Text color={btn(defaultChoice === 'confirm').color}>Yes</Prim.Text>
+      </Prim.Pressable>
+      <Prim.Pressable onClick={() => onCancel?.()} style={btn(defaultChoice === 'cancel')}>
+        <Prim.Text color={btn(defaultChoice === 'cancel').color}>No</Prim.Text>
+      </Prim.Pressable>
     </Box>
   );
 }

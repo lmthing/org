@@ -170,7 +170,8 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'audio': {
       const src = String(props['src'] ?? props['url'] ?? '');
       if (!src) return null;
-      // eslint-disable-next-line jsx-a11y/media-has-caption
+      // No `jsx-a11y` disable: the plugin is not a dependency, so the rule never ran and the
+      // directive itself was an error. See the same note in `chat/app/Message.tsx`.
       // `Prim.Audio` is a host passthrough — style props are ignored, so `style` it is.
       return <Prim.Audio key={key} controls src={src} style={{ marginTop: '0.25rem', marginBottom: '0.25rem', maxWidth: '100%' }} />;
     }

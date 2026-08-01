@@ -23,6 +23,7 @@ import '../suites/native-style-units'
 import '../suites/string-children'
 import '../suites/branding'
 import '../suites/text-styling'
+import '../suites/text-children-fixes'
 import { runRegisteredCases } from '../harness'
 
 void runRegisteredCases()

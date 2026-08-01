@@ -79,7 +79,11 @@ function ContextMenu({
             {...CONTEXT_MENU_ITEM}
           >
             <Plus {...FIELD_TREE_CONTEXT_MENU_ITEM_ICON} />
-            {node.type === 'domain' ? 'New Field' : 'New Option'}
+            {/* `Prim.Pressable` is an RN `View` — `CONTEXT_MENU_ITEM`'s `color`/`fontSize` style
+                the row, not this label, so both are restated on the wrapped `Prim.Text`. */}
+            <Prim.Text color={CONTEXT_MENU_ITEM.color} fontSize={CONTEXT_MENU_ITEM.fontSize}>
+              {node.type === 'domain' ? 'New Field' : 'New Option'}
+            </Prim.Text>
           </Prim.Pressable>
         )}
         <Prim.Pressable
@@ -87,7 +91,7 @@ function ContextMenu({
           {...CONTEXT_MENU_ITEM}
         >
           <Edit3 {...FIELD_TREE_CONTEXT_MENU_ITEM_ICON} />
-          Rename
+          <Prim.Text color={CONTEXT_MENU_ITEM.color} fontSize={CONTEXT_MENU_ITEM.fontSize}>Rename</Prim.Text>
         </Prim.Pressable>
         <Prim.Pressable
           onClick={() => { onDelete(); onClose() }}
@@ -95,7 +99,9 @@ function ContextMenu({
           {...CONTEXT_MENU_ITEM_DESTRUCTIVE}
         >
           <Trash2 {...CONTEXT_MENU_ITEM_ICON_DESTRUCTIVE} />
-          Delete
+          {/* The DESTRUCTIVE spread overrides `color` after `CONTEXT_MENU_ITEM` — restate the
+              EFFECTIVE (post-override) colour, not the base one, or "Delete" reads as a plain item. */}
+          <Prim.Text color={CONTEXT_MENU_ITEM_DESTRUCTIVE.color} fontSize={CONTEXT_MENU_ITEM.fontSize}>Delete</Prim.Text>
         </Prim.Pressable>
       </Prim.Box>
     </>

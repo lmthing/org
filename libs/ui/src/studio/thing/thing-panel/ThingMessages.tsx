@@ -37,8 +37,13 @@ export function ThingMessages({ hasEnv, messages, isWorking, messagesEndRef }: T
           backgroundColor="$muted"
           fontSize={13}
         >
-          <Prim.Text as="strong">Environment not configured.</Prim.Text> THING needs API keys to call LLMs.
-          Add environment variables (e.g., <Prim.Text as="code">OPENAI_API_KEY</Prim.Text>) to enable AI features.
+          {/* `Prim.Box` is an RN `View` — its `fontSize` above styles the box, not this paragraph,
+              so the whole thing (including the two inline `Prim.Text`s) is wrapped in one
+              `Prim.Text` restating it, or the plain-text runs between/around them drop outright. */}
+          <Prim.Text fontSize={13}>
+            <Prim.Text as="strong">Environment not configured.</Prim.Text> THING needs API keys to call LLMs.
+            Add environment variables (e.g., <Prim.Text as="code">OPENAI_API_KEY</Prim.Text>) to enable AI features.
+          </Prim.Text>
         </Prim.Box>
       )}
 
@@ -88,7 +93,9 @@ export function ThingMessages({ hasEnv, messages, isWorking, messagesEndRef }: T
           fontSize={13}
           opacity={0.7}
         >
-          Processing...
+          {/* `Prim.Box` is an RN `View` — its `fontSize` above styles the box, not this label, so
+              it is restated on the wrapped `Prim.Text`. */}
+          <Prim.Text fontSize={13}>Processing...</Prim.Text>
         </Prim.Box>
       )}
 

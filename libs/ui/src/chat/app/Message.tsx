@@ -63,7 +63,12 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
       {...(inert ? BLOCK_INERT : BLOCK_LIVE)} transition="quick" animateOnly={["color", "background-color", "border-color"]} borderWidth={1} borderRadius="$radius-xl" padding="$3"
     >
       {block.state === 'answered' && (
-        <Prim.Box fontSize="$xs" color="$knowledge" fontFamily="$mono" marginBottom="0.5rem">✓ {preview(block.answer, 200)}</Prim.Box>
+        // `Prim.Box` is an RN `View` — none of `fontSize`/`color`/`fontFamily` below reaches a bare
+        // string child, so both the checkmark and the preview are wrapped in one `Prim.Text` that
+        // restates them (see the `cancelled` case just below, and `primitives/_native.tsx#NativeText`).
+        <Prim.Box fontSize="$xs" color="$knowledge" fontFamily="$mono" marginBottom="0.5rem">
+          <Prim.Text fontSize="$xs" color="$knowledge" fontFamily="$mono">✓ {preview(block.answer, 200)}</Prim.Text>
+        </Prim.Box>
       )}
       {block.state === 'cancelled' && (
         // `Prim.Box` is an RN `View` — none of `fontSize`/`color`/`fontFamily` above reaches the
@@ -99,7 +104,9 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
               onClick={() => onSubmit(text)}
               transition="quick" animateOnly={["opacity"]} paddingHorizontal="$3" paddingVertical="$1.5" backgroundColor="$agent" color="$agent-foreground" borderRadius="$radius-lg" fontSize="$sm" disabledStyle={{ opacity: 0.5 }} hoverStyle={{ opacity: 0.9 }}
             >
-              Send
+              {/* `Prim.Pressable` is an RN `View` — its `color`/`fontSize` above style the button
+                  fill, not this label, so both are restated on the wrapped `Prim.Text`. */}
+              <Prim.Text color="$agent-foreground" fontSize="$sm">Send</Prim.Text>
             </Prim.Pressable>
           </Prim.Row>
         )}
@@ -239,12 +246,17 @@ function UserAttachment({ att }: { att: TraceAttachment }) {
   if (att.kind === 'audio') {
     return (
       <Prim.Col gap="$1" alignItems="flex-end">
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        {/* No `jsx-a11y` disable here: that plugin is not a dependency, so the rule it named never
+            ran and the directive was an ERROR ('Definition for rule was not found'). A voice note has
+            no caption track to offer; if `eslint-plugin-jsx-a11y` is ever added, this is a real
+            finding to answer rather than a comment to restore. */}
         {/* `Prim.Audio` is a host passthrough — it IGNORES style props, so this is a `style`. */}
         <Prim.Audio controls src={url} style={{ maxWidth: 260 }} />
         {att.transcript && (
+          // `Prim.Box` is an RN `View` — its `fontSize`/`color`/`fontStyle`/`textAlign` below style
+          // the box, not the quoted transcript, so all four are restated on the wrapped `Prim.Text`.
           <Prim.Box maxWidth="260px" fontSize="$xs" color="$muted-foreground" fontStyle="italic" textAlign="right">
-            “{att.transcript}”
+            <Prim.Text fontSize="$xs" color="$muted-foreground" fontStyle="italic" textAlign="right">“{att.transcript}”</Prim.Text>
           </Prim.Box>
         )}
       </Prim.Col>

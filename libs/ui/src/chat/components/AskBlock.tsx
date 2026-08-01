@@ -173,7 +173,7 @@ export function AskBlock({ id, descriptor, onSubmit, onCancel }: AskBlockProps):
           />
           <Prim.Pressable type="submit" marginTop={8}><Prim.Text>Submit</Prim.Text></Prim.Pressable>
           <Prim.Pressable type="button" onClick={() => onCancel(id)} marginTop={8} marginLeft={8}>
-            Cancel
+            <Prim.Text>Cancel</Prim.Text>
           </Prim.Pressable>
         </Prim.Form>
       </Prim.Box>
@@ -194,7 +194,7 @@ export function AskBlock({ id, descriptor, onSubmit, onCancel }: AskBlockProps):
         {formFields}
         <Prim.Box marginTop={12}>
           <Prim.Pressable type="submit" marginRight={8}><Prim.Text>Submit</Prim.Text></Prim.Pressable>
-          <Prim.Pressable type="button" onClick={() => onCancel(id)}>Cancel</Prim.Pressable>
+          <Prim.Pressable type="button" onClick={() => onCancel(id)}><Prim.Text>Cancel</Prim.Text></Prim.Pressable>
         </Prim.Box>
       </Prim.Form>
     </Prim.Box>

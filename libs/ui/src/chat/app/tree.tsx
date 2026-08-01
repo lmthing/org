@@ -60,7 +60,9 @@ function TreeRow({ node, depth, now }: { node: ExecNode; depth: number; now: num
             color="var(--muted-foreground)" width="$3" textAlign="center" flexShrink={0}
             aria-label={expanded ? 'collapse' : 'expand'}
           >
-            {expanded ? '▾' : '▸'}
+            {/* `Prim.Pressable` is an RN `View` — its `color`/`textAlign` above style the button,
+                not this glyph, so both are restated on the wrapped `Prim.Text`. */}
+            <Prim.Text color="var(--muted-foreground)" textAlign="center">{expanded ? '▾' : '▸'}</Prim.Text>
           </Prim.Pressable>
         ) : (
           <Prim.Text width="$3" flexShrink={0} />

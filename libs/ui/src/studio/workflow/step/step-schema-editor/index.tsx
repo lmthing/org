@@ -52,7 +52,12 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
                 }
               : {})}
           >
-            Visual
+            {/* `Prim.Pressable` is an RN `View` — its `color`/`fontSize`/`fontWeight` above style
+                the toggle, not this label, so all three are restated on the wrapped `Prim.Text`,
+                using the SAME conditional the Pressable itself resolves `color` from. */}
+            <Prim.Text color={viewMode === 'visual' ? '$foreground' : '$muted-foreground'} fontSize="$sm" fontWeight="$medium">
+              Visual
+            </Prim.Text>
           </Prim.Pressable>
           <Prim.Pressable
             onClick={handleSwitchToCode}
@@ -74,7 +79,10 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
                 }
               : {})}
           >
-            Code
+            {/* Same drop as "Visual" above — restated with the "code" branch's own condition. */}
+            <Prim.Text color={viewMode === 'code' ? '$foreground' : '$muted-foreground'} fontSize="$sm" fontWeight="$medium">
+              Code
+            </Prim.Text>
           </Prim.Pressable>
         </Prim.Box>
       </Prim.Box>
@@ -165,7 +173,9 @@ export function StepSchemaEditor({ value, onChange }: StepSchemaEditorProps) {
                 <Prim.Svg {...SCHEMA_EDITOR_ADD_ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <Prim.Path d="M12 5v14M5 12h14" />
                 </Prim.Svg>
-                Add Property
+                {/* `Prim.Pressable` is an RN `View` — its `fontSize`/`color` above style the
+                    button, not this label, so both are restated on the wrapped `Prim.Text`. */}
+                <Prim.Text fontSize="$sm" color="$muted-foreground">Add Property</Prim.Text>
               </Prim.Pressable>
             </Prim.Box>
           )}

@@ -178,7 +178,12 @@ export function PropertyRow({
                 hoverStyle: { backgroundColor: '$muted' },
               })}
         >
-          {property.required ? 'required' : 'optional'}
+          {/* `Prim.Pressable` is an RN `View` — its `fontSize`/`fontWeight`/`color` above (the
+              last from the required/optional conditional) style the toggle, not this label, so
+              all three are restated on the wrapped `Prim.Text`. */}
+          <Prim.Text fontSize="$xs" fontWeight="$medium" color={property.required ? '$destructive' : '$muted-foreground'}>
+            {property.required ? 'required' : 'optional'}
+          </Prim.Text>
         </Prim.Pressable>
 
         {/* Description hint */}
@@ -318,7 +323,9 @@ export function PropertyRow({
               transition="quick" animateOnly={["color", "background-color", "border-color"]}
               hoverStyle={{ borderColor: '$brand-3', color: '$brand-3' }}
             >
-              + Define array item type
+              {/* `Prim.Pressable` is an RN `View` — its `fontSize`/`color` above style the
+                  button, not this label, so both are restated on the wrapped `Prim.Text`. */}
+              <Prim.Text fontSize="$sm" color="$muted-foreground">+ Define array item type</Prim.Text>
             </Prim.Pressable>
           )}
         </Prim.Box>

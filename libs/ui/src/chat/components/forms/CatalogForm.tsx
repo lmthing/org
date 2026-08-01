@@ -80,7 +80,11 @@ function Control({
       return (
         <Prim.Box display="flex" gap={2}>
           {Array.from({ length: max }, (_, i) => (
-            <Prim.Pressable key={i} onClick={() => onChange(i + 1)} backgroundColor="none" borderWidth={0} cursor="pointer" color={i < cur ? 'var(--warning)' : 'var(--muted-foreground)'} fontSize={16}>★</Prim.Pressable>
+            <Prim.Pressable key={i} onClick={() => onChange(i + 1)} backgroundColor="none" borderWidth={0} cursor="pointer" color={i < cur ? 'var(--warning)' : 'var(--muted-foreground)'} fontSize={16}>
+              {/* `Prim.Pressable` is an RN `View` — its `color`/`fontSize` above style the button,
+                  not this glyph, so both are restated on the wrapped `Prim.Text`. */}
+              <Prim.Text color={i < cur ? 'var(--warning)' : 'var(--muted-foreground)'} fontSize={16}>★</Prim.Text>
+            </Prim.Pressable>
           ))}
         </Prim.Box>
       );
@@ -148,8 +152,10 @@ export function CatalogForm({
     if (only.kind === 'confirm') {
       return (
         <Prim.Box display="flex" gap={8}>
-          <Prim.Pressable {...btnProps(true)} onClick={() => onSubmit(true)}>Yes</Prim.Pressable>
-          <Prim.Pressable {...btnProps(false)} onClick={() => onSubmit(false)}>No</Prim.Pressable>
+          {/* `Prim.Pressable` is an RN `View` — the `color` inside `btnProps(...)` styles the
+              button fill, not this label, so it is restated on the wrapped `Prim.Text`. */}
+          <Prim.Pressable {...btnProps(true)} onClick={() => onSubmit(true)}><Prim.Text color={btnProps(true).color}>Yes</Prim.Text></Prim.Pressable>
+          <Prim.Pressable {...btnProps(false)} onClick={() => onSubmit(false)}><Prim.Text color={btnProps(false).color}>No</Prim.Text></Prim.Pressable>
         </Prim.Box>
       );
     }

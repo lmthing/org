@@ -183,8 +183,10 @@ export function ProjectSettingsView() {
                         <Stack gap="md">
                           {integration.readme ? (
                             <Prim.Box as="details" {...LM_SETUP_GUIDE} open>
+                              {/* `className` is web-only (dropped by `nativeSafeProps`), so there is
+                                  no style to restate here — just a text host for the bare label. */}
                               <Prim.Box as="summary" className="lm-setup-guide__summary">
-                                How to get your keys — setup guide
+                                <Prim.Text>How to get your keys — setup guide</Prim.Text>
                               </Prim.Box>
                               <Prim.Box backgroundColor="$background" borderColor="$border" borderTopWidth={1} borderTopStyle="solid" paddingVertical={13.6} paddingHorizontal="$4">
                                 <Markdown source={integration.readme} />

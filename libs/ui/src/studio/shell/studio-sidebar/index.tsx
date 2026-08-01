@@ -175,7 +175,13 @@ export function StudioSidebar({
                 opacity={0.7}
               >
                 {fieldsExpanded ? <ChevronDown {...STUDIO_SIDEBAR_SECTION_CHEVRON} /> : <ChevronRightSmall {...STUDIO_SIDEBAR_SECTION_CHEVRON} />}
-                Knowledge ({fields.length})
+                {/* `Prim.Pressable` is an RN `View` — none of the text props above (`color` from
+                    `SIDEBAR_ITEM`, `fontSize`/`fontWeight`/`textTransform`/`letterSpacing`) reach a
+                    bare label, so all are restated on the wrapped `Prim.Text`. Repeated identically
+                    for every section header below. */}
+                <Prim.Text color={SIDEBAR_ITEM.color} fontSize={10} fontWeight="$semibold" textTransform="uppercase" letterSpacing="$wider">
+                  Knowledge ({fields.length})
+                </Prim.Text>
               </Prim.Pressable>
               {fieldsExpanded && (
                 <Prim.Box display="flex" flexDirection="column" gap={2}>
@@ -208,7 +214,9 @@ export function StudioSidebar({
                 opacity={0.7}
               >
                 {agentsExpanded ? <ChevronDown {...STUDIO_SIDEBAR_SECTION_CHEVRON} /> : <ChevronRightSmall {...STUDIO_SIDEBAR_SECTION_CHEVRON} />}
-                Agents ({agents.length})
+                <Prim.Text color={SIDEBAR_ITEM.color} fontSize={10} fontWeight="$semibold" textTransform="uppercase" letterSpacing="$wider">
+                  Agents ({agents.length})
+                </Prim.Text>
               </Prim.Pressable>
               {agentsExpanded && (
                 <Prim.Box display="flex" flexDirection="column" gap={2}>
@@ -241,7 +249,9 @@ export function StudioSidebar({
                 opacity={0.7}
               >
                 {tasklistsExpanded ? <ChevronDown {...STUDIO_SIDEBAR_SECTION_CHEVRON} /> : <ChevronRightSmall {...STUDIO_SIDEBAR_SECTION_CHEVRON} />}
-                Tasklists ({tasklistItems.length})
+                <Prim.Text color={SIDEBAR_ITEM.color} fontSize={10} fontWeight="$semibold" textTransform="uppercase" letterSpacing="$wider">
+                  Tasklists ({tasklistItems.length})
+                </Prim.Text>
               </Prim.Pressable>
               {tasklistsExpanded && (
                 <Prim.Box display="flex" flexDirection="column" gap={2}>
@@ -274,7 +284,9 @@ export function StudioSidebar({
                 opacity={0.7}
               >
                 {functionsExpanded ? <ChevronDown {...STUDIO_SIDEBAR_SECTION_CHEVRON} /> : <ChevronRightSmall {...STUDIO_SIDEBAR_SECTION_CHEVRON} />}
-                Functions ({functions.length})
+                <Prim.Text color={SIDEBAR_ITEM.color} fontSize={10} fontWeight="$semibold" textTransform="uppercase" letterSpacing="$wider">
+                  Functions ({functions.length})
+                </Prim.Text>
               </Prim.Pressable>
               {functionsExpanded && (
                 <Prim.Box display="flex" flexDirection="column" gap={2}>
@@ -306,7 +318,9 @@ export function StudioSidebar({
                 opacity={0.7}
               >
                 {componentsExpanded ? <ChevronDown {...STUDIO_SIDEBAR_SECTION_CHEVRON} /> : <ChevronRightSmall {...STUDIO_SIDEBAR_SECTION_CHEVRON} />}
-                Components ({components.length})
+                <Prim.Text color={SIDEBAR_ITEM.color} fontSize={10} fontWeight="$semibold" textTransform="uppercase" letterSpacing="$wider">
+                  Components ({components.length})
+                </Prim.Text>
               </Prim.Pressable>
               {componentsExpanded && (
                 <Prim.Box display="flex" flexDirection="column" gap={2}>
@@ -337,11 +351,15 @@ export function StudioSidebar({
                   opacity={0.7}
                 >
                   {conversationsExpanded ? <ChevronDown {...STUDIO_SIDEBAR_SECTION_CHEVRON} /> : <ChevronRightSmall {...STUDIO_SIDEBAR_SECTION_CHEVRON} />}
-                  Conversations (0)
+                  <Prim.Text color={SIDEBAR_ITEM.color} fontSize={10} fontWeight="$semibold" textTransform="uppercase" letterSpacing="$wider">
+                    Conversations (0)
+                  </Prim.Text>
                 </Prim.Pressable>
                 {conversationsExpanded && (
+                  // `Prim.Box` is an RN `View` — its `color`/`fontSize` (from `SIDEBAR_ITEM` and the
+                  // `$xs` override) style the row, not this label, so both are restated below.
                   <Prim.Box {...SIDEBAR_ITEM} opacity={0.5} fontSize="$xs" cursor="default">
-                    No conversations yet.
+                    <Prim.Text color={SIDEBAR_ITEM.color} fontSize="$xs">No conversations yet.</Prim.Text>
                   </Prim.Box>
                 )}
               </Prim.Box>

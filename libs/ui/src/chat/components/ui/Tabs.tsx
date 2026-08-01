@@ -32,7 +32,13 @@ export function Tabs({ tabs, active, onChange, className }: TabsProps) {
           onClick={() => onChange(t.id)}
           {...(t.id === active ? TAB_ACTIVE : TAB_IDLE)} transition="quick" animateOnly={["color", "background-color", "border-color"]} paddingHorizontal="$3" paddingVertical="$2" fontSize="$xs" fontWeight="$medium" borderBottomWidth={2} marginBottom="-$px"
         >
-          {t.label}
+          {/* `Prim.Pressable` is an RN `View` — `t.label` is a plain `string` (not a JSX literal,
+              so the AST gate's literal-only check cannot see it), and the same drop applies: the
+              `color`/`fontSize`/`fontWeight` above style the tab, not this label, so all three are
+              restated here from the same active/idle branch. */}
+          <Prim.Text color={t.id === active ? TAB_ACTIVE.color : TAB_IDLE.color} fontSize="$xs" fontWeight="$medium">
+            {t.label}
+          </Prim.Text>
         </Prim.Pressable>
       ))}
     </Prim.Box>

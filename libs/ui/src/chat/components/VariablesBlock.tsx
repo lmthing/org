@@ -21,7 +21,11 @@ export function VariablesBlock({ vars }: VariablesBlockProps): React.ReactElemen
       {entries.map(([name, value]) => (
         <Prim.Box key={name} marginBottom={4}>
           <Prim.Text fontFamily="monospace" fontSize={13} color="var(--agent)">{name}</Prim.Text>
-          {': '}
+          {/* Bare `': '` was a literal drop, not just a style miss — it needs its own text host.
+              Restated `fontFamily`/`fontSize` come from the OUTER Box (line 13); nothing in this
+              chain sets a `color` for it, so it is left to `NativeText`'s own default, same as it
+              would fall to the browser's inherited default on web. */}
+          <Prim.Text fontFamily="monospace" fontSize={13}>{': '}</Prim.Text>
           <Prim.Text fontFamily="monospace" fontSize={13} color="var(--knowledge)">
             {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
           </Prim.Text>

@@ -391,13 +391,6 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
     }
   };
 
-  if (mode === 'replay') {
-    return (
-      <Prim.Box className={className} paddingHorizontal="$4" paddingVertical="$3" fontSize="$sm" color="$muted-foreground" textAlign="center" borderTopWidth={1} borderColor="$border">
-        <Prim.Text>Replay mode — input disabled</Prim.Text>
-      </Prim.Box>
-    );
-  }
 
 
   /**
@@ -446,6 +439,33 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
   React.useEffect(() => {
     if (contentHeight > oneLineRef.current * 1.5) setStacked(true);
   }, [contentHeight]);
+
+  /**
+   * Replay mode renders a banner instead of a composer — and this branch has to sit AFTER every hook
+   * above, not before them.
+   *
+   * It used to be an early `return` immediately after the key handler, i.e. above
+   * `stacked`/`oneLineRef` and their two effects. That makes the number of hooks `Composer` calls
+   * depend on `mode`, which React cannot survive: entering or leaving replay within the same mounted
+   * element changes the hook count between renders, and React matches hook state POSITIONALLY. The
+   * failure is not a wrong style, it is "Rendered fewer hooks than expected" or — worse, when the
+   * counts happen to line up — this component silently reading another hook's state.
+   *
+   * Nothing was catching it. `eslint-plugin-react-hooks` was a declared dependency of
+   * `@lmthing/config` that the shared flat config never registered, so `rules-of-hooks` had never
+   * run anywhere in the monorepo. Wiring it in reported this, and three sibling calls, as errors.
+   *
+   * Moving the branch down means the hooks now also run in replay mode. That is harmless by
+   * inspection: both effects only read `text`/`contentHeight` and set local arrangement state that
+   * nothing below this line consumes.
+   */
+  if (mode === 'replay') {
+    return (
+      <Prim.Box className={className} paddingHorizontal="$4" paddingVertical="$3" fontSize="$sm" color="$muted-foreground" textAlign="center" borderTopWidth={1} borderColor="$border">
+        <Prim.Text fontSize="$sm" color="$muted-foreground" textAlign="center">Replay mode — input disabled</Prim.Text>
+      </Prim.Box>
+    );
+  }
 
   const plusButton = (
     /* A PLUS, not a paperclip. A clip means "a file is stapled to this", which undersells what the
@@ -554,7 +574,10 @@ export function Composer({ onSend, projectId, className, disabled }: ComposerPro
                 flexShrink={0} color="$muted-foreground" hoverStyle={{ color: "$foreground" }}
                 aria-label="Remove attachment"
               >
-                ×
+                {/* `Prim.Pressable` is an RN `View` — its `color` above styles the button, not this
+                    bare glyph, so it is restated on the wrapped `Prim.Text` (see
+                    `primitives/_native.tsx#NativeText`'s unconditional `$foreground` default). */}
+                <Prim.Text color="$muted-foreground">×</Prim.Text>
               </Prim.Pressable>
             </Prim.Text>
           ))}

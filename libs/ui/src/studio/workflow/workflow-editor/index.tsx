@@ -107,7 +107,11 @@ export function TasklistEditor({ name, onBack }: TasklistEditorProps) {
           <Prim.Svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
             <Prim.Path d="M12 5v14M5 12h14" />
           </Prim.Svg>
-          Add Task
+          {/* `Prim.Pressable` is an RN `View` — `TASKLIST_EDITOR_ADD_TASK_BTN`'s `fontSize`/
+              `fontWeight`/`color` style the button, not this label, so all three are restated. */}
+          <Prim.Text fontSize={TASKLIST_EDITOR_ADD_TASK_BTN.fontSize} fontWeight={TASKLIST_EDITOR_ADD_TASK_BTN.fontWeight} color={TASKLIST_EDITOR_ADD_TASK_BTN.color}>
+            Add Task
+          </Prim.Text>
         </Prim.Pressable>
       </Prim.Box>
     </Prim.Box>

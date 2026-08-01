@@ -150,7 +150,9 @@ export function AgentChatPanel({
           }}
           {...styles.sendButton}
         >
-          Retry
+          {/* `Prim.Pressable` is an RN `View` — the `color`/`fontWeight` in `styles.sendButton`
+              style the button fill, not this label, so both are restated on the wrapped `Prim.Text`. */}
+          <Prim.Text color={styles.sendButton.color} fontWeight={styles.sendButton.fontWeight}>Retry</Prim.Text>
         </Prim.Pressable>
       </Prim.Box>
     );

@@ -135,7 +135,13 @@ export function Tabs<T extends string>({ tabs, active, onChange }: { tabs: reado
             ? { borderBottomColor: 'var(--agent)', color: 'var(--foreground)' }
             : { borderBottomColor: 'transparent', color: 'var(--muted-foreground)', hoverStyle: { color: 'var(--foreground)' } })}
         >
-          {t}
+          {/* `Prim.Pressable` is an RN `View` — `t` is a bare `T extends string`, not a literal,
+              so the AST gate (which only flags literal shapes) cannot see this one, but the drop
+              is the same: `fontSize`/`fontFamily`/`textTransform`/`color` above style the tab, not
+              this label, so all four are restated here (`color` from the same active/idle branch). */}
+          <Prim.Text fontSize="11px" fontFamily="$mono" textTransform="capitalize" color={active === t ? 'var(--foreground)' : 'var(--muted-foreground)'}>
+            {t}
+          </Prim.Text>
         </Prim.Pressable>
       ))}
     </Prim.Row>

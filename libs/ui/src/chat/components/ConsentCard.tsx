@@ -79,7 +79,10 @@ export function ConsentCard({
         <ShieldIcon />
         <Prim.Box minWidth={0} flexGrow={1} flexShrink={1} flexBasis="0%">
           <Prim.Box fontSize="$sm" fontWeight="$semibold" color="$foreground">
-            THING wants to run{' '}
+            {/* The Box's `fontSize`/`fontWeight`/`color` are container props an RN `View` drops —
+                a bare "THING wants to run" child was dropped outright (not just mis-styled), so it
+                needs its OWN `Prim.Text` restating them, the same way `fn`'s already does below. */}
+            <Prim.Text fontSize="$sm" fontWeight="$semibold" color="$foreground">THING wants to run</Prim.Text>{' '}
             {/* The Box's `fontSize`/`fontWeight` are container props an RN `View` drops — restated
                 here, or `fn` renders at Tamagui's default size/weight instead of matching the
                 sentence it sits in. `color`/`fontFamily` were already its own, kept as-is. */}
@@ -87,7 +90,10 @@ export function ConsentCard({
           </Prim.Box>
           {space && (
             <Prim.Box fontSize="$xs" color="$muted-foreground" marginTop="0.125rem">
-              space: <Prim.Text fontSize="$xs" color="$muted-foreground" fontFamily="$mono">{space}</Prim.Text>
+              {/* Same drop as above: a bare "space: " label under an RN `View` needs its own
+                  `Prim.Text`, restating the Box's `fontSize`/`color`. */}
+              <Prim.Text fontSize="$xs" color="$muted-foreground">space: </Prim.Text>
+              <Prim.Text fontSize="$xs" color="$muted-foreground" fontFamily="$mono">{space}</Prim.Text>
             </Prim.Box>
           )}
         </Prim.Box>

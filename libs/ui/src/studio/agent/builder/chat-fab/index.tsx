@@ -44,7 +44,9 @@ export function ChatFAB({ onClick }: ChatFABProps) {
       }}
     >
       <MessageCircle {...CHAT_FAB_ICON} />
-      Chat
+      {/* `Prim.Pressable` is an RN `View` — its `color`/`fontSize`/`fontWeight` above style the
+          button fill, not this label, so all three are restated on the wrapped `Prim.Text`. */}
+      <Prim.Text color="$agent-foreground" fontSize={15} fontWeight="$semibold">Chat</Prim.Text>
     </Prim.Pressable>
   )
 }

@@ -69,7 +69,9 @@ export function PlaybackBar(): React.ReactElement | null {
   return (
     <Prim.Row borderColor="var(--border)" backgroundColor="var(--muted)" gap="$2" paddingHorizontal="$3" paddingVertical="$2" borderTopWidth={1} alignItems="center">
       <Prim.Pressable onClick={() => (replay.playing ? pause() : play())} color="var(--agent)" fontSize="13px" width="$6">
-        {replay.playing ? '⏸' : '▶'}
+        {/* `Prim.Pressable` is an RN `View` — its `color`/`fontSize` above style the button, not
+            this glyph, so both are restated on the wrapped `Prim.Text`. */}
+        <Prim.Text color="var(--agent)" fontSize="13px">{replay.playing ? '⏸' : '▶'}</Prim.Text>
       </Prim.Pressable>
       <Prim.TextField
         type="range"

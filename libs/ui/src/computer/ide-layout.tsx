@@ -123,7 +123,9 @@ function IdeLayout(props: IdeLayoutProps) {
               disabledStyle={{ opacity: 0.4 }}
               title="Restart CLI process (reloads .env)"
             >
-              {restarting ? '↻' : '⏻'}
+              {/* `Prim.Pressable` is an RN `View` — its `fontSize`/`color` above style the button,
+                  not this glyph, so both are restated on the wrapped `Prim.Text`. */}
+              <Prim.Text fontSize="$xs" color="$muted-foreground">{restarting ? '↻' : '⏻'}</Prim.Text>
             </Prim.Pressable>
           )}
         </Prim.Box>

@@ -106,7 +106,11 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
             ? { borderBottomWidth: 2, borderBottomColor: '$primary', color: '$primary' }
             : { borderBottomWidth: 2, borderBottomColor: 'transparent' })}
         >
-          <Shield {...SETTINGS_VIEW_TAB_ICON} /> Environment
+          {/* `Prim.Pressable` is an RN `View` — the conditional `color` spread above styles the
+              button, not this label, so it is restated on the wrapped `Prim.Text`. Omitted rather
+              than passed as `color={undefined}` when NOT active — Tamagui treats an explicit
+              `undefined` as an override and it would clobber `NativeText`'s own default. */}
+          <Shield {...SETTINGS_VIEW_TAB_ICON} /><Prim.Text {...(activeTab === 'env' ? { color: '$primary' } : {})}> Environment</Prim.Text>
         </Prim.Pressable>
         <Prim.Pressable
           onClick={() => handleTabChange('packages')}
@@ -121,7 +125,9 @@ export function SettingsView({ isOpen }: SettingsViewProps) {
             ? { borderBottomWidth: 2, borderBottomColor: '$primary', color: '$primary' }
             : { borderBottomWidth: 2, borderBottomColor: 'transparent' })}
         >
-          <FileCode2 {...SETTINGS_VIEW_TAB_ICON} /> package.json
+          {/* Same drop as the Environment tab above: restate the conditional `color`, omitted
+              (not `undefined`) when this tab is not the active one. */}
+          <FileCode2 {...SETTINGS_VIEW_TAB_ICON} /><Prim.Text {...(activeTab === 'packages' ? { color: '$primary' } : {})}> package.json</Prim.Text>
         </Prim.Pressable>
       </Prim.Box>
 

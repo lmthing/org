@@ -47,6 +47,23 @@ test('a cancelled ask block paints "cancelled" muted and mono, in both themes', 
   }
 })
 
+test('an answered ask block paints its checkmark+preview in knowledge mono, in both themes', () => {
+  // Message.tsx: the same drop as `cancelled` below, on the OTHER branch of the same conditional —
+  // `Prim.Box` wraps a bare `✓ {preview(...)}` that used to restate none of `fontSize`/`color`/
+  // `fontFamily` either.
+  const block: ConvoBlock = { id: 'b3', ts: 0, nodeId: 'n1', type: 'ask', askId: 'a1', descriptor: undefined, state: 'answered', answer: 'yes' }
+  for (const [theme, ink] of [['light', '#4a6b52'], ['dark', '#7fa78c']] as const) {
+    resetStore()
+    const { tree } = render(<Message block={block} />, { theme })
+    const answered = findAll(tree, (t) => t === NATIVE_TEXT)
+      .map((n) => ({ style: flattenStyle(n.props?.style), children: n.children }))
+      .find((n) => n.children?.some((c) => typeof c === 'string' && c.includes('yes')))
+    expect(answered).toBeDefined()
+    expect(answered?.style.color).toBe(ink)
+    expect(answered?.style.fontFamily).toBe('JetBrains Mono')
+  }
+})
+
 test('an error block paints its message in destructive mono, in both themes', () => {
   const block: ConvoBlock = { id: 'b2', ts: 0, nodeId: 'n1', type: 'error', message: 'the sandbox crashed' }
   for (const [theme, ink] of [['light', '#a8322a'], ['dark', '#d4685c']] as const) {

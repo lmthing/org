@@ -93,7 +93,9 @@ function SlashActionCard({ workflow, onToggleEnabled, onEdit, onDetach }: {
     <Card interactive>
       <CardBody>
         <Stack row gap="sm" {...ACTIONS_PANEL_CARD_ROW}>
-          <Prim.Box flexShrink={0} fontSize={20}>⚡</Prim.Box>
+          {/* `Prim.Box` is an RN `View` — its `fontSize` above styles the box, not this glyph, so
+              it is restated on the wrapped `Prim.Text`. */}
+          <Prim.Box flexShrink={0} fontSize={20}><Prim.Text fontSize={20}>⚡</Prim.Text></Prim.Box>
           <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
             <Stack row gap="sm" {...ACTIONS_PANEL_CARD_TITLE_ROW}>
               <Code>/{workflow.slashAction.actionId}</Code>
