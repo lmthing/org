@@ -552,7 +552,7 @@
   "tamaguiConfig": {
     "fonts": {
       "body": {
-        "family": "TypeMates Cera Round Pro Bold, system-ui, sans-serif",
+        "family": "Manrope, system-ui, sans-serif",
         "size": {
           "xs": 12,
           "sm": 14,
@@ -608,7 +608,7 @@
         }
       },
       "heading": {
-        "family": "TypeMates Cera Round Pro Bold, system-ui, sans-serif",
+        "family": "Manrope, system-ui, sans-serif",
         "size": {
           "xs": 12,
           "sm": 14,
@@ -664,7 +664,63 @@
         }
       },
       "mono": {
-        "family": "ui-monospace, monospace",
+        "family": "JetBrains Mono, ui-monospace, monospace",
+        "size": {
+          "xs": 12,
+          "sm": 14,
+          "base": 16,
+          "lg": 18,
+          "xl": 20,
+          "2xl": 24,
+          "3xl": 30,
+          "4xl": 36,
+          "5xl": 48,
+          "6xl": 60,
+          "7xl": 72,
+          "8xl": 96,
+          "9xl": 128,
+          "true": 16
+        },
+        "lineHeight": {
+          "xs": 16,
+          "sm": 20,
+          "base": 24,
+          "lg": 28,
+          "xl": 28,
+          "2xl": 32,
+          "3xl": 36,
+          "4xl": 40,
+          "5xl": 48,
+          "6xl": 60,
+          "7xl": 72,
+          "8xl": 96,
+          "9xl": 128,
+          "true": 24
+        },
+        "weight": {
+          "thin": "100",
+          "extralight": "200",
+          "light": "300",
+          "normal": "400",
+          "medium": "500",
+          "semibold": "600",
+          "bold": "700",
+          "extrabold": "800",
+          "black": "900",
+          "true": "400"
+        },
+        "letterSpacing": {
+          "tighter": "-0.05em",
+          "tight": "-0.025em",
+          "normal": "0em",
+          "wide": "0.025em",
+          "wider": "0.05em",
+          "widest": "0.1em",
+          "true": "0em"
+        }
+      },
+      "brand": {
+        "family": "TypeMates Cera Round Pro Bold, system-ui, sans-serif",
         "size": {
           "xs": 12,
           "sm": 14,
@@ -773,6 +829,11 @@
     },
     "themes": {
       "app": {
+        "logo-1": "var(--logo-1)",
+        "logo-2": "var(--logo-2)",
+        "logo-3": "var(--logo-3)",
+        "logo-4": "var(--logo-4)",
+        "logo-5": "var(--logo-5)",
         "brand-1": "var(--brand-1)",
         "brand-2": "var(--brand-2)",
         "brand-3": "var(--brand-3)",
@@ -877,6 +938,41 @@
     },
     "tokens": {
       "color": {
+        "logo-1": {
+          "isVar": true,
+          "key": "$logo-1",
+          "name": "c-color-logo-1",
+          "val": "var(--logo-1)",
+          "variable": "var(--c-color-logo-1)"
+        },
+        "logo-2": {
+          "isVar": true,
+          "key": "$logo-2",
+          "name": "c-color-logo-2",
+          "val": "var(--logo-2)",
+          "variable": "var(--c-color-logo-2)"
+        },
+        "logo-3": {
+          "isVar": true,
+          "key": "$logo-3",
+          "name": "c-color-logo-3",
+          "val": "var(--logo-3)",
+          "variable": "var(--c-color-logo-3)"
+        },
+        "logo-4": {
+          "isVar": true,
+          "key": "$logo-4",
+          "name": "c-color-logo-4",
+          "val": "var(--logo-4)",
+          "variable": "var(--c-color-logo-4)"
+        },
+        "logo-5": {
+          "isVar": true,
+          "key": "$logo-5",
+          "name": "c-color-logo-5",
+          "val": "var(--logo-5)",
+          "variable": "var(--c-color-logo-5)"
+        },
         "brand-1": {
           "isVar": true,
           "key": "$brand-1",
@@ -2485,6 +2581,41 @@
         "name": "c-color-knowledge-foreground",
         "val": "var(--knowledge-foreground)",
         "variable": "var(--c-color-knowledge-foreground)"
+      },
+      "$color.logo-1": {
+        "isVar": true,
+        "key": "$logo-1",
+        "name": "c-color-logo-1",
+        "val": "var(--logo-1)",
+        "variable": "var(--c-color-logo-1)"
+      },
+      "$color.logo-2": {
+        "isVar": true,
+        "key": "$logo-2",
+        "name": "c-color-logo-2",
+        "val": "var(--logo-2)",
+        "variable": "var(--c-color-logo-2)"
+      },
+      "$color.logo-3": {
+        "isVar": true,
+        "key": "$logo-3",
+        "name": "c-color-logo-3",
+        "val": "var(--logo-3)",
+        "variable": "var(--c-color-logo-3)"
+      },
+      "$color.logo-4": {
+        "isVar": true,
+        "key": "$logo-4",
+        "name": "c-color-logo-4",
+        "val": "var(--logo-4)",
+        "variable": "var(--c-color-logo-4)"
+      },
+      "$color.logo-5": {
+        "isVar": true,
+        "key": "$logo-5",
+        "name": "c-color-logo-5",
+        "val": "var(--logo-5)",
+        "variable": "var(--c-color-logo-5)"
       },
       "$color.muted": {
         "isVar": true,
