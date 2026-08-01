@@ -49,7 +49,9 @@ export function Dialog({ open, onClose, title, children, className }: DialogProp
         {title && (
           <Prim.Row justifyContent="space-between" paddingHorizontal="$4" paddingVertical="$3" borderBottomWidth={1} borderColor="$border" alignItems="center" flexShrink={0}>
             <Prim.Text as="h2" fontWeight="$semibold" fontSize="$sm" color="$foreground">{title}</Prim.Text>
-            <Prim.Pressable onClick={onClose} color="$muted-foreground" fontSize="$lg" lineHeight={18} hoverStyle={{ color: "$foreground" }}><Prim.Text>&times;</Prim.Text></Prim.Pressable>
+            {/* `Pressable` is an RN `View` — its `color`/`fontSize` never reach the nested `Text`,
+                which renders the × glyph at body size/ink without its own copy. */}
+            <Prim.Pressable onClick={onClose} color="$muted-foreground" fontSize="$lg" lineHeight={18} hoverStyle={{ color: "$foreground" }}><Prim.Text color="$muted-foreground" fontSize="$lg">&times;</Prim.Text></Prim.Pressable>
           </Prim.Row>
         )}
         <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" overflow="auto" padding="$4">{children}</Prim.Box>

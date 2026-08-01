@@ -220,7 +220,10 @@ export function ChatView({
         aria-label="chat header"
       >
         <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
-          <Prim.Box fontSize="$sm" fontWeight="$medium" color="$foreground" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap"><Prim.Text>{title}</Prim.Text></Prim.Box>
+          {/* The outer `Prim.Box` is an RN `View` — its `fontSize`/`fontWeight`/`color` style the
+              row, not the nested `Prim.Text`, which needs its own copy or the session title renders
+              at body size/weight/ink on a device. */}
+          <Prim.Box fontSize="$sm" fontWeight="$medium" color="$foreground" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap"><Prim.Text fontSize="$sm" fontWeight="$medium" color="$foreground">{title}</Prim.Text></Prim.Box>
         </Prim.Box>
         {sessionCostUsd > 0 && (
           <Prim.Text fontSize="$xs" color="$muted-foreground" flexShrink={0} title="Session cost">

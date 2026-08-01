@@ -89,7 +89,9 @@ export function PlaybackBar(): React.ReactElement | null {
       >
         {[1, 2, 4, 8].map((s) => <Prim.Option key={s} value={s}>{s}×</Prim.Option>)}
       </Prim.Select>
-      <Prim.Pressable onClick={exitReplay} color="var(--muted-foreground)" hoverStyle={{ color: "var(--foreground)" }}><Prim.Text>✕ live</Prim.Text></Prim.Pressable>
+      {/* `Pressable` is an RN `View` — its `color` never reaches the nested `Text` without restating
+          it, so "✕ live" rendered in body ink instead of muted on a device. */}
+      <Prim.Pressable onClick={exitReplay} color="var(--muted-foreground)" hoverStyle={{ color: "var(--foreground)" }}><Prim.Text color="var(--muted-foreground)">✕ live</Prim.Text></Prim.Pressable>
     </Prim.Row>
   );
 }

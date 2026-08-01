@@ -66,7 +66,11 @@ function AskForm({ block }: { block: Extract<ConvoBlock, { type: 'ask' }> }) {
         <Prim.Box fontSize="$xs" color="$knowledge" fontFamily="$mono" marginBottom="0.5rem">✓ {preview(block.answer, 200)}</Prim.Box>
       )}
       {block.state === 'cancelled' && (
-        <Prim.Box fontSize="$xs" color="$muted-foreground" fontFamily="$mono" marginBottom="0.5rem"><Prim.Text>cancelled</Prim.Text></Prim.Box>
+        // `Prim.Box` is an RN `View` — none of `fontSize`/`color`/`fontFamily` above reaches the
+        // nested `Prim.Text`, and `NativeText`'s own unconditional defaults (`$body`/`$foreground`)
+        // fill the gap instead. Restated here so "cancelled" actually renders muted and mono on a
+        // device rather than at body size/face/ink. See `primitives/_native.tsx#NativeText`.
+        <Prim.Box fontSize="$xs" color="$muted-foreground" fontFamily="$mono" marginBottom="0.5rem"><Prim.Text fontSize="$xs" color="$muted-foreground" fontFamily="$mono">cancelled</Prim.Text></Prim.Box>
       )}
       <Prim.Box style={inert ? { pointerEvents: 'none' } : undefined}>
         {d && isConsentDescriptor(d) ? (
@@ -275,7 +279,9 @@ function ErrorMessage({ block }: { block: Extract<ConvoBlock, { type: 'error' }>
   return (
     <Prim.Box className="lm-fade-in" paddingVertical="$2" data-testid="block">
       <Prim.Box borderColor="color-mix(in srgb, var(--destructive) 30%, transparent)" backgroundColor="color-mix(in srgb, var(--destructive) 10%, transparent)" borderWidth={1} borderRadius="$radius-lg" paddingHorizontal="$3" paddingVertical="$2" fontSize="$sm" color="$destructive" fontFamily="$mono">
-        <Prim.Text>{block.message}</Prim.Text>
+        {/* The Box's fontSize/color/fontFamily are container-level props; an RN `View` drops them
+            all, so the message rendered at body size/ink/face on native without this. */}
+        <Prim.Text fontSize="$sm" color="$destructive" fontFamily="$mono">{block.message}</Prim.Text>
         {retryText && <RetryButton text={retryText} />}
       </Prim.Box>
     </Prim.Box>

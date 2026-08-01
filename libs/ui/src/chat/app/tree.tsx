@@ -66,7 +66,10 @@ function TreeRow({ node, depth, now }: { node: ExecNode; depth: number; now: num
           <Prim.Text width="$3" flexShrink={0} />
         )}
         <StatusIcon status={node.status} />
-        <Prim.Text color="var(--foreground)" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.label}>{node.label}</Prim.Text>
+        {/* The row (`Prim.Box` above) carries `fontSize="12px"` as a container prop — an RN `View`
+            drops it, so without restating it here the label alone would render at Tamagui's default
+            text size instead of matching the badge/duration/retry text beside it. */}
+        <Prim.Text color="var(--foreground)" fontSize="12px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={node.label}>{node.label}</Prim.Text>
         <KindBadge kind={node.kind} />
         {dur && <Prim.Text color="var(--muted-foreground)" fontSize="10px" fontFamily="$mono" flexShrink={0} marginLeft="auto">{dur}</Prim.Text>}
         {retries > 0 && <Prim.Text color="var(--warning)" fontSize="10px" fontFamily="$mono" flexShrink={0} title={`${retries} retries`}>×{retries}</Prim.Text>}
@@ -92,12 +95,15 @@ export function ExecutionTree(): React.ReactElement {
 
   return (
     <Prim.Box as="nav" aria-label="execution tree" height="100%" overflowY="auto" paddingVertical="$1">
+      {/* `Prim.Row` is an RN `View`: its `color`/`fontSize` style the row, not the two `Prim.Text`
+          children inside it, which each need their own copy or fall back to `NativeText`'s
+          `$foreground`-at-body-size default. */}
       <Prim.Row color="var(--muted-foreground)" paddingHorizontal="$2" paddingVertical="$1" fontSize="10px" textTransform="uppercase" letterSpacing="$wider" justifyContent="space-between" alignItems="center">
-        <Prim.Text>Execution</Prim.Text>
-        {queue && <Prim.Text fontFamily="$mono">q {queue.active}/{queue.max}</Prim.Text>}
+        <Prim.Text color="var(--muted-foreground)" fontSize="10px">Execution</Prim.Text>
+        {queue && <Prim.Text color="var(--muted-foreground)" fontSize="10px" fontFamily="$mono">q {queue.active}/{queue.max}</Prim.Text>}
       </Prim.Row>
       {rootId ? <TreeRowById id={rootId} depth={0} now={now} /> : (
-        <Prim.Box color="var(--muted-foreground)" paddingHorizontal="$3" paddingVertical="$4" fontSize="12px"><Prim.Text>No activity yet. Send a message to start.</Prim.Text></Prim.Box>
+        <Prim.Box color="var(--muted-foreground)" paddingHorizontal="$3" paddingVertical="$4" fontSize="12px"><Prim.Text color="var(--muted-foreground)" fontSize="12px">No activity yet. Send a message to start.</Prim.Text></Prim.Box>
       )}
     </Prim.Box>
   );

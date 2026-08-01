@@ -15,7 +15,7 @@
  */
 import * as React from 'react'
 import { test, expect } from '../harness'
-import { render, findAll, findByText, hostTypes, NATIVE_TEXT } from '../render'
+import { render, findAll, findByText, hostTypes, flattenStyle, NATIVE_TEXT } from '../render'
 import { renderDescriptor } from '../../src/chat/components/render-descriptor'
 
 const d = (type: string, props: Record<string, unknown> = {}, children: unknown[] = []) =>
@@ -97,6 +97,67 @@ test('a component nobody ships never reaches the reader as its own JSON', () => 
   expect(text.includes('secret')).toBe(false)
   // The content inside it survives.
   expect(findByText(tree, 'the actual answer')).toBeTruthy()
+})
+
+/**
+ * `quote`/`callout`/`table`/`keyvalue` all wrap their text in a `Prim.Box`/`Prim.Row` (an RN
+ * `View`), which drops `color`/`fontSize`/`fontWeight` rather than passing it to the `Prim.Text`
+ * inside — so before this these rendered in body ink/size regardless of the descriptor's own tone
+ * or the renderer's compact scale. Asserted on the LEAF text node, in both themes (light mode makes
+ * this invisible whenever the fallback happens to read close enough to the intended tone).
+ */
+test('a quote renders its text in the muted/italic quote tone, in both themes', () => {
+  for (const [theme, ink] of [['light', '#5c636b'], ['dark', '#98a0a9']] as const) {
+    const { tree } = render(<>{renderDescriptor(d('quote', {}, ['a quoted line']))}</>, { theme })
+    const node = findAll(tree, (t) => t === NATIVE_TEXT)
+      .map((n) => ({ style: flattenStyle(n.props?.style), children: n.children }))
+      .find((n) => n.children?.includes('a quoted line'))
+    expect(node).toBeDefined()
+    expect(node?.style.color).toBe(ink)
+    expect(node?.style.fontStyle).toBe('italic')
+  }
+})
+
+test('a success callout renders its title in the success tone, in both themes', () => {
+  for (const [theme, ink] of [['light', '#2c6b48'], ['dark', '#63a684']] as const) {
+    const { tree } = render(<>{renderDescriptor(d('callout', { variant: 'success', title: 'Done' }, ['All checks passed.']))}</>, { theme })
+    const title = findAll(tree, (t) => t === NATIVE_TEXT)
+      .map((n) => ({ style: flattenStyle(n.props?.style), children: n.children }))
+      .find((n) => n.children?.includes('Done'))
+    const body = findAll(tree, (t) => t === NATIVE_TEXT)
+      .map((n) => ({ style: flattenStyle(n.props?.style), children: n.children }))
+      .find((n) => n.children?.includes('All checks passed.'))
+    expect(title).toBeDefined()
+    expect(title?.style.color).toBe(ink)
+    expect(body).toBeDefined()
+    expect(body?.style.color).toBe(ink)
+  }
+})
+
+test('a table header cell renders bold muted text, in both themes', () => {
+  // A registered weight resolves onto a distinct FONT FAMILY name (`<face>-SemiBold`/`-Medium`),
+  // not a numeric `fontWeight` style — Android cannot synthesise a weight from one registered face
+  // (`theme/tamagui.config.ts`), so that is what a "bold" assertion has to check here.
+  for (const [theme, ink] of [['light', '#5c636b'], ['dark', '#98a0a9']] as const) {
+    const { tree } = render(<>{renderDescriptor(d('table', { columns: ['Name'], rows: [] }))}</>, { theme })
+    const header = findAll(tree, (t) => t === NATIVE_TEXT)
+      .map((n) => ({ style: flattenStyle(n.props?.style), children: n.children }))
+      .find((n) => n.children?.includes('Name'))
+    expect(header).toBeDefined()
+    expect(header?.style.color).toBe(ink)
+    expect(String(header?.style.fontFamily).endsWith('-SemiBold')).toBe(true)
+  }
+})
+
+test('a keyvalue pair renders at the compact 12px scale, in both themes', () => {
+  for (const theme of ['light', 'dark'] as const) {
+    const { tree } = render(<>{renderDescriptor(d('keyvalue', { pairs: { Status: 'active' } }))}</>, { theme })
+    const key = findAll(tree, (t) => t === NATIVE_TEXT)
+      .map((n) => ({ style: flattenStyle(n.props?.style), children: n.children }))
+      .find((n) => n.children?.includes('Status'))
+    expect(key).toBeDefined()
+    expect(key?.style.fontSize).toBe(12)
+  }
 })
 
 test('a LIST of blocks — what a team channel post is — mounts every one', () => {

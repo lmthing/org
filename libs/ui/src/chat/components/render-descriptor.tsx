@@ -67,12 +67,20 @@ export function isDescriptor(v: unknown): v is Descriptor {
  * host TYPE of the mounted node rather than just finding the text.
  *
  * Harmless on web: `Prim.Text` is an inline span there.
+ *
+ * `ambient` carries the CONTAINER's own text styling (e.g. `quote`'s `color`/`fontStyle`,
+ * `callout`'s tone colour) down onto the `Text` this wraps a bare string in. The container below is
+ * a `Prim.Box`/`Prim.Row`, an RN `View`, which drops `color`/`fontFamily`/`fontSize`/`fontWeight`
+ * entirely rather than passing them to a text child — and `NativeText`'s own unconditional defaults
+ * fill the gap with body ink at body size instead. Only the STRING branch needs it: an already-
+ * rendered element (a nested descriptor, a `renderDescriptor` result) carries its own explicit
+ * styling from its own case in the switch below.
  */
-function inView(content: React.ReactNode, key?: React.Key): React.ReactNode {
+function inView(content: React.ReactNode, key?: React.Key, ambient?: Prim.TextProps): React.ReactNode {
   if (typeof content === 'string' || typeof content === 'number') {
-    return <Prim.Text key={key}>{content}</Prim.Text>;
+    return <Prim.Text key={key} {...ambient}>{content}</Prim.Text>;
   }
-  if (Array.isArray(content)) return content.map((c, i) => inView(c, i));
+  if (Array.isArray(content)) return content.map((c, i) => inView(c, i, ambient));
   return content;
 }
 
@@ -146,7 +154,10 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       return <Markdown key={key} source={markdown} preset="prose" />;
     }
     case 'span': return <Prim.Text key={key}>{body}</Prim.Text>;
-    case 'quote': return <Prim.Box as="blockquote" key={key} borderColor="var(--border)" color="var(--muted-foreground)" borderLeftWidth={2} paddingLeft="$2" fontStyle="italic" marginVertical="0.25rem">{inView(body)}</Prim.Box>;
+    // `color`/`fontStyle` are on the `Box` (an RN `View`), so `inView` is handed them as `ambient`
+    // to stamp onto whatever bare string it wraps — otherwise the quote rendered in body ink,
+    // upright, on native.
+    case 'quote': return <Prim.Box as="blockquote" key={key} borderColor="var(--border)" color="var(--muted-foreground)" borderLeftWidth={2} paddingLeft="$2" fontStyle="italic" marginVertical="0.25rem">{inView(body, undefined, { color: 'var(--muted-foreground)', fontStyle: 'italic' })}</Prim.Box>;
     case 'link': return <Prim.Link key={key} href={String(props['href'] ?? '#')} target="_blank" rel="noreferrer" color="var(--agent)" textDecorationLine="underline">{body}</Prim.Link>;
 
     // ── media ──
@@ -176,8 +187,10 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'columns': return <Prim.Box key={key} display="grid" marginVertical="0.25rem" gridTemplateColumns={`repeat(${(d.children ?? []).length || 1}, minmax(0,1fr))`} gap={((props['gap'] as number) ?? 2) * 4}>{inView(body)}</Prim.Box>;
     case 'spacer': return <Prim.Box key={key} flexGrow={1} />;
     case 'divider': return (
+      // The Row's `color`/`fontSize` are container props (an RN `View` drops both); the label is
+      // the only actual text here, so it alone needs to restate them.
       <Prim.Row key={key} color="var(--muted-foreground)" gap="$2" marginVertical="$2" fontSize="11px" alignItems="center">
-        <Prim.Text borderColor="var(--border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />{props['label'] ? <Prim.Text>{String(props['label'])}</Prim.Text> : null}<Prim.Text borderColor="var(--border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />
+        <Prim.Text borderColor="var(--border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />{props['label'] ? <Prim.Text color="var(--muted-foreground)" fontSize="11px">{String(props['label'])}</Prim.Text> : null}<Prim.Text borderColor="var(--border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />
       </Prim.Row>
     );
 
@@ -190,7 +203,10 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'callout': case 'alert': case 'banner': {
       const variant = props['variant'] as string | undefined;
       const tone = variant === 'error' ? 'red' : variant === 'success' ? 'green' : variant === 'warning' ? 'amber' : 'accent';
-      return <Prim.Box key={key} marginVertical="0.25rem" borderLeftWidth={2} borderLeftColor={lmColor(tone)} color={lmColor(tone)} backgroundColor="var(--accent)" paddingHorizontal="$2" paddingVertical="$1" borderRadius="$radius">{props['title'] ? <Prim.Text fontWeight="$semibold">{String(props['title'])}</Prim.Text> : null}{inView(body)}</Prim.Box>;
+      // The Box's `color={lmColor(tone)}` is a container prop an RN `View` drops — the title and
+      // any bare-string body both need the tone colour restated, or the whole callout reads in
+      // body ink on native regardless of `variant`.
+      return <Prim.Box key={key} marginVertical="0.25rem" borderLeftWidth={2} borderLeftColor={lmColor(tone)} color={lmColor(tone)} backgroundColor="var(--accent)" paddingHorizontal="$2" paddingVertical="$1" borderRadius="$radius">{props['title'] ? <Prim.Text color={lmColor(tone)} fontWeight="$semibold">{String(props['title'])}</Prim.Text> : null}{inView(body, undefined, { color: lmColor(tone) })}</Prim.Box>;
     }
     case 'badge': case 'tag': case 'pill': {
       const tone = lmColor(color ?? 'accent');
@@ -201,7 +217,9 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'list': case 'orderedlist': {
       const ordered = d.type.toLowerCase() === 'orderedlist';
       const items = props['items'] as (string | number)[] | undefined;
-      const lis = items ? items.map((it, i) => <Prim.ListItem key={i}><Prim.Text>{String(it)}</Prim.Text></Prim.ListItem>) : kids;
+      // `Prim.List` below carries `color="var(--foreground)"` — a container prop an RN `View`
+      // (`Prim.List`/`Prim.ListItem`) drops, so each item's text needs its own copy.
+      const lis = items ? items.map((it, i) => <Prim.ListItem key={i}><Prim.Text color="var(--foreground)">{String(it)}</Prim.Text></Prim.ListItem>) : kids;
       return ordered
         ? <Prim.List ordered key={key} color="var(--foreground)" marginLeft="1.25rem" marginVertical="0.25rem" style={{ listStyleType: 'decimal' }}>{lis}</Prim.List>
         : <Prim.List key={key} color="var(--foreground)" marginLeft="1.25rem" marginVertical="0.25rem" style={{ listStyleType: 'disc' }}>{lis}</Prim.List>;
@@ -212,14 +230,19 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       const rows = (props['rows'] as (string | number)[][]) ?? [];
       return (
         <Prim.Table key={key} marginVertical="$1" fontSize="12px" borderColor="$collapse">
-          {columns.length > 0 && <Prim.Thead><Prim.Tr>{columns.map((c, i) => <Prim.Th key={i} textAlign="left" fontWeight="$semibold" color="var(--muted-foreground)" borderBottomWidth={1} borderColor="var(--border)" paddingHorizontal="$2" paddingVertical="$1"><Prim.Text>{c}</Prim.Text></Prim.Th>)}</Prim.Tr></Prim.Thead>}
-          <Prim.Tbody>{rows.map((r, ri) => <Prim.Tr key={ri}>{r.map((cell, ci) => <Prim.Td key={ci} borderBottomWidth={1} borderColor="var(--border)" paddingHorizontal="$2" paddingVertical="$1" color="var(--foreground)"><Prim.Text>{String(cell)}</Prim.Text></Prim.Td>)}</Prim.Tr>)}</Prim.Tbody>
+          {/* `Prim.Th`/`Prim.Td` are RN `View`s (see `primitives/table.native.tsx`) — their own
+              `fontWeight`/`color` style the cell container, not the `Prim.Text` inside it. */}
+          {columns.length > 0 && <Prim.Thead><Prim.Tr>{columns.map((c, i) => <Prim.Th key={i} textAlign="left" fontWeight="$semibold" color="var(--muted-foreground)" borderBottomWidth={1} borderColor="var(--border)" paddingHorizontal="$2" paddingVertical="$1"><Prim.Text fontWeight="$semibold" color="var(--muted-foreground)">{c}</Prim.Text></Prim.Th>)}</Prim.Tr></Prim.Thead>}
+          <Prim.Tbody>{rows.map((r, ri) => <Prim.Tr key={ri}>{r.map((cell, ci) => <Prim.Td key={ci} borderBottomWidth={1} borderColor="var(--border)" paddingHorizontal="$2" paddingVertical="$1" color="var(--foreground)"><Prim.Text color="var(--foreground)">{String(cell)}</Prim.Text></Prim.Td>)}</Prim.Tr>)}</Prim.Tbody>
         </Prim.Table>
       );
     }
     case 'keyvalue': {
       const pairs = (props['pairs'] as Record<string, unknown>) ?? {};
-      return <Prim.Box as="dl" key={key} fontSize="12px" marginVertical="0.25rem">{Object.entries(pairs).map(([k, v]) => <Prim.Row key={k} gap="$2"><Prim.Text as="dt" color="var(--muted-foreground)" minWidth="120px">{k}</Prim.Text><Prim.Text as="dd" color="var(--foreground)">{String(v)}</Prim.Text></Prim.Row>)}</Prim.Box>;
+      // `Prim.Box`'s `fontSize="12px"` is a container prop; both `dt`/`dd` already restate their
+      // own `color` but not the size, so without this each pair rendered at Tamagui's default text
+      // size instead of the compact 12px the rest of the descriptor renderer uses.
+      return <Prim.Box as="dl" key={key} fontSize="12px" marginVertical="0.25rem">{Object.entries(pairs).map(([k, v]) => <Prim.Row key={k} gap="$2"><Prim.Text as="dt" color="var(--muted-foreground)" fontSize="12px" minWidth="120px">{k}</Prim.Text><Prim.Text as="dd" color="var(--foreground)" fontSize="12px">{String(v)}</Prim.Text></Prim.Row>)}</Prim.Box>;
     }
     case 'timeline': {
       const items = (props['items'] as { title: string; time?: string; detail?: string }[]) ?? [];

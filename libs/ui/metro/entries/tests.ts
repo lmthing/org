@@ -22,6 +22,7 @@ import '../suites/view'
 import '../suites/native-style-units'
 import '../suites/string-children'
 import '../suites/branding'
+import '../suites/text-styling'
 import { runRegisteredCases } from '../harness'
 
 void runRegisteredCases()

@@ -80,11 +80,14 @@ export function ConsentCard({
         <Prim.Box minWidth={0} flexGrow={1} flexShrink={1} flexBasis="0%">
           <Prim.Box fontSize="$sm" fontWeight="$semibold" color="$foreground">
             THING wants to run{' '}
-            <Prim.Text as="code" fontFamily="$mono" color="$agent" style={{ wordBreak: 'break-all' }}>{fn}</Prim.Text>
+            {/* The Box's `fontSize`/`fontWeight` are container props an RN `View` drops — restated
+                here, or `fn` renders at Tamagui's default size/weight instead of matching the
+                sentence it sits in. `color`/`fontFamily` were already its own, kept as-is. */}
+            <Prim.Text as="code" fontSize="$sm" fontWeight="$semibold" fontFamily="$mono" color="$agent" style={{ wordBreak: 'break-all' }}>{fn}</Prim.Text>
           </Prim.Box>
           {space && (
             <Prim.Box fontSize="$xs" color="$muted-foreground" marginTop="0.125rem">
-              space: <Prim.Text fontFamily="$mono">{space}</Prim.Text>
+              space: <Prim.Text fontSize="$xs" color="$muted-foreground" fontFamily="$mono">{space}</Prim.Text>
             </Prim.Box>
           )}
         </Prim.Box>
