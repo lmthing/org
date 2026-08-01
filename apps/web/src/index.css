@@ -6,13 +6,8 @@
    docs/tamagui-final-steps.md §2. */
 @import "@lmthing/css/animations.css";
 
-@font-face {
-  font-family: 'TypeMates Cera Round Pro Bold';
-  src: url('/TypeMates  Cera Round Pro Bold.otf') format('opentype');
-  font-weight: bold;
-  font-style: normal;
-  font-display: swap;
-}
+/* The wordmark's @font-face moved to `@lmthing/css/src/fonts.css`, imported by `theme.css`, so every
+   surface gets it rather than just this one and `com`. Do not re-add it per app. */
 
 /* Base layer styles */
 @layer base {

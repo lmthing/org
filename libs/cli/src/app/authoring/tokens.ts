@@ -35,13 +35,17 @@ export const INVISIBLE_AS_TEXT: readonly string[] = [
   'active',
   'background',
   'border',
-  'brand-1',
-  'brand-2',
   'card',
   'disabled',
   'focus',
   'hover',
   'input',
+  // The two palest hues are `logo-1` (sunflower) and `logo-2` (amber). They used to be `brand-1`
+  // and `brand-2`: the wordmark's five colours were the general-purpose brand ramp, so the palette
+  // could not be restyled without restyling the logo. `logo-*` is now frozen at the mark's hues and
+  // `brand-*` follows the palette — which is why these two entries changed NAME, not meaning.
+  'logo-1',
+  'logo-2',
   'muted',
   'neutral',
   'neutral-1',

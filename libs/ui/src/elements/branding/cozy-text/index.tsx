@@ -11,13 +11,17 @@ export interface CozyThingTextProps extends Omit<Prim.TextProps, 'children'> {
 }
 
 type Tone = 'neutral' | 'brand-1' | 'brand-2' | 'brand-3' | 'brand-4' | 'brand-5'
+// `$logo-1..5`, NOT `$brand-1..5`. The two used to be one set, which meant the palette could not be
+// restyled without restyling the logo — section accents, avatars and the `--spectrum-*` ramp all
+// read the same five hues the wordmark did. `logo-*` is frozen at the mark's colours; `brand-*` is
+// free to follow the palette. The `lm` prefix is grey so the coloured `thing` carries the mark.
 const TONE_COLOR: Record<Tone, string> = {
-  neutral: '$foreground',
-  'brand-1': '$brand-1',
-  'brand-2': '$brand-2',
-  'brand-3': '$brand-3',
-  'brand-4': '$brand-4',
-  'brand-5': '$brand-5',
+  neutral: '$muted-foreground',
+  'brand-1': '$logo-1',
+  'brand-2': '$logo-2',
+  'brand-3': '$logo-3',
+  'brand-4': '$logo-4',
+  'brand-5': '$logo-5',
 }
 
 const Toned = ({ tone, children }: { tone: Tone; children: React.ReactNode }) => (
@@ -52,7 +56,7 @@ const LmthingBrand = () => (
 // so a surface can restyle the brand mark (font face, size, line-height) with plain style props —
 // which is how `elements/nav/app-sidebar` carries what used to be `.app-sidebar__brand`.
 const Wrapper = ({ children, ...rest }: Prim.TextProps) => (
-  <Prim.Text fontWeight="$semibold" {...rest}>{children}</Prim.Text>
+  <Prim.Text fontFamily="$brand" fontWeight="$semibold" {...rest}>{children}</Prim.Text>
 )
 
 export function CozyThingText({ text = '', ...rest }: CozyThingTextProps) {

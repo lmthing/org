@@ -46,11 +46,17 @@
       "name": "font-sans",
       "cssVar": "--font-sans",
       "group": "font",
-      "value": "TypeMates Cera Round Pro Bold, system-ui, sans-serif"
+      "value": "Manrope, system-ui, sans-serif"
     },
     {
       "name": "font-display",
       "cssVar": "--font-display",
+      "group": "font",
+      "value": "Manrope, system-ui, sans-serif"
+    },
+    {
+      "name": "font-brand",
+      "cssVar": "--font-brand",
       "group": "font",
       "value": "TypeMates Cera Round Pro Bold, system-ui, sans-serif"
     },
@@ -58,71 +64,116 @@
       "name": "font-mono",
       "cssVar": "--font-mono",
       "group": "font",
-      "value": "ui-monospace, monospace"
+      "value": "JetBrains Mono, ui-monospace, monospace"
     }
   ],
   "colors": [
+    {
+      "name": "logo-1",
+      "cssVar": "--logo-1",
+      "utility": "--color-logo-1",
+      "group": "logo",
+      "light": "#f5c815",
+      "dark": "#f5c815",
+      "description": "WORDMARK ONLY — letter 't', yellow (sunflower). FROZEN: the logo's five hues are the brand mark and must not change with the palette. Consumed solely by elements/branding/cozy-text; never use one as a general accent — that is what brand-1..5 are for."
+    },
+    {
+      "name": "logo-2",
+      "cssVar": "--logo-2",
+      "utility": "--color-logo-2",
+      "group": "logo",
+      "light": "#f9a94a",
+      "dark": "#f9a94a",
+      "description": "WORDMARK ONLY — letter 'h', amber. Frozen; see logo-1."
+    },
+    {
+      "name": "logo-3",
+      "cssVar": "--logo-3",
+      "utility": "--color-logo-3",
+      "group": "logo",
+      "light": "#f38358",
+      "dark": "#f38358",
+      "description": "WORDMARK ONLY — letter 'i', coral. Frozen; see logo-1."
+    },
+    {
+      "name": "logo-4",
+      "cssVar": "--logo-4",
+      "utility": "--color-logo-4",
+      "group": "logo",
+      "light": "#ed92a1",
+      "dark": "#ed92a1",
+      "description": "WORDMARK ONLY — letter 'n', rose. Frozen; see logo-1."
+    },
+    {
+      "name": "logo-5",
+      "cssVar": "--logo-5",
+      "utility": "--color-logo-5",
+      "group": "logo",
+      "light": "#d59ec8",
+      "dark": "#d59ec8",
+      "description": "WORDMARK ONLY — letter 'g', orchid. Frozen; see logo-1."
+    },
     {
       "name": "brand-1",
       "cssVar": "--brand-1",
       "utility": "--color-brand-1",
       "group": "brand",
-      "light": "#f5c815",
-      "dark": "#f5c815",
-      "description": "THING letter 't' — yellow (sunflower)"
+      "light": "#2c4763",
+      "dark": "#7f9ab8",
+      "description": "Section/avatar ramp anchor 1 - slate navy. NOT the wordmark: the logo reads logo-1..5"
     },
     {
       "name": "brand-2",
       "cssVar": "--brand-2",
       "utility": "--color-brand-2",
       "group": "brand",
-      "light": "#f9a94a",
-      "dark": "#f9a94a",
-      "description": "THING letter 'h' — amber"
+      "light": "#2f6270",
+      "dark": "#78a8b4",
+      "description": "Section/avatar ramp anchor 2 - teal"
     },
     {
       "name": "brand-3",
       "cssVar": "--brand-3",
       "utility": "--color-brand-3",
       "group": "brand",
-      "light": "#f38358",
-      "dark": "#f38358",
-      "description": "THING letter 'i' — coral (the primary/CTA anchor)"
+      "light": "#4b7a63",
+      "dark": "#8db09b",
+      "description": "Section/avatar ramp anchor 3 - sage"
     },
     {
       "name": "brand-4",
       "cssVar": "--brand-4",
       "utility": "--color-brand-4",
       "group": "brand",
-      "light": "#ed92a1",
-      "dark": "#ed92a1",
-      "description": "THING letter 'n' — rose"
+      "light": "#7a7350",
+      "dark": "#b0a887",
+      "description": "Section/avatar ramp anchor 4 - taupe"
     },
     {
       "name": "brand-5",
       "cssVar": "--brand-5",
       "utility": "--color-brand-5",
       "group": "brand",
-      "light": "#d59ec8",
-      "dark": "#d59ec8",
-      "description": "THING letter 'g' — orchid"
+      "light": "#6b4f63",
+      "dark": "#a98ea1",
+      "description": "Section/avatar ramp anchor 5 - muted plum"
     },
     {
       "name": "neutral-1",
       "cssVar": "--neutral-1",
       "utility": "--color-neutral-1",
       "group": "neutral",
-      "light": "#cbcac8",
-      "dark": "#8a8175",
-      "description": "Warm stone neutral (never cool grey)"
+      "light": "#c3c8ce",
+      "dark": "#737a82",
+      "description": "Cool neutral (was warm stone)"
     },
     {
       "name": "neutral",
       "cssVar": "--neutral",
       "utility": "--color-neutral",
       "group": "neutral",
-      "light": "#cbcac8",
-      "dark": "#8a8175",
+      "light": "#c3c8ce",
+      "dark": "#737a82",
       "description": "Alias of neutral-1"
     },
     {
@@ -130,17 +181,17 @@
       "cssVar": "--background",
       "utility": "--color-background",
       "group": "surface",
-      "light": "#fffdfb",
-      "dark": "#1a1512",
-      "description": "Page background — faint warm tint"
+      "light": "#fcfcfd",
+      "dark": "#101317",
+      "description": "Page background - cool, near-neutral"
     },
     {
       "name": "foreground",
       "cssVar": "--foreground",
       "utility": "--color-foreground",
       "group": "surface",
-      "light": "#1c1917",
-      "dark": "#ece8e3",
+      "light": "#14171a",
+      "dark": "#e7eaed",
       "description": "Default body text"
     },
     {
@@ -148,17 +199,17 @@
       "cssVar": "--card",
       "utility": "--color-card",
       "group": "surface",
-      "light": "#fffaf6",
-      "dark": "#221c18",
-      "description": "Card / raised surface — subtle warm tint"
+      "light": "#ffffff",
+      "dark": "#171b20",
+      "description": "Card / raised surface"
     },
     {
       "name": "card-foreground",
       "cssVar": "--card-foreground",
       "utility": "--color-card-foreground",
       "group": "surface",
-      "light": "#1c1917",
-      "dark": "#ece8e3",
+      "light": "#14171a",
+      "dark": "#e7eaed",
       "description": "Text on card"
     },
     {
@@ -166,8 +217,8 @@
       "cssVar": "--popover",
       "utility": "--color-popover",
       "group": "surface",
-      "light": "#fffaf6",
-      "dark": "#221c18",
+      "light": "#ffffff",
+      "dark": "#171b20",
       "description": "Popover / menu surface"
     },
     {
@@ -175,8 +226,8 @@
       "cssVar": "--popover-foreground",
       "utility": "--color-popover-foreground",
       "group": "surface",
-      "light": "#1c1917",
-      "dark": "#ece8e3",
+      "light": "#14171a",
+      "dark": "#e7eaed",
       "description": "Text on popover"
     },
     {
@@ -184,35 +235,35 @@
       "cssVar": "--primary",
       "utility": "--color-primary",
       "group": "intent",
-      "light": "#f38358",
-      "dark": "#f38358",
-      "description": "Primary action / CTA fill — brand coral (brand-3)"
+      "light": "#15505c",
+      "dark": "#6aa8b4",
+      "description": "Primary action / CTA fill - slate teal"
     },
     {
       "name": "primary-foreground",
       "cssVar": "--primary-foreground",
       "utility": "--color-primary-foreground",
       "group": "intent",
-      "light": "#2b1a12",
-      "dark": "#2b1a12",
-      "description": "Text on primary — warm near-black for AA contrast on coral"
+      "light": "#ffffff",
+      "dark": "#101214",
+      "description": "Text on primary"
     },
     {
       "name": "secondary",
       "cssVar": "--secondary",
       "utility": "--color-secondary",
       "group": "intent",
-      "light": "#f7f1ec",
-      "dark": "#2e2723",
-      "description": "Secondary surface / button — warm"
+      "light": "#f2f4f6",
+      "dark": "#1e232a",
+      "description": "Secondary surface / button"
     },
     {
       "name": "secondary-foreground",
       "cssVar": "--secondary-foreground",
       "utility": "--color-secondary-foreground",
       "group": "intent",
-      "light": "#1c1917",
-      "dark": "#ece8e3",
+      "light": "#14171a",
+      "dark": "#e7eaed",
       "description": "Text on secondary"
     },
     {
@@ -220,35 +271,35 @@
       "cssVar": "--muted",
       "utility": "--color-muted",
       "group": "intent",
-      "light": "#f7f1ec",
-      "dark": "#2e2723",
-      "description": "Muted background — warm"
+      "light": "#f2f4f6",
+      "dark": "#1e232a",
+      "description": "Muted background"
     },
     {
       "name": "muted-foreground",
       "cssVar": "--muted-foreground",
       "utility": "--color-muted-foreground",
       "group": "intent",
-      "light": "#57534e",
-      "dark": "#a8a29e",
-      "description": "Muted / secondary text"
+      "light": "#5c636b",
+      "dark": "#98a0a9",
+      "description": "Muted / secondary text - also the wordmark lm prefix"
     },
     {
       "name": "accent",
       "cssVar": "--accent",
       "utility": "--color-accent",
       "group": "intent",
-      "light": "#fbe7dd",
-      "dark": "#34271f",
-      "description": "Accent hover surface — warm coral tint"
+      "light": "#eceef1",
+      "dark": "#20252b",
+      "description": "Accent hover surface"
     },
     {
       "name": "accent-foreground",
       "cssVar": "--accent-foreground",
       "utility": "--color-accent-foreground",
       "group": "intent",
-      "light": "#1c1917",
-      "dark": "#ece8e3",
+      "light": "#14171a",
+      "dark": "#e7eaed",
       "description": "Text on accent"
     },
     {
@@ -256,9 +307,9 @@
       "cssVar": "--destructive",
       "utility": "--color-destructive",
       "group": "functional",
-      "light": "#bd3b28",
-      "dark": "#e0754a",
-      "description": "Errors / destructive — deep red-terracotta (distinct from coral primary)"
+      "light": "#a8322a",
+      "dark": "#d4685c",
+      "description": "Errors / destructive"
     },
     {
       "name": "destructive-foreground",
@@ -266,7 +317,7 @@
       "utility": "--color-destructive-foreground",
       "group": "functional",
       "light": "#ffffff",
-      "dark": "#1a1816",
+      "dark": "#15100f",
       "description": "Text on destructive"
     },
     {
@@ -274,17 +325,17 @@
       "cssVar": "--border",
       "utility": "--color-border",
       "group": "state",
-      "light": "#efe6df",
-      "dark": "#2f2620",
-      "description": "Hairline border — warm"
+      "light": "#e4e7ea",
+      "dark": "#262c33",
+      "description": "Hairline border"
     },
     {
       "name": "input",
       "cssVar": "--input",
       "utility": "--color-input",
       "group": "state",
-      "light": "#efe6df",
-      "dark": "#2f2620",
+      "light": "#e4e7ea",
+      "dark": "#262c33",
       "description": "Input border"
     },
     {
@@ -292,18 +343,18 @@
       "cssVar": "--ring",
       "utility": "--color-ring",
       "group": "state",
-      "light": "#f38358",
-      "dark": "#f38358",
-      "description": "Focus ring — brand coral"
+      "light": "#15505c",
+      "dark": "#6aa8b4",
+      "description": "Focus ring - slate teal"
     },
     {
       "name": "knowledge",
       "cssVar": "--knowledge",
       "utility": "--color-knowledge",
       "group": "functional",
-      "light": "#8f9a2b",
-      "dark": "#c2ca5e",
-      "description": "Knowledge / data streams — vivid sage"
+      "light": "#4a6b52",
+      "dark": "#7fa78c",
+      "description": "Knowledge / data streams - muted green"
     },
     {
       "name": "knowledge-foreground",
@@ -311,7 +362,7 @@
       "utility": "--color-knowledge-foreground",
       "group": "functional",
       "light": "#ffffff",
-      "dark": "#1a1816",
+      "dark": "#0f1512",
       "description": "Text on knowledge"
     },
     {
@@ -319,9 +370,9 @@
       "cssVar": "--agent",
       "utility": "--color-agent",
       "group": "functional",
-      "light": "#944a80",
-      "dark": "#cf94bd",
-      "description": "Agent / AI streams and chat — vivid plum"
+      "light": "#54476b",
+      "dark": "#9b8bb5",
+      "description": "Agent / AI streams and chat - muted violet"
     },
     {
       "name": "agent-foreground",
@@ -329,7 +380,7 @@
       "utility": "--color-agent-foreground",
       "group": "functional",
       "light": "#ffffff",
-      "dark": "#1a1816",
+      "dark": "#111017",
       "description": "Text on agent"
     },
     {
@@ -337,9 +388,9 @@
       "cssVar": "--success",
       "utility": "--color-success",
       "group": "status",
-      "light": "#4f9a2f",
-      "dark": "#a6c56f",
-      "description": "Positive / running status — vivid green"
+      "light": "#2c6b48",
+      "dark": "#63a684",
+      "description": "Positive / running status"
     },
     {
       "name": "success-foreground",
@@ -347,7 +398,7 @@
       "utility": "--color-success-foreground",
       "group": "status",
       "light": "#ffffff",
-      "dark": "#1a1816",
+      "dark": "#0c1512",
       "description": "Text on success"
     },
     {
@@ -355,9 +406,9 @@
       "cssVar": "--warning",
       "utility": "--color-warning",
       "group": "status",
-      "light": "#dd8410",
-      "dark": "#f5b544",
-      "description": "Caution / booting status — vivid amber"
+      "light": "#96690b",
+      "dark": "#cb9c3f",
+      "description": "Caution / booting status"
     },
     {
       "name": "warning-foreground",
@@ -365,7 +416,7 @@
       "utility": "--color-warning-foreground",
       "group": "status",
       "light": "#ffffff",
-      "dark": "#1a1816",
+      "dark": "#161310",
       "description": "Text on warning"
     },
     {
@@ -373,35 +424,35 @@
       "cssVar": "--hover",
       "utility": "--color-hover",
       "group": "state",
-      "light": "rgba(243, 131, 88, 0.08)",
-      "dark": "rgba(243, 131, 88, 0.12)",
-      "description": "Hover overlay — faint coral"
+      "light": "rgba(21, 80, 92, 0.06)",
+      "dark": "rgba(106, 168, 180, 0.06)",
+      "description": "Hover overlay - slate teal"
     },
     {
       "name": "active",
       "cssVar": "--active",
       "utility": "--color-active",
       "group": "state",
-      "light": "rgba(243, 131, 88, 0.16)",
-      "dark": "rgba(243, 131, 88, 0.22)",
-      "description": "Active/pressed overlay — coral"
+      "light": "rgba(21, 80, 92, 0.13)",
+      "dark": "rgba(106, 168, 180, 0.13)",
+      "description": "Active/pressed overlay"
     },
     {
       "name": "focus",
       "cssVar": "--focus",
       "utility": "--color-focus",
       "group": "state",
-      "light": "rgba(243, 131, 88, 0.4)",
-      "dark": "rgba(243, 131, 88, 0.5)",
-      "description": "Focus overlay — coral"
+      "light": "rgba(21, 80, 92, 0.35)",
+      "dark": "rgba(106, 168, 180, 0.35)",
+      "description": "Focus overlay"
     },
     {
       "name": "disabled",
       "cssVar": "--disabled",
       "utility": "--color-disabled",
       "group": "state",
-      "light": "#e7e0da",
-      "dark": "#3d3530",
+      "light": "#e9ecef",
+      "dark": "#2b2d30",
       "description": "Disabled surface"
     },
     {
@@ -409,8 +460,8 @@
       "cssVar": "--disabled-foreground",
       "utility": "--color-disabled-foreground",
       "group": "state",
-      "light": "#a8a29e",
-      "dark": "#6b625a",
+      "light": "#a3a9b0",
+      "dark": "#66686b",
       "description": "Disabled text"
     },
     {
@@ -427,17 +478,17 @@
       "cssVar": "--sidebar-background",
       "utility": "--color-sidebar-background",
       "group": "sidebar",
-      "light": "#fdf5ef",
-      "dark": "#17120f",
-      "description": "Sidebar background — warm brand tint"
+      "light": "#f7f8fa",
+      "dark": "#0c0f12",
+      "description": "Sidebar background"
     },
     {
       "name": "sidebar-foreground",
       "cssVar": "--sidebar-foreground",
       "utility": "--color-sidebar-foreground",
       "group": "sidebar",
-      "light": "#1c1917",
-      "dark": "#ece8e3",
+      "light": "#14171a",
+      "dark": "#e7eaed",
       "description": "Sidebar text"
     },
     {
@@ -445,17 +496,17 @@
       "cssVar": "--sidebar-primary",
       "utility": "--color-sidebar-primary",
       "group": "sidebar",
-      "light": "#f38358",
-      "dark": "#f38358",
-      "description": "Sidebar primary / active item — brand coral"
+      "light": "#15505c",
+      "dark": "#6aa8b4",
+      "description": "Sidebar primary / active item"
     },
     {
       "name": "sidebar-primary-foreground",
       "cssVar": "--sidebar-primary-foreground",
       "utility": "--color-sidebar-primary-foreground",
       "group": "sidebar",
-      "light": "#2b1a12",
-      "dark": "#2b1a12",
+      "light": "#ffffff",
+      "dark": "#101214",
       "description": "Text on sidebar primary"
     },
     {
@@ -463,17 +514,17 @@
       "cssVar": "--sidebar-accent",
       "utility": "--color-sidebar-accent",
       "group": "sidebar",
-      "light": "#fbe7dd",
-      "dark": "#2e241e",
-      "description": "Sidebar accent / hover surface — warm coral tint"
+      "light": "#eceef1",
+      "dark": "#20252b",
+      "description": "Sidebar accent / hover surface"
     },
     {
       "name": "sidebar-accent-foreground",
       "cssVar": "--sidebar-accent-foreground",
       "utility": "--color-sidebar-accent-foreground",
       "group": "sidebar",
-      "light": "#1c1917",
-      "dark": "#ece8e3",
+      "light": "#14171a",
+      "dark": "#e7eaed",
       "description": "Text on sidebar accent"
     },
     {
@@ -481,26 +532,26 @@
       "cssVar": "--sidebar-border",
       "utility": "--color-sidebar-border",
       "group": "sidebar",
-      "light": "#f2e4da",
-      "dark": "#2f2620",
-      "description": "Sidebar border — warm"
+      "light": "#e4e7ea",
+      "dark": "#262c33",
+      "description": "Sidebar border"
     },
     {
       "name": "sidebar-ring",
       "cssVar": "--sidebar-ring",
       "utility": "--color-sidebar-ring",
       "group": "sidebar",
-      "light": "#f38358",
-      "dark": "#f38358",
-      "description": "Sidebar focus ring — coral"
+      "light": "#15505c",
+      "dark": "#6aa8b4",
+      "description": "Sidebar focus ring"
     },
     {
       "name": "sidebar",
       "cssVar": "--sidebar",
       "utility": "--color-sidebar",
       "group": "sidebar",
-      "light": "#fdf5ef",
-      "dark": "#17120f",
+      "light": "#f7f8fa",
+      "dark": "#0c0f12",
       "description": "Sidebar (alias)"
     },
     {
@@ -508,450 +559,450 @@
       "cssVar": "--spectrum-1",
       "utility": "--color-spectrum-1",
       "group": "spectrum",
-      "light": "#f5c815",
-      "dark": "#f5c815",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#2c4763",
+      "dark": "#7f9ab8",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-2",
       "cssVar": "--spectrum-2",
       "utility": "--color-spectrum-2",
       "group": "spectrum",
-      "light": "#f5c619",
-      "dark": "#f5c619",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#2c4964",
+      "dark": "#7e9bb8",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-3",
       "cssVar": "--spectrum-3",
       "utility": "--color-spectrum-3",
       "group": "spectrum",
-      "light": "#f6c31d",
-      "dark": "#f6c31d",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#2c4b65",
+      "dark": "#7e9cb7",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-4",
       "cssVar": "--spectrum-4",
       "utility": "--color-spectrum-4",
       "group": "spectrum",
-      "light": "#f6c121",
-      "dark": "#f6c121",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#2d4d66",
+      "dark": "#7d9db7",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-5",
       "cssVar": "--spectrum-5",
       "utility": "--color-spectrum-5",
       "group": "spectrum",
-      "light": "#f6be25",
-      "dark": "#f6be25",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#2d4f67",
+      "dark": "#7d9eb7",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-6",
       "cssVar": "--spectrum-6",
       "utility": "--color-spectrum-6",
       "group": "spectrum",
-      "light": "#f7bc29",
-      "dark": "#f7bc29",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#2d5168",
+      "dark": "#7c9fb6",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-7",
       "cssVar": "--spectrum-7",
       "utility": "--color-spectrum-7",
       "group": "spectrum",
-      "light": "#f7ba2d",
-      "dark": "#f7ba2d",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#2d5369",
+      "dark": "#7ca0b6",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-8",
       "cssVar": "--spectrum-8",
       "utility": "--color-spectrum-8",
       "group": "spectrum",
-      "light": "#f7b732",
-      "dark": "#f7b732",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#2e566a",
+      "dark": "#7ba2b6",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-9",
       "cssVar": "--spectrum-9",
       "utility": "--color-spectrum-9",
       "group": "spectrum",
-      "light": "#f7b536",
-      "dark": "#f7b536",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#2e586b",
+      "dark": "#7ba3b6",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-10",
       "cssVar": "--spectrum-10",
       "utility": "--color-spectrum-10",
       "group": "spectrum",
-      "light": "#f8b33a",
-      "dark": "#f8b33a",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#2e5a6c",
+      "dark": "#7aa4b5",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-11",
       "cssVar": "--spectrum-11",
       "utility": "--color-spectrum-11",
       "group": "spectrum",
-      "light": "#f8b03e",
-      "dark": "#f8b03e",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#2e5c6d",
+      "dark": "#7aa5b5",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-12",
       "cssVar": "--spectrum-12",
       "utility": "--color-spectrum-12",
       "group": "spectrum",
-      "light": "#f8ae42",
-      "dark": "#f8ae42",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#2f5e6e",
+      "dark": "#79a6b5",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-13",
       "cssVar": "--spectrum-13",
       "utility": "--color-spectrum-13",
       "group": "spectrum",
-      "light": "#f9ab46",
-      "dark": "#f9ab46",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#2f606f",
+      "dark": "#79a7b4",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-14",
       "cssVar": "--spectrum-14",
       "utility": "--color-spectrum-14",
       "group": "spectrum",
-      "light": "#f9a94a",
-      "dark": "#f9a94a",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#2f6270",
+      "dark": "#78a8b4",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-15",
       "cssVar": "--spectrum-15",
       "utility": "--color-spectrum-15",
       "group": "spectrum",
-      "light": "#f9a64b",
-      "dark": "#f9a64b",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#31646f",
+      "dark": "#7aa9b2",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-16",
       "cssVar": "--spectrum-16",
       "utility": "--color-spectrum-16",
       "group": "spectrum",
-      "light": "#f8a34c",
-      "dark": "#f8a34c",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#33666e",
+      "dark": "#7ba9b0",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-17",
       "cssVar": "--spectrum-17",
       "utility": "--color-spectrum-17",
       "group": "spectrum",
-      "light": "#f8a04d",
-      "dark": "#f8a04d",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#35686d",
+      "dark": "#7daaae",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-18",
       "cssVar": "--spectrum-18",
       "utility": "--color-spectrum-18",
       "group": "spectrum",
-      "light": "#f79d4e",
-      "dark": "#f79d4e",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#38696c",
+      "dark": "#7eaaac",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-19",
       "cssVar": "--spectrum-19",
       "utility": "--color-spectrum-19",
       "group": "spectrum",
-      "light": "#f79a4f",
-      "dark": "#f79a4f",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#3a6b6b",
+      "dark": "#80abaa",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-20",
       "cssVar": "--spectrum-20",
       "utility": "--color-spectrum-20",
       "group": "spectrum",
-      "light": "#f69750",
-      "dark": "#f69750",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#3c6d6a",
+      "dark": "#82aca8",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-21",
       "cssVar": "--spectrum-21",
       "utility": "--color-spectrum-21",
       "group": "spectrum",
-      "light": "#f69552",
-      "dark": "#f69552",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#3e6f69",
+      "dark": "#83aca7",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-22",
       "cssVar": "--spectrum-22",
       "utility": "--color-spectrum-22",
       "group": "spectrum",
-      "light": "#f59253",
-      "dark": "#f59253",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#407168",
+      "dark": "#85ada5",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-23",
       "cssVar": "--spectrum-23",
       "utility": "--color-spectrum-23",
       "group": "spectrum",
-      "light": "#f58f54",
-      "dark": "#f58f54",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#427367",
+      "dark": "#87aea3",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-24",
       "cssVar": "--spectrum-24",
       "utility": "--color-spectrum-24",
       "group": "spectrum",
-      "light": "#f48c55",
-      "dark": "#f48c55",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#457466",
+      "dark": "#88aea1",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-25",
       "cssVar": "--spectrum-25",
       "utility": "--color-spectrum-25",
       "group": "spectrum",
-      "light": "#f48956",
-      "dark": "#f48956",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#477665",
+      "dark": "#8aaf9f",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-26",
       "cssVar": "--spectrum-26",
       "utility": "--color-spectrum-26",
       "group": "spectrum",
-      "light": "#f38657",
-      "dark": "#f38657",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#497864",
+      "dark": "#8baf9d",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-27",
       "cssVar": "--spectrum-27",
       "utility": "--color-spectrum-27",
       "group": "spectrum",
-      "light": "#f38358",
-      "dark": "#f38358",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#4b7a63",
+      "dark": "#8db09b",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-28",
       "cssVar": "--spectrum-28",
       "utility": "--color-spectrum-28",
       "group": "spectrum",
-      "light": "#f3845e",
-      "dark": "#f3845e",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#4f7962",
+      "dark": "#90af99",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-29",
       "cssVar": "--spectrum-29",
       "utility": "--color-spectrum-29",
       "group": "spectrum",
-      "light": "#f28563",
-      "dark": "#f28563",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#527960",
+      "dark": "#92af98",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-30",
       "cssVar": "--spectrum-30",
       "utility": "--color-spectrum-30",
       "group": "spectrum",
-      "light": "#f28669",
-      "dark": "#f28669",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#56785f",
+      "dark": "#95ae96",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-31",
       "cssVar": "--spectrum-31",
       "utility": "--color-spectrum-31",
       "group": "spectrum",
-      "light": "#f1886e",
-      "dark": "#f1886e",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#59785d",
+      "dark": "#98ae95",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-32",
       "cssVar": "--spectrum-32",
       "utility": "--color-spectrum-32",
       "group": "spectrum",
-      "light": "#f18974",
-      "dark": "#f18974",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#5d775c",
+      "dark": "#9aad93",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-33",
       "cssVar": "--spectrum-33",
       "utility": "--color-spectrum-33",
       "group": "spectrum",
-      "light": "#f08a7a",
-      "dark": "#f08a7a",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#61775a",
+      "dark": "#9dac92",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-34",
       "cssVar": "--spectrum-34",
       "utility": "--color-spectrum-34",
       "group": "spectrum",
-      "light": "#f08b7f",
-      "dark": "#f08b7f",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#647659",
+      "dark": "#a0ac90",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-35",
       "cssVar": "--spectrum-35",
       "utility": "--color-spectrum-35",
       "group": "spectrum",
-      "light": "#ef8c85",
-      "dark": "#ef8c85",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#687657",
+      "dark": "#a3ab8f",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-36",
       "cssVar": "--spectrum-36",
       "utility": "--color-spectrum-36",
       "group": "spectrum",
-      "light": "#ef8d8b",
-      "dark": "#ef8d8b",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#6c7556",
+      "dark": "#a5aa8d",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-37",
       "cssVar": "--spectrum-37",
       "utility": "--color-spectrum-37",
       "group": "spectrum",
-      "light": "#ee8f90",
-      "dark": "#ee8f90",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#6f7554",
+      "dark": "#a8aa8c",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-38",
       "cssVar": "--spectrum-38",
       "utility": "--color-spectrum-38",
       "group": "spectrum",
-      "light": "#ee9096",
-      "dark": "#ee9096",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#737453",
+      "dark": "#aba98a",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-39",
       "cssVar": "--spectrum-39",
       "utility": "--color-spectrum-39",
       "group": "spectrum",
-      "light": "#ed919b",
-      "dark": "#ed919b",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#767451",
+      "dark": "#ada989",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-40",
       "cssVar": "--spectrum-40",
       "utility": "--color-spectrum-40",
       "group": "spectrum",
-      "light": "#ed92a1",
-      "dark": "#ed92a1",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#7a7350",
+      "dark": "#b0a887",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-41",
       "cssVar": "--spectrum-41",
       "utility": "--color-spectrum-41",
       "group": "spectrum",
-      "light": "#eb93a4",
-      "dark": "#eb93a4",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#797051",
+      "dark": "#afa689",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-42",
       "cssVar": "--spectrum-42",
       "utility": "--color-spectrum-42",
       "group": "spectrum",
-      "light": "#e994a7",
-      "dark": "#e994a7",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#786d53",
+      "dark": "#afa48b",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-43",
       "cssVar": "--spectrum-43",
       "utility": "--color-spectrum-43",
       "group": "spectrum",
-      "light": "#e795aa",
-      "dark": "#e795aa",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#776b54",
+      "dark": "#aea28d",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-44",
       "cssVar": "--spectrum-44",
       "utility": "--color-spectrum-44",
       "group": "spectrum",
-      "light": "#e696ad",
-      "dark": "#e696ad",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#756856",
+      "dark": "#aea08f",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-45",
       "cssVar": "--spectrum-45",
       "utility": "--color-spectrum-45",
       "group": "spectrum",
-      "light": "#e497b0",
-      "dark": "#e497b0",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#746557",
+      "dark": "#ad9e91",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-46",
       "cssVar": "--spectrum-46",
       "utility": "--color-spectrum-46",
       "group": "spectrum",
-      "light": "#e298b3",
-      "dark": "#e298b3",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#736259",
+      "dark": "#ad9c93",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-47",
       "cssVar": "--spectrum-47",
       "utility": "--color-spectrum-47",
       "group": "spectrum",
-      "light": "#e098b6",
-      "dark": "#e098b6",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#72605a",
+      "dark": "#ac9a95",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-48",
       "cssVar": "--spectrum-48",
       "utility": "--color-spectrum-48",
       "group": "spectrum",
-      "light": "#de99b9",
-      "dark": "#de99b9",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#715d5c",
+      "dark": "#ac9897",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-49",
       "cssVar": "--spectrum-49",
       "utility": "--color-spectrum-49",
       "group": "spectrum",
-      "light": "#dc9abc",
-      "dark": "#dc9abc",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#705a5d",
+      "dark": "#ab9699",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     },
     {
       "name": "spectrum-50",
       "cssVar": "--spectrum-50",
       "utility": "--color-spectrum-50",
       "group": "spectrum",
-      "light": "#db9bbf",
-      "dark": "#db9bbf",
-      "description": "50-stop interpolated ramp from brand-1 (yellow) through the warm arc to brand-5 (orchid). Rotated across sidebar sections, tabs and avatars for the full-spectrum look. Identical in light and dark."
+      "light": "#6e575f",
+      "dark": "#ab949b",
+      "description": "50-stop interpolated ramp from brand-1 (slate navy) through teal, sage and taupe to brand-5 (muted plum). Rotated across sidebar sections, tabs and avatars so they stay tellable apart without reading as a rainbow. Cut PER THEME, because the anchors differ between light and dark."
     }
   ]
 }

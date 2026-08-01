@@ -15,15 +15,18 @@ describe('CozyThingText', () => {
     render(<CozyThingText text="thing" data-testid="brand" />)
     const el = screen.getByTestId('brand')
     expect(el.textContent).toBe('thing')
-    // t·h·i·n·g each get their own `$brand-N` colour — the former `.cozy-text--brand-N` modifiers.
-    for (const n of [1, 2, 3, 4, 5]) expect(el.innerHTML).toContain(`_col-brand-${n}`)
+    // t·h·i·n·g each get their own `$logo-N` colour. NOT `$brand-N`: those two were one set until
+    // the palette was made restyleable, and `brand-*` now follows the palette while `logo-*` stays
+    // frozen at the mark's hues. Asserting `logo-*` is what keeps a palette edit off the logo.
+    for (const n of [1, 2, 3, 4, 5]) expect(el.innerHTML).toContain(`_col-logo-${n}`)
   })
 
   it('renders the `lm` prefix in the neutral tone for `lmthing`', () => {
     render(<CozyThingText text="lmthing" data-testid="full" />)
     const el = screen.getByTestId('full')
     expect(el.textContent).toBe('lmthing')
-    expect(el.innerHTML).toContain('_col-foreground')
+    // Grey, not near-black: the coloured `thing` carries the mark and the prefix recedes.
+    expect(el.innerHTML).toContain('_col-muted-foreg')
   })
 
   it('keeps the original casing of a dotted suffix', () => {
@@ -38,6 +41,16 @@ describe('CozyThingText', () => {
     render(<CozyThingText text="thing" data-testid="b" fontWeight="$bold" />)
     expect(screen.getByTestId('b').className).toMatch(/_fw-f-weight-bo\d/)
     expect(screen.getByTestId('b').className).not.toMatch(/_fw-f-weight-se/)
+  })
+
+  it('renders in the WORDMARK face, not the UI face', () => {
+    // Regression guard. `--font-sans`/`--font-display` used to BE the wordmark face, so nothing
+    // distinguished the mark from body text and `app-sidebar` could pass `fontFamily: '$heading'`
+    // harmlessly. Once the UI moved to its own face that override silently rendered the sidebar
+    // logo in the UI font — right colours, wrong letterforms, which reads as a weight change rather
+    // than a bug. The mark owns its family; a surface must not name one.
+    render(<CozyThingText text="lmthing" data-testid="face" />)
+    expect(screen.getByTestId('face').className).toMatch(/font_brand/)
   })
 
   it('takes idiomatic style props (the presentation slides restyle the mark this way)', () => {

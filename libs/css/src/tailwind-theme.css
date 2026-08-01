@@ -12,6 +12,11 @@
  * bake in the light value at build time.
  */
 @theme inline {
+  --color-logo-1: var(--logo-1);
+  --color-logo-2: var(--logo-2);
+  --color-logo-3: var(--logo-3);
+  --color-logo-4: var(--logo-4);
+  --color-logo-5: var(--logo-5);
   --color-brand-1: var(--brand-1);
   --color-brand-2: var(--brand-2);
   --color-brand-3: var(--brand-3);

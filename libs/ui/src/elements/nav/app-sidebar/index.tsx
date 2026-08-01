@@ -20,8 +20,8 @@ import { CozyThingText } from '../../branding/cozy-text'
  *   the row and `$group-row-hover` on the delete button.
  * - `text-muted-foreground/60` becomes a web `color-mix`, the same alpha treatment used elsewhere.
  *
- * `font-display` resolves to the same face as `$heading` (`theme.css:15`), so the brand marks use
- * that token. Every `transition-colors`/`transition-opacity` had no animation to preserve.
+ * The brand marks name NO font family — `CozyThingText` owns that (`$brand`). Every
+ * `transition-colors`/`transition-opacity` had no animation to preserve.
  */
 const SIDEBAR_SHELL = {
   display: 'flex',
@@ -56,7 +56,13 @@ const ICON_BTN = {
 
 const RAIL = { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingVertical: '$3', gap: '$2' } as const
 const RAIL_BTN = { ...ICON_BTN, width: '$8', height: '$8' } as const
-const BRAND = { fontFamily: '$heading', fontWeight: '$bold', fontSize: '$base' } as const
+// NO `fontFamily` HERE. `CozyThingText` defaults to `$brand` (the wordmark's own face) and spreads
+// caller props AFTER that default, so naming a family here silently overrides the mark. This used to
+// say `fontFamily: '$heading'`, which was harmless only while `$heading` WAS the wordmark face — the
+// moment `--font-display` moved to the UI face, the sidebar logo rendered in Manrope while every
+// other surface rendered it in Cera, with the right colours, so it read as a subtle weight change
+// rather than a bug.
+const BRAND = { fontWeight: '$bold', fontSize: '$base' } as const
 // 16 = the `$base` font size, i.e. "no extra leading". NOT `1`: Tamagui appends `px`, so a ratio
 // becomes a 1px line box. See lineHeight.test.tsx.
 const RAIL_BRAND = { ...BRAND, lineHeight: 16 } as const

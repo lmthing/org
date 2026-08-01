@@ -13,24 +13,14 @@
  * token exists, and Tailwind was already tree-shaking them out of the bundle).
  */
 
-/* ── Non-color theme tokens ─────────────────────────────────────
-   WAS an `@theme` block. It is kept — rather than dropped in favour of theme.css's generated scales —
-   because the FONT values here differ from tokens.json and, being loaded later, they have been
-   WINNING app-wide: `--font-sans` resolves to `-apple-system, …` and not to the generated
-   `TypeMates Cera Round Pro Bold, …`. Preserving that keeps this phase's P0 delta reviewable; the
-   contradiction itself is a bug, filed in `.issues/`, not something to fix inside a CSS deletion.
-   The radius values are equivalent to the generated ones (2px = 0.125rem, 6px = 0.375rem, …). */
-:root {
-  --radius-sm: 2px;
-  --radius-md: 6px;
-  --radius: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-full: 9999px;
-  --font-sans: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
-  --font-display: "Cera Round Pro", "TypeMates Cera Round Pro Bold", system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-}
+/* ── Non-color theme tokens: DELETED, do not reinstate ────────────
+   This file used to restate `--radius-*` and `--font-{sans,display,mono}` in a `:root` block. Because
+   it is loaded AFTER `@lmthing/css/theme.css` and the build emits one CSS bundle, those values won
+   **app-wide, not just on /chat** — `--font-sans` resolved to `-apple-system, …` on every surface, so
+   the generated value from `tokens.json` was dead the moment this stylesheet shipped. The radii were
+   merely duplicates (2px = 0.125rem, 6px = 0.375rem, …); the fonts actively contradicted the source of
+   truth, which is what made an app-wide font change silently no-op.
+   `tokens.json` owns both scales now. Anything this surface needs goes THERE. */
 
 /* ── Theme tokens ─────────────────────────────────────────────────
    The color palette is owned by the shared design system

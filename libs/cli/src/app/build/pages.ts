@@ -353,6 +353,12 @@ async function runBuild(
     assetNames: 'assets/[name]-[hash]',
     chunkNames: 'assets/[name]-[hash]',
     loader: { '.css': 'css', '.png': 'file', '.svg': 'file', '.jpg': 'file' },
+    // ROOT-ABSOLUTE URLs ARE RUNTIME PATHS, NOT BUILD INPUTS. The design system self-hosts its font
+    // faces and `@lmthing/css/src/fonts.css` points at `/fonts/*`, which the pod serves. esbuild
+    // otherwise tries to resolve that as a file on disk relative to the bundle and fails the whole
+    // build with `Could not resolve "/fonts/cera-round-pro-bold.otf"` — every page in the project
+    // app, killed by a font reference. Marking the prefix external passes the URL through untouched.
+    external: ['/fonts/*'],
     // A browser has no `process`. React and Tamagui both read `process.env.*` at MODULE SCOPE, so
     // without this the very first line of the bundle threw `ReferenceError: process is not defined`
     // and the page rendered nothing at all — no error on screen, just white. `platform: 'browser'`

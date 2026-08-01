@@ -31,8 +31,8 @@
     "**/*.css"
   ],
   "scripts": {
-    "generate": "node scripts/generate-theme.mjs && node scripts/generate-tamagui-config.mjs && node scripts/generate-components-catalog.mjs",
-    "prebuild": "node scripts/generate-theme.mjs && node scripts/generate-tamagui-config.mjs && node scripts/generate-components-catalog.mjs",
+    "generate": "node scripts/sync-fonts.mjs && node scripts/generate-theme.mjs && node scripts/generate-tamagui-config.mjs && node scripts/generate-components-catalog.mjs",
+    "prebuild": "node scripts/sync-fonts.mjs && node scripts/generate-theme.mjs && node scripts/generate-tamagui-config.mjs && node scripts/generate-components-catalog.mjs",
     "lint:tokens": "node scripts/lint-design-tokens.mjs src",
     "lint": "eslint . && node scripts/lint-design-tokens.mjs src",
     "format": "prettier --write ."

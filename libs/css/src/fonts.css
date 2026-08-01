@@ -1,0 +1,93 @@
+/*
+ * fonts.css — every @font-face the design system needs, in ONE place, SELF-HOSTED.
+ *
+ * Imported by `theme.css`, so any surface that imports the theme gets the whole type system. That
+ * is the point: this used to be per-app, only `com` and `apps/web` declared the wordmark face, and
+ * on `org`, `store`, `space`, `blog`, `casa` and `social` the logo silently fell back to
+ * `system-ui`. Nothing failed; the mark was simply a different typeface on six of eight surfaces.
+ *
+ * WHY SELF-HOSTED RATHER THAN GOOGLE FONTS. The apps used to pull the UI face from
+ * `fonts.googleapis.com` via a <link> in each index.html. Three problems:
+ *   1. The PACKAGED DESKTOP APP can be offline, and then every surface falls back to system-ui.
+ *   2. It is a third-party request on the critical path of every page load, on all eight origins.
+ *   3. Cera has no CDN, so the font system was split across two mechanisms already.
+ * Serving all three faces from our own origin makes web, desktop and the pod behave identically.
+ *
+ * WHY .ttf AND NOT SUBSETTED .woff2. Google's woff2 files are per-unicode-range SLICES; taking one
+ * silently drops Greek, which this product actually renders (Greek product names appear in the
+ * scenario corpus, and the team is Greek). The full TTFs carry Latin + Greek + Cyrillic in ~95 KB,
+ * and `font-display: swap` means a weight is only fetched when something uses it. Converting these
+ * to full-coverage woff2 (~40% smaller) needs a brotli toolchain that is not on the build box —
+ * worth doing, but not at the cost of dropping glyphs.
+ *
+ * The files are served from `/fonts/` on every origin; `scripts/sync-fonts.mjs` copies them into
+ * each app's `public/fonts/` and runs from `generate`/`prebuild`, so a new surface cannot miss them.
+ * React Native cannot use any of this — it bundles the same files through `expo-font`, see
+ * `apps/mobile/src/fonts.ts`.
+ */
+
+/* ── Manrope — --font-sans and --font-display ──────────────────────────────── */
+@font-face {
+  font-family: 'Manrope';
+  src: url('/fonts/Manrope-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Manrope';
+  src: url('/fonts/Manrope-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Manrope';
+  src: url('/fonts/Manrope-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Manrope';
+  src: url('/fonts/Manrope-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Manrope';
+  src: url('/fonts/Manrope-ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── JetBrains Mono — --font-mono ──────────────────────────────────────────── */
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── The wordmark — --font-brand ONLY ──────────────────────────────────────── */
+@font-face {
+  /* `--font-sans` deliberately does NOT reference this. It is a rounded DISPLAY cut shipped in a
+     single Bold weight; it used to BE `--font-sans`/`--font-display`, which gave every label, table
+     cell and paragraph on every surface one heavy rounded voice and no weight hierarchy at all.
+     Only `elements/branding/cozy-text` should reach for it. */
+  font-family: 'TypeMates Cera Round Pro Bold';
+  src: url('/fonts/cera-round-pro-bold.otf') format('opentype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}

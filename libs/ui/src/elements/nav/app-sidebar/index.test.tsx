@@ -64,8 +64,13 @@ describe('AppSidebar — the translated `.app-sidebar*` rules', () => {
     }
   })
 
-  it('the brand mark is the heading face, and the rail variant only tightens leading', () => {
-    expect(S.BRAND).toEqual({ fontFamily: '$heading', fontWeight: '$bold', fontSize: '$base' })
+  it('the brand mark names NO face, and the rail variant only tightens leading', () => {
+    // It used to say `fontFamily: '$heading'`. `CozyThingText` spreads caller props AFTER its own
+    // `$brand` default, so that override silently replaced the wordmark's face — invisible while
+    // `$heading` and `$brand` were the same font, and a wrong-typeface logo the moment they were
+    // not. The mark owns its family; this bag must not name one.
+    expect(S.BRAND).toEqual({ fontWeight: '$bold', fontSize: '$base' })
+    expect(S.BRAND).not.toHaveProperty('fontFamily')
     // 16px = the `$base` font size, i.e. no extra leading. A bare `1` would mean 1 PIXEL here.
     expect(S.RAIL_BRAND).toEqual({ ...S.BRAND, lineHeight: 16 })
   })

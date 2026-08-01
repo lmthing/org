@@ -214,8 +214,42 @@ const nativeLetterSpacings = Object.fromEntries(
   Object.entries(letterSpacings).map(([key, em]) => [key, Number.parseFloat(em) * LETTER_SPACING_BASE_PX]),
 ) as Record<string, number>
 
+/**
+ * Native cannot take a CSS font stack. `family` is `"Manrope, system-ui, sans-serif"` — perfect on
+ * web, but React Native reads the whole string as one family name, misses, and silently falls back
+ * to Roboto/SF. So on native we hand Tamagui the FIRST family only, unquoted.
+ */
+const nativeFamily = (stack: string) => (stack.split(',')[0] ?? stack).trim().replace(/^['"]|['"]$/g, '')
+
+/**
+ * Android will not synthesise a weight from a single registered face — ask for 700 on a family that
+ * registered only its Regular and you get Regular, not bold. Tamagui's `face` map is the supported
+ * fix: it maps a numeric weight onto a separately-registered family name. These names must match the
+ * keys in `apps/mobile/src/fonts.ts#FONT_ASSETS` exactly.
+ */
+const NATIVE_FACE: Record<string, Record<string, { normal: string }>> = {
+  Manrope: {
+    400: { normal: 'Manrope' },
+    500: { normal: 'Manrope-Medium' },
+    600: { normal: 'Manrope-SemiBold' },
+    700: { normal: 'Manrope-Bold' },
+    800: { normal: 'Manrope-ExtraBold' },
+  },
+  'JetBrains Mono': {
+    400: { normal: 'JetBrains Mono' },
+    500: { normal: 'JetBrains Mono-Medium' },
+  },
+  // The wordmark ships as a single Bold cut, so every weight resolves to the one face.
+  'TypeMates Cera Round Pro Bold': {
+    400: { normal: 'TypeMates Cera Round Pro Bold' },
+    600: { normal: 'TypeMates Cera Round Pro Bold' },
+    700: { normal: 'TypeMates Cera Round Pro Bold' },
+  },
+}
+
 const makeFont = (family: string) => ({
-  family,
+  family: isWeb ? family : nativeFamily(family),
+  ...(isWeb ? {} : { face: NATIVE_FACE[nativeFamily(family)] }),
   size: { ...fontSizes } as Record<string, number>,
   lineHeight: { ...lineHeights } as Record<string, number>,
   weight: { ...fontWeights } as Record<string, string>,
@@ -244,6 +278,11 @@ export const tamaguiConfig = createTamagui({
     body: makeFont(fonts['font-sans']),
     heading: makeFont(fonts['font-display']),
     mono: makeFont(fonts['font-mono']),
+    // The wordmark's own face, deliberately NOT the UI face. `font-sans`/`font-display` moved off
+    // Cera Round Pro Bold (a rounded DISPLAY cut, shipped in one weight, which made every label on
+    // every surface read as heavy and playful); the logo keeps it, because that letterform IS the
+    // brand mark. Only `elements/branding/cozy-text` should reference `$brand`.
+    brand: makeFont(fonts['font-brand']),
   },
   // Tailwind breakpoints (SPIKE B) so `md:` → `$md`/`$gtSm` media props resolve identically.
   media: mediaConfig as Record<string, { minWidth: number }>,

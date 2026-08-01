@@ -42,9 +42,12 @@ const hexToRgb = (h) => {
 const rgbToHex = (rgb) =>
   '#' + rgb.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('');
 
-export function buildSpectrum(spec, colorMap) {
+// `mode` is 'light' | 'dark'. MUST mirror generate-theme.mjs#buildSpectrum: the two generators feed
+// the same parity test, so a ramp cut from the light anchors here and the dark anchors there is
+// caught as a byte-for-byte mismatch. brand-1..5 now follow the palette and differ per theme.
+export function buildSpectrum(spec, colorMap, mode = 'light') {
   const anchorNames = ['brand-1', 'brand-2', 'brand-3', 'brand-4', 'brand-5'];
-  const anchors = anchorNames.map((n) => hexToRgb(colorMap[n].light));
+  const anchors = anchorNames.map((n) => hexToRgb(colorMap[n][mode]));
   const spacing = 13; // anchors at 1, 14, 27, 40, 53
   const out = [];
   for (let i = 1; i <= spec.steps; i++) {
@@ -203,12 +206,13 @@ export function buildMedia() {
  */
 export function buildTamaguiTokens(tokens) {
   const colorMap = Object.fromEntries(tokens.colors.map((c) => [c.name, c]));
-  const spectrum = buildSpectrum(tokens.spectrum, colorMap);
+  const spectrumLight = buildSpectrum(tokens.spectrum, colorMap, 'light');
+  const spectrumDark = buildSpectrum(tokens.spectrum, colorMap, 'dark');
 
   // Full ordered color list: authored colors, then spectrum (same order as generate-theme.mjs).
   const colors = [
     ...tokens.colors.map((c) => ({ name: c.name, light: c.light, dark: c.dark })),
-    ...spectrum.map((s) => ({ name: s.name, light: s.value, dark: s.value })),
+    ...spectrumLight.map((s, i) => ({ name: s.name, light: s.value, dark: spectrumDark[i].value })),
   ];
 
   const radius = {};

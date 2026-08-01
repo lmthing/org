@@ -276,7 +276,15 @@ test('Text forwards typography tokens to the native text', () => {
   const { tree } = render(<Text fontSize="$sm" fontWeight="$bold">tokens</Text>)
   const style = styleOf(tree, NATIVE_TEXT)
   expect(style.fontSize).toBe(14)
-  expect(style.fontWeight).toBe('700')
+  // A WEIGHT, not a `fontWeight`. `expo-font` registers each cut under its own family name, so
+  // `Manrope-Bold` is a different family from `Manrope` — and Android will NOT synthesise bold from
+  // a family whose only registered face is Regular. Tamagui's `face` map (tamagui.config.ts
+  // #NATIVE_FACE) therefore resolves the weight to the family and drops the numeric prop.
+  // This used to assert `fontWeight === '700'`, which passed while the app bundled no fonts at all
+  // and every screen actually rendered in Roboto/SF — the assertion could not tell the difference.
+  // Asserting the family is what proves real bold reaches the device.
+  expect(style.fontFamily).toBe('Manrope-Bold')
+  expect(String(style.fontWeight)).toBe('undefined')
 })
 
 test('Row/Col style props compose with the fork own flexDirection', () => {

@@ -49,7 +49,9 @@ APP = os.path.dirname(HERE)
 ORG = os.path.dirname(os.path.dirname(APP))
 
 TOKENS = os.path.join(ORG, "libs/css/src/tokens/tokens.json")
-FONT_PATH = os.path.join(ORG, "apps/web/public/TypeMates  Cera Round Pro Bold.otf")
+# The wordmark face now lives in the design system rather than in one app's public dir
+# (it was per-app, and only two of eight surfaces had a copy).
+FONT_PATH = os.path.join(ORG, "libs/css/assets/fonts/cera-round-pro-bold.otf")
 
 # Supersample before downscaling: Pillow renders OTF outlines without any
 # antialiasing worth the name at 1024px, and the rounded terminals of this

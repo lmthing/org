@@ -30,9 +30,13 @@ const hexToRgb = (h) => {
 const rgbToHex = (rgb) =>
   '#' + rgb.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('');
 
-function buildSpectrum(spec, colorMap) {
+// `mode` is 'light' | 'dark'. The ramp is cut PER THEME: the anchors used to be identical in both,
+// so a single pass was enough, but brand-1..5 now follow the palette and a dark theme needs lighter
+// stops to stay legible on a dark surface. Deriving both from `.light` would paint the dark UI with
+// the light ramp.
+function buildSpectrum(spec, colorMap, mode) {
   const anchorNames = ['brand-1', 'brand-2', 'brand-3', 'brand-4', 'brand-5'];
-  const anchors = anchorNames.map((n) => hexToRgb(colorMap[n].light));
+  const anchors = anchorNames.map((n) => hexToRgb(colorMap[n][mode]));
   const spacing = 13; // anchors at 1, 14, 27, 40, 53
   const out = [];
   for (let i = 1; i <= spec.steps; i++) {
@@ -49,16 +53,17 @@ function buildSpectrum(spec, colorMap) {
 
 // ── Assemble ────────────────────────────────────────────────────────
 const colorMap = Object.fromEntries(tokens.colors.map((c) => [c.name, c]));
-const spectrum = buildSpectrum(tokens.spectrum, colorMap);
+const spectrumLight = buildSpectrum(tokens.spectrum, colorMap, 'light');
+const spectrumDark = buildSpectrum(tokens.spectrum, colorMap, 'dark');
 
 // Full ordered color list: authored colors, then spectrum.
 const colors = [
   ...tokens.colors,
-  ...spectrum.map((s) => ({
+  ...spectrumLight.map((s, i) => ({
     name: s.name,
     group: tokens.spectrum.group,
     light: s.value,
-    dark: s.value,
+    dark: spectrumDark[i].value,
     description: tokens.spectrum.description,
   })),
 ];
@@ -103,6 +108,12 @@ const css = `/*
 @layer base, components, utilities;
 
 @import "./preflight.css" layer(base);
+
+/* The wordmark's @font-face. Imported HERE so every surface that imports the theme loads it — it
+   used to be declared per-app, and six of the eight SPAs simply never did, so the logo fell back to
+   system-ui on them. UNLAYERED on purpose: @font-face is not a style rule and takes no part in the
+   cascade, so it needs no layer. See ./fonts.css. */
+@import "./fonts.css";
 
 /* Auto-generated scales by ${BANNER} — edit src/tokens/tokens.json, not this file */
 :root {
