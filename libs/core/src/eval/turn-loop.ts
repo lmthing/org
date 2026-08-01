@@ -227,7 +227,7 @@ export function looksLikeProse(stmt: string): boolean {
   const s = stmt.trim();
   if (!s) return false;
   // Any code punctuation → treat as code, keep it.
-  if (/[=(){}\[\];`<>]/.test(s)) return false;
+  if (/[=(){}[\];`<>]/.test(s)) return false;
   if (/=>|\.\w|\bawait\b/.test(s)) return false;
   // Real statement keywords are never prose.
   if (TS_KEYWORD_START.test(s)) return false;
@@ -1034,7 +1034,7 @@ export async function runTurnLoop(deps: TurnLoopDeps): Promise<'done' | 'error'>
       // so the generic name-binding above captures nothing. Surface the inspected
       // values explicitly via formatInspectResult, independent of any binding —
       // otherwise a bare inspect() resolves to an empty VARIABLES block and the
-      // model sees nothing (the exact failure that lets it re-type/​hallucinate
+      // model sees nothing (the exact failure that lets it re-type/hallucinate
       // values instead of reading them).
       const inspectArgs = yields
         .filter((y) => y.kind === 'inspect')

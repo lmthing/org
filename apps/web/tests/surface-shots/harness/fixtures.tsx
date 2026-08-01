@@ -397,48 +397,63 @@ const OLDER: unknown[] = Array.from({ length: 8 }, (_, i) => ({
   email: i % 2 ? 'ana@lmthing.org' : 'kim@lmthing.org',
 }))
 
+/**
+ * The two fixtures that hold a hook live as NAMED components rather than inline in `FIXTURES`.
+ *
+ * `entry.tsx` renders these as `<Fixture />`, so a hook inside one is legal — but a fixture's
+ * "name" is its object key (`'team-long'`), and neither a linter nor a profiler can tell a
+ * hook-holding component from an arbitrary callback by that. `react-hooks/rules-of-hooks` reported
+ * both as errors for exactly that reason, and it is not wrong to: the same body one refactor away
+ * from being CALLED instead of rendered would run its `useMemo` against the harness's fibre.
+ * A capitalised declaration is what makes the intent checkable.
+ */
+function TeamLong() {
+  const client = React.useMemo(() => fakeTeamClient({ messages: { 'c-general': LONG } }), [])
+  return (
+    <TeamChannelsView
+      client={client}
+      isEditor
+      activeChannelId="c-general"
+      rail={null}
+      onSelectChannel={() => {}}
+      onOpenThread={() => {}}
+      onOpenApp={() => {}}
+      onCloseRail={() => {}}
+      appUrl={(id) => `/app/${id}`}
+      team={{ id: 't1', name: 'lmthing' }}
+    />
+  )
+}
+
+/** A channel the pod says has MORE history behind it — see the `team-paging` entry below. */
+function TeamPaging() {
+  const client = React.useMemo(() => fakeTeamClient({ hasMore: true }), [])
+  return (
+    <TeamChannelsView
+      client={client}
+      isEditor
+      activeChannelId="c-general"
+      rail={null}
+      onSelectChannel={() => {}}
+      onOpenThread={() => {}}
+      onOpenApp={() => {}}
+      onCloseRail={() => {}}
+      appUrl={(id) => `/app/${id}`}
+      team={{ id: 't1', name: 'lmthing' }}
+    />
+  )
+}
+
 export const FIXTURES: Record<string, () => React.ReactElement> = {
   team: () => <Team />,
-  'team-long': () => {
-    const client = React.useMemo(() => fakeTeamClient({ messages: { 'c-general': LONG } }), [])
-    return (
-      <TeamChannelsView
-        client={client}
-        isEditor
-        activeChannelId="c-general"
-        rail={null}
-        onSelectChannel={() => {}}
-        onOpenThread={() => {}}
-        onOpenApp={() => {}}
-        onCloseRail={() => {}}
-        appUrl={(id) => `/app/${id}`}
-        team={{ id: 't1', name: 'lmthing' }}
-      />
-    )
-  },
+  'team-long': () => <TeamLong />,
   'team-thread': () => <Team rail={{ kind: 'thread', threadId: 'm4' }} />,
   'team-dm': () => <Team channel="c-dm-ana" />,
   'team-attachments': () => <TeamAttachments />,
   // A channel the pod says has MORE history behind it. Exists to photograph the "Load earlier
   // messages" affordance, which is invisible in every other fixture because they all report
   // `hasMore: false` — a feature nobody can see is a feature nobody can review.
-  'team-paging': () => {
-    const client = React.useMemo(() => fakeTeamClient({ hasMore: true }), [])
-    return (
-      <TeamChannelsView
-        client={client}
-        isEditor
-        activeChannelId="c-general"
-        rail={null}
-        onSelectChannel={() => {}}
-        onOpenThread={() => {}}
-        onOpenApp={() => {}}
-        onCloseRail={() => {}}
-        appUrl={(id) => `/app/${id}`}
-        team={{ id: 't1', name: 'lmthing' }}
-      />
-    )
-  },
+  'team-paging': () => <TeamPaging />,
   chat: () => <Chat />,
   'chat-empty': () => <ChatEmpty />,
   'chat-devpanel': () => <ChatDevPanel />,

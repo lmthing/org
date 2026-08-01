@@ -225,17 +225,40 @@ export interface PodTarget {
   edgeToken: () => Promise<string>
 }
 
-export function PodEnsureGate({
-  children,
-  target,
-}: {
+interface PodEnsureGateProps {
   children: React.ReactNode
   /** Defaults to the signed-in user's own pod. */
   target?: PodTarget
-}) {
-  // Pod-embedded (token injected) or local run (the pod is the server itself):
-  // no need to ensure the pod via the cloud gateway.
-  if (isPodEmbedded() || isLocalRun()) return <>{children}</>
+}
+
+/**
+ * The bypass, split into a component that calls NO hooks of its own.
+ *
+ * Pod-embedded (token injected) or local run (the pod is the server itself): there is no cloud
+ * gateway to ensure anything through, so none of the machinery below should run — not the ensure
+ * call, not the edge poll, not the upgrade poll.
+ *
+ * The bypass used to be an early `return` INSIDE the body below, above eleven hook calls, which made
+ * the number of hooks the component calls depend on a condition. React matches hook state
+ * positionally, so that is either "Rendered fewer hooks than expected" or this component silently
+ * reading another hook's state. It has not bitten because `isPodEmbedded()`/`isLocalRun()` read
+ * deployment facts that never change within a session — the hook count is stable BY ACCIDENT, not by
+ * construction, and the day one of those predicates starts reading something reactive it becomes
+ * state corruption in the gate that fronts every surface.
+ *
+ * Splitting is what keeps the original intent. Moving the `return` below the hooks would fix the
+ * ordering and start running every effect in pod-embedded mode — real network calls that exist
+ * precisely to be skipped there. Here the inner component either mounts or does not.
+ *
+ * Found by `react-hooks/rules-of-hooks`, which had never run anywhere in this monorepo: the plugin
+ * was a declared dependency of `@lmthing/config` that its flat config never registered.
+ */
+export function PodEnsureGate(props: PodEnsureGateProps) {
+  if (isPodEmbedded() || isLocalRun()) return <>{props.children}</>
+  return <PodEnsureGateInner {...props} />
+}
+
+function PodEnsureGateInner({ children, target }: PodEnsureGateProps) {
   const { session, getAccessToken } = useAuth()
   const computeBase = target?.base ?? `${CLOUD_BASE_URL}/api/compute`
   const controlToken = target?.getToken ?? getAccessToken

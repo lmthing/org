@@ -194,8 +194,11 @@ describe('ForkEngine', () => {
   });
 
   it('rejects on timeout', async () => {
-    // Stream that never ends
+    // Stream that never ends. It yields NOTHING on purpose — that is what "the model produced no
+    // statement before the deadline" looks like — so `require-yield` is suppressed rather than
+    // satisfied: adding a `yield` to quiet it would change what this test is testing.
     let aborted = false;
+    // eslint-disable-next-line require-yield
     async function* neverEnds() {
       while (!aborted) {
         await new Promise((r) => setTimeout(r, 10));

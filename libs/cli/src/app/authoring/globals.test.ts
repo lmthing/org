@@ -124,7 +124,7 @@ describe('createProjectAuthoringGlobals', () => {
   } as unknown as TableSchema;
 
   it('writeProjectTable lands database/<name>.json in the LIVE project and fires onSchemaWrite', () => {
-    let schemaWrites: string[] = [];
+    const schemaWrites: string[] = [];
     const pa = createProjectAuthoringGlobals({
       projectRoot,
       republish: () => {

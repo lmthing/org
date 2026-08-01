@@ -261,6 +261,14 @@ export class ForkEngine {
   private async runFork<T>(task: ForkTask, forkScope: TraceScope): Promise<ForkResultMeta<T>> {
     const tracer = this.opts.tracer ?? NULL_TRACER;
 
+    // An `async` executor is normally a real hazard — see the long note at the `try` below — and the
+    // rule is right to flag it. It is suppressed rather than restructured because the hazard it warns
+    // about has been closed at the source: every statement in this executor that can throw now sits
+    // inside the `try` whose `catch` rejects, and what remains outside it is closure definitions, a
+    // `setTimeout` registration and property reads. The alternative — hoisting ~460 lines into an
+    // inner `void (async () => …)().catch(reject)` — is a whole-body reindent of the fork runner for
+    // no behavioural gain, which is a worse thing to review than this comment.
+    // eslint-disable-next-line no-async-promise-executor
     return new Promise<ForkResultMeta<T>>(async (resolve, reject) => {
       let settled = false;
       let didResolve = false;
@@ -296,13 +304,27 @@ export class ForkEngine {
         }
       }
 
-      // Per-fork budget. Assert nesting depth before spending anything on a VM —
-      // a depth-exceeded fork rejects cleanly with BudgetExceededError.
-      const budget = new Budget(this.opts.budgetLimits ?? {});
-      const depth = this.opts.forkDepth ?? 1;
-
       let vm: VM | undefined;
       try {
+        // ## Constructed INSIDE the try, and that placement is the whole point
+        //
+        // This executor is `async`, which means a throw anywhere in it that is not caught here does
+        // not reject the promise — it produces an unhandled rejection on the async function while
+        // `runFork`'s promise **never settles at all**. For a fork that is not an error, it is a
+        // HANG: the caller waits out its whole timeout, or forever when the task set none, and the
+        // only symptom is a fork that never came back.
+        //
+        // `new Budget(...)` is the one throwable statement that used to sit above the `try`, so it
+        // was the one statement whose failure could not be reported. Everything else in the prologue
+        // is a closure definition or a property read. Moved in, the existing `catch` at the bottom
+        // rejects it like any other setup failure. (`budget`/`depth` are read only within this
+        // block, so nothing below needed to change.)
+        //
+        // Found by `no-async-promise-executor`, from `js.configs.recommended` — a rule that has
+        // always been enabled here and whose one finding in this package nobody had looked at.
+        const budget = new Budget(this.opts.budgetLimits ?? {});
+        const depth = this.opts.forkDepth ?? 1;
+
         budget.assertForkDepth(depth);
 
         // Delegation: a task may delegate ONLY per its `canDelegateTo` policy (unified

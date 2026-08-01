@@ -75,7 +75,7 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
     checkLoadKnowledge(content, `Agent "${slug}" instruct.md`);
 
     // Extract functions list
-    const fnLines = (fm.match(/^functions:\s*\n((?:  - .+\n?)*)/m) ?? [])[1] ?? '';
+    const fnLines = (fm.match(/^functions:\s*\n((?: {2}- .+\n?)*)/m) ?? [])[1] ?? '';
     const functionNames = fnLines.trim().split('\n')
       .map((l: string) => l.replace(/^\s*-\s*/, '').trim())
       .filter((n: string) => n && n !== '[]');
@@ -97,7 +97,7 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
     }
 
     // Check knowledge tree
-    const kLines = (fm.match(/^knowledge:\s*\n((?:  - .+\n?)*)/m) ?? [])[1] ?? '';
+    const kLines = (fm.match(/^knowledge:\s*\n((?: {2}- .+\n?)*)/m) ?? [])[1] ?? '';
     const knowledgeRefs = kLines.trim().split('\n')
       .map((l: string) => l.replace(/^\s*-\s*/, '').trim())
       .filter((n: string) => n && n !== '[]');
@@ -135,7 +135,7 @@ export function validateSpace(space: string): { ok: boolean; errors: string[]; d
     }
 
     // Check components
-    const cLines = (fm.match(/^components:\s*\n((?:  - .+\n?)*)/m) ?? [])[1] ?? '';
+    const cLines = (fm.match(/^components:\s*\n((?: {2}- .+\n?)*)/m) ?? [])[1] ?? '';
     const componentNames = cLines.trim().split('\n')
       .map((l: string) => l.replace(/^\s*-\s*/, '').trim())
       .filter((n: string) => n && n !== '[]');

@@ -39,7 +39,7 @@ function MultiChoiceField({ field, onDone }: { field: FieldSpec; onDone: (v: unk
   useInput((input, key) => {
     if (key.upArrow) setActive((i) => (i - 1 + opts.length) % opts.length);
     else if (key.downArrow) setActive((i) => (i + 1) % opts.length);
-    else if (input === ' ') setChecked((s) => { const n = new Set(s); n.has(active) ? n.delete(active) : n.add(active); return n; });
+    else if (input === ' ') setChecked((s) => { const n = new Set(s); if (n.has(active)) n.delete(active); else n.add(active); return n; });
     else if (key.return) onDone([...checked].map((i) => opts[i]?.value));
   });
   return (

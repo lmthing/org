@@ -156,6 +156,9 @@ describe('engineer scratch fs (readFile/writeFile/editFile/grep, jailed to a scr
   });
 
   it('a path escaping the scratch sandbox (absolute / ..) is rejected', () => {
+    // A deliberate `require`: this writes a file the sandboxed VM must NOT be able to reach, so it
+    // has to happen on the HOST side, outside anything the module graph under test can see.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('node:fs').writeFileSync(join(dir, 'outside.txt'), 'secret');
     const abs = evalDump(vm, `readFile(${JSON.stringify(join(dir, 'outside.txt'))})`) as { ok: boolean; error?: string };
     expect(abs.ok).toBe(false);

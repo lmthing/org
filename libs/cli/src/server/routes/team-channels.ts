@@ -783,9 +783,11 @@ function beginThingReply(
 ): Promise<void> {
   let release!: () => void;
   const untilParkedOrDone = new Promise<void>((resolve) => (release = resolve));
-  let run: Promise<void> | undefined;
   let parked = false;
-  run = runThingReply(
+  // `const`, declared at its single assignment. It was `let run: Promise<void> | undefined` assigned
+  // on the next line, which made the `| undefined` in the type a fiction — there is no window in
+  // which anything observes it unset, and the closures below that read it are all defined after.
+  const run: Promise<void> = runThingReply(
     manager,
     root,
     message,

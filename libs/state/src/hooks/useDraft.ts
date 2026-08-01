@@ -58,7 +58,15 @@ let draftsByPatternCache: { key: string; value: string[] } = { key: '', value: [
  * @returns Functions to modify drafts
  */
 export function useDraftMutations() {
-  const { drafts } = useApp()
+  // `appFS` is read HERE, during render, and closed over by `save` below.
+  //
+  // `save` used to `await import('./fs/useAppFS')` and call `useAppFS()` itself — a hook call inside
+  // a plain async callback, which React does not support: hooks read from the fibre that is
+  // currently rendering, and by the time a click handler's promise resolves there is none. So it
+  // either threw or read whichever component happened to be rendering, and "save a draft to disk"
+  // is not a thing that should depend on that. The dynamic import bought nothing either: this file
+  // already imports `useApp` statically, and `useAppFS` is a one-line wrapper over it.
+  const { drafts, appFS } = useApp()
 
   return {
     /**
@@ -89,8 +97,6 @@ export function useDraftMutations() {
       const draftContent = drafts.get(path)
       if (draftContent === undefined) return
 
-      const { useAppFS } = await import('./fs/useAppFS')
-      const appFS = useAppFS()
       appFS.writeFile(path, draftContent)
       drafts.delete(path)
     }

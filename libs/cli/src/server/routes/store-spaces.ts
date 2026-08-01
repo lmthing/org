@@ -527,7 +527,7 @@ interface LmthingPackageBlock {
 
 /**
  * `GET /api/projects/:projectId/integrations` — scan
- * `<root>/<projectId>/spaces/*​/package.json` and return the ones whose
+ * every `<root>/<projectId>/spaces/<spaceId>/package.json` and return the ones whose
  * `lmthing.kind === 'integration'`. Tolerant of a missing/invalid `projectId`,
  * a missing project root, or a missing/malformed `package.json` (skipped, not
  * fatal — one broken space must not blank the whole list).
