@@ -40,19 +40,10 @@
 //! rather than panic if the shape is not what it expects, because a browser in the wrong place is
 //! survivable and a crash on launch is not.
 
-use std::sync::Mutex;
-
 use gtk::prelude::*;
-use tauri::{Manager, Runtime, WebviewWindow};
+use tauri::{Manager, Runtime};
 
-use crate::browser_view::{PaneRect, BROWSER_LABEL, MAIN_LABEL};
-
-/// Where the pane goes, as GTK will be asked for it.
-///
-/// Shared with the overlay's positioning callback, which GTK calls during layout — on its own
-/// schedule, not ours. There is no way to hand it an argument, so the rectangle has to be somewhere
-/// the callback can read at the moment it runs.
-static PANE_RECT: Mutex<(i32, i32, i32, i32)> = Mutex::new((0, 0, 1, 1));
+use crate::browser_view::{PaneRect, BROWSER_LABEL};
 
 /// Rearrange the window's widgets so the pane can be positioned. Safe to call more than once.
 ///
@@ -133,8 +124,14 @@ pub fn place<R: Runtime>(app: &tauri::AppHandle<R>, rect: PaneRect) -> Result<()
     let Some(browser) = app.get_webview(BROWSER_LABEL) else {
         return Ok(());
     };
-    let (x, y) = (rect.x.round().max(0.0) as i32, rect.y.round().max(0.0) as i32);
-    let (w, h) = (rect.width.round().max(1.0) as i32, rect.height.round().max(1.0) as i32);
+    let (x, y) = (
+        rect.x.round().max(0.0) as i32,
+        rect.y.round().max(0.0) as i32,
+    );
+    let (w, h) = (
+        rect.width.round().max(1.0) as i32,
+        rect.height.round().max(1.0) as i32,
+    );
     browser
         .with_webview(move |platform| {
             let child = platform.inner();
@@ -149,9 +146,4 @@ pub fn place<R: Runtime>(app: &tauri::AppHandle<R>, rect: PaneRect) -> Result<()
             child.set_size_request(w, h);
         })
         .map_err(|e| e.to_string())
-}
-
-/// The main window, for callers that need it before the pane exists.
-pub fn main_window<R: Runtime>(app: &tauri::AppHandle<R>) -> Option<WebviewWindow<R>> {
-    app.get_webview_window(MAIN_LABEL)
 }

@@ -131,7 +131,7 @@ pub fn set_bounds(app: &AppHandle, rect: PaneRect) -> Result<(), String> {
         if find(app).is_none() {
             return Ok(());
         }
-        return crate::gtk_pane::place(app, rect);
+        crate::gtk_pane::place(app, rect)
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -181,7 +181,10 @@ pub fn state(app: &AppHandle) -> Result<ViewState, String> {
             open: true,
             url: view.url().map(|u| u.to_string()).unwrap_or_default(),
         },
-        None => ViewState { open: false, url: String::new() },
+        None => ViewState {
+            open: false,
+            url: String::new(),
+        },
     })
 }
 
@@ -205,10 +208,7 @@ pub fn parse_url(input: &str) -> Result<Url, String> {
     let candidate = if looks_like_host {
         format!("https://{text}")
     } else {
-        format!(
-            "https://duckduckgo.com/?q={}",
-            urlencode(text)
-        )
+        format!("https://duckduckgo.com/?q={}", urlencode(text))
     };
     Url::parse(&candidate).map_err(|e| format!("could not open {text}: {e}"))
 }
@@ -234,11 +234,20 @@ mod tests {
 
     #[test]
     fn an_address_bar_takes_three_kinds_of_input() {
-        assert_eq!(parse_url("https://example.com").unwrap().as_str(), "https://example.com/");
+        assert_eq!(
+            parse_url("https://example.com").unwrap().as_str(),
+            "https://example.com/"
+        );
         // A bare host is a host, not a search. Getting this wrong is the single most visible way an
         // address bar can be wrong.
-        assert_eq!(parse_url("example.com").unwrap().as_str(), "https://example.com/");
-        assert_eq!(parse_url(" news.ycombinator.com ").unwrap().as_str(), "https://news.ycombinator.com/");
+        assert_eq!(
+            parse_url("example.com").unwrap().as_str(),
+            "https://example.com/"
+        );
+        assert_eq!(
+            parse_url(" news.ycombinator.com ").unwrap().as_str(),
+            "https://news.ycombinator.com/"
+        );
         // Words are a search.
         let q = parse_url("athens weather").unwrap();
         assert_eq!(q.host_str(), Some("duckduckgo.com"));

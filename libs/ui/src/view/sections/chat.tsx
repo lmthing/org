@@ -20,7 +20,7 @@
  */
 
 import * as React from 'react'
-import { podOrigin } from '../client.js'
+import { podOrigin } from '../client'
 import * as Prim from '../../elements/primitives/index'
 import { ReplChatView } from '../../chat'
 import type { ChatSection } from '../types'

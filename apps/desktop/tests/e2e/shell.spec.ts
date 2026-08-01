@@ -309,8 +309,9 @@ test.describe('the host bridge', () => {
     await installBridge(page)
     await page.goto('/')
 
-    // Sign in, then open the pane and connect. Connecting is EXPLICIT by design: a cloud agent
-    // gaining access to somebody's disk must not switch itself on because an app was launched.
+    // Sign in, then open the pane. The bridge dials on its own as soon as HomeShell mounts
+    // (`bridge.start({ implied: true })` — see HomeShell.tsx): signing in IS the deliberate act,
+    // not opening this panel, so there is no separate "Connect" click to make here.
     await page.getByPlaceholder('you@example.com').fill('someone@example.test')
     await page.getByRole('button', { name: /continue with email/i }).click()
     await page.getByPlaceholder('123456').fill(DEV_CODE)
@@ -319,8 +320,7 @@ test.describe('the host bridge', () => {
 
     await page.getByRole('button', { name: 'Open navigation' }).click()
     await page.getByRole('button', { name: 'Local access' }).click()
-    await expect(page.getByText(/Not connected/i)).toBeVisible()
-    await page.getByRole('button', { name: 'Connect' }).click()
+    await expect(page.getByText(/Connected — your workspace/i)).toBeVisible({ timeout: 15_000 })
 
     // The pod saw the grant list — ids and labels only, never a path.
     await expect
@@ -359,7 +359,8 @@ test.describe('the host bridge', () => {
     await expect(page.getByText(/good (morning|afternoon|evening)/i)).toBeVisible({ timeout: 20_000 })
     await page.getByRole('button', { name: 'Open navigation' }).click()
     await page.getByRole('button', { name: 'Local access' }).click()
-    await page.getByRole('button', { name: 'Connect' }).click()
+    // The bridge is already dialing on its own by the time this panel opens (implied start on
+    // sign-in) — no "Connect" click needed to reach this state.
     await expect(page.getByText(/Connected — your workspace/i)).toBeVisible({ timeout: 15_000 })
 
     await page.getByRole('button', { name: 'Disconnect' }).click()

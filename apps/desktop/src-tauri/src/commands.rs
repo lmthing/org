@@ -342,7 +342,10 @@ pub fn browserview_bounds(app: AppHandle, rect: browser_view::PaneRect) -> Resul
 }
 
 #[tauri::command]
-pub fn browserview_navigate(app: AppHandle, url: String) -> Result<browser_view::ViewState, String> {
+pub fn browserview_navigate(
+    app: AppHandle,
+    url: String,
+) -> Result<browser_view::ViewState, String> {
     browser_view::navigate(&app, &url)
 }
 

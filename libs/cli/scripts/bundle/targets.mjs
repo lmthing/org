@@ -49,21 +49,22 @@ export const ZEROSTACK_VERSION = 'v1.7.2';
  */
 
 /**
- * `-musl` on Linux, NOT `-gnu` — the opposite of what the compute image uses, and
- * for a reason that only applies here.
+ * `-musl` on Linux, NOT `-gnu`.
  *
  * The gnu build is dynamically linked against a very recent glibc: it needs
- * **2.39**, which is Ubuntu 24.04. The bundle is built on ubuntu-22.04 (glibc
- * 2.35) precisely so the executable runs on older distros, so the gnu binary
- * fails its own `--version` probe on the build machine, and would have failed at
- * exec on every user older than 24.04:
+ * **2.38 / 2.39**. The bundle is built on ubuntu-22.04 (glibc 2.35) precisely so
+ * the executable runs on older distros, so the gnu binary fails its own
+ * `--version` probe on the build machine, and would have failed at exec on every
+ * user on an older distro:
  *
  *     zerostack: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.39' not found
  *
- * The musl build is statically linked and has no libc dependency at all. The
- * compute image can prefer gnu because it controls its own base (Debian, one
- * known glibc); a downloadable bundle controls nothing about where it lands,
- * which is exactly the case static linking exists for.
+ * The musl build is statically linked and has no libc dependency at all — the
+ * only asset choice that works regardless of where it lands. This used to be
+ * "only" a bundle constraint on the theory that the compute image could prefer
+ * gnu because it controls its own base image; that base (node:24-slim, Debian
+ * bookworm, glibc 2.36) turned out to be too old for the gnu asset too, so
+ * `devops/argocd/compute/Dockerfile` now pins musl as well.
  */
 const ZS_TRIPLE = {
   'linux-x64': 'x86_64-unknown-linux-musl',

@@ -99,7 +99,12 @@ fn view_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Submenu<R>> {
 /// Build and install the menu.
 pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     #[cfg(target_os = "macos")]
-    let sections = [app_menu(app)?, edit_menu(app)?, view_menu(app)?, window_menu(app)?];
+    let sections = [
+        app_menu(app)?,
+        edit_menu(app)?,
+        view_menu(app)?,
+        window_menu(app)?,
+    ];
     #[cfg(not(target_os = "macos"))]
     let sections = [edit_menu(app)?, view_menu(app)?, window_menu(app)?];
 

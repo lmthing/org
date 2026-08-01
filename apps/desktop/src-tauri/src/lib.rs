@@ -9,12 +9,12 @@
 //! for safety, which is the point: the surface that has to be right is one function.
 
 mod browser_view;
-#[cfg(target_os = "linux")]
-mod gtk_pane;
 mod commands;
 mod config;
 mod fsops;
 mod grants;
+#[cfg(target_os = "linux")]
+mod gtk_pane;
 mod menu;
 mod navigation;
 mod sidecar;
@@ -227,7 +227,10 @@ mod tests {
             .join("\n");
 
         let mut wanted: Vec<&str> = Vec::new();
-        for (_, rest) in commands.match_indices("State<'_, ").map(|(i, _)| (i, &commands[i..])) {
+        for (_, rest) in commands
+            .match_indices("State<'_, ")
+            .map(|(i, _)| (i, &commands[i..]))
+        {
             let after = &rest["State<'_, ".len()..];
             let Some(end) = after.find('>') else { continue };
             let ty = after[..end].trim();
@@ -235,7 +238,10 @@ mod tests {
                 wanted.push(ty);
             }
         }
-        assert!(!wanted.is_empty(), "no command state found — has commands.rs moved?");
+        assert!(
+            !wanted.is_empty(),
+            "no command state found — has commands.rs moved?"
+        );
 
         for ty in wanted {
             let managed = format!("app.manage(commands::{ty}");
