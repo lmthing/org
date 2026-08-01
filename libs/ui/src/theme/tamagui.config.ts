@@ -227,7 +227,7 @@ const nativeFamily = (stack: string) => (stack.split(',')[0] ?? stack).trim().re
  * fix: it maps a numeric weight onto a separately-registered family name. These names must match the
  * keys in `apps/mobile/src/fonts.ts#FONT_ASSETS` exactly.
  */
-const NATIVE_FACE: Record<string, Record<string, { normal: string }>> = {
+export const NATIVE_FACE: Record<string, Record<string, { normal: string }>> = {
   Manrope: {
     400: { normal: 'Manrope' },
     500: { normal: 'Manrope-Medium' },

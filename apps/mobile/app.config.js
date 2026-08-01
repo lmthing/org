@@ -104,11 +104,15 @@ module.exports = {
     // AndroidManifest, hence `runtimeVersion: { policy: 'fingerprint' }` below), so it ships on
     // the next store build, not an OTA.
     orientation: 'default',
-    // Locked to light, not 'automatic': the shared dark theme's contrast is bad enough on-device
-    // that following the system scheme is a regression, not a feature. This is a native-project
-    // change (baked into AndroidManifest/Info.plist, same as `orientation` above), so it ships on
-    // the next store build. `App.tsx` locks the JS-side Tamagui theme to match.
-    userInterfaceStyle: 'light',
+    // Follows the phone. This was locked to `'light'` while the OLD palette's dark theme was
+    // unreadable on-device; the Slate Teal palette replaced it and every semantic foreground/ground
+    // pair now clears WCAG AA in dark (`libs/ui/src/theme/theme-contrast.test.ts` measures them).
+    // 'automatic' is what lets the NATIVE chrome — system dialogs, the text-selection menu, the
+    // autofill sheet — go dark with the app; without it those stay light and only the JS tree
+    // flips, which reads as broken rather than as light mode. This is a native-project change
+    // (baked into AndroidManifest/Info.plist, same as `orientation` above), so it ships on the next
+    // store build, not an OTA. `App.tsx` follows the same scheme on the JS side.
+    userInterfaceStyle: 'automatic',
     scheme: 'lmthing',
     newArchEnabled: true,
     icon: './assets/icon.png',

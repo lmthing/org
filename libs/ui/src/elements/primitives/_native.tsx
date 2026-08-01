@@ -44,19 +44,30 @@ import { styled, View, Text as TamaguiText } from '../../theme/tamagui.config'
 export const NativeView: React.ComponentType<any> = styled(View, { name: 'NativeView' }) as unknown as React.ComponentType<any>
 
 /**
- * `fontFamily: '$body'` is load-bearing, not decoration.
+ * Both defaults here are load-bearing, not decoration — each one is a thing `theme.css` already does
+ * for web, and native has no stylesheet to do it.
  *
- * A `$`-token font SIZE is looked up in the scale of the component's font face, so with no family
- * set Tamagui has no scale to resolve against and **drops `fontSize="$sm"` silently** — the text
- * renders at the platform default with no warning. Web never sees this: `theme.css` puts the family
- * on `.font_body`/`.is_View`, so every element already has one.
+ * **`fontFamily: '$body'`.** A `$`-token font SIZE is looked up in the scale of the component's font
+ * face, so with no family set Tamagui has no scale to resolve against and **drops `fontSize="$sm"`
+ * silently** — the text renders at the platform default with no warning. Web never sees this:
+ * `theme.css` puts the family on `.font_body`/`.is_View`, so every element already has one.
  *
- * Setting it here gives native the same starting point web has. `Pre` overrides it with `$mono`,
- * and any caller can.
+ * **`color: '$foreground'`.** Tamagui's own `Text` defaults to `$color`, and this design system has
+ * no `color` token — its body ink is `foreground` (`tokens.json`). So a `<Prim.Text>` with no
+ * explicit colour resolved nothing from the theme and fell through to Tamagui's colour TOKEN map,
+ * which on native is built from `themes.light` whichever theme is mounted
+ * (`theme/tamagui.config.ts#buildColorTokens`). In light mode that is accidentally correct and the
+ * bug is invisible; in dark mode it paints light-mode ink on a near-black ground. That is what made
+ * the pod-boot error read as a blank screen, and it applied to every uncoloured `Prim.Text` in the
+ * app at once.
+ *
+ * Setting them here gives native the same starting point web has. `Pre` overrides the family with
+ * `$mono`, and any caller can override either.
  */
 export const NativeText: React.ComponentType<any> = styled(TamaguiText, {
   name: 'NativeText',
   fontFamily: '$body',
+  color: '$foreground',
 }) as never
 
 /** The raw styled() factory + base, re-exported for forks that need an explicit flexDirection. */

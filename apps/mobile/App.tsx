@@ -1,10 +1,19 @@
 import * as React from 'react'
-import { ActivityIndicator, Alert, AppState, KeyboardAvoidingView, Platform } from 'react-native'
+import {
+  ActivityIndicator,
+  Alert,
+  AppState,
+  KeyboardAvoidingView,
+  Platform,
+  useColorScheme,
+} from 'react-native'
+import * as SystemUI from 'expo-system-ui'
 import { TamaguiProvider } from '@tamagui/core'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { AuthProvider, hydrateAuth, useAuth, getSession, storeSession } from '@lmthing/auth'
 import { tamaguiConfig } from '@lmthing/ui/theme/tamagui.config'
+import { themes as nativeThemes } from '@lmthing/css/tamagui-tokens'
 import { LoginScreen } from '@lmthing/ui/components/auth/login-screen'
 import { ChatShell, Drawer } from '@lmthing/ui/chat'
 import { DashboardHome } from '@lmthing/ui/dashboard'
@@ -42,10 +51,19 @@ import { hapticWarning, hapticSuccess } from './src/haptics'
 const TEST_SESSION_JSON = process.env.EXPO_PUBLIC_TEST_SESSION
 
 export default function App() {
-  // Locked to light — the shared dark theme's contrast breaks down badly enough on-device that a
-  // system-following theme genuinely regresses readability. `userInterfaceStyle: 'light'` in
-  // app.config.js locks the native chrome (status bar, system dialogs) to match.
-  const scheme = 'light'
+  // Follows the phone. This was hard-locked to `'light'` while the OLD palette's dark theme was
+  // genuinely unreadable on-device; the Slate Teal palette replaced it and every semantic pair now
+  // clears WCAG AA in dark (`theme-contrast.test.ts` measures them, so this can be re-checked rather
+  // than re-argued). `userInterfaceStyle: 'automatic'` in app.config.js unlocks the native chrome to
+  // match. `useColorScheme()` answers `null` before the first read — that is "not known yet", not
+  // "dark", so it must fall to light or the app flashes a dark frame on every cold start.
+  const scheme: 'light' | 'dark' = useColorScheme() === 'dark' ? 'dark' : 'light'
+  // Every Tamagui `$token` is resolved by the theme, but the tree's OUTERMOST surfaces are plain
+  // React Native views that Tamagui never sees — `SafeAreaView` and the window behind it. Left
+  // unset they stay at the platform default (white), so in dark mode the inset strips behind the
+  // status bar and the gesture pill, and every overscroll gap, painted white around a near-black
+  // app. Both take a literal, so they read the same generated palette the theme is built from.
+  const ground = nativeThemes[scheme].background
   const [authReady, setAuthReady] = React.useState(false)
   // Bundled faces (see src/fonts.ts). Held in the same gate as auth below: painting before they
   // resolve shows one frame of Roboto/SF and then reflows the whole tree when the real metrics
@@ -75,12 +93,22 @@ export default function App() {
       .finally(() => setAuthReady(true))
   }, [])
 
+  React.useEffect(() => {
+    // The window's OWN background, below the React root. RN never paints it, so it shows through
+    // wherever the root does not cover: the split second before the first frame, the overscroll
+    // rubber-band, and the strip the keyboard leaves behind as it animates out. At the platform
+    // default that is a white flash on every one of them in dark mode. Re-runs on a scheme flip.
+    void SystemUI.setBackgroundColorAsync(ground)
+  }, [ground])
+
   return (
     <SafeAreaProvider>
       <TamaguiProvider config={tamaguiConfig} defaultTheme={scheme}>
-        {/* Dark icons/text on the light status bar — "auto" would follow the system scheme, which
-            this app no longer does. */}
-        <StatusBar style="dark" />
+        {/* Named explicitly rather than `style="auto"`: "auto" reads the SYSTEM scheme, and the app's
+            theme is only equal to that while nothing overrides it. Deriving both from the one
+            `scheme` above keeps the bar's icons legible against whatever the app actually painted —
+            dark glyphs on the light ground, light glyphs on the dark one. */}
+        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
         {/*
           The shared surfaces are written for a viewport that begins at the top of the window,
           because on web it does. A phone's does not: the status bar and the gesture pill are drawn
@@ -89,7 +117,7 @@ export default function App() {
           shared component to know it is on a phone — the surfaces stay target-agnostic, which is
           the invariant this app exists to keep.
         */}
-        <SafeAreaView style={{ flex: 1 }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: ground }}>
           {/*
             A property of the DEVICE, not of whichever surface is open — as relevant on the login
             screen (you cannot sign in offline) and the pod-boot screen (that IS a network call) as

@@ -24,9 +24,34 @@ const TONE_COLOR: Record<Tone, string> = {
   'brand-5': '$logo-5',
 }
 
-const Toned = ({ tone, children }: { tone: Tone; children: React.ReactNode }) => (
-  <Prim.Text color={TONE_COLOR[tone]}>{children}</Prim.Text>
-)
+/**
+ * The face the LETTERS must render in, handed down from `Wrapper`.
+ *
+ * The mark is one `Prim.Text` wrapping one `Prim.Text` per letter, because each letter carries its
+ * own `$logo-N` colour. On web the letters are `<span>`s with only a colour, so they INHERIT
+ * `font-family` from the wrapper and the wordmark face applies to all of them for free.
+ *
+ * **Native has no inheritance to rely on here.** `primitives/_native.tsx#NativeText` sets
+ * `fontFamily: '$body'` as a styled default — it has to, or a `$`-token `fontSize` has no scale to
+ * resolve against and is dropped silently. A styled default is unconditional, so it lands on every
+ * letter as an EXPLICIT family, which beats whatever the wrapper set. The wordmark therefore rendered
+ * in Manrope on the phone while the wrapper truthfully claimed `$brand`, and because the letter
+ * colours were right it read as a weight glitch rather than as the wrong typeface.
+ *
+ * So the face is passed down instead of inherited. It carries the wrapper's EFFECTIVE values, not
+ * the defaults, so a caller that restyles the mark restyles the letters with it.
+ */
+type Face = Pick<Prim.TextProps, 'fontFamily' | 'fontWeight'>
+const FaceContext = React.createContext<Face | null>(null)
+
+const Toned = ({ tone, children }: { tone: Tone; children: React.ReactNode }) => {
+  const face = React.useContext(FaceContext)
+  return (
+    <Prim.Text color={TONE_COLOR[tone]} {...face}>
+      {children}
+    </Prim.Text>
+  )
+}
 
 const LmtBrand = () => (
   <>
@@ -55,9 +80,22 @@ const LmthingBrand = () => (
 // The `.cozy-text` wrapper — a semibold span. Callers' props pass through AFTER the default weight,
 // so a surface can restyle the brand mark (font face, size, line-height) with plain style props —
 // which is how `elements/nav/app-sidebar` carries what used to be `.app-sidebar__brand`.
-const Wrapper = ({ children, ...rest }: Prim.TextProps) => (
-  <Prim.Text fontFamily="$brand" fontWeight="$semibold" {...rest}>{children}</Prim.Text>
-)
+const Wrapper = ({ children, ...rest }: Prim.TextProps) => {
+  // The same precedence the spread below expresses, computed so the LETTERS get it too — see
+  // `FaceContext`. `useMemo` keeps the provider's value stable across renders that change nothing.
+  const face = React.useMemo<Face>(
+    () => ({
+      fontFamily: rest.fontFamily ?? '$brand',
+      fontWeight: rest.fontWeight ?? '$semibold',
+    }),
+    [rest.fontFamily, rest.fontWeight],
+  )
+  return (
+    <FaceContext.Provider value={face}>
+      <Prim.Text fontFamily="$brand" fontWeight="$semibold" {...rest}>{children}</Prim.Text>
+    </FaceContext.Provider>
+  )
+}
 
 export function CozyThingText({ text = '', ...rest }: CozyThingTextProps) {
   const lowerText = text.toLowerCase().trim()
