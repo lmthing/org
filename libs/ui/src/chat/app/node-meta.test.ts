@@ -134,6 +134,31 @@ describe('currentWorkNode / currentWorkSentence', () => {
     expect(currentWorkSentence(bare)).toBe('researcher…');
   });
 
+  it('says NOTHING rather than a raw uuid for a node it has only heard about indirectly', () => {
+    reset();
+    // No `node_start` — an `activity`/statement event for an unknown node makes `ensureNode`
+    // seed a placeholder whose `label` IS its id (`store/model.ts#ensureNode`). Printing that
+    // put `d35eb2d0-f3f9-46ff-bd1c-b310e499ddb1…` above the composer in prod.
+    const m = buildModel([
+      ev({ ts: 1, type: 'statement', context: 'x', nodeId: 'd35eb2d0-f3f9-46ff-bd1c-b310e499ddb1', code: '' }),
+    ]);
+    const phantom = m.nodes['d35eb2d0-f3f9-46ff-bd1c-b310e499ddb1'];
+    // The placeholder really is the node the line would otherwise be about.
+    expect(phantom?.label).toBe(phantom?.id);
+    expect(currentWorkNode(m)?.id).toBe('d35eb2d0-f3f9-46ff-bd1c-b310e499ddb1');
+    expect(currentWorkSentence(m)).toBe('');
+  });
+
+  it('still speaks for a placeholder that DID say something', () => {
+    reset();
+    // Same indirectly-created node, but a `setActivity` reached it — that sentence is real work
+    // narration and must survive the uuid guard above.
+    const m = buildModel([
+      ev({ ts: 1, type: 'activity', context: 'sub', nodeId: 'ffffffff-0000-0000-0000-000000000001', scope: 'delegate', text: 'Reading the channel history' }),
+    ]);
+    expect(currentWorkSentence(m)).toBe('Reading the channel history');
+  });
+
   it('is empty when no sub-agent work is in flight (the line falls back to THING)', () => {
     reset();
     const m = buildModel([

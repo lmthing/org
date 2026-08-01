@@ -153,5 +153,12 @@ export function currentWorkSentence(m: SessionModel): string {
   const node = currentWorkNode(m);
   if (!node) return '';
   const headline = node.activity || narrationOf(latestSubtreeStatement(m, node.id)?.code ?? '');
-  return headline || `${node.label}…`;
+  if (headline) return headline;
+  // A node the store has only heard about INDIRECTLY has no label of its own: `ensureNode` seeds
+  // a placeholder with `label: id` when an event arrives for a node whose `node_start` has not
+  // been seen yet (`store/model.ts#ensureNode`). Its "label" is therefore a raw uuid, and saying
+  // `4f3c…-b310e499ddb1…` answers "what is happening?" with nothing at all — seen live in prod
+  // the moment this line moved next to the composer, where it is the sentence a reader actually
+  // reads. Say nothing instead and let `StatusLine` fall back to THING's own line.
+  return node.label === node.id ? '' : `${node.label}…`;
 }
