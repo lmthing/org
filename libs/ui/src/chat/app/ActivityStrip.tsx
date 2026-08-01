@@ -34,18 +34,25 @@ export function ActivityStrip({ nodeIds, className }: ActivityStripProps) {
       {visible.map((node) => {
         if (!node) return null;
         const dur = node.endTs && node.startTs ? fmtDuration(node.endTs - node.startTs) : null;
+        const chip = STATUS_COLOR[node.status] ?? STATUS_COLOR.done;
+        // The STATUS colour and the chip's size live on the `Pressable`, which is an RN `View` — it
+        // has no text style for these four leaves to inherit, so every one of them restates the pair.
+        // Without it a `running` chip's label came out `$foreground` at the body size on a phone
+        // instead of `$brand-2` at `$xs`: legible, so no gate and no glance catches it, and the whole
+        // point of a status chip is that its colour IS the status.
+        const face = { fontSize: '$xs', color: chip?.['color'] } as const;
         return (
           <Prim.Pressable
             key={node.id}
             onClick={() => handleChip(node.id)}
             data-node-id={node.id}
             display="inline-flex"
-            {...(STATUS_COLOR[node.status] ?? STATUS_COLOR.done)} transition="quick" alignItems="center" gap="$1" paddingHorizontal="$2" paddingVertical="$0.5" borderRadius="$radius-full" borderWidth={1} fontSize="$xs" hoverStyle={{ opacity: 0.8 }}
+            {...chip} transition="quick" alignItems="center" gap="$1" paddingHorizontal="$2" paddingVertical="$0.5" borderRadius="$radius-full" borderWidth={1} fontSize="$xs" hoverStyle={{ opacity: 0.8 }}
           >
-            <Prim.Text>{KIND_ICON[node.kind] ?? '◦'}</Prim.Text>
-            <Prim.Text maxWidth="120px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{node.label}</Prim.Text>
-            {node.status === 'running' && <Prim.Text className="lm-pulse">…</Prim.Text>}
-            {dur && <Prim.Text opacity={0.6}>{dur}</Prim.Text>}
+            <Prim.Text {...face}>{KIND_ICON[node.kind] ?? '◦'}</Prim.Text>
+            <Prim.Text {...face} maxWidth="120px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{node.label}</Prim.Text>
+            {node.status === 'running' && <Prim.Text {...face} className="lm-pulse">…</Prim.Text>}
+            {dur && <Prim.Text {...face} opacity={0.6}>{dur}</Prim.Text>}
           </Prim.Pressable>
         );
       })}

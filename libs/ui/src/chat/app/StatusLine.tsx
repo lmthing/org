@@ -47,8 +47,11 @@ export function StatusLine(): React.ReactElement | null {
       data-testid="activity"
       title={text}
     >
-      <Prim.Text className="animate-pulse" width="$1.5" height="$1.5" borderRadius="$radius-full" backgroundColor="$agent" flexShrink={0} aria-hidden />
-      <Prim.Text fontStyle="italic" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{text}</Prim.Text>
+      {/* `Prim.Row` is an RN `View` — its `fontSize`/`color` above never reach these two `Prim.Text`
+          children, so both restate them (see `primitives/_native.tsx#NativeText`'s unconditional
+          `$body`/`$foreground` defaults). */}
+      <Prim.Text className="animate-pulse" width="$1.5" height="$1.5" borderRadius="$radius-full" backgroundColor="$agent" flexShrink={0} fontSize="$xs" color="$muted-foreground" aria-hidden />
+      <Prim.Text fontStyle="italic" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" fontSize="$xs" color="$muted-foreground">{text}</Prim.Text>
     </Prim.Row>
   );
 }

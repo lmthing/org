@@ -87,7 +87,7 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
       {result ? (
         <Prim.Col gap="$3" fontSize="$sm" lineHeight="1.25rem">
           {/* `Prim.Col`'s `fontSize` is a container prop an RN `View` drops — restated on the
-              paragraph, or it renders at Tamagui's default size instead of `$sm`. */}
+              paragraph and the link below, or they render at Tamagui's default size instead of `$sm`. */}
           <Prim.Text as="p" color="$foreground" fontSize="$sm">
             Thanks — issue #{result.number} was filed.
           </Prim.Text>
@@ -95,7 +95,7 @@ export function BugReportDialog({ open, onClose, screenshot }: BugReportDialogPr
             href={result.url}
             target="_blank"
             rel="noreferrer"
-            color="$agent" hoverStyle={{ textDecorationLine: "underline" }}
+            color="$agent" fontSize="$sm" hoverStyle={{ textDecorationLine: "underline" }}
           >
             {/* `Prim.Link` (native) is itself a `NativeText` — but a NESTED `Prim.Text` still gets
                 its OWN styled default (`$body`/`$foreground`), which wins over whatever the Link

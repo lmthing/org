@@ -97,12 +97,12 @@ export function ExecutionTree(): React.ReactElement {
 
   return (
     <Prim.Box as="nav" aria-label="execution tree" height="100%" overflowY="auto" paddingVertical="$1">
-      {/* `Prim.Row` is an RN `View`: its `color`/`fontSize` style the row, not the two `Prim.Text`
-          children inside it, which each need their own copy or fall back to `NativeText`'s
-          `$foreground`-at-body-size default. */}
+      {/* `Prim.Row` is an RN `View`: its `color`/`fontSize`/`textTransform`/`letterSpacing` style the
+          row, not the two `Prim.Text` children inside it, which each need their own copy or fall
+          back to `NativeText`'s `$foreground`-at-body-size default. */}
       <Prim.Row color="var(--muted-foreground)" paddingHorizontal="$2" paddingVertical="$1" fontSize="10px" textTransform="uppercase" letterSpacing="$wider" justifyContent="space-between" alignItems="center">
-        <Prim.Text color="var(--muted-foreground)" fontSize="10px">Execution</Prim.Text>
-        {queue && <Prim.Text color="var(--muted-foreground)" fontSize="10px" fontFamily="$mono">q {queue.active}/{queue.max}</Prim.Text>}
+        <Prim.Text color="var(--muted-foreground)" fontSize="10px" textTransform="uppercase" letterSpacing="$wider">Execution</Prim.Text>
+        {queue && <Prim.Text color="var(--muted-foreground)" fontSize="10px" fontFamily="$mono" textTransform="uppercase" letterSpacing="$wider">q {queue.active}/{queue.max}</Prim.Text>}
       </Prim.Row>
       {rootId ? <TreeRowById id={rootId} depth={0} now={now} /> : (
         <Prim.Box color="var(--muted-foreground)" paddingHorizontal="$3" paddingVertical="$4" fontSize="12px"><Prim.Text color="var(--muted-foreground)" fontSize="12px">No activity yet. Send a message to start.</Prim.Text></Prim.Box>

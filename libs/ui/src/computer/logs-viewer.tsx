@@ -72,22 +72,37 @@ function LogsViewer({ logs }: LogsViewerProps) {
           flexShrink={1}
           flexBasis="0%"
           overflow="auto"
-          fontFamily="monospace"
+          fontFamily="$mono"
           fontSize="$xs"
           padding="$3"
         >
           {filtered.length === 0 ? (
-            <Prim.Text fontSize="$sm" color="$muted-foreground" paddingVertical="$4" textAlign="center">No logs</Prim.Text>
+            // The list `Prim.Box` above sets fontFamily="$mono" for the whole log pane, but
+            // it's an RN `View` — restated here or the empty-state message falls back to the
+            // default `$body` face.
+            <Prim.Text fontSize="$sm" fontFamily="$mono" color="$muted-foreground" paddingVertical="$4" textAlign="center">No logs</Prim.Text>
           ) : (
-            filtered.map((entry, i) => (
-              <Prim.Box key={i} display="flex" gap="$2">
-                <Prim.Text color="$muted-foreground" flexShrink={0}>{formatTime(entry.timestamp)}</Prim.Text>
-                <Prim.Text color="$primary" flexShrink={0}>[{entry.source}]</Prim.Text>
-                <Prim.Text style={{ wordBreak: 'break-all' }} color={MESSAGE_COLOR[entry.level]}>
-                  {entry.message}
-                </Prim.Text>
-              </Prim.Box>
-            ))
+            filtered.map((entry, i) => {
+              // The list `Prim.Box` above sets fontFamily="$mono" and fontSize="$xs" for the
+              // whole log pane, but it's an RN `View` — none of these three leaves inherit them,
+              // so each restates the shared face (a log line would otherwise render at body
+              // size/face on native).
+              //
+              // `$mono`, not the raw `monospace` keyword this pane used to carry: that keyword is a
+              // PLATFORM alias, so on Android it resolves to Droid Sans Mono while the app registers
+              // and everywhere else uses JetBrains Mono. Two different monos in one product, only
+              // visible on a device.
+              const face = { fontFamily: '$mono', fontSize: '$xs' } as const
+              return (
+                <Prim.Box key={i} display="flex" gap="$2">
+                  <Prim.Text {...face} color="$muted-foreground" flexShrink={0}>{formatTime(entry.timestamp)}</Prim.Text>
+                  <Prim.Text {...face} color="$primary" flexShrink={0}>[{entry.source}]</Prim.Text>
+                  <Prim.Text {...face} style={{ wordBreak: 'break-all' }} color={MESSAGE_COLOR[entry.level]}>
+                    {entry.message}
+                  </Prim.Text>
+                </Prim.Box>
+              )
+            })
           )}
         </Prim.Box>
       </Prim.Box>

@@ -46,6 +46,15 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
   const [dialogType, setDialogType] = useState<'file' | 'folder' | null>(null)
   const [newName, setNewName] = useState('')
   const isActive = activeFile === node.path
+  // The row `Prim.Box` below sets `fontSize="$sm"` and the active-state colour for the whole row,
+  // but it is an RN `View` — the file-name `Prim.Text` inherits neither, so it restates this face.
+  //
+  // `color` is OMITTED rather than set to `undefined` when the row is inactive. Tamagui treats a
+  // passed `undefined` as an override, so `{ color: undefined }` would clobber `NativeText`'s
+  // unconditional `$foreground` default and reintroduce the exact bug this line exists to fix — on
+  // every INACTIVE row, i.e. almost all of them. Same trap `labelled()` documents for `ghost`/
+  // `outline` buttons (`elements/primitives/labelled.tsx`).
+  const face = { fontSize: '$sm', ...(isActive ? { color: '$primary' } : {}) } as const
 
   function handleClick() {
     if (node.type === 'directory') {
@@ -93,11 +102,15 @@ function IdeFileTreeItem({ node, level, activeFile, onFileSelect, onCreateFile, 
               </>
             ) : (
               <>
-                <Prim.Text width={16} />
+                {/* A 16px LAYOUT spacer that lines a file up under the folders' chevron — it holds
+                    no text, so it is a Box. It was a childless `Prim.Text`, which made the gate ask
+                    it to restate the row's face; giving a face to something with nothing to render
+                    answers the gate rather than the question. */}
+                <Prim.Box width={16} />
                 <File size={16} {...IDE_FILE_TREE_ICON} />
               </>
             )}
-            <Prim.Text overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{node.name}</Prim.Text>
+            <Prim.Text {...face} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">{node.name}</Prim.Text>
           </Prim.Box>
         </ContextMenu.Trigger>
         <ContextMenu.Portal>

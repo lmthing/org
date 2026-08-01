@@ -74,11 +74,14 @@ function BootProgress({ tier, stage }: BootProgressProps) {
         {steps.map((step) => {
           const state = getStepState(step.key, stage, steps)
           return (
+            // The steps `Prim.Box` above sets fontSize="$xs" for the whole list, but it's an RN
+            // `View` \u2014 this leaf restates it, or a step renders at body size on native.
             <Prim.Text
               key={step.key}
               display="flex"
               alignItems="center"
               gap="$2"
+              fontSize="$xs"
               color={STEP_COLOR[state]}
             >
               {state === 'done' ? '\u2713' : state === 'active' ? '\u25CB' : '\u00B7'} {step.label}

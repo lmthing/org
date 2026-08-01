@@ -73,7 +73,9 @@ function IdeLayout(props: IdeLayoutProps) {
         backgroundColor="$card"
         flexShrink={0}
       >
-        <Prim.Text fontSize="$sm" fontWeight="$semibold"><CozyThingText text="lmthing.computer" /></Prim.Text>
+        {/* The header `Prim.Box` above sets color="$foreground", but it's an RN `View` — restated
+            here or the wordmark falls back to `NativeText`'s own default ink. */}
+        <Prim.Text fontSize="$sm" fontWeight="$semibold" color="$foreground"><CozyThingText text="lmthing.computer" /></Prim.Text>
         {onNavigate && (
           <Prim.Box as="nav" display="flex" alignItems="center" gap="$1" marginLeft="$4">
             {navItems.map((item) => (

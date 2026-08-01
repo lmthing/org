@@ -106,7 +106,9 @@ export function ConsentCard({
       )}
 
       <Prim.Box fontSize="$xs" color="$muted-foreground" marginTop="0.5rem" marginBottom="0.75rem">
-        <Prim.Text>Approve to let THING run this once, or deny to refuse it.</Prim.Text>
+        {/* Same drop as above: the Box's `fontSize`/`color` are container props an RN `View`
+            drops, so the sentence needs its own `Prim.Text` restating them. */}
+        <Prim.Text fontSize="$xs" color="$muted-foreground">Approve to let THING run this once, or deny to refuse it.</Prim.Text>
       </Prim.Box>
 
       <Prim.Row gap="$2">
@@ -117,7 +119,9 @@ export function ConsentCard({
           data-testid="consent-approve"
           transition="quick" animateOnly={["opacity"]} paddingHorizontal="$3" paddingVertical="$1.5" backgroundColor="$primary" color="$primary-foreground" borderRadius="$radius-lg" fontSize="$sm" fontWeight="$medium" disabledStyle={{ opacity: 0.5 }} hoverStyle={{ opacity: 0.9 }}
         >
-          <Prim.Text>Approve</Prim.Text>
+          {/* `Prim.Pressable` is an RN `View` — its `color`/`fontSize`/`fontWeight` above style the
+              button fill, not this label, so all three are restated on the wrapped `Prim.Text`. */}
+          <Prim.Text fontSize="$sm" fontWeight="$medium" color="$primary-foreground">Approve</Prim.Text>
         </Prim.Pressable>
         <Prim.Pressable
           type="button"
@@ -126,7 +130,9 @@ export function ConsentCard({
           data-testid="consent-deny"
           transition="quick" animateOnly={["color", "background-color", "border-color"]} paddingHorizontal="$3" paddingVertical="$1.5" borderWidth={1} borderColor="$border" color="$foreground" borderRadius="$radius-lg" fontSize="$sm" disabledStyle={{ opacity: 0.5 }} hoverStyle={{ backgroundColor: "$muted" }}
         >
-          <Prim.Text>Deny</Prim.Text>
+          {/* `Prim.Pressable` is an RN `View` — its `color`/`fontSize` above style the button fill,
+              not this label, so both are restated on the wrapped `Prim.Text`. */}
+          <Prim.Text fontSize="$sm" color="$foreground">Deny</Prim.Text>
         </Prim.Pressable>
       </Prim.Row>
     </Prim.Box>

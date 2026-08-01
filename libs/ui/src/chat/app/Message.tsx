@@ -137,7 +137,9 @@ function RetryButton({ text }: { text: string }) {
       transition="quick" animateOnly={["opacity"]} alignItems="center" gap="$1" marginTop="0.375rem" paddingHorizontal="$2" paddingVertical="$1" borderWidth={1} borderColor="color-mix(in srgb, var(--destructive) 40%, transparent)" borderRadius="$radius-lg" fontSize="$xs" color="$destructive" display="inline-flex" hoverStyle={{ opacity: 0.8 }}
       aria-label="Retry the last message"
     >
-      <Prim.Text>↻ Retry</Prim.Text>
+      {/* `Prim.Pressable` is an RN `View` — its `fontSize`/`color` above style the button, not
+          this label, so both are restated on the wrapped `Prim.Text`. */}
+      <Prim.Text fontSize="$xs" color="$destructive">↻ Retry</Prim.Text>
     </Prim.Pressable>
   );
 }

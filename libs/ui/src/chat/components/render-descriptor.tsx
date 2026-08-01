@@ -189,9 +189,11 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
     case 'spacer': return <Prim.Box key={key} flexGrow={1} />;
     case 'divider': return (
       // The Row's `color`/`fontSize` are container props (an RN `View` drops both); the label is
-      // the only actual text here, so it alone needs to restate them.
+      // the only actual text here, so it alone needs to restate them. The two RULES either side of
+      // it hold no text at all — they are `Prim.Box`es, not childless `Prim.Text`s. Giving a face
+      // to something with nothing to render answers a lint and not the question.
       <Prim.Row key={key} color="var(--muted-foreground)" gap="$2" marginVertical="$2" fontSize="11px" alignItems="center">
-        <Prim.Text borderColor="var(--border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />{props['label'] ? <Prim.Text color="var(--muted-foreground)" fontSize="11px">{String(props['label'])}</Prim.Text> : null}<Prim.Text borderColor="var(--border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />
+        <Prim.Box borderColor="var(--border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />{props['label'] ? <Prim.Text color="var(--muted-foreground)" fontSize="11px">{String(props['label'])}</Prim.Text> : null}<Prim.Box borderColor="var(--border)" flexGrow={1} flexShrink={1} flexBasis="0%" borderTopWidth={1} />
       </Prim.Row>
     );
 
@@ -232,9 +234,11 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       return (
         <Prim.Table key={key} marginVertical="$1" fontSize="12px" borderColor="$collapse">
           {/* `Prim.Th`/`Prim.Td` are RN `View`s (see `primitives/table.native.tsx`) — their own
-              `fontWeight`/`color` style the cell container, not the `Prim.Text` inside it. */}
-          {columns.length > 0 && <Prim.Thead><Prim.Tr>{columns.map((c, i) => <Prim.Th key={i} textAlign="left" fontWeight="$semibold" color="var(--muted-foreground)" borderBottomWidth={1} borderColor="var(--border)" paddingHorizontal="$2" paddingVertical="$1"><Prim.Text fontWeight="$semibold" color="var(--muted-foreground)">{c}</Prim.Text></Prim.Th>)}</Prim.Tr></Prim.Thead>}
-          <Prim.Tbody>{rows.map((r, ri) => <Prim.Tr key={ri}>{r.map((cell, ci) => <Prim.Td key={ci} borderBottomWidth={1} borderColor="var(--border)" paddingHorizontal="$2" paddingVertical="$1" color="var(--foreground)"><Prim.Text color="var(--foreground)">{String(cell)}</Prim.Text></Prim.Td>)}</Prim.Tr>)}</Prim.Tbody>
+              `fontWeight`/`color` style the cell container, not the `Prim.Text` inside it. The
+              `Prim.Table`'s own `fontSize="12px"` is a container prop too, so both cell texts
+              also restate it here rather than falling back to Tamagui's default size. */}
+          {columns.length > 0 && <Prim.Thead><Prim.Tr>{columns.map((c, i) => <Prim.Th key={i} textAlign="left" fontWeight="$semibold" color="var(--muted-foreground)" borderBottomWidth={1} borderColor="var(--border)" paddingHorizontal="$2" paddingVertical="$1"><Prim.Text fontWeight="$semibold" color="var(--muted-foreground)" fontSize="12px">{c}</Prim.Text></Prim.Th>)}</Prim.Tr></Prim.Thead>}
+          <Prim.Tbody>{rows.map((r, ri) => <Prim.Tr key={ri}>{r.map((cell, ci) => <Prim.Td key={ci} borderBottomWidth={1} borderColor="var(--border)" paddingHorizontal="$2" paddingVertical="$1" color="var(--foreground)"><Prim.Text color="var(--foreground)" fontSize="12px">{String(cell)}</Prim.Text></Prim.Td>)}</Prim.Tr>)}</Prim.Tbody>
         </Prim.Table>
       );
     }
@@ -256,7 +260,9 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
       const pct = Math.max(0, Math.min(100, (Number(props['value'] ?? 0) / max) * 100));
       return <Prim.Box key={key} marginVertical="0.25rem"><Prim.Box backgroundColor="var(--muted)" height="$2" borderRadius="$radius" overflow="hidden"><Prim.Box backgroundColor="var(--agent)" height="100%" width={`${pct}%`} /></Prim.Box>{props['label'] ? <Prim.Text color="var(--muted-foreground)" fontSize="10px" marginTop="0.125rem">{String(props['label'])}</Prim.Text> : null}</Prim.Box>;
     }
-    case 'spinner': return <Prim.Row key={key} color="var(--muted-foreground)" gap="$2" fontSize="12px" marginVertical="$1" alignItems="center"><Prim.Text className="lm-spin">◐</Prim.Text>{props['label'] ? <Prim.Text>{String(props['label'])}</Prim.Text> : null}</Prim.Row>;
+    // The Row's `color`/`fontSize` are container props an RN `View` drops — both the spinner glyph
+    // and the label restate them, or they'd render at body size/ink on native.
+    case 'spinner': return <Prim.Row key={key} color="var(--muted-foreground)" gap="$2" fontSize="12px" marginVertical="$1" alignItems="center"><Prim.Text className="lm-spin" color="var(--muted-foreground)" fontSize="12px">◐</Prim.Text>{props['label'] ? <Prim.Text color="var(--muted-foreground)" fontSize="12px">{String(props['label'])}</Prim.Text> : null}</Prim.Row>;
     case 'statcard': return <Prim.Box key={key} borderColor="var(--border)" backgroundColor="var(--accent)" borderWidth={1} borderRadius="$radius" padding="$2" display="inline-block" marginVertical="0.25rem"><Prim.Text color="var(--muted-foreground)" fontSize="10px" textTransform="uppercase">{String(props['label'] ?? '')}</Prim.Text><Prim.Text color="var(--foreground)" fontSize="$lg" fontWeight="$semibold">{String(props['value'] ?? '')}</Prim.Text>{props['delta'] ? <Prim.Text color="var(--success)" fontSize="11px">{String(props['delta'])}</Prim.Text> : null}</Prim.Box>;
     case 'details': return <Prim.Box as="details" key={key} borderColor="var(--border)" backgroundColor="var(--accent)" borderWidth={1} borderRadius="$radius" padding="$2" marginVertical="0.25rem"><Prim.Box as="summary" cursor="pointer"><Prim.Text color="var(--foreground)">{String(props['summary'] ?? 'Details')}</Prim.Text></Prim.Box><Prim.Box marginTop="0.25rem">{inView(body)}</Prim.Box></Prim.Box>;
 

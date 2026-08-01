@@ -99,13 +99,17 @@ function YieldsTab({ node }: { node: ExecNode }): React.ReactElement {
 function VariablesTab({ node }: { node: ExecNode }): React.ReactElement {
   const entries = Object.entries(node.variables);
   if (entries.length === 0) return <Empty>No variables captured.</Empty>;
+  // The outer `Prim.Box`'s `fontFamily`/`fontSize` are container props an RN `View` drops — none of
+  // the three `Prim.Text` siblings below (across the inner `Prim.Box` too) inherit them, so the face
+  // is hoisted once and spread onto each.
+  const face = { fontFamily: '$mono', fontSize: '11px' } as const;
   return (
     <Prim.Box display="flex" flexDirection="column" gap="$1" fontFamily="$mono" fontSize="11px">
       {entries.map(([k, v]) => (
         <Prim.Box key={k} borderColor="color-mix(in srgb, var(--border) 50%, transparent)" borderBottomWidth={1} paddingVertical="$1">
           {/* The `: ` separator needs a text host of its own, or it drops on native between the two
               `Prim.Text` siblings either side of it. */}
-          <Prim.Text color="var(--agent)">{k}</Prim.Text><Prim.Text>: </Prim.Text><Prim.Text color="var(--success)" wordWrap="break-word">{preview(v, 600)}</Prim.Text>
+          <Prim.Text {...face} color="var(--agent)">{k}</Prim.Text><Prim.Text {...face}>: </Prim.Text><Prim.Text {...face} color="var(--success)" wordWrap="break-word">{preview(v, 600)}</Prim.Text>
         </Prim.Box>
       ))}
     </Prim.Box>

@@ -14,17 +14,29 @@
  */
 import * as React from 'react'
 import { test, expect } from '../harness'
-import { render, findAll, flattenStyle, NATIVE_TEXT } from '../render'
+import { render, findAll, findPressable, flattenStyle, NATIVE_TEXT } from '../render'
 import { Message } from '../../src/chat/app/Message'
 import { useStore } from '../../src/chat/store/store'
 import type { ConvoBlock, ExecNode } from '../../src/chat/store/model'
 import { ListItem } from '../../src/elements/content/list-item'
+import { ActivityStrip } from '../../src/chat/app/ActivityStrip'
+import * as Prim from '../../src/elements/primitives/index'
 
 /** A minimal session node — `kind: 'session'` so `Message` skips the attribution button entirely. */
 const node: ExecNode = {
   id: 'n1', parentId: null, kind: 'session', label: 'THING', status: 'done',
   childIds: [], depTaskIds: [], llmCalls: [], statements: [], yields: [], variables: {},
   eventSeqs: [],
+}
+
+/** `#2f6270` and `rgba(47, 98, 112, 1)` are the same paint — reduce both to `47,98,112`. */
+function rgb(colour: unknown): string {
+  const s = String(colour ?? '')
+  const hex = /^#([0-9a-f]{6})$/i.exec(s)
+  if (hex) return [0, 2, 4].map((i) => parseInt(hex[1]!.slice(i, i + 2), 16)).join(',')
+  const fn = /^rgba?\(([^)]+)\)$/.exec(s)
+  if (fn) return fn[1]!.split(',').slice(0, 3).map((p) => p.trim()).join(',')
+  return s
 }
 
 function resetStore(): void {
@@ -94,5 +106,45 @@ test('a selected ListItem label is BOLDER than an unselected one, in both themes
     const selectedStyle = flattenStyle(findAll(selected.tree, (t) => t === NATIVE_TEXT)[0]?.props?.style)
     expect(String(selectedStyle.fontFamily).endsWith('-Medium')).toBe(true)
     expect(String(unselectedStyle.fontFamily).endsWith('-Medium')).toBe(false)
+  }
+})
+
+test('an ActivityStrip chip label takes the STATUS colour and size, not body ink, in both themes', () => {
+  // The generalisation of every case above, and the one `lint-rn-text-inherit.mjs` was written for:
+  // the chip's `Prim.Pressable` carries `fontSize="$xs"` and the STATUS colour (`node-meta.ts`'s
+  // `STATUS_COLOR.running` → `$brand-2`), and four `Prim.Text` leaves used to restate neither. On a
+  // phone a `running` chip therefore read as body ink at body size — legible, so nothing catches it,
+  // while the entire job of a status chip is that its colour IS the status.
+  //
+  // Asserted RELATIVE to the container rather than against a hex, because that is the actual
+  // invariant ("the leaf resolves what the chip resolves") and it holds in both themes without this
+  // suite having to know the palette. `$foreground` is named as the exact wrong answer so a
+  // regression is legible when it fires.
+  const running: ExecNode = { ...node, id: 'n2', kind: 'llm', label: 'thinking', status: 'running' }
+  for (const theme of ['light', 'dark'] as const) {
+    useStore.setState({ model: { nodes: { n2: running }, rootId: 'n2', blocks: [], rawEvents: [], lastSeq: 0 } })
+    const { tree } = render(<ActivityStrip nodeIds={['n2']} />, { theme })
+    const chip = flattenStyle(findPressable(tree)?.props?.style)
+    const label = findAll(tree, (t) => t === NATIVE_TEXT)
+      .map((n) => ({ style: flattenStyle(n.props?.style), children: n.children }))
+      .find((n) => n.children?.includes('thinking'))
+    expect(label).toBeDefined()
+    // Compared as RGB triples, not as strings. The two hosts reach the same colour by different
+    // routes — a `View`'s props go through `_native.tsx#toNativeColor`, which emits `rgba(47, 98,
+    // 112, 1)`, while `NativeText` resolves `$brand-2` through Tamagui's theme and emits `#2f6270`.
+    // Identical paint, different notation; asserting on the literal string would fail on a match.
+    expect(rgb(label?.style.color)).toBe(rgb(chip.color))
+
+    // The chip's OWN `fontSize` is not merely unused on native — it is absent from the View's style
+    // entirely (`nativeSafeProps` drops what `RCTView` has no use for), which is why there is
+    // nothing here to compare the label against. Both reference values are therefore rendered rather
+    // than hardcoded, so this case survives a change to the type scale or the palette.
+    expect(chip.fontSize).toBe(undefined)
+    const refStyle = (el: React.ReactElement) =>
+      flattenStyle(findAll(render(el, { theme }).tree, (t) => t === NATIVE_TEXT)[0]?.props?.style)
+    expect(label?.style.fontSize).toBe(refStyle(<Prim.Text fontSize="$xs">x</Prim.Text>).fontSize)
+    // The bug's signature: `NativeText`'s unconditional `$foreground` default winning over the
+    // container.
+    expect(label?.style.color === refStyle(<Prim.Text>x</Prim.Text>).color).toBe(false)
   }
 })

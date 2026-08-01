@@ -37,7 +37,9 @@ export function EmptyState({ projectName, onSuggestion, className }: EmptyStateP
         alignItems="center"
         lineHeight={32}
       >
-        <Text>✦</Text>
+        {/* `Row` is an RN `View` — its `fontSize` above never reaches this bare glyph, so it's
+            restated on the `Text` directly (see `primitives/_native.tsx#NativeText`). */}
+        <Text fontSize="$2xl">✦</Text>
       </Row>
       <Text as="h1" fontFamily="$heading" fontSize="$2xl" fontWeight="$bold" color="$foreground" marginBottom="$2">
         How can I help{projectName ? ` in ${projectName}` : ''}?
@@ -53,7 +55,9 @@ export function EmptyState({ projectName, onSuggestion, className }: EmptyStateP
               onClick={() => onSuggestion(s)}
               transition="quick" animateOnly={["color", "background-color", "border-color"]} paddingHorizontal="$3" paddingVertical="$1.5" borderRadius="$radius-full" borderWidth={1} borderColor="$border" fontSize="$sm" color="$muted-foreground" hoverStyle={{ color: "$foreground", borderColor: "color-mix(in srgb, var(--foreground) 30%, transparent)" }}
             >
-              <Text>{s}</Text>
+              {/* `Pressable` is an RN `View` — its `fontSize`/`color` above style the button, not
+                  this label, so both are restated on the wrapped `Text`. */}
+              <Text fontSize="$sm" color="$muted-foreground">{s}</Text>
             </Pressable>
           ))}
         </Row>

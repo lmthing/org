@@ -853,7 +853,9 @@ function TableBody({ columns, rows, scope }: { columns: TableColumn[]; rows: unk
               paddingHorizontal="$2"
               paddingVertical="$1.5"
             >
-              <Prim.Text fontSize="$xs" color="$muted-foreground">
+              {/* The `Prim.Th` above sets fontWeight="$semibold", but it's an RN `View` — restated
+                  here or the header label loses its weight on native. */}
+              <Prim.Text fontSize="$xs" fontWeight="$semibold" color="$muted-foreground">
                 {stringify(resolveOptional(col.label, scope) ?? col.label)}
               </Prim.Text>
             </Prim.Th>

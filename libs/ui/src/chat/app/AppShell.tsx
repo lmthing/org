@@ -187,7 +187,9 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges }: AppS
             position="absolute" top="$3" left="$3" zIndex={10} width="$8" height="$8" display="flex" alignItems="center" justifyContent="center" color="$muted-foreground" borderRadius="$radius-lg" $md={{ display: "none" }} hoverStyle={{ color: "$foreground", backgroundColor: "$muted" }}
             aria-label="Toggle sidebar"
           >
-            <Prim.Text>☰</Prim.Text>
+            {/* `Prim.Pressable` is an RN `View` — its `color` above styles the button, not this
+                glyph, so it's restated on the wrapped `Prim.Text`. */}
+            <Prim.Text color="$muted-foreground">☰</Prim.Text>
           </Prim.Pressable>
         )}
 

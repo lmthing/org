@@ -89,6 +89,15 @@ export function PlaybackBar(): React.ReactElement | null {
         onChange={(e) => setSpeed(Number(e.target.value))}
         backgroundColor="var(--background)" borderWidth={1} borderColor="var(--border)" borderRadius="$radius" fontSize="11px" color="var(--foreground)" paddingHorizontal="$1" paddingVertical="$0.5"
       >
+        {/* NOT restated, and the gate excludes `Option` for this reason
+            (`scripts/lint-rn-text-inherit.mjs#UNSTYLEABLE_HOSTS`). `Prim.Option`'s type is
+            `OptionHTMLAttributes<HTMLOptionElement>` (`elements/primitives/controls.tsx`) — no style
+            props at all, documented there as "a pure host passthrough: it is never styled" — so
+            there is nothing to restate onto. The drop is real: the native fork IS a `NativeText`
+            (`controls.native.tsx#Option`), so these speeds render in body ink at body size on a
+            phone. It is left because the native `Select` is a PLACEHOLDER — a `View` with its
+            options stacked underneath, not a picker — so facing its labels is polish on something
+            that does not work yet. Fix the picker, then this and the exclusion both go. */}
         {[1, 2, 4, 8].map((s) => <Prim.Option key={s} value={s}>{s}×</Prim.Option>)}
       </Prim.Select>
       {/* `Pressable` is an RN `View` — its `color` never reaches the nested `Text` without restating
