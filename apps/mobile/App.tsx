@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ActivityIndicator, Alert, AppState, KeyboardAvoidingView, Platform, useColorScheme } from 'react-native'
+import { ActivityIndicator, Alert, AppState, KeyboardAvoidingView, Platform } from 'react-native'
 import { TamaguiProvider } from '@tamagui/core'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
@@ -12,6 +12,8 @@ import { SurfaceSwitcher, type Surface as NavTab } from '@lmthing/ui/elements/na
 import * as Prim from '@lmthing/ui/elements/primitives'
 import { onDismiss } from '@lmthing/ui/platform'
 import { ensureComputePod, waitForPodEdge } from '@lmthing/ui/lib/pod-boot'
+import { useFonts } from 'expo-font'
+import { FONT_ASSETS } from './src/fonts'
 import { TeamScreen } from './src/TeamScreen'
 import { AppScreen } from './src/AppScreen'
 import { unregisterPush, watchPushDeepLinks, type PushDeepLink } from './src/push'
@@ -40,8 +42,16 @@ import { hapticWarning, hapticSuccess } from './src/haptics'
 const TEST_SESSION_JSON = process.env.EXPO_PUBLIC_TEST_SESSION
 
 export default function App() {
-  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light'
+  // Locked to light — the shared dark theme's contrast breaks down badly enough on-device that a
+  // system-following theme genuinely regresses readability. `userInterfaceStyle: 'light'` in
+  // app.config.js locks the native chrome (status bar, system dialogs) to match.
+  const scheme = 'light'
   const [authReady, setAuthReady] = React.useState(false)
+  // Bundled faces (see src/fonts.ts). Held in the same gate as auth below: painting before they
+  // resolve shows one frame of Roboto/SF and then reflows the whole tree when the real metrics
+  // arrive. `useFonts` never rejects — on failure it resolves with `error` set and the platform
+  // default is used, which is degraded but not a boot loop, so it must not block forever.
+  const [fontsReady, fontError] = useFonts(FONT_ASSETS)
 
   React.useEffect(() => {
     // Never rejects — an unreadable keystore entry is treated as "logged out", not a boot loop.
@@ -68,7 +78,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <TamaguiProvider config={tamaguiConfig} defaultTheme={scheme}>
-        <StatusBar style="auto" />
+        {/* Dark icons/text on the light status bar — "auto" would follow the system scheme, which
+            this app no longer does. */}
+        <StatusBar style="dark" />
         {/*
           The shared surfaces are written for a viewport that begins at the top of the window,
           because on web it does. A phone's does not: the status bar and the gesture pill are drawn
@@ -98,7 +110,10 @@ export default function App() {
             style={{ flex: 1 }}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           >
-            {authReady ? (
+            {/* Fonts join auth in the SAME gate. `fontError` counts as ready on purpose: a face that
+                fails to decode must degrade to the platform default, not hold the app on a blank
+                screen forever. */}
+            {authReady && (fontsReady || fontError) ? (
               <AuthProvider appName="mobile">
                 <AuthGate />
               </AuthProvider>

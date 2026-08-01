@@ -24,3 +24,7 @@ certs/private-key.pem
 # repo: the canonical copy is the EAS build record, which also carries the fingerprint
 # and versionCode that make a binary identifiable.
 build-artifacts/
+
+# Staging directory nightly-builds.yml assembles before uploading to the rolling GitHub
+# release — the release itself is the canonical copy.
+publish/
