@@ -35,6 +35,15 @@ const NativeTextInput: React.ComponentType<any> = styled(
     // Same reason as `NativeText`: a `$`-token fontSize is looked up in the font face's scale, so
     // with no family set Tamagui has nothing to resolve against and drops the size silently.
     fontFamily: '$body',
+    // And the same trap `NativeText` had: an RN `TextInput` defaults its ink to the platform's
+    // near-black, which no theme is consulted about. So what the user TYPED was dark-on-dark in dark
+    // mode — the field looked empty while it held their email address, and the placeholder (which RN
+    // greys by default) stayed visible, so the field read as "not accepting input" rather than as a
+    // colour bug. Found on the login screen the moment a character was typed on a dark emulator.
+    color: '$foreground',
+    // The placeholder is a PROP, not a style, and RN's default grey happens to pass on both grounds —
+    // but "happens to" is what the line above was. Naming it keeps the pair moving together.
+    placeholderTextColor: '$muted-foreground',
   },
   {
     // `isInput` goes in styled()'s THIRD argument — the static config. Putting it in the second

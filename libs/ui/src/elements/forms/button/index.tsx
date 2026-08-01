@@ -70,7 +70,7 @@ const SIZE: Record<ButtonSize, Record<string, unknown>> = {
 }
 
 function Button({ variant = 'primary', size = 'default', asChild = false, children, ...props }: ButtonProps) {
-  const styleProps = { ...BASE, ...VARIANT[variant], ...SIZE[size] }
+  const styleProps: Record<string, unknown> = { ...BASE, ...VARIANT[variant], ...SIZE[size] }
   // asChild: render the caller's element, merging our styling + props onto it (local Slot).
   if (asChild && React.isValidElement(children)) {
     const child = children as React.ReactElement<any>
@@ -78,7 +78,19 @@ function Button({ variant = 'primary', size = 'default', asChild = false, childr
   }
   return (
     <Prim.Pressable {...(styleProps as Record<string, unknown>)} {...(props as React.HTMLAttributes<HTMLElement>)}>
-      {labelled(children)}
+      {/*
+        The label's typography is handed to it, not inherited. On native the `Pressable` is an RN
+        `View`, which has no text colour or size to inherit FROM — so `primary`'s
+        `color: '$primary-foreground'` and the size scale's `fontSize` never reached the label, and
+        `NativeText`'s unconditional defaults supplied body ink instead: an unreadable label on a
+        `$primary` fill in both themes. See `primitives/labelled.tsx`. Inert on web, where the
+        `<span>` would have inherited exactly these values anyway.
+      */}
+      {labelled(children, {
+        color: styleProps.color as Prim.TextProps['color'],
+        fontSize: styleProps.fontSize as Prim.TextProps['fontSize'],
+        fontWeight: styleProps.fontWeight as Prim.TextProps['fontWeight'],
+      })}
     </Prim.Pressable>
   )
 }

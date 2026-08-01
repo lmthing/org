@@ -19,6 +19,9 @@ import { act } from 'react-test-renderer'
 import { TamaguiProvider } from '@tamagui/core'
 import { tamaguiConfig } from '../../src/theme/tamagui.config'
 import { test, expect } from '../harness'
+// Not a primitive, but it is the shape that proved `labelled()` cannot inherit on native, and the
+// label it wraps is a `Prim.Text` — so the assertion belongs with the other text-host ones.
+import { Button } from '../../src/elements/forms/button'
 import {
   render,
   find,
@@ -188,6 +191,46 @@ test('TextField forwards Tamagui style props to the native input', () => {
   // half — an RN TextInput ignores a `fontSize` prop, so this assertion is the whole reason to
   // know that flag exists.
   expect(style.fontSize).toBe(14)
+})
+
+test("a Button's LABEL is painted for the fill it sits on, in both schemes", () => {
+  // The label is a bare string, so `labelled()` wraps it in a `Text`. On web that `<span>` inherits
+  // the button's `color`; on native the container is an RN `View`, which has no text colour to
+  // inherit FROM — and `NativeText`'s unconditional `color` default then supplies BODY ink. Every
+  // primary Button in the app rendered `$foreground` on a `$primary` fill: 1.4:1 in light, 2.2:1 in
+  // dark. Unreadable on the main call to action, in both themes, since the primitives were forked.
+  for (const [theme, fill, ink] of [
+    ['light', '#15505c', '#ffffff'],
+    ['dark', '#6aa8b4', '#101214'],
+  ] as const) {
+    const { tree } = render(<Button>Continue with email</Button>, { theme })
+    expect(styleOf(tree, NATIVE_VIEW).backgroundColor).toBe(fill)
+    // The label is the only text node the button produces.
+    expect(styleOf(tree, NATIVE_TEXT).color).toBe(ink)
+  }
+})
+
+test('a variant that names no colour leaves the label at body ink', () => {
+  // `ghost`/`outline` sit on the page's own ground, so the default is correct there and passing
+  // `color: undefined` must not clobber it.
+  const { tree } = render(<Button variant="ghost">Resend</Button>, { theme: 'dark' })
+  expect(styleOf(tree, NATIVE_TEXT).color).toBe('#e7eaed')
+})
+
+test('what the user TYPES follows the theme, in both schemes', () => {
+  // An RN `TextInput` inks its text with the platform's near-black, and consults no theme to do it.
+  // In dark mode the login field held the address you had just typed and looked empty; the
+  // placeholder stayed visible (RN greys that one by default), so it read as a field refusing input
+  // rather than as a colour. Asserted in BOTH themes, because light mode makes the bug invisible —
+  // which is exactly how it shipped.
+  for (const [theme, expected] of [
+    ['light', '#14171a'],
+    ['dark', '#e7eaed'],
+  ] as const) {
+    const input = findTextInput(render(<TextField value="you@example.com" />, { theme }).tree)
+    const style = flattenStyle(input?.props?.style)
+    expect(style.color).toBe(expected)
+  }
 })
 
 test('type="password" becomes secureTextEntry, not a plain-text field', () => {
