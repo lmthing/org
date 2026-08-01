@@ -326,8 +326,23 @@ describe('ForkEngine', () => {
   });
 
   describe('concurrency (maxConcurrentForks)', () => {
-    // streamFn holds the slot for a beat and records how many forks are in flight,
-    // so `peak` reveals whether the cap actually serialized them.
+    /**
+     * `streamFn` holds its slot until TWO forks are concurrently in flight, and records the high
+     * water mark — so `peak` reveals whether the cap actually serialized them.
+     *
+     * It waits on the OTHER FORK, not on a clock. This used to `setTimeout(…, 15)`: fork A held its
+     * slot for 15 ms and B had to arrive inside that window for `peak` to reach 2, which is a bet on
+     * the scheduler. It paid off alone and lost in the full 252-file suite, reporting `expected 2,
+     * got 1` — "the cap serialized forks it should have run in parallel", a product bug that was not
+     * there. Waiting for `active === 2` makes the pass condition the thing being tested and takes the
+     * machine out of it entirely.
+     *
+     * The `cap = 1` case relies on that barrier being UNREACHABLE — one slot means B cannot enter
+     * while A holds it — so A waits out the bound and releases. If the cap were broken, B would
+     * arrive within a few ms and `peak` would be 2 long before the bound expires, so the detection
+     * does not depend on the timeout length either; only the (bounded) cost of the passing case does.
+     */
+    const HOLD_TICKS = 60; // × 5 ms — a ceiling for the cap=1 case, never reached when cap ≥ 2
     function trackingEngine(max: number, track: { active: number; peak: number }): ForkEngine {
       return new ForkEngine({
         maxConcurrentForks: max,
@@ -338,7 +353,10 @@ describe('ForkEngine', () => {
         streamFn: async () => {
           track.active++;
           track.peak = Math.max(track.peak, track.active);
-          await new Promise((r) => setTimeout(r, 15));
+          for (let i = 0; i < HOLD_TICKS && track.active < 2; i++) {
+            await new Promise((r) => setTimeout(r, 5));
+            track.peak = Math.max(track.peak, track.active);
+          }
           track.active--;
           return makeStream('currentTask.resolve({ ok: true });\n');
         },
