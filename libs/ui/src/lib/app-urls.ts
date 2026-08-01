@@ -116,6 +116,29 @@ export function dataPlaneOrigin(role: ApiRole): string {
   return origin
 }
 
+/**
+ * Where ONE page of a project-as-application is served.
+ *
+ * The pod serves an installed app's pages under the reserved `/app/<project>/` prefix in every
+ * context except production `lmthing.app`, which serves them at the root — the same rule
+ * `APP_PATH_PREFIX` states in the web app's config and the pod's own mount
+ * (`serve.ts` `servesUnifiedSpa`). It is mirrored rather than imported because `libs/ui` cannot
+ * reach `apps/web`, and it is derived from `apiBase()` rather than a literal because native and
+ * the desktop shell each have their own answer for where the pod is (see `platform/api-base`).
+ *
+ * `routePath` is a manifest route (`/`, `/trips`, `/settings/profile`) — what
+ * `GET /api/projects/:id/app` returns in `pages[].routePath`.
+ */
+export function projectAppUrl(projectId: string, routePath = '/'): string {
+  const origin = apiBase()
+  // Only meaningful when the pod IS this origin: with a host-supplied base (native/desktop) the
+  // local hostname says nothing about how that pod serves its apps.
+  const atAppDomain = !origin && isWeb() && window.location.hostname === 'lmthing.app'
+  const prefix = atAppDomain ? '' : '/app'
+  const rest = routePath.replace(/^\//, '')
+  return `${origin}${prefix}/${encodeURIComponent(projectId)}/${rest}`
+}
+
 export interface AppLink {
   app: LmthingApp
   label: string

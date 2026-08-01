@@ -5,6 +5,7 @@ import type { ConvoBlock, UploadedAttachment } from '../store/model';
 import { Message, AssistantTurn } from './Message';
 import { Composer } from './Composer';
 import { StatusLine } from './StatusLine';
+import { AppPages } from './AppPages';
 import { EmptyState } from './EmptyState';
 import { useTheme } from '../../theme/theme';
 import { TraceLoader } from './replay';
@@ -220,9 +221,6 @@ export function ChatView({
       >
         <Prim.Box flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
           <Prim.Box fontSize="$sm" fontWeight="$medium" color="$foreground" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap"><Prim.Text>{title}</Prim.Text></Prim.Box>
-          {/* The one live "currently doing" sentence — a running sub-agent's narration
-              when one is in flight, otherwise THING's own setActivity line. */}
-          <StatusLine />
         </Prim.Box>
         {sessionCostUsd > 0 && (
           <Prim.Text fontSize="$xs" color="$muted-foreground" flexShrink={0} title="Session cost">
@@ -358,6 +356,18 @@ export function ChatView({
           <Prim.Text>↓</Prim.Text>
         </Prim.Pressable>
       )}
+
+      {/* Between the transcript and the input — the two things a reader wants within a glance of
+          the box they are typing into, in the order of how often they change. */}
+
+      {/* Where this project's app lives, when it has one. Rendered outside the transcript so it
+          does not scroll away with it: the pages are a property of the PROJECT, not of any one
+          turn, and they are wanted most right after the turn that built them. */}
+      <AppPages projectId={projectId} />
+
+      {/* The one live "currently doing" sentence — a running sub-agent's narration when one is in
+          flight, otherwise THING's own setActivity line. */}
+      <StatusLine />
 
       {/* Composer */}
       {/* Keyed on the session: `Composer` holds its draft (`text`/`attachments`/`recording`/

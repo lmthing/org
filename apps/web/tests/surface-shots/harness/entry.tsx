@@ -27,7 +27,7 @@ class DeadSocket {
   static readonly CLOSED = 3
   readyState = 1
   onopen: (() => void) | null = null
-  onmessage: (() => void) | null = null
+  onmessage: ((event: { data: string }) => void) | null = null
   onclose: (() => void) | null = null
   onerror: (() => void) | null = null
   constructor() {
@@ -41,6 +41,58 @@ class DeadSocket {
   close() {}
 }
 ;(globalThis as unknown as Record<string, unknown>)['WebSocket'] = DeadSocket
+
+// The thread fixture exists to photograph a thread, and a thread with THING working in it is the
+// state worth looking at: the live activity strip only renders while a turn runs, and a turn is
+// something only the socket can announce (`thing_status`). The dead socket says one frame for
+// that fixture and nothing for any other, so every other picture is unchanged.
+if (name === 'team-thread') {
+  class BusyThreadSocket extends DeadSocket {
+    constructor() {
+      super()
+      setTimeout(() => {
+        this.onmessage?.({
+          data: JSON.stringify({
+            type: 'thing_status',
+            channelId: 'c-general',
+            threadId: 'm4',
+            status: 'running',
+            startedAt: new Date().toISOString(),
+            activity: 'Reading the channel history',
+          }),
+        })
+      }, 0)
+    }
+  }
+  ;(globalThis as unknown as Record<string, unknown>)['WebSocket'] = BusyThreadSocket
+}
+
+/**
+ * The chat surface asks the pod for the selected project's app manifest, to list its pages above
+ * the composer (`chat/app/AppPages.tsx`). No pod here — answer the one route it calls so the row
+ * paints, and let everything else fail as it already did (nothing else on these surfaces fetches).
+ */
+const realFetch = globalThis.fetch?.bind(globalThis)
+globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  if (/\/api\/projects\/[^/]+\/app$/.test(url)) {
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          hasApp: true,
+          pages: [
+            { routePath: '/' },
+            { routePath: '/trips' },
+            { routePath: '/trips/:tripId' },
+            { routePath: '/packing' },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    )
+  }
+  return realFetch ? realFetch(input, init) : Promise.reject(new Error('no fetch'))
+}) as typeof fetch
 
 const Fixture = FIXTURES[name]
 

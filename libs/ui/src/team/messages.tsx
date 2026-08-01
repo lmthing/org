@@ -748,6 +748,25 @@ export function ThreadSummary({
 }
 
 /** A pulsing-dot strip — "something is happening" kept out of the transcript. */
+function PulseStrip({ text, testId }: { text: string; testId?: string }) {
+  return (
+    <Prim.Row
+      gap="$1.5"
+      alignItems="center"
+      paddingHorizontal="$4"
+      paddingVertical="$1"
+      aria-live="polite"
+      {...(testId ? { 'data-testid': testId } : {})}
+    >
+      <Prim.Text className="lm-pulse" color="$primary" fontSize="$xs">
+        ●
+      </Prim.Text>
+      <Caption>{text}</Caption>
+    </Prim.Row>
+  )
+}
+
+/** Who is typing right now, kept out of the transcript. */
 export function TypingStrip({ labels }: { labels: string[] }) {
   const text =
     labels.length === 1
@@ -755,12 +774,22 @@ export function TypingStrip({ labels }: { labels: string[] }) {
       : labels.length === 2
         ? `${labels[0]} and ${labels[1]} are typing…`
         : `${labels.length} people are typing…`
+  return <PulseStrip text={text} />
+}
+
+/**
+ * THING's live "currently doing" line for a thread — the same strip, its own sentence.
+ *
+ * This used to reuse `TypingStrip` with the activity folded into the name, which read
+ * "THING — Building the pages is typing…": the one place the label is not a person, and the one
+ * verb that is wrong for it. An agent narrating its own work is not typing, and `activity` is a
+ * step (`Building the pages`), not part of a name.
+ */
+export function AgentActivityStrip({ activity }: { activity?: string }) {
   return (
-    <Prim.Row gap="$1.5" alignItems="center" paddingHorizontal="$4" paddingVertical="$1">
-      <Prim.Text className="lm-pulse" color="$primary" fontSize="$xs">
-        ●
-      </Prim.Text>
-      <Caption>{text}</Caption>
-    </Prim.Row>
+    <PulseStrip
+      text={activity ? `THING — ${activity}` : 'THING is working…'}
+      testId="thread-activity"
+    />
   )
 }

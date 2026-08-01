@@ -4,8 +4,15 @@ import { useStore } from '../store/store';
 import { currentWorkSentence } from './node-meta';
 
 /**
- * The chat's ONE live status line: a single sentence, directly under the
- * conversation title, saying what is being done right now.
+ * The chat's ONE live status line: a single sentence, directly above the message
+ * input, saying what is being done right now.
+ *
+ * It sits there rather than under the conversation title because that is where the
+ * reader already is. The title is a header — glanced at once when the chat opens and
+ * then never again, while the eye stays between the newest message and the box it is
+ * about to type in. A sentence that changes every few seconds twenty lines above that
+ * is a sentence nobody reads, and on a phone the header can be scrolled past entirely.
+ * Anchored to the composer it is in the same place the answer will appear.
  *
  * It replaces the old delegation tree (`LiveActivity` + `WorkBlock`), which
  * listed every in-flight fork/delegate/tasklist/task as an indented, expandable
@@ -34,7 +41,8 @@ export function StatusLine(): React.ReactElement | null {
 
   return (
     <Prim.Row
-      marginTop="$0.5" gap="$1.5" fontSize="$xs" color="$muted-foreground" alignItems="center" minWidth={0} lineHeight="1rem"
+      // Aligned with the composer below it, which owns the same `$4` horizontal padding.
+      paddingHorizontal="$4" paddingTop="$2" gap="$1.5" fontSize="$xs" color="$muted-foreground" alignItems="center" minWidth={0} lineHeight="1rem"
       aria-live="polite"
       data-testid="activity"
       title={text}

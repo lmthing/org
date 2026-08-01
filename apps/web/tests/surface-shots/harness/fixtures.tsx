@@ -256,6 +256,10 @@ function seedChat() {
     mode: 'live',
     connection: 'open',
     sessionId: 'sess-fixture',
+    // The live "currently doing" sentence, which renders directly above the composer. Seeded
+    // because it is only ever on screen mid-turn — the state a still picture would otherwise
+    // never catch, and the one where the space between transcript and input gets crowded.
+    activity: 'Reading the team channel routes',
     model: {
       nodes: {
         n3: { id: 'n3', kind: 'turn', status: 'running', label: 'Answering', startedAt: NOW - 5_000 },
@@ -275,7 +279,10 @@ function Chat() {
     setReady(true)
   }, [])
   if (!ready) return null
-  return <ChatView />
+  // A project id, because the app-pages row above the composer is a property of the SELECTED
+  // project — with none there is nothing to link to and the row is absent by design. The manifest
+  // it reads is answered by the harness's `fetch` stub (see `entry.tsx`).
+  return <ChatView projectId="trips" />
 }
 
 function ChatEmpty() {

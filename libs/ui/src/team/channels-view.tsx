@@ -25,6 +25,7 @@ import { ChannelSidebar } from './sidebar'
 import { Composer, type ComposerProps } from './composer'
 import { AppFrame, ChannelHeader, OpenAppExternally, RailPane, RAIL_DEFAULT } from './rail'
 import {
+  AgentActivityStrip,
   MessageGroupView,
   MessageRow,
   ThreadSummary,
@@ -749,10 +750,15 @@ function ThreadRail({
           {groups.map((group) => (
             <MessageGroupView key={group.key} group={group} ctx={ctx} />
           ))}
-          {busy ? <TypingStrip labels={[activity ? `THING — ${activity}` : 'THING']} /> : null}
         </Prim.Scroll>
         {!threadScroll.atBottom ? <JumpToBottomButton onClick={threadScroll.jumpToBottom} /> : null}
       </Prim.Box>
+      {/* OUTSIDE the scroll, pinned above the composer — the same place the channel puts its own
+          `TypingStrip`, and for the same reason. Inside the transcript this was the last thing in
+          a scrolling region, so a reader who had scrolled up to reread the question could not see
+          that THING was still working on it, and on a long thread it was off screen exactly while
+          a minutes-long build was the only thing happening. It is live state, not transcript. */}
+      {busy ? <AgentActivityStrip {...(activity ? { activity } : {})} /> : null}
       <Composer
         // Same reason as the channel composer: the rail is full-width on a phone but the box is
         // still two lines, and the hint is what pushed it over.

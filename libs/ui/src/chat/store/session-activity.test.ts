@@ -9,9 +9,9 @@ const wire = (event: TraceEvent): WireEvent => ({ seq: ++seq, event });
 /**
  * setActivity() reaches the client as a fire-and-forget `activity` trace event.
  * The top-level SESSION scope drives THING's MAIN "currently doing" line (store
- * `activity`, shown under the header title). A fork/delegate scope instead sets
- * that work node's narration (`ExecNode.activity`) — NOT the store field. Both
- * feed the SAME single header sentence (`StatusLine`), which prefers a running
+ * `activity`, shown directly above the composer). A fork/delegate scope instead
+ * sets that work node's narration (`ExecNode.activity`) — NOT the store field.
+ * Both feed the SAME single sentence (`StatusLine`), which prefers a running
  * sub-agent over THING's own line.
  */
 describe('feedLive — activity: THING main line', () => {
@@ -56,7 +56,7 @@ describe('feedLive — activity: fork/delegate sub-activity → work node narrat
   const startNode = (nodeId: string, label: string): WireEvent =>
     wire({ ts: 1, type: 'node_start', nodeId, parentId: null, kind: 'delegate', label, context: label, status: 'running' });
 
-  it('sets the work node activity and leaves the header main line untouched', () => {
+  it('sets the work node activity and leaves the session main line untouched', () => {
     useStore.getState().feedLive([
       startNode('n1', 'geocoder'),
       wire({ ts: 2, type: 'activity', context: 'geocoder', nodeId: 'n1', scope: 'delegate', text: 'Geocoding addresses…' }),

@@ -54,8 +54,8 @@ export interface AppState {
   /** Live "currently doing" status (THING's main line), set via setActivity() from the
    *  top-level session scope. '' = none. Clears when the turn goes idle (setDone) and on
    *  session switch/reset. Fork/delegate sub-activities live on their execution node
-   *  (`ExecNode.activity`), not here — the header `StatusLine` prefers a running
-   *  sub-agent's sentence over this one while work is in flight. */
+   *  (`ExecNode.activity`), not here — `StatusLine` (the sentence above the composer)
+   *  prefers a running sub-agent's sentence over this one while work is in flight. */
   activity: string;
   /** Set by `Message`'s "Edit" action to reopen a sent user message in the composer for
    *  edit-and-resend. Consumed once (`Composer`'s `editDraft` effect) then cleared — see

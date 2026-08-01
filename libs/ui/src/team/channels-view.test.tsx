@@ -157,3 +157,75 @@ describe('TeamChannelsView — the compact drawer dismisses on Escape (round 2, 
     )
   })
 })
+
+describe("TeamChannelsView — THING's live activity in a thread", () => {
+  /** The one `thing_status` frame the pod broadcasts while a turn runs. */
+  function pushStatus(frame: Record<string, unknown>) {
+    const socket = FakeWebSocket.instances.at(-1)!
+    socket.onopen?.()
+    socket.onmessage?.({ data: JSON.stringify(frame) })
+  }
+
+  const ROOT: ChannelMessage = {
+    id: 'm1', ts: '2026-01-01T00:00:00.000Z', channelId: 'general', kind: 'user',
+    text: '@thing build me a page',
+  }
+
+  function renderThread() {
+    const client = makeClient({
+      messages: vi.fn().mockResolvedValue({ messages: [ROOT], hasMore: false }),
+    })
+    return render(
+      <TeamChannelsView
+        {...BASE_PROPS}
+        client={client}
+        rail={{ kind: 'thread', threadId: 'm1' }}
+      />,
+    )
+  }
+
+  it('shows the setActivity step as its own sentence, not as part of a name', async () => {
+    const { findByTestId } = renderThread()
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBeGreaterThan(0))
+
+    pushStatus({
+      type: 'thing_status', channelId: 'general', threadId: 'm1',
+      status: 'running', activity: 'Building the pages',
+    })
+
+    const strip = await findByTestId('thread-activity')
+    // NOT "THING — Building the pages is typing…": an agent narrating its own work is not
+    // typing, and the activity is a step rather than part of its name.
+    expect(strip.textContent).toContain('THING — Building the pages')
+    expect(strip.textContent).not.toContain('typing')
+  })
+
+  it('pins it above the thread composer, outside the scrolling transcript', async () => {
+    const { container, findByTestId } = renderThread()
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBeGreaterThan(0))
+
+    pushStatus({
+      type: 'thing_status', channelId: 'general', threadId: 'm1',
+      status: 'running', activity: 'Building the pages',
+    })
+
+    const strip = await findByTestId('thread-activity')
+    // The thread's own composer — the channel's is the other one on screen, so take the LAST.
+    const input = Array.from(container.querySelectorAll('textarea')).at(-1)!
+    // Inside the transcript this was the last thing in a scrolling region, so a reader scrolled
+    // up could not see that THING was still working. Sibling of the composer ⇒ out of the scroll.
+    expect(strip.parentElement!.contains(input)).toBe(true)
+    expect(strip.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('clears on the terminal frame', async () => {
+    const { queryByTestId, findByTestId } = renderThread()
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBeGreaterThan(0))
+
+    pushStatus({ type: 'thing_status', channelId: 'general', threadId: 'm1', status: 'running', activity: 'Building' })
+    await findByTestId('thread-activity')
+
+    pushStatus({ type: 'thing_status', channelId: 'general', threadId: 'm1', status: 'done' })
+    await waitFor(() => expect(queryByTestId('thread-activity')).toBeNull())
+  })
+})
