@@ -25,6 +25,11 @@ let mod: HapticsModule | null | undefined
 function load(): HapticsModule | null {
   if (mod !== undefined) return mod
   try {
+    // A LAZY require, deliberately — the whole point of this seam is that the module may not be
+    // installed, and the `catch` below is what makes that survivable. An `import` is hoisted and
+    // evaluated before this function can guard it, so converting this would move the failure to
+    // module load, where nothing can catch it. Not reachable on web: Metro picks the `.native` fork.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     mod = require('expo-haptics') as HapticsModule
   } catch {
     mod = null

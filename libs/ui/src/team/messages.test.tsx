@@ -15,7 +15,9 @@ vi.mock('../platform/clipboard', () => ({
     readText: vi.fn().mockResolvedValue(''),
   },
 }))
-// eslint-disable-next-line import/order
+// This import deliberately follows the `vi.mock` above — the mock has to be registered before the
+// module under test pulls it in. (No `import/order` disable: `eslint-plugin-import` is not a
+// dependency, so that rule never ran and naming it was itself an error.)
 import { clipboard } from '../platform/clipboard'
 
 const MEMBERS: MemberProfile[] = [

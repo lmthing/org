@@ -16,7 +16,7 @@
  * Usage: node libs/ui/scripts/lint-rn-safety.mjs [dir …]   (defaults to the three surfaces)
  */
 import ts from 'typescript';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -31,8 +31,19 @@ const DEFAULT_DIRS = [
   join(uiSrc, 'elements'), join(uiSrc, 'components'), join(uiSrc, 'view'),
 ];
 
+// A file with a `X.native.tsx` SIBLING is web-only too — Metro resolves the sibling and never
+// loads this one, which is the same guarantee `.web.tsx` gives and the one `lint-native-forks.mjs`
+// already registers as a deliberate fork. `elements/content/app-view/view.tsx` is that shape: a real
+// `<iframe>` beside a `view.native.tsx` that renders a WebView. It sat here unreported for months
+// because `pnpm lint` is an `&&` chain and `eslint .` was failing 27 errors up-stream of this gate,
+// so the gate never ran — the same reason `bem-sweep.mjs`'s missing import survived. Renaming to
+// `view.web.tsx` would work equally well; not renaming is the point, since the pair convention this
+// package actually uses is `X.tsx` + `X.native.tsx` and the gate has to know it.
 const isExempt = (p) =>
-  p.endsWith('.web.tsx') || p.endsWith('.native.tsx') || p.endsWith('.test.tsx');
+  p.endsWith('.web.tsx') ||
+  p.endsWith('.native.tsx') ||
+  p.endsWith('.test.tsx') ||
+  existsSync(p.replace(/\.tsx$/, '.native.tsx'));
 
 function walk(dir, out) {
   let entries;

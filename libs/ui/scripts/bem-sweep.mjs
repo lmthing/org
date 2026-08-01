@@ -15,7 +15,11 @@
  * See docs/tamagui-idiomatic-migration.md §4.
  */
 import { execFileSync } from 'node:child_process'
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+// `unlinkSync` was USED at the bottom of this file and never imported — so the one branch that
+// deletes a stylesheet whose last rule was swept threw `unlinkSync is not defined` instead. Nothing
+// reported it: `no-undef` was off for the whole TypeScript block and plain `.js`/`.mjs` files matched
+// no globals block at all, so this script could not be linted against its own globals.
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs'
 import { readdirSync, statSync } from 'node:fs'
 import { join, relative, dirname } from 'node:path'
 import { convertStylesheet, trimStylesheet, serializeBag } from './bem-to-props.mjs'

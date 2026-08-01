@@ -309,6 +309,10 @@ export type { GetProps } from '@tamagui/core'
 
 // Ambient module augmentation so `styled()` calls get typed `$token` autocompletion.
 declare module '@tamagui/core' {
+  // An interface with no members of its own IS the point here, and `type X = Y` cannot replace it:
+  // module augmentation merges DECLARATIONS, so Tamagui only picks this config up if the shape
+  // arrives as an `interface` extending it. The rule is correct in general and wrong here.
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   interface TamaguiCustomConfig extends TamaguiConfig {}
 }
 
