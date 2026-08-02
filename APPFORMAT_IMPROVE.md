@@ -508,21 +508,35 @@ smoke (`renderSpecAppSmoke`, `renderSmokeViews`) mounts without effects and rout
 blind to both classes; closing that gap (a real by-path, data-fetching render probe) is folded into
 W10.
 
-### W7 — App IR + declarative API  ⬜ **NOT STARTED**
+### W7 — App IR + declarative API  ✅ **DONE**
 
-`compile()` / `generate()` / `check()`; `model/*.entity.json`; `api/*.query.json` tiers 1–3; generated
-handlers; derived `invalidates`, `x-options`, `param`; `generate --check`.
-**Acceptance:** ≥85% of endpoints on the scenario corpus are declarative; a hand-edited generated file
-is a hard error.
+`compile()`/`generate()`/`check()` (`libs/cli/src/app/ir/{entity,query,check,formula,invalidates}.ts`).
+`model/<entity>.entity.json` compiles to the existing `database/<name>.json` `TableSchema`
+(`compileEntity`), enforcing "one vocabulary per fact forever" and "a fact key names one column"
+against a cross-entity fact registry. `api/<name>.query.json` (list/get/aggregate/create/update/toggle)
+generates a **self-contained** `api/<route>/<METHOD>.ts` handler (no dependency on `ApiCtx`/
+`contract.d.ts`) via `generateQueryHandler` — a closed compute-formula AST
+(`add sub mul div min max round coalesce sum count avg first`) covers computed fields and aggregates.
+`checkGeneratedIr` byte-compares every generated artifact against what its IR compiles to and reports a
+hand-edit as a hard error. `deriveInvalidates` computes a mutation's cache-invalidation set from write-
+set ∩ read-set. Wired as `writeProjectEntity`/`writeProjectQuery` (`authoring/globals.ts`, gated on the
+existing `db:schema`/`api:write` capabilities — no new grant), through the same lint/typing/typecheck
+gates a hand-written `writeProjectTable`/`writeProjectApi` artifact faces. `x-options`/path-param typing
+fall out of the EXISTING `fk-options.ts`/`schema.ts` machinery unchanged, since a generated handler
+carries real `Input`/`Output` interfaces just like a hand-written one.
 
-> **Why this is the next priority.** The live `30-bike-workshop` runs showed a weaker model (DeepSeek)
-> burning most of its retries on exactly the failures W7 makes *unrepresentable*: a handler returning
-> `uncollected_job_count` its own `FrontPageOutput` never declared (many repair rounds on one endpoint);
-> `import ../../types/contract`, `import { query } from '@app/runtime'`, `readProjectTable`, `Request` as
-> a handler param — all invented, all rejected-and-retried. The format already caught them (the app still
-> shipped correct), but at 18–28 min / ~1.7M tokens. A declarative endpoint (`api/<name>.query.json`)
-> with a generated handler cannot disagree with its own contract, so this whole class stops *existing*.
-> Nothing here is blocked; `model/` and the query IR are net-new files beside the existing writers.
+`05-plan_endpoints.md`/`12-implement_endpoints.md` (system-appbuilder) now branch on a per-endpoint
+`declarative: true` marker: a plain list/get/aggregate/create/update/toggle is authored via
+`writeProjectQuery`; a genuinely bespoke endpoint (cross-table lookup, grouped breakdown, date pick,
+classification label — everything the closed formula set cannot express) stays on the existing
+hand-written `writeProjectApi` path, unchanged. `knowledge/model/{index,file-formats,capability-model}.md`
+and the `api-author`/`automator`/`data-modeler` instructs document both writers.
+
+**Acceptance met (structurally):** 150+ new tests, including full END-TO-END execution of generated
+handlers (list/get/aggregate/create/update/toggle) against a real project db through the actual worker
+runtime (`api/runtime.ts`) — proven correct against real rows, not just well-typed. **Not yet measured:**
+the ≥85%-declarative ratio on a real scenario build (needs a live run through the updated appbuilder,
+next up).
 
 ### W8 — Tasklist engine features  ✅ **DONE**
 
@@ -534,29 +548,71 @@ validation, resume pre-population and the two dispatch branches in `libs/core/sr
 snapshot round-trips through `resume` so the pre-checkpoint step does not re-run. Host JSONL journal
 deferred to W9 (its only consumer).
 
-### W9 — The planning + slice pipeline  ⬜ **NOT STARTED**
+### W9 — The planning + slice pipeline  🟡 **PARTIAL**
 
-Rewrite `build_live_project` as P1–P5 + per-slice subgraph + transactional promotion + owner-routed
-repair; context budgets per node. The engine features it needs (W8: `subgraph`/`checkpoint`/dynamic
-`forEach`) are done and unused — nothing consumes them yet. `build_live_project` is still the original
-23-node CONTRACT→BUILD→PROVE DAG (`01-read_sources … 18-finalize`).
-**Acceptance:** slice 0 promotes in ≤3 min; killing the run mid-build leaves an openable green app.
+`09b-plan_slices.ts` (host-run, deterministic): groups the validated design into ordered,
+self-contained vertical slices — tables topologically sorted on FK dependency, endpoints/pages bucketed
+by the deepest table they touch, an automation riding the slice that introduces the table it reacts to.
+Pure function, unit-tested (dependency ordering, self-contained payloads, dead-planned artifacts never
+dropped, cycle degrade). Three `checkpoint: true` barriers (`checkpoint_tables`/`checkpoint_endpoints`/
+`checkpoint_ui`) are wired into the EXISTING linear `build_live_project` DAG for real crash-resume value
+today: a run killed mid-build resumes past whichever phase already landed. `finalize` reports
+`plan_slices.sliceCount`, informational only.
 
-### W10 — Gate ladder completion  ⬜ **NOT STARTED**
+> **Engine gap found while implementing, honestly scoped rather than papered over.** The current
+> `forEach`-over-`subgraph` primitive (W8) runs its fan-out **concurrently** (`Promise.all`), and a
+> subgraph naming a tasklist already on the call stack is a hard cycle error — so there is no way,
+> today, to run a dynamic-length list of slices ONE AT A TIME with each fully promoted (built + gated)
+> before the next begins, which is what "the app is openable after slice 0, and after every promotion"
+> literally requires. `plan_slices` is therefore a real, tested, PARKED foundation — like W8's
+> checkpoint journal was parked for W9 — not a wired execution loop; `build_live_project` still runs the
+> original monolithic `implement_*` nodes. Continuing this needs either a new "sequential fold" engine
+> primitive, or redesigning slices to be safe under concurrent execution (duplicate a shared earlier
+> table's write across every slice that needs it, relying on `writeProjectTable`/`writeProjectEntity`'s
+> idempotent merge instead of de-duplicating).
 
-L2 grounding, L10 interaction probes, L11 round-trip, L12 promotion; G1–G4 from §6. Of G1–G4, only
-**G2** (native-coverage gate) exists today (from W1). **Add here:** a real **by-path, effect-firing
-render probe** — the two host bugs above (route precedence, `from`-envelope) both passed every existing
-gate because L7/L9 route by name and mount without fetching; a probe that drives the app the way the
-browser does (match by path, fire the query) is the gate that would have caught them.
-**Acceptance:** each gate has a red fixture and a green fixture.
+**Acceptance:** NOT met (slice 0 does not yet promote independently — see the gap above). The
+checkpoint-resume half ("killing the run mid-build leaves an openable green app") is real for the
+phase boundaries it now covers (tables / endpoints+smoke / UI+verify).
+
+### W10 — Gate ladder completion  🟡 **PARTIAL**
+
+**G1** (rooted import allow-list, `libs/ui/src/view/rooted-imports.test.ts`) and **G3** (tone parity,
+`libs/ui/src/view/tone-parity.test.ts`) are done — both real TS-parser/token-file checks against the
+live tree, both green today. **G2** (native coverage) was already done (W1). **G4** (golden cross-target
+render) is not formalized as its own gate, though the render/native suites already cover much of its
+intent.
+
+A concrete gap the by-path investigation surfaced is fixed: `renderSpecAppSmoke` mounted every
+parameterised route with `params: {}`, so `$route.<param>` silently resolved to nothing on every
+`[id]`-style route (a null binding renders empty, not a throw — invisible). It now extracts each
+route's real param names and supplies a placeholder value.
+
+> **The FULL by-path, effect-firing render probe is NOT done.** Mounting the real `ViewRenderer` via
+> `libs/ui/src/view/router.ts#matchRoutes` against a real path, with real `useEffect`-fired data
+> fetching (the only way to genuinely reproduce what a browser does, and the only way that would have
+> caught BOTH live host bugs — route precedence needs by-path matching, the `from`-envelope bug needs
+> real effects to run) needs `jsdom` + `@testing-library/react` added to `libs/cli` (today a
+> `libs/ui`-only devDependency), with careful handling of the react18(cli)/react19(ui) version split
+> `validate.ts` already works around defensively for its OWN `renderToStaticMarkup` path. That's a real,
+> larger lift, correctly deferred rather than rushed under time pressure.
+
+L2 (entity-model grounding — W7's `EntityField.source` exists but is not yet enforced by a gate), L10
+(interaction probes), L11 (round-trip) and L12 (promotion — blocked on W9's parked slice execution)
+remain **NOT STARTED**.
+**Acceptance:** partially met — G1/G3 each have a green fixture (the live tree) proven today; a
+red-fixture pair for each (a deliberately broken tree asserting the gate fails) is a fast follow-up, not
+yet written.
 
 ---
 
 ## 11a. What is built, and what it was proven against
 
-**Status: W1–W6 and W8 are implemented and on `main`. W7, W9, W10 are not started** (W10 has only G2).
-The evidence, in the order it was produced:
+**Status: W1–W8 are implemented and on `main`. W9 and W10 are PARTIAL** — see each section above for
+exactly what landed and what's honestly still open (an engine gap for W9's sequential slice execution;
+the full by-path effect-firing render probe plus L2/L10/L11/L12 for W10). W7's declarative query IR is
+structurally proven (end-to-end runtime tests) but not yet measured against a real scenario build for
+the ≥85%-declarative acceptance number. The evidence, in the order it was produced:
 
 | gate | result |
 |---|---|
