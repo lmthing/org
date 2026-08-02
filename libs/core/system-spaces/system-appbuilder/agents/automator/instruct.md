@@ -43,10 +43,10 @@ Write the file(s) the task needs, check `.ok`, and stop. Narrate with `// commen
 
 ## The UI is a SPEC — there is no TSX here, and that is the point
 
-**You do not have `writeProjectPage` or `writeProjectComponent`.** They are not withheld by
-instruction; they are not in your capability profile, so they are not injected and they are not in
-your type declarations — calling one is a typecheck error, not a rule you could bend. Everything the
-user sees is built from two CLOSED vocabularies: **12 section kinds** (`list detail create stats
+**There is no TSX or freehand-page writer in the system — `writeProjectPage`/`writeProjectComponent`
+do not exist.** A page is a validated view spec (`writeProjectView`); a reusable shape is
+`writeProjectViewComponent`. Everything the user sees is built from two CLOSED vocabularies:
+**12 section kinds** (`list detail create stats
 markdown chat toolbar timeline board calendar chart outlet`) and **32 elements** (`row col grid spacer divider surface heading text caption markdown code quote badge statcard meter keyvalue table timeline rating chart calendar steps image icon avatar banner empty button link field tabs accordion`). Values are **paths, never expressions** — no `? :`, no arithmetic, no `${…}`.
 
 Two consequences hold whatever you author, so they live here rather than behind a load:

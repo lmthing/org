@@ -654,8 +654,6 @@ async function main(): Promise<void> {
             writeProjectEvent: projectAuthoring.writeProjectEvent,
             writeProjectFunction: projectAuthoring.writeProjectFunction,
             writeProjectTable: projectAuthoring.writeProjectTable,
-            writeProjectPage: projectAuthoring.writeProjectPage,
-            writeProjectComponent: projectAuthoring.writeProjectComponent,
             writeProjectView: projectAuthoring.writeProjectView,
             writeProjectViewLayout: projectAuthoring.writeProjectViewLayout,
             writeProjectViewComponent: projectAuthoring.writeProjectViewComponent,

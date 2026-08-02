@@ -426,12 +426,26 @@ composes the chain; `validate.ts` enforces exactly-one-outlet in a layout and no
 projects keep serving.
 **Acceptance:** a v1 project still serves; a new project is written as v2; `pnpm test libs/cli/src/app` green.
 
-### W5 — Legacy TSX removal
+### W5 — Legacy TSX removal  ✅ **DONE**
 
-Delete `pages:write`, `writeProjectPage`, `writeProjectComponent`, `buildApp()`, their DTS fragments
-and injection sites; convert the six catalog apps to v2 specs; delete the TSX branch of the page build.
-**Acceptance:** no `pages:write` in the codebase; the catalog installs and renders; conversion gaps
-reported as `cannotExpress`.
+Deleted the `pages:write` capability (union, `CAPABILITY_IDS`, `BARE_ONLY`, `AppCapabilities` field), the
+model-facing writers `writeProjectPage`/`writeProjectComponent` and the `buildApp()` yield global
+(`globals/build-app.ts`, the `'buildApp'` yield kind, `buildAppResolver`, every threading site), their
+DTS fragments (`PROJECT_PAGE_DTS`/`PROJECT_COMPONENT_DTS`/`BUILD_APP_DTS`) and injection sites, plus the
+cli lint helpers (`lintPageSource`/`lintComponentSource` + their dead siblings) and the `'page'`/
+`'component'` kinds of `saveTypecheckError`. Every appbuilder/architect/thing/engineer knowledge + prompt
+that named a TSX writer or `pages:write` was reworded to the surviving contract (`views:write` is the sole
+UI-authoring grant; a page is validated spec data — no freehand-TSX writer exists to grant). `writeProjectApi`,
+the four `writeProjectView*` writers, and the host-side check (`runProjectAppCheck`/`buildProjectApp`, still
+reached via a CODE node's `ctx.buildProjectApp()`) are untouched.
+
+The catalog TSX example apps were **deleted, not migrated** (per the request) — they are not part of the
+`sdk/org` build and W6 removes the per-project page build that served them.
+
+**Acceptance met:** `pages:write` and the legacy writers exist nowhere in the code; `pnpm typecheck` (9/9)
+and the full suite (**3360 passed**) are green; the surviving `views:write` path keeps its coverage
+(capability, DTS-fragment, and cross-target render tests). The `org/docs` source-of-truth pass follows in
+the same change.
 
 ### W6 — One renderer, zero project build
 

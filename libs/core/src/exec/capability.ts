@@ -6,7 +6,7 @@ import type { AppCapabilities } from '../spaces/capabilities.js';
  * capability — the app grants are intersected with `allowWrite`, exactly as the
  * host-tools write gate withholds `writeFileRaw`. Only the read/outbound grants
  * (`db:read`, `api:call`, `connections:use`, `store:read`) survive; every
- * mutating/authoring grant (`db:write`/`db:schema`/`pages:write`/`api:write`/
+ * mutating/authoring grant (`db:write`/`db:schema`/`views:write`/`api:write`/
  * `hooks:write`/`knowledge:write`/`store:install`/`events:emit`) is dropped. NOTE: `connections:use`
  * can have a side-effect (POST to an external service), but is treated as
  * outbound like `api:call` — the caller's own read-only intent governs, not the
@@ -119,7 +119,7 @@ export interface CapabilityProfile {
   /** Raw CDP against the desktop's visible browser. Consent-gated on top of the capability. */
   browserCdp: boolean;
   /** Project-app capability grants (`capabilities:` frontmatter → parsed `AppCapabilities`).
-   *  Drives BOTH which app globals `createChildVM` injects (`db.*`/`apiCall`/`writeProjectPage`/…)
+   *  Drives BOTH which app globals `createChildVM` injects (`db.*`/`apiCall`/`writeProjectView`/…)
    *  AND which capability fragments `buildAmbientDts` emits — kept in lockstep exactly like
    *  the boolean flags above. Empty (`{}`) for any agent that declares no `capabilities:`
    *  (the default), so a session/fork/delegate with no app grants injects no app globals and

@@ -486,7 +486,6 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             knowledgeBaseDirs: [space.dir + '/knowledge', ...systemSpaces.map((s) => s.dir + '/knowledge')],
             apiCallResolver: opts.appGlobals?.apiCall,
             apiCallAllow: capabilities.app['api:call']?.allow,
-            buildAppResolver: opts.appGlobals?.buildApp,
             connectionResolver: opts.appGlobals?.callConnection,
             documentResolver: opts.documentResolver,
             // Store search/inspect + manual emits work in delegates (system-store

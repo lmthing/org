@@ -4,10 +4,9 @@ description: LOAD WHEN you are about to hand-author a view, a view component or 
 
 ## The UI is a SPEC — there is no TSX here, and that is the point
 
-**You do not have `writeProjectPage` or `writeProjectComponent`.** They are not withheld by
-instruction; they are not in your capability profile, so they are not injected and they are not in
-your type declarations — calling one is a typecheck error, not a rule you could bend. Everything the
-user sees is built from two closed vocabularies:
+**There is no TSX or freehand-page writer in the system — `writeProjectPage`/`writeProjectComponent`
+do not exist.** A page is a validated view spec (`writeProjectView`); a reusable shape is
+`writeProjectViewComponent`. Everything the user sees is built from two closed vocabularies:
 
 - **12 section kinds** — `list`, `detail`, `create`, `stats`, `markdown`, `chat`, `toolbar`,
   `timeline`, `board`, `calendar`, `chart`, `outlet`. A page is `{ route, title?, sections: [ … ] }`,

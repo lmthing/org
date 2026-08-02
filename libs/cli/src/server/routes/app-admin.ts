@@ -490,8 +490,8 @@ export function handleRebuild(
 /**
  * `POST /api/projects/:projectId/app/check` — the AUTHORITATIVE build verdict:
  * `{ ok, built, routes, errors }` from {@link runProjectAppCheck}, i.e. the project-app typecheck
- * FOLLOWED BY the esbuild bundle. This is the same call behind the agent's `buildApp()` global and
- * the `verify` code node, so all three agree.
+ * FOLLOWED BY the esbuild bundle. This is the same call the `verify` code node makes via
+ * `ctx.buildProjectApp()`, so the HTTP verdict and the build gate agree.
  *
  * Deliberately SEPARATE from `POST .../app/build`, which runs {@link buildProjectPages} — esbuild
  * only, no typecheck — and is what actually serves the app. That tolerance is intentional and stays:

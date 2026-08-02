@@ -6,8 +6,7 @@
  * (the esbuild bundle) — it never ran `generateProjectContracts` (the SAME per-endpoint
  * `ts-json-schema-generator` pass `POST .../app/build` runs, via `pages.ts#runBuild` →
  * `schema.ts#generateAppTypes`) on its own, so a contract-generation throw either propagated
- * UNCAUGHT out of `buildApp()` (the agent-facing global — see `libs/core/src/globals/
- * build-app.ts`) or, if it happened to be swallowed somewhere downstream, left `POST
+ * UNCAUGHT out of `runProjectAppCheck` or, if it happened to be swallowed somewhere downstream, left `POST
  * .../app/check` reporting `ok:true` for a project `POST .../app/build` could not actually
  * build. These tests reproduce a contract-gen failure that `typecheckProjectApp` genuinely
  * cannot see (a malformed `database/*.json` — `typecheckProjectApp`'s `SOURCE_DIRS` are

@@ -20,9 +20,9 @@ describe('narrowAppCaps — per-node capability narrowing (SELECT ∩ DECLARED, 
   });
 
   it('drops a selected cap the agent never declared (cannot widen)', () => {
-    const narrowed = narrowAppCaps(agent, ['db:read', 'pages:write']);
+    const narrowed = narrowAppCaps(agent, ['db:read', 'views:write']);
     expect(narrowed).toEqual({ 'db:read': { tables: ['legs'] } });
-    expect(narrowed['pages:write']).toBeUndefined();
+    expect(narrowed['views:write']).toBeUndefined();
   });
 
   it('an empty allow list yields an empty set (a node that opted into nothing)', () => {

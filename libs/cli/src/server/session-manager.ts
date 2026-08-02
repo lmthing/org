@@ -36,7 +36,6 @@ import { createApiRuntime, type ApiRuntime } from '../app/api/runtime.js';
 import type { ProjectDb } from '../app/store.js';
 import { createProjectAuthoringGlobals, type ProjectAuthoringGlobals } from '../app/authoring/index.js';
 import { generateProjectContracts, type ProjectContracts } from '../app/build/contracts.js';
-import { runProjectAppCheck } from '../app/build/check.js';
 import { loadAllHooks } from '../app/hooks/index.js';
 import { ProjectHookRuntime } from '../app/hooks/runtime.js';
 import { scanEmitterDefs } from './emitter-manifests.js';
@@ -893,17 +892,10 @@ export class SessionManager {
       // (same runtime the browser + hooks use). Only present when the project has
       // an `api/` dir; the yield router rejects apiCall() otherwise.
       ...(apiRt ? { apiCall: (name: string, input?: unknown) => unwrapApiCall(apiRt, name, input) } : undefined),
-      // Agent-facing buildApp — build + programmatically check THIS project's live app
-      // (lint → typecheck → esbuild) and return the structured error list. The build gate
-      // node calls it to drive the app to type-correct-or-fail-loud; a clean run is the
-      // sole authoritative build (sets built:true for all routes). Bound to the project root.
-      buildApp: () => runProjectAppCheck(join(root, projectId)),
       writeProjectHook: projectAuthoring.writeProjectHook,
       writeProjectEvent: projectAuthoring.writeProjectEvent,
       writeProjectFunction: projectAuthoring.writeProjectFunction,
       writeProjectTable: projectAuthoring.writeProjectTable,
-      writeProjectPage: projectAuthoring.writeProjectPage,
-      writeProjectComponent: projectAuthoring.writeProjectComponent,
       writeProjectView: projectAuthoring.writeProjectView,
       writeProjectViewLayout: projectAuthoring.writeProjectViewLayout,
       writeProjectViewComponent: projectAuthoring.writeProjectViewComponent,

@@ -4,7 +4,7 @@
  *
  * Three things are being proven here, in order of how much they matter:
  *
- *  1. **a rejection reaches the model as a retryable throw**, exactly as `writeProjectPage`'s
+ *  1. **a rejection reaches the model as a retryable throw**, exactly as `writeProjectApi`'s
  *     lint does — a `{ ok:false }` a tasklist node can ignore is not a gate;
  *  2. **nothing lands on a rejection** — a half-validated spec on disk is worse than no spec,
  *     because the next gate reads it as intentional;

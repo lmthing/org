@@ -39,7 +39,7 @@ const projectContext = (session: Session) =>
 
 describe('Session — a cross-project delegate rebinds the code-node factory to its target', () => {
   // THING lives in `user` and builds INTO `tanzania-trip`. The agent-node writers (appGlobals) rebind
-  // to the target so `writeProjectComponent` lands there; the CODE-node factory must rebind too, or a
+  // to the target so `writeProjectView` lands there; the CODE-node factory must rebind too, or a
   // code node like `emit_types` writes `types/contract.d.ts` into `user` while every generated
   // `import '../types/contract'` resolves against `tanzania-trip` — module-not-found on every file.
   // Confirmed in 06-tanzania run 35 (19 typecheck errors, all "Cannot find module '../../types/

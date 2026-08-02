@@ -18,14 +18,14 @@ import type { AppCapabilities } from '../spaces/capabilities.js';
 describe('a read-only caller cannot be granted the writers', () => {
   const full: AppCapabilities = {
     'db:read': {}, 'db:write': {}, 'db:schema': {},
-    'pages:write': true, 'views:write': true, 'api:write': true, 'hooks:write': true,
+    'views:write': true, 'api:write': true, 'hooks:write': true,
     'knowledge:write': {}, 'store:read': true, 'store:install': true, 'events:emit': true,
     'team:read': true, 'team:post': true, 'api:call': { allow: ['x'] },
   } as AppCapabilities;
 
   it('drops every write grant, including the team writer', () => {
     const ro = intersectAppCaps(full, false);
-    for (const denied of ['db:write','db:schema','pages:write','views:write','api:write','hooks:write','knowledge:write','store:install','events:emit','team:post']) {
+    for (const denied of ['db:write','db:schema','views:write','api:write','hooks:write','knowledge:write','store:install','events:emit','team:post']) {
       expect(ro[denied as keyof AppCapabilities], `${denied} must not survive`).toBeUndefined();
     }
   });

@@ -38,9 +38,9 @@ project?"* — and `messages.ts` is how either answer is phrased, because a reje
 not name the finite valid set costs a fork per retry.
 
 The writers that call all of this live in [`../authoring/globals.ts`](../authoring/globals.ts)
-(`writeProjectView` · `writeProjectViewComponent` · `writeProjectViewShell`), gated on
-**`views:write`** — a separate capability from `pages:write`, which is what makes freehand TSX in
-every `system-appbuilder` agent a typecheck error rather than a policed instruction.
+(`writeProjectView` · `writeProjectViewLayout` · `writeProjectViewComponent` · `writeProjectViewShell`),
+gated on **`views:write`** — the sole UI-authoring capability. There is no freehand-TSX writer in the
+system, so a non-spec page isn't a policed instruction — it's unrepresentable.
 
 `schema.ts` is **shape only**. It does not know the project: whether `query: 'listRecipes'`
 is a real endpoint, whether `$.title` is a real Output field, whether `{ use: 'RecipeCard' }`

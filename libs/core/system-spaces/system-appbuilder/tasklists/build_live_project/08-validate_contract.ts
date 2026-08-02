@@ -247,7 +247,7 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
   //
   // A `create` section declares no fields by design: the renderer derives every one from the
   // endpoint's Input JSON Schema. So an absent `input` is not a missing annotation, it is a form with
-  // no fields — the page renders "Nothing to fill in." above a Save button, and `buildApp`,
+  // no fields — the page renders "Nothing to fill in." above a Save button, and `buildProjectApp()`,
   // `validateAppViews` and `renderSmokeViews` all pass, because the spec and the data are both
   // perfectly consistent with a body that was never specified. Caught here, at plan time, because
   // this is the last point where adding it costs one field instead of a re-plan.

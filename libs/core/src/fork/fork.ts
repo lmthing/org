@@ -566,7 +566,6 @@ export class ForkEngine {
           resolveRegisterSpace: true,
           dynamicSpaces: this.opts.dynamicSpaces,
           apiCallResolver: this.opts.appGlobals?.apiCall,
-          buildAppResolver: this.opts.appGlobals?.buildApp,
           connectionResolver: this.opts.appGlobals?.callConnection,
           documentResolver: this.opts.documentResolver,
           // Store discovery + manual emits follow the (role-intersected) app

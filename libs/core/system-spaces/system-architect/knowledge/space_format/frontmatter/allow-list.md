@@ -15,7 +15,7 @@ title, knowledge, functions, components, actions, defaultAction, canDelegateTo, 
   the keys `writeAgentFile` already writes for every scaffolded agent — nothing changes there.
 - `dependencies` is a legacy alias predating `canDelegateTo`; prefer `canDelegateTo` for anything
   new.
-- `capabilities` is the config-bearing key that grants project-app powers (`db:*`, `pages:write`,
+- `capabilities` is the config-bearing key that grants project-app powers (`db:*`, `views:write`,
   `api:write`, `hooks:write`, `api:call`, `project:manage`) — see the `capabilities` aspect. Leave
   it out entirely for a plain (non-app) space; an agent with no `capabilities:` gets none of those
   globals and none of their typecheck DTS surface.

@@ -25,14 +25,11 @@ import { transformSync } from 'esbuild';
 import { validateTableSchema, type TableSchema } from '@lmthing/core';
 import {
   LintError,
-  apiCallSites,
   apiHandlerTypingError,
   braceBody,
   existingApiNames,
   lintApiHandler,
-  lintComponentSource,
   lintHookSource,
-  lintPageSource,
   topLevelKeys,
 } from './lint.js';
 import { saveTypecheckError } from './save-typecheck.js';
@@ -91,44 +88,6 @@ function assertSourceParses(src: string, loader: 'ts' | 'tsx'): void {
     const msg = e instanceof Error ? e.message : String(e);
     throw new Error(`source failed to parse (write rejected — fix and retry): ${msg.split('\n')[0]}`);
   }
-}
-
-/**
- * The API routes a page source actually FETCHES — every `useApi('x')` / `useApiMutation('x')` /
- * `apiCall('x')` whose route is a literal first argument. This is the page's data: a page that
- * fetches nothing renders nothing (a `@app/runtime` page has no other way to reach the db).
- */
-function fetchedRoutes(src: string): string[] {
-  return [...new Set(apiCallSites(src).map((s) => s.name))];
-}
-
-/**
- * Guard a page OVERWRITE that would drop the page's data. Returns an error message when
- * `file` already exists, already fetches ≥1 API route, and `src` fetches none of them —
- * i.e. the replacement deletes every section the user could see. Returns `undefined`
- * (allowed) for a new page, for a page that fetched nothing anyway, or for a rewrite that
- * keeps at least one of the routes it had (a genuine edit/refactor, not a wipe).
- */
-function wouldDropData(file: string, src: string): string | undefined {
-  if (!existsSync(file)) return undefined;
-  let before: string;
-  try {
-    before = readFileSync(file, 'utf8');
-  } catch {
-    return undefined;
-  }
-  const had = fetchedRoutes(before);
-  if (had.length === 0) return undefined;
-  const now = fetchedRoutes(src);
-  if (had.some((r) => now.includes(r))) return undefined;
-  const rel = file.split(`${sep}pages${sep}`).pop() ?? file;
-  return (
-    `refusing to overwrite pages/${rel}: the page you are replacing fetches ${had.join(', ')} and the ` +
-    `new source fetches ${now.length ? now.join(', ') : 'nothing'} — this DELETES the section(s) the user ` +
-    `already has (they open the app to an empty page). Read it first — readProjectFile('pages/${rel}').content — ` +
-    `and EXTEND it (keep its existing sections and ADD yours). Pass { replace: true } only if the user ` +
-    `explicitly asked you to remove those sections.`
-  );
 }
 
 /** Project ids and hook slugs are a lowercase kebab-slug: letters/digits/hyphen,
@@ -222,11 +181,8 @@ export interface ProjectAuthoringGlobals {
    *  injected until a table already exists, so an agent could not otherwise insert into a
    *  table it just created. */
   writeProjectTable: (name: string, schema: unknown, rows?: unknown[]) => { ok: boolean; error?: string };
-  /** Write `<projectRoot>/pages/<route>.tsx` (a React page) — the LIVE-project
-   *  counterpart of the catalog's `writePage`. */
-  writeProjectPage: (route: string, src: string, opts?: { replace?: boolean }) => { ok: boolean; error?: string };
   /** Write `<projectRoot>/pages/<route>.view.json` (a VIEW SPEC) plus its generated
-   *  `pages/<route>.tsx` wrapper — the `system-appbuilder` counterpart of `writeProjectPage`.
+   *  `pages/<route>.tsx` wrapper — the ONE UI-authoring surface (`system-appbuilder`).
    *
    *  A view is data, not TSX: the spec is validated against the project's endpoint contracts at
    *  save time (`view-spec/validate.ts#validateViewSpec`) and rendered by the shared
@@ -256,10 +212,6 @@ export interface ProjectAuthoringGlobals {
    *  gate that can see a page which is structurally perfect and empty. Absent api runtime ⇒ it
    *  reports `unavailable: true` rather than an empty (i.e. "clean") finding list. */
   renderSmokeViews: () => Promise<RenderSmokeResult>;
-  /** Write `<projectRoot>/components/<Name>.tsx` (a shared React component a page imports).
-   *  Name is PascalCase. There is no space-rooted fs writer for this — the typed writer IS
-   *  the surface, so an app can gain shared components without any generic filesystem access. */
-  writeProjectComponent: (name: string, src: string) => { ok: boolean; error?: string };
   /** Write `<projectRoot>/api/<path>/<METHOD>.ts` (a typed API handler) — the
    *  LIVE-project counterpart of the catalog's `writeApi`. */
   writeProjectApi: (route: string, src: string) => { ok: boolean; error?: string };
@@ -270,15 +222,14 @@ export interface ProjectAuthoringGlobals {
   /** Read a project file's text (`<projectRoot>/<path>`). Project-rooted; the read twin of the
    *  writers, for inspecting an existing table schema / page / hook before editing it. */
   readProjectFile: (path: string) => { ok: boolean; content: string; error?: string };
-  /** Typecheck + bundle the project app, returning the SAME structured result as the agent-facing
-   *  `buildApp()` global (which resolves to the very same {@link runProjectAppCheck}).
+  /** Typecheck + bundle the project app (lint → typecheck → esbuild), returning the same
+   *  structured result {@link runProjectAppCheck} produces.
    *
-   *  This exists so a tasklist **code node** can gate a build. `buildApp()` is a sandbox yield, so
-   *  it is reachable only from a model turn — which meant every build gate had to be ~50 lines of
-   *  scanning TypeScript re-emitted by the model on each run. In one real scenario run that
-   *  accounted for 35% of all errors (`'gateErrors' is not defined` cascades), and a gate that
-   *  fails to execute contributes no findings, so the pipeline reads its empty result as "clean".
-   *  Exposing it host-side lets the gate be deterministic. */
+   *  This exists so a tasklist **code node** can gate a build deterministically, without asking a
+   *  model turn to re-emit ~50 lines of scanning TypeScript on every run — which, in one real
+   *  scenario run, accounted for 35% of all errors (`'gateErrors' is not defined` cascades), and a
+   *  gate that fails to execute contributes no findings, so the pipeline reads its empty result as
+   *  "clean". Exposing it host-side lets the gate be deterministic. */
   buildProjectApp: () => Promise<AppCheckResult>;
   /** Write a GENERATED type-declaration file under the project root — narrowly scoped to
    *  `types/*.d.ts`, and refusing `types/generated.d.ts`.
@@ -286,9 +237,9 @@ export interface ProjectAuthoringGlobals {
    *  Every other artifact goes through a TYPED writer that validates its contract at write time,
    *  which is the whole design (`lint.ts`); a general-purpose file writer would route around that.
    *  But the contract `emit_types` produces from the plan is not an artifact any of them accept —
-   *  `writeProjectComponent` throws a LintError for source with no default-exported React
-   *  component, and a throw in a code node aborts the tasklist. So the escape hatch exists, and is
-   *  kept as small as the one job requires. */
+   *  every typed writer throws a LintError for a shape it does not recognize, and a throw in a
+   *  code node aborts the tasklist. So the escape hatch exists, and is kept as small as the one
+   *  job requires. */
   writeProjectFile: (path: string, contents: string) => { ok: boolean; error?: string };
   /** Invoke one of the PROJECT'S OWN api endpoints by its `export const name`, returning the real
    *  `{ status, body }` the browser would get — the same `ApiRuntime` the served app and hooks enter.
@@ -339,7 +290,7 @@ export function createProjectAuthoringGlobals(opts: {
    *  a table it just created — `db` isn't injected until a table exists — so seeding is done
    *  host-side here). Fire-and-forget, like `republish`. */
   onSchemaWrite?: (table: string, rows?: unknown[]) => void;
-  /** Called after a successful `writeProjectPage`/`writeProjectApi` — the host rebuilds
+  /** Called after a successful `writeProjectView`/`writeProjectApi`/… — the host rebuilds
    *  the project's pages (so `/app/<id>/` serves the new UI) and drops any cached page-build
    *  or endpoint-contract state. Fire-and-forget, like `republish`. */
   onAppWrite?: (kind: 'page' | 'api' | 'component', route: string) => void;
@@ -601,59 +552,10 @@ export function createProjectAuthoringGlobals(opts: {
     return out;
   }
 
-  /**
-   * Write a React page into the LIVE project (`pages/<route>.tsx`) and tell the host to
-   * rebuild the project's pages. The live twin of the catalog `writePage`: without it a
-   * project the user is actually working in can gain a data model + automation
-   * (writeProjectTable/Hook) but never a UI — "turn this into an app I can open" would
-   * dead-end because the automator has only `writeProjectTable`, and an attempt to call a
-   * page writer fails typecheck (found live in scenario 05: `Cannot find name
-   * 'writeProjectPage'`). Route validation + `.tsx` normalization mirror the catalog writer.
-   *
-   * **Overwrites are guarded** (see {@link fetchedRoutes}). An app grows over its life: a
-   * later "add an invoices section" turn that re-authors `pages/index.tsx` from scratch
-   * silently DELETES the dashboard the user already had — the app still builds, every route
-   * still 200s, and the user opens their vault to an empty page. Found live in scenario 07:
-   * the home page came back as a stub linking to the newest section while `/vault-dashboard`
-   * (which nothing fetched any more) still served the whole household. So: replacing a page
-   * that fetches data with one that fetches NONE of it is rejected — the agent reads it and
-   * extends it, or says it means it with `{ replace: true }`.
-   */
-  function writeProjectPage(
-    route: string,
-    src: string,
-    opts?: { replace?: boolean },
-  ): { ok: boolean; error?: string } {
-    let rel: string;
-    try {
-      rel = assertPathSegments('page route', route);
-      if (!rel.endsWith('.tsx')) rel = `${rel}.tsx`;
-      assertSourceParses(src, 'tsx');
-      throwLint(lintPageSource(src, { projectRoot }));
-      throwLint(saveTypecheckError({ projectRoot, relPath: `pages/${rel}`, src, kind: 'page' }));
-    } catch (e) {
-      if (e instanceof LintError) throw e;
-      return { ok: false, error: String(e instanceof Error ? e.message : e) };
-    }
-    if (!opts?.replace) {
-      const clobbered = wouldDropData(join(projectRoot, 'pages', rel), src);
-      if (clobbered) return { ok: false, error: clobbered };
-    }
-    const out = writeUnder(join('pages', rel), src);
-    if (out.ok) {
-      try {
-        onAppWrite?.('page', route);
-      } catch {
-        /* best-effort — the page file already landed */
-      }
-    }
-    return out;
-  }
-
   // ── view specs (system-appbuilder) ────────────────────────────────────────
   //
-  // The same four-step shape as `writeProjectPage` above — validate, `throwLint`, `writeUnder`,
-  // `onAppWrite` — over a different medium. Consistency with its siblings is the point: a writer
+  // The same four-step shape throughout — validate, `throwLint`, `writeUnder`, `onAppWrite` —
+  // over a different medium each time. Consistency across the family is the point: a writer
   // that reported failures differently would need its own retry handling in every prompt that
   // calls it.
 
@@ -733,7 +635,7 @@ export function createProjectAuthoringGlobals(opts: {
    * rejection), every `$.field` against the endpoint's declared Output, every `{ use: … }`
    * reference and its props, every `reveals`/`$data.<id>` target, every `navigate` route.
    *
-   * A failure THROWS a {@link LintError}, exactly like `writeProjectPage`'s lint: the model sees a
+   * A failure THROWS a {@link LintError}, exactly like `writeProjectApi`'s lint: the model sees a
    * retryable, menu-shaped error in the same turn it wrote the spec, which is the whole reason the
    * checks live in the writer rather than in a downstream gate.
    */
@@ -942,36 +844,6 @@ export function createProjectAuthoringGlobals(opts: {
     return out;
   }
 
-  /**
-   * Write a shared React component into the LIVE project (`components/<Name>.tsx`) and tell the
-   * host to rebuild the project's pages (a page may now import it). The typed twin of a page
-   * writer for shared UI: without it an app-authoring agent that wants a reusable `<TripCard>`
-   * had no typed writer and would have reached for the (now removed) space-rooted `writeFile`,
-   * which mis-roots. `<Name>` is PascalCase; `.tsx` is enforced.
-   */
-  function writeProjectComponent(name: string, src: string): { ok: boolean; error?: string } {
-    try {
-      if (!COMPONENT_NAME_RE.test(name)) {
-        throw new Error(`component name "${name}" is not PascalCase (expected /${COMPONENT_NAME_RE.source}/)`);
-      }
-      assertSourceParses(src, 'tsx');
-      throwLint(lintComponentSource(src, { projectRoot }));
-      throwLint(saveTypecheckError({ projectRoot, relPath: `components/${name}.tsx`, src, kind: 'component' }));
-    } catch (e) {
-      if (e instanceof LintError) throw e;
-      return { ok: false, error: String(e instanceof Error ? e.message : e) };
-    }
-    const out = writeUnder(join('components', `${name}.tsx`), src);
-    if (out.ok) {
-      try {
-        onAppWrite?.('component', name);
-      } catch {
-        /* best-effort — the component file already landed */
-      }
-    }
-    return out;
-  }
-
   /** List `<projectRoot>/<dir>` — project-rooted introspection (the read twin of the writers).
    *  A missing dir returns `entries: []` (not an error) so an agent can safely check "what tables
    *  exist?" on a fresh project. `safeResolve` keeps it inside the project (no traversal). */
@@ -997,8 +869,8 @@ export function createProjectAuthoringGlobals(opts: {
     }
   }
 
-  /** Host-side twin of the agent's `buildApp()` — same `runProjectAppCheck`, reachable from a
-   *  tasklist code node so a build gate can be deterministic rather than model-emitted. */
+  /** `runProjectAppCheck`, reachable from a tasklist code node so a build gate can be
+   *  deterministic rather than model-emitted. */
   const buildProjectApp = (): Promise<AppCheckResult> => runProjectAppCheck(opts.projectRoot);
 
   /** Write a GENERATED, non-artifact file under the project root (`types/contract.d.ts`). */
@@ -1010,9 +882,9 @@ export function createProjectAuthoringGlobals(opts: {
         error:
           `writeProjectFile("${path}") refused: only \`types/*.d.ts\` may be written this way. ` +
           'Every other artifact has a TYPED writer that validates it (writeProjectTable / ' +
-          'writeProjectApi / writeProjectPage / writeProjectComponent / writeProjectHook / ' +
-          'writeProjectEvent / writeProjectFunction) — use the one for the artifact you are ' +
-          'authoring, so its contract is checked at write time.',
+          'writeProjectApi / writeProjectView / writeProjectHook / writeProjectEvent / ' +
+          'writeProjectFunction) — use the one for the artifact you are authoring, so its ' +
+          'contract is checked at write time.',
       };
     }
     if (rel === 'types/generated.d.ts') {
@@ -1034,15 +906,13 @@ export function createProjectAuthoringGlobals(opts: {
     writeProjectEvent,
     writeProjectFunction,
     writeProjectTable,
-    writeProjectPage,
-    writeProjectComponent,
     writeProjectApi,
     writeProjectView,
     writeProjectViewLayout,
     writeProjectViewComponent,
     writeProjectViewShell,
-    // Host-side gates, reachable from a tasklist CODE node (like `buildProjectApp`). `16-verify`
-    // merges these two structured lists with `buildApp`'s; `17-fix` fans out over the union.
+    // Host-side gates, reachable from a tasklist CODE node (like `buildProjectApp` itself). `16-verify`
+    // merges these two structured lists with `buildProjectApp`'s; `17-fix` fans out over the union.
     validateAppViews: () => validateAppViews(opts.projectRoot),
     renderSmokeViews: () => renderSmokeViews(opts.projectRoot, { call: callProjectApi as ApiCaller | undefined }),
     listProjectDir,

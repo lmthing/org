@@ -413,8 +413,8 @@ An agent's \`capabilities:\` frontmatter grants globals — \`db:read\`, \`db:wr
 The rule that matters when you are debugging: **not granted means not injected AND absent from the
 type declarations.** So calling an ungranted global is a *typecheck* error, not a runtime one, and
 not a rule the model could bend. If an agent "refuses" to write a page, check whether it holds
-\`views:write\` (spec pages) or \`pages:write\` (TSX pages) — these are disjoint, and today only
-the spec medium has an author.
+\`views:write\` — the sole UI-authoring grant. A page is validated view-spec data (there is no
+freehand-TSX writer in the system), so a missing \`views:write\` is why the author isn't there.
 
 ---
 

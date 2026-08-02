@@ -301,7 +301,8 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     }),
   );
   // The AUTHORITATIVE verdict (typecheck THEN bundle) — `app/build` above is esbuild-only and
-  // reports `built:true` for an app that does not type-check. Same call as the `buildApp()` global.
+  // reports `built:true` for an app that does not type-check. Same host check the appbuilder runs
+  // via a CODE node's `ctx.buildProjectApp()` (`runProjectAppCheck`).
   router.add('POST', '/api/projects/:projectId/app/check', handleAppCheck(manager, effectiveLmthingRoot));
   router.add('GET', '/api/projects/:projectId/app/data/:table', handleListRows(manager, effectiveLmthingRoot));
   router.add('PATCH', '/api/projects/:projectId/app/data/:table/:id', handleUpdateRow(manager, effectiveLmthingRoot));

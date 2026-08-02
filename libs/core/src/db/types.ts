@@ -155,14 +155,12 @@ export type ApiCallFn = (name: string, input?: unknown) => Promise<unknown>;
  * throw — `ts-json-schema-generator` builds its OWN program per handler FILE (`app/build/
  * schema.ts#buildGeneratorConfig`) and, until it was also given `contract.d.ts` as a root, could
  * not resolve a bare global name like `Output = FlightsOutput` even though `tsc` could. Before
- * this phase existed, a contract-generation throw propagated UNCAUGHT out of `buildApp()` — the
- * model saw a raw exception instead of a retryable `{ok:false, errors:[...]}`, and
+ * this phase existed, a contract-generation throw propagated UNCAUGHT out of the host app check — the
+ * caller saw a raw exception instead of a retryable `{ok:false, errors:[...]}`, and
  * `POST .../app/check` returned a clean `ok:true` for a project that could not actually build
  * (`POST .../app/build` failed). A third `'lint'` member used to be declared here and was never
  * emitted by anything — the write-time contract lint is real (`app/authoring/lint.ts`) but it
- * throws a `LintError` at the WRITER, in the authoring turn; it is not a phase of `buildApp()`.
- * Prompts that promised "buildApp runs the lint" were describing a check that would never appear
- * in this list.
+ * throws a `LintError` at the WRITER, in the authoring turn; it is not a phase of the app check.
  */
 export interface AppCheckError {
   phase: 'typecheck' | 'contract' | 'build';
@@ -173,10 +171,10 @@ export interface AppCheckError {
 }
 
 /**
- * The structured result of building + checking a live-project app — what the
- * model-facing `buildApp()` global resolves. `ok` ⇔ zero errors; `built` ⇔ a clean
- * esbuild bundle was produced (all routes). A non-empty `errors` is a FAIL the caller
- * feeds back and retries (or surfaces loudly), never a partial ship.
+ * The structured result of building + checking a live-project app — what the host
+ * check (`runProjectAppCheck`, reached via a CODE node's `ctx.buildProjectApp()`) resolves.
+ * `ok` ⇔ zero errors; `built` ⇔ a clean esbuild bundle was produced (all routes). A non-empty
+ * `errors` is a FAIL the caller feeds back and retries (or surfaces loudly), never a partial ship.
  */
 export interface AppCheckResult {
   ok: boolean;
@@ -184,9 +182,6 @@ export interface AppCheckResult {
   routes: string[];
   errors: AppCheckError[];
 }
-
-/** Build + programmatically check the session's live-project app (host-supplied). */
-export type AppBuildFn = () => Promise<AppCheckResult>;
 
 /**
  * A single authenticated request to a connected external service, made through

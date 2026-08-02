@@ -15,7 +15,7 @@ describe('parseCapabilities', () => {
       { 'db:read': { tables: ['sources', 'raw_items'] } },
       { 'db:write': { tables: ['raw_items'] } },
       'db:schema', // bare db = all tables
-      'pages:write', // bare authoring
+      'views:write', // bare authoring
       { 'api:call': { allow: ['webSearch', 'markRead'] } },
       { 'connections:use': { providers: ['google', 'slack'] } },
     ];
@@ -24,7 +24,7 @@ describe('parseCapabilities', () => {
       'db:read': { tables: ['sources', 'raw_items'] },
       'db:write': { tables: ['raw_items'] },
       'db:schema': {},
-      'pages:write': true,
+      'views:write': true,
       'api:call': { allow: ['webSearch', 'markRead'] },
       'connections:use': { providers: ['google', 'slack'] },
     };
@@ -83,8 +83,8 @@ describe('parseCapabilities', () => {
   });
 
   it('throws when a bare-only authoring cap is given a config', () => {
-    expect(() => parseCapabilities([{ 'pages:write': { route: '/x' } }], ctx())).toThrow(
-      /"pages:write" takes no config/,
+    expect(() => parseCapabilities([{ 'views:write': { route: '/x' } }], ctx())).toThrow(
+      /"views:write" takes no config/,
     );
   });
 
@@ -130,7 +130,7 @@ describe('parseCapabilities', () => {
   });
 
   it('throws when the same capability is declared twice', () => {
-    expect(() => parseCapabilities(['pages:write', 'pages:write'], ctx())).toThrow(
+    expect(() => parseCapabilities(['views:write', 'views:write'], ctx())).toThrow(
       /more than once/,
     );
   });
@@ -201,20 +201,20 @@ describe('system-space smoke: the new frontmatter allow-list gate breaks nothing
   /**
    * The `system-appbuilder` guarantee is enforced by capability ABSENCE, not by prose. Its whole
    * premise is that the UI is 100% spec — which is what lets the same app render natively in the
-   * mobile app with no WebView — and the mechanism is that no agent in that space holds
-   * `pages:write`. Not granted ⇒ `writeProjectPage`/`writeProjectComponent` are neither injected nor
-   * in the DTS, so an attempt to author freehand TSX is a typecheck error the model can see and
-   * retry, rather than a rule it is asked to respect. A well-meaning "just add pages:write so it can
-   * also write a component" would silently dissolve that, and nothing else in the repo would notice.
+   * mobile app with no WebView — and the mechanism is now that the legacy freehand-TSX writers
+   * (`writeProjectPage`/`writeProjectComponent`) and their `pages:write` capability are DELETED
+   * from the codebase entirely, not merely ungranted. So the guarantee is unconditional: no agent
+   * anywhere can hold `pages:write` (the id no longer exists to declare), and the legacy writers
+   * appear in no agent's DTS, granted or not.
    */
-  it('every system-appbuilder agent holds views:write and NEVER pages:write', async () => {
+  it('every system-appbuilder agent holds views:write; the deleted pages:write id is not a thing to hold', async () => {
     const dirs = defaultSystemSpaceDirs();
     const spaces = await loadSystemSpaces(dirs);
     const appbuilder = spaces.find((s) => s.dir.endsWith('system-appbuilder'));
     expect(appbuilder, 'system-appbuilder loads').toBeTruthy();
 
     for (const [slug, agent] of Object.entries(appbuilder!.agents)) {
-      expect(agent.capabilities?.['pages:write'], `${slug} must not hold pages:write`).toBeUndefined();
+      expect((agent.capabilities as Record<string, unknown> | undefined)?.['pages:write'], `${slug} must not hold pages:write`).toBeUndefined();
     }
     // The UI grant every authoring agent in this space actually carries.
     expect(appbuilder!.agents['automator']!.capabilities?.['views:write']).toBe(true);

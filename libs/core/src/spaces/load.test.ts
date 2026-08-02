@@ -95,12 +95,12 @@ describe('loadSpace agent-frontmatter allow-list gate', () => {
   it('parses capabilities and attaches AppCapabilities to the agent', async () => {
     const dir = await makeSpace({
       'agents/a/instruct.md':
-        '---\ntitle: A\ncapabilities:\n  - db:schema\n  - pages:write\n  - api:call: { allow: [markRead] }\n---\nbody',
+        '---\ntitle: A\ncapabilities:\n  - db:schema\n  - views:write\n  - api:call: { allow: [markRead] }\n---\nbody',
     });
     const space = await loadSpace(dir);
     expect(space.agents['a']!.capabilities).toEqual({
       'db:schema': {},
-      'pages:write': true,
+      'views:write': true,
       'api:call': { allow: ['markRead'] },
     });
   });

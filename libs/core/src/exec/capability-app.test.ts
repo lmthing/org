@@ -14,7 +14,7 @@ describe('intersectAppCaps — read-only roles lose write/authoring grants', () 
     'db:read': { tables: ['a'] },
     'db:write': { tables: ['a'] },
     'db:schema': {},
-    'pages:write': true,
+    'views:write': true,
     'api:write': true,
     'hooks:write': true,
     'api:call': { allow: ['x'] },
@@ -27,7 +27,7 @@ describe('intersectAppCaps — read-only roles lose write/authoring grants', () 
   it('allowWrite:false keeps only read/outbound (db:read, api:call), drops every mutating/authoring grant', () => {
     const ro = intersectAppCaps(full, false);
     expect(ro).toEqual({ 'db:read': { tables: ['a'] }, 'api:call': { allow: ['x'] } });
-    for (const dropped of ['db:write', 'db:schema', 'pages:write', 'api:write', 'hooks:write'] as const) {
+    for (const dropped of ['db:write', 'db:schema', 'views:write', 'api:write', 'hooks:write'] as const) {
       expect(ro[dropped]).toBeUndefined();
     }
   });
@@ -73,37 +73,37 @@ describe('buildAmbientDts — app-capability DTS composition', () => {
     expect((dts.match(/declare const db\b/g) ?? []).length).toBe(1); // single db object
   });
 
-  it('api:call / pages:write / api:write / hooks:write each add their own declaration', () => {
+  it('api:call / views:write / api:write / hooks:write each add their own declaration', () => {
     expect(dtsFor({ 'api:call': { allow: ['x'] } })).toContain('apiCall');
-    expect(dtsFor({ 'pages:write': true })).toContain('writeProjectPage');
+    expect(dtsFor({ 'views:write': true })).toContain('writeProjectView(');
     expect(dtsFor({ 'api:write': true })).toContain('writeProjectApi');
     expect(dtsFor({ 'hooks:write': true })).toContain('writeProjectHook');
   });
 
   /**
-   * The TWO AUTHORING MEDIA are separated by capability, and this is where that separation is
-   * observable end to end: through the real composer, not the fragment map.
-   *
-   * `system-appbuilder` promises apps that are 100% spec and render natively with no WebView.
-   * Nothing in a prompt can promise that — a weak model told "do not write TSX" will write TSX. The
-   * guarantee is that `writeProjectPage` is NOT IN ITS DTS, so the attempt is a typecheck error it
-   * sees and retries. That holds only while `views:write` and `pages:write` are distinct ids: a
-   * profile grants IDs, not globals, so one shared id would hand a spec-only space both writers.
+   * `views:write` is the ONLY UI-authoring capability now that the legacy `pages:write`
+   * (freehand-TSX) capability and its writers (`writeProjectPage`/`writeProjectComponent`/
+   * `buildApp`) are deleted. The guarantee that used to be "each medium is absent from the
+   * other's DTS" collapses to a stronger one: the legacy globals are absent from EVERY agent's
+   * DTS, granted or not, because the format cannot represent freehand TSX at all — "renders
+   * natively" holds by construction, not by a rule a weak model is asked to respect.
    */
-  it('views:write ⇔ pages:write: each medium is absent from the other agent\'s DTS', () => {
+  it('views:write earns the view-spec writers; the deleted legacy TSX writers appear nowhere', () => {
     const viewsOnly = dtsFor({ 'views:write': true });
     expect(viewsOnly).toContain('writeProjectView(');
     expect(viewsOnly).toContain('writeProjectViewComponent(');
+    expect(viewsOnly).toContain('writeProjectViewLayout(');
     expect(viewsOnly).toContain('writeProjectViewShell(');
-    // The whole point: a system-appbuilder agent cannot author freehand TSX, because it cannot NAME it.
+    // The legacy freehand-TSX writers and buildApp are gone entirely — not just ungranted.
     expect(viewsOnly).not.toContain('writeProjectPage(');
     expect(viewsOnly).not.toContain('writeProjectComponent(');
+    expect(viewsOnly).not.toContain('buildApp(');
 
-    const pagesOnly = dtsFor({ 'pages:write': true });
-    expect(pagesOnly).toContain('writeProjectPage(');
-    expect(pagesOnly).toContain('writeProjectComponent(');
-    expect(pagesOnly).not.toContain('writeProjectView(');
-    expect(pagesOnly).not.toContain('writeProjectViewShell(');
+    const noGrants = dtsFor({});
+    expect(noGrants).not.toContain('writeProjectView(');
+    expect(noGrants).not.toContain('writeProjectPage(');
+    expect(noGrants).not.toContain('writeProjectComponent(');
+    expect(noGrants).not.toContain('buildApp(');
   });
 
   it('a read-only role loses views:write like every other authoring grant', () => {

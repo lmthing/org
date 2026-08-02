@@ -1,6 +1,6 @@
 import type { VM } from '../sandbox/quickjs.js';
 import { marshalToQuickJS, injectGlobal } from '../sandbox/host-bridge.js';
-import type { DbApi, QueryOpts, UpdateOpts, Row, ApiCallFn, AppBuildFn, ConnectionResolver } from '../db/types.js';
+import type { DbApi, QueryOpts, UpdateOpts, Row, ApiCallFn, ConnectionResolver } from '../db/types.js';
 import type { AppCapabilities } from '../spaces/capabilities.js';
 import type { StoreResolver } from '../globals/store.js';
 import type { EmitEventResolver } from '../globals/emit-event.js';
@@ -45,14 +45,6 @@ export interface AppGlobalImpls {
    *  `YieldRouterContext.apiCallResolver`), so it can end the turn and resume. The
    *  host (libs/cli) supplies a resolver that re-enters the project's api runtime. */
   apiCall?: ApiCallFn;
-  /** Agent-facing `buildApp` — build + programmatically check the project's live app
-   *  (lint → typecheck → esbuild) and return the structured {@link AppCheckResult}.
-   *  Value-yielding (Promise-returning) like `apiCall`: NOT injected here but wired
-   *  through the yield router (`YieldRouterContext.buildAppResolver`), so the heavy
-   *  esbuild + tsc run host-side without blocking the sandbox bridge. The host (libs/cli)
-   *  supplies a resolver bound to the session's project root. Injected on `pages:write`
-   *  (the same grant as the page/component writers it verifies). */
-  buildApp?: AppBuildFn;
   /** Agent-facing `callConnection` — an authenticated request to a user-connected
    *  external service via the gateway egress proxy. Value-yielding like `apiCall`:
    *  NOT injected here (see `injectAppGlobals`) but wired through the yield router
@@ -106,21 +98,14 @@ export interface AppGlobalImpls {
    *  `<projectRoot>/database/<name>.json` and re-derives the project's db. The ONLY
    *  data-model writer now — a project with no `database/*.json` boots NO db at all. */
   writeProjectTable?: (name: string, schema: unknown) => AuthoringResult;
-  /** LIVE-project page/API writers (the `pages:write`/`api:write` twins): write
-   *  `<projectRoot>/pages/<route>.tsx` / `<projectRoot>/api/<path>/<METHOD>.ts` and
-   *  rebuild the served app. Without them a live project can gain a data model +
-   *  automation but never a UI — "turn this into an app I can open" dead-ends (scenario 05). */
-  writeProjectPage?: (route: string, src: string, opts?: { replace?: boolean }) => AuthoringResult;
+  /** LIVE-project API endpoint writer (`api:write`): writes
+   *  `<projectRoot>/api/<path>/<METHOD>.ts` and republishes the served app. */
   writeProjectApi?: (route: string, src: string) => AuthoringResult;
-  /** LIVE-project shared-component writer (the `pages:write` twin of `writeProjectPage`):
-   *  writes `<projectRoot>/components/<Name>.tsx` and rebuilds the served app. The typed
-   *  surface for shared UI — there is no space-rooted fs writer for it anymore. */
-  writeProjectComponent?: (name: string, src: string) => AuthoringResult;
-  /** LIVE-project VIEW-SPEC writers (also `pages:write`): a page as validated DATA rather than
-   *  TSX, rendered by the shared `ViewRenderer` on the web bundle and natively in the mobile app.
-   *  `writeProjectView` persists the spec and generates the wrapper page that bundles it;
-   *  `writeProjectViewComponent` writes a reusable element composition; `writeProjectViewShell`
-   *  writes the app's navigation. Provided by libs/cli
+  /** LIVE-project VIEW-SPEC writers (`views:write`) — the ONLY UI-authoring surface: a page as
+   *  validated DATA, rendered by the shared `ViewRenderer` on the web bundle and natively in the
+   *  mobile app. `writeProjectView` persists the spec; `writeProjectViewLayout` writes a nested
+   *  layout frame; `writeProjectViewComponent` writes a reusable element composition;
+   *  `writeProjectViewShell` writes the app's navigation. Provided by libs/cli
    *  (`app/authoring/globals.ts#createProjectAuthoringGlobals`), which validates each against the
    *  project's real endpoint contracts and rejects with a menu-shaped error. */
   writeProjectView?: (route: string, spec: unknown) => AuthoringResult;
@@ -237,26 +222,12 @@ export function injectAppGlobals(
     handle.dispose();
   }
 
-  // Live-project page/API authoring (S11) — same `pages:write`/`api:write` grant, but these
-  // write into the session's OWN project (not the catalog) and rebuild the served app. Present
-  // only when the host supplies them (a project-rooted session); a catalog-only appbuilder
-  // session leaves them absent, so a stray call there fails typecheck rather than mis-targeting.
-  if (app['pages:write'] && impls.writeProjectPage) injectGlobal(ctx, 'writeProjectPage', impls.writeProjectPage as (...a: unknown[]) => unknown);
-  if (app['pages:write'] && impls.writeProjectComponent) injectGlobal(ctx, 'writeProjectComponent', impls.writeProjectComponent as (...a: unknown[]) => unknown);
-  // The view-spec writers are gated on `views:write` — a SEPARATE capability from `pages:write`,
-  // and deliberately not an alternative to it.
-  //
-  // This is the mechanism behind `system-appbuilder`'s central guarantee ("its output is 100%
-  // spec, zero WebView by construction"), and it only works as a split. A capability profile names
-  // capability IDs, not individual globals, so a space cannot hold `pages:write` and decline
-  // `writeProjectPage`: the grant injects the TSX writers and emits their DTS as one unit. Gate the
-  // view writers on the same id and a spec-only space would necessarily also be able to author
-  // freehand TSX — and freehand TSX would TYPECHECK, leaving nothing but an instruction between a
-  // weak model and a WebView-bound page. That is precisely what "not granted ⇒ not injected AND
-  // absent from the DTS" exists to replace.
-  //
-  // Note the absence of `|| app['pages:write']`: an OR would hand every appbuilder-shaped agent
-  // both media and dissolve the separation from the other side.
+  // The VIEW-SPEC writers, gated on `views:write` — the ONLY UI-authoring capability. This is the
+  // mechanism behind the zero-WebView guarantee: a page is validated DATA, rendered by one shared
+  // `ViewRenderer` on web and native. There is no freehand-TSX writer to grant — the format cannot
+  // represent one — so "not granted ⇒ not injected AND absent from the DTS" makes any non-spec UI a
+  // typecheck error rather than a rule a weak model is asked to respect. Present only when the host
+  // supplies them (a project-rooted session); a catalog-only appbuilder session leaves them absent.
   if (app['views:write'] && impls.writeProjectView) injectGlobal(ctx, 'writeProjectView', impls.writeProjectView as (...a: unknown[]) => unknown);
   if (app['views:write'] && impls.writeProjectViewLayout)
     injectGlobal(ctx, 'writeProjectViewLayout', impls.writeProjectViewLayout as (...a: unknown[]) => unknown);

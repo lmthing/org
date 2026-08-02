@@ -253,8 +253,8 @@ look for it or duplicated into two answers that disagree.
   it directly with `db.query(table, opts)`. You WRITE it through `await tasklist('write_fact',
   { fact, kind })` — its classify → locate → write pipeline is what proves the RIGHT row changed
   (a top-level `db.insert`/`db.update` skips the locate-and-confirm step, and a write that guessed
-  its row is how the wrong row gets corrupted while the reply claims success). (You do NOT hold
-  `db:schema`/`pages:write`: creating a NEW table or page is still the automator's job.)
+  its row is how the wrong row gets corrupted while the reply claims success). (Creating a NEW table
+  or a new page is still the automator's job, via `db:schema`/`views:write`, which you do not hold.)
 - **Space knowledge — an agent's understanding of a TOPIC or place.** How a product warranty works,
   a tax-filing rule, a maintenance schedule. Not rows, not rendered on a page — it's what a specialist space
   KNOWS. A space writes its own knowledge (research-and-store); you never put topic facts in the DB.

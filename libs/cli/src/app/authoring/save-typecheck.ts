@@ -1,6 +1,5 @@
 /**
- * SAVE-TIME partial typecheck for the project-app writers (`writeProjectPage`/
- * `writeProjectComponent`/`writeProjectApi` in `./globals.ts`).
+ * SAVE-TIME partial typecheck for the project-app writers (`writeProjectApi` in `./globals.ts`).
  *
  * ## Why a second typecheck exists
  *
@@ -260,7 +259,7 @@ export function saveTypecheckError(opts: {
   projectRoot: string;
   relPath: string;
   src: string;
-  kind: 'page' | 'component' | 'api endpoint';
+  kind: 'api endpoint';
 }): string | null {
   const diag = saveTypecheckFile(opts);
   if (!diag) return null;

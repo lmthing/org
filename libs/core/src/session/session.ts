@@ -1282,7 +1282,6 @@ export class Session {
       scope: this.currentScope ?? undefined,
       apiCallResolver: this.opts.appGlobals?.apiCall,
       apiCallAllow: this.appCapabilities['api:call']?.allow,
-      buildAppResolver: this.opts.appGlobals?.buildApp,
       connectionResolver: this.opts.appGlobals?.callConnection,
       documentResolver: this.opts.documentResolver,
       integrationStatusResolver: this.opts.integrationStatusResolver,

@@ -106,8 +106,8 @@ export interface WorkerInvokeHandlers {
    *  main-side by `server/emitter-state.ts`. Omitted for hooks/code nodes (a
    *  `ctx.state` call then rejects). */
   state?: { get: (key: string) => Promise<unknown>; set: (key: string, value: unknown) => Promise<void> };
-  /** Typed live-project writers (`writeProjectTable`/`writeProjectApi`/`writeProjectPage`/
-   *  `writeProjectComponent`/…) exposed as `ctx.<name>` proxies so a tasklist CODE node can
+  /** Typed live-project writers (`writeProjectTable`/`writeProjectApi`/`writeProjectView`/
+   *  `writeProjectViewComponent`/…) exposed as `ctx.<name>` proxies so a tasklist CODE node can
    *  author files. Each returns a serializable `{ ok, error? }` (readers return their payload);
    *  synchronous impls are fine — `serviceProxy` awaits the return either way. */
   authoring?: Record<string, (...args: unknown[]) => unknown>;

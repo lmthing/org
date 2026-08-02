@@ -452,7 +452,7 @@ export const VALUE_PATTERN =
 export const VALUE_RE = new RegExp(VALUE_PATTERN);
 
 /**
- * A page route in the **authoring** form — the same grammar `writeProjectPage` takes and
+ * A page route in the **authoring** form — the same grammar `writeProjectView` takes and
  * `walkPages` discovers: no leading slash, no extension, `index` for a directory root,
  * `[param]` for a dynamic segment. `recipes/[id]`, not `/recipes/:id`.
  *

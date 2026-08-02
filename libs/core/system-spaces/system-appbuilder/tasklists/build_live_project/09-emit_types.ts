@@ -102,9 +102,9 @@ const CONTRACT_PATH = 'types/contract.d.ts';
 const WRITER_GAP =
   `cannot write ${CONTRACT_PATH}: the host exposes no free-form project-file writer. ` +
   `ProjectAuthoringGlobals (libs/cli/src/app/authoring/globals.ts) declares only ` +
-  `writeProjectTable/Page/Api/Component/Hook/Event/Function, each of which forces its own ` +
-  `directory, filename shape and lint (writeProjectComponent even THROWS a LintError for source ` +
-  `with no default-exported React component). Wire a writeProjectFile onto ProjectAuthoringGlobals ` +
+  `writeProjectTable/View/ViewComponent/ViewLayout/ViewShell/Api/Hook/Event/Function, each of ` +
+  `which forces its own directory, filename shape and lint (writeProjectViewComponent even THROWS ` +
+  `a LintError for a spec with no valid \`node\` tree). Wire a writeProjectFile onto ProjectAuthoringGlobals ` +
   `— it is proxied onto a code node's ctx automatically (tasklist-runner.ts#createCodeNodeCtxFactory ` +
   `passes the whole object as \`authoring\`). The full .d.ts text is returned as \`dts\` regardless.`;
 

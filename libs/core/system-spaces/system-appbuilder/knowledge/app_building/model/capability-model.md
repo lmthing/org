@@ -17,7 +17,6 @@ reaching the engine. This is least-privilege: give an agent exactly the caps its
 | `db:schema` | `writeTableSchema`, `db.createTable`/`db.addColumn` | optional `{ tables: [...] }` |
 | `db:read` | `db.query`, `db.tables` | optional `{ tables: [...] }` |
 | `db:write` | `db.insert`, `db.update` | optional `{ tables: [...] }` |
-| `pages:write` | `writePage`, `writeProjectPage`, `writeProjectComponent` (TSX — **NOT held by any agent in this space**) | bare |
 | `views:write` | `writeProjectView`, `writeProjectViewComponent`, `writeProjectViewShell` | bare |
 | `api:write` | `writeApi`, `writeProjectApi` | bare |
 | `hooks:write` | `writeHook` | bare |
@@ -46,8 +45,7 @@ capabilities:
 
 - `db:read`/`db:write`/`db:schema` accept an optional `{ tables: [...] }` that narrows the grant to
   named tables; bare = all tables. The `db` object exposes only the verbs of the granted db caps.
-- `pages:write`/`views:write`/`api:write`/`hooks:write`/`project:manage` are BARE — passing a config
-  is an error.
+- `views:write`/`api:write`/`hooks:write`/`project:manage` are BARE — passing a config is an error.
 - `api:call` REQUIRES a non-empty `{ allow: [...] }` allowlist (there is no "call anything").
 - An unknown capability id fails the space load (fail-loud).
 
@@ -61,12 +59,11 @@ bodies without any extra delegation. The narrower specialists hold only their sl
 `db:schema`+`db:read`; `api-author` = `api:write`+`db:read`; `spec-builder` = `views:write`+`db:read`
 — a spec builder cannot write a table; a data modeler cannot write a page.
 
-**No agent in this space holds `pages:write`, and that is load-bearing.** `pages:write` is what earns
-`writeProjectPage`/`writeProjectComponent`, the TSX writers. Withholding it means they are neither
-injected nor present in the DTS anywhere in this pipeline, so an attempt to author freehand React is a
-TYPECHECK ERROR the model can see and retry — not a policy it is asked to respect. The UI here is
-100% spec by construction, which is also what makes it render natively with no WebView. Freehand
-React remains available: it is `system-appbuilder`'s, unchanged.
+**`views:write` is the sole UI-authoring grant, and that is load-bearing.** There is no freehand-TSX
+writer anywhere in the system to hold instead — `writeProjectPage`/`writeProjectComponent` do not
+exist. A page is 100% validated view-spec JSON, rendered by one shared `ViewRenderer` on web and
+native, so "renders natively, no WebView" holds by construction rather than by a rule an agent is
+asked to respect.
 
 `project:manage` (`createProject`/`selectProject`) is held by the **host orchestrator (THING)**, not
 this space's agents: THING creates or selects the LIVE project, and the runtime automatically

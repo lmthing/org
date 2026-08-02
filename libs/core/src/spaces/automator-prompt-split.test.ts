@@ -58,17 +58,16 @@ describe('system-appbuilder/automator — what must survive a skipped load', () 
   });
 
   /**
-   * The two TSX writers are named ONLY to say they are absent, and to say WHY they are absent —
-   * because the capability profile does not carry them, so the call is a typecheck error rather
-   * than a rule. A model that is merely ASKED not to write TSX writes TSX; one whose DTS lacks
-   * `writeProjectPage` cannot. Naming the mechanism is what stops the agent hunting for the writer
-   * it half-remembers, and it must survive a turn that loads nothing.
+   * The two TSX writers are named ONLY to say they do not exist — not "withheld from this agent",
+   * not a capability this profile happens to lack, but absent from the system entirely: the format
+   * cannot represent freehand TSX, so no capability could ever earn it back. Naming that is what
+   * stops the agent hunting for a writer it half-remembers, and it must survive a turn that loads
+   * nothing.
    */
-  it('explains that the TSX writers are absent by CAPABILITY, not by instruction', () => {
+  it('explains that the TSX writers do not exist, not merely that this agent lacks them', () => {
     const flat = instruct().replace(/\s+/g, ' ');
-    expect(flat).toMatch(/You do not have `writeProjectPage` or `writeProjectComponent`/);
-    expect(flat).toMatch(/not in your capability profile[^.]*not injected[^.]*not in your type declarations/i);
-    expect(flat).toMatch(/typecheck error, not a rule you could bend/i);
+    expect(flat).toMatch(/There is no TSX or freehand-page writer in the system[^.]*`writeProjectPage`\/`writeProjectComponent`\s*do not exist/i);
+    expect(flat).toMatch(/A page is a validated view spec \(`writeProjectView`\)/i);
     // And no writer list may advertise them as available.
     expect(instruct()).not.toMatch(/^- `writeProjectPage\(/m);
     expect(instruct()).not.toMatch(/^- `writeProjectComponent\(/m);

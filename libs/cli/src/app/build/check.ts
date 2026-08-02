@@ -1,11 +1,11 @@
 /**
  * Project-app **programmatic-check aggregator** (Phase 2 of the durability fix).
  *
- * {@link runProjectAppCheck} is what `libs/cli/src/server/session-manager.ts` binds
- * the agent-facing `buildApp()` global to (via `libs/core`'s `buildAppResolver` yield
- * seam — see `@lmthing/core`'s `AppBuildFn`/`AppCheckResult` in `libs/core/src/db/types.ts`,
- * which this module's exported types structurally mirror EXACTLY so the two packages
- * never have to import each other's runtime).
+ * {@link runProjectAppCheck} is the host-side app check — reached from a tasklist CODE
+ * node via `ctx.buildProjectApp()` (the `build_live_project` verify step) and over HTTP at
+ * `POST .../app/check`. Its result type structurally mirrors `@lmthing/core`'s
+ * `AppCheckResult` (`libs/core/src/db/types.ts`) EXACTLY so the two packages never have to
+ * import each other's runtime.
  *
  * Three phases, cheapest-first, each short-circuiting the next:
  *   1. **typecheck** ({@link typecheckProjectApp}) — a real `tsc` program over the
@@ -21,7 +21,7 @@
  *      `runProjectAppCheck` — a clean `typecheck` phase does NOT prove this phase would also
  *      be clean, because `typecheck` runs ONE whole-program `tsc` pass with `contract.d.ts`
  *      as a root while `ts-json-schema-generator` builds its OWN program per handler file
- *      (`app/build/schema.ts#buildGeneratorConfig`). The agent-facing `buildApp()` global is
+ *      (`app/build/schema.ts#buildGeneratorConfig`). {@link runProjectAppCheck} is
  *      documented to always resolve a structured `AppCheckResult`, never throw; this phase is
  *      what keeps that promise for a contract-generation failure the way phase 3 already did
  *      for an esbuild one.
@@ -41,18 +41,17 @@ import { typecheckProjectApp } from './typecheck.js';
 import { buildProjectPagesChecked } from './pages.js';
 import { generateProjectContracts } from './contracts.js';
 
-// The check contract is the SINGLE source of truth in `@lmthing/core` (the `buildApp()`
-// yield resolver is typed against it there); re-exported here as a type-only import (erased
-// at build — no runtime coupling) so `typecheck.ts`/`pages.ts` share the exact same shape
-// and can never drift from what the core `buildAppResolver` returns to the sandbox.
+// The check contract's SINGLE source of truth is `@lmthing/core`'s `AppCheckResult`;
+// re-exported here as a type-only import (erased at build — no runtime coupling) so
+// `typecheck.ts`/`pages.ts` share the exact same shape and can never drift.
 export type { AppCheckError, AppCheckResult } from '@lmthing/core';
 import type { AppCheckError, AppCheckResult } from '@lmthing/core';
 
 /**
  * Build + programmatically check a project's live app: typecheck first (short-
  * circuiting on any type error — never bundle known-broken code), then contract
- * generation, then esbuild. This is what the agent-facing `buildApp()` global
- * resolves to (bound to a project root by `libs/cli/src/server/session-manager.ts`).
+ * generation, then esbuild. Reached from a tasklist CODE node via `ctx.buildProjectApp()`
+ * and over HTTP at `POST .../app/check`.
  */
 export async function runProjectAppCheck(projectRoot: string): Promise<AppCheckResult> {
   const tcErrors = await typecheckProjectApp(projectRoot);

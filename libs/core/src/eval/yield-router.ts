@@ -1,5 +1,5 @@
 import type { YieldRequest } from './yield.js';
-import type { ApiCallFn, AppBuildFn, ConnectionResolver } from '../db/types.js';
+import type { ApiCallFn, ConnectionResolver } from '../db/types.js';
 import type { DocumentResolver } from '../globals/read-document.js';
 import type { IntegrationStatusResolver } from '../globals/integration-status.js';
 import type { StoreResolver, InstallSpaceResult } from '../globals/store.js';
@@ -91,11 +91,6 @@ export interface YieldRouterContext {
    *  retryable error naming what IS allowed). `['*']` = any endpoint this project
    *  declares. Absent ⇒ unenforced (a non-agent context, e.g. a bare unit test). */
   apiCallAllow?: string[];
-  /** Resolve a `buildApp()` yield — build + programmatically check the project's live
-   *  app (lint → typecheck → esbuild) and return the structured {@link AppCheckResult}
-   *  (host-supplied via the project's app globals). Absent outside a project-app
-   *  context; a `buildApp` yield then rejects with a clear error. */
-  buildAppResolver?: AppBuildFn;
   /** Resolve a `callConnection()` yield — forward the request to the gateway's
    *  egress proxy for the named connected service (host-supplied via the pod's
    *  scoped connections JWT). Absent outside a pod with a configured connections
@@ -250,16 +245,6 @@ export async function routeCommonYield(
         );
       }
       const value = await ctx.apiCallResolver(name, input);
-      return { handled: true, value };
-    }
-    case 'buildApp': {
-      // Build + programmatically check the project's live app (agent-facing `buildApp`).
-      // A missing resolver means this context has no project app to build — throw an
-      // actionable, retryable error rather than binding undefined.
-      if (!ctx.buildAppResolver) {
-        throw new Error('buildApp is not available here: this session has no live project app');
-      }
-      const value = await ctx.buildAppResolver();
       return { handled: true, value };
     }
     case 'callConnection': {

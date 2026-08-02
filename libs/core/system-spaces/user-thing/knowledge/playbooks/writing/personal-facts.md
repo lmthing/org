@@ -56,8 +56,8 @@ const w = await tasklist('write_fact', { fact: '<their sentence, values verbatim
 ```
 
 Quote the user's NEW value verbatim in `fact`; never normalize it. Only when the change needs a
-NEW table or a schema/page that doesn't exist yet does it go to the **automator** — creating
-tables/pages needs `db:schema`/`pages:write`, which you do not hold. Then TELL THE TRUTH: relay the
+NEW table or UI that doesn't exist yet does it go to the **automator** — creating a table or a page
+is its job, via `db:schema`/`views:write`, which you do not hold. Then TELL THE TRUTH: relay the
 tasklist's `detail` as reported — if `ok` is false, the data did NOT change; never report "updated!"
 on a write nothing can show.
 

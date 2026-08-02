@@ -315,50 +315,28 @@ export function composeConnectionsDts(providers: string[]): string {
   return `declare function callConnection(provider: ${union}, req: { method: string; path: string; query?: Record<string, string>; body?: unknown; headers?: Record<string, string> }): Promise<{ ok: boolean; status: number; data: any }>;`;
 }
 
-// `pages:write`/`api:write` earn the plan-S11 LIVE-PROJECT writers — `writeProjectPage`
-// (`pages/<route>.tsx`) and `writeProjectApi` (`api/<path>/<METHOD>.ts`) — which write the UI
-// into the session's OWN project (the store-catalog `writePage`/`writeApi` writers are gone) and
-// rebuild the served app, so "turn
-// this into an app I can open" produces a real page-serving app in the live project rather than
-// dead-ending (the automator had only writeProjectTable — scenario 05). Appended to the catalog
-// writers in the capability registry; the one-liner invariant on the base consts is preserved.
-// Overwriting an existing page is GUARDED: a replacement that fetches none of the API routes the
-// page it replaces fetched is rejected (it would delete the sections the user already has — the
-// app still builds and every route still 200s, but the user opens it to an empty page; scenario
-// 07). Read the page and extend it; `{ replace: true }` says the deletion is what the user asked for.
-export const PROJECT_PAGE_DTS = `declare function writeProjectPage(route: string, src: string, opts?: { replace?: boolean }): { ok: boolean; error?: string };`;
+// `api:write` earns the plan-S11 LIVE-PROJECT endpoint writer — `writeProjectApi`
+// (`api/<path>/<METHOD>.ts`) — which writes into the session's OWN project (the store-catalog
+// `writeApi` writer is gone) and republishes, so "turn this into an app I can open" produces a
+// real serving app in the live project. One-liner invariant preserved.
 export const PROJECT_API_DTS = `declare function writeProjectApi(route: string, src: string): { ok: boolean; error?: string };`;
-// `pages:write` ALSO earns the shared-component writer — `writeProjectComponent` writes
-// `components/<Name>.tsx` (PascalCase) into the live project so a page can import it. The
-// typed surface for shared UI (there is no space-rooted fs writer for components anymore).
-export const PROJECT_COMPONENT_DTS = `declare function writeProjectComponent(name: string, src: string): { ok: boolean; error?: string };`;
 
-// `views:write` — a SEPARATE capability from `pages:write`, and the mechanism behind
-// `system-appbuilder`'s zero-WebView guarantee.
+// `views:write` — the ONLY UI-authoring capability, and the mechanism behind the zero-WebView
+// guarantee. It earns the VIEW-SPEC writers: a page is DATA (a validated object literal) rather
+// than TSX, rendered by one shared `ViewRenderer` on the web bundle AND natively in the mobile
+// app. `writeProjectView` persists `views/<route>.view.json`; `writeProjectViewComponent` writes
+// a reusable element composition with typed props; `writeProjectViewLayout` writes a nested
+// layout frame; `writeProjectViewShell` writes the app's navigation + assistant dock.
 //
-// It earns the VIEW-SPEC writers: the medium where a page is DATA (a validated object literal)
-// rather than TSX, rendered by one shared `ViewRenderer` on the web bundle AND natively in the
-// mobile app. `writeProjectView` persists `pages/<route>.view.json` and generates the wrapper
-// `pages/<route>.tsx` that bundles it, so the page build needs no changes at all;
-// `writeProjectViewComponent` writes a reusable element composition with typed props;
-// `writeProjectViewShell` writes the app's navigation.
+// There is no freehand-TSX writer to grant — the format cannot represent one — so "renders
+// natively" holds by construction, not by a rule a weak model is asked to respect.
 //
-// **Why its own id and not a share of `pages:write`.** A capability profile lists capability IDs,
-// not globals — so a space granted `pages:write` receives `writeProjectPage` AND
-// `writeProjectComponent` AND their DTS as one indivisible unit. Bundling the view writers there
-// would mean a spec-only space must also hold the TSX writers, freehand UI would TYPECHECK, and
-// the only thing left standing between a weak model and a WebView-bound page would be an
-// instruction. Split, the invariant does the work instead: not granted ⇒ not injected AND absent
-// from the DTS, so freehand UI in a viewbuilder agent is a typecheck error it can see and retry.
-// (`buildApp` stays under `pages:write` for the same reason — the viewbuilder gates its build
-// HOST-side through a code node's `buildProjectApp`, not through a model-facing global.)
-//
-// All three validate against the project's REAL endpoint contracts at save time and reject with a
+// All validate against the project's REAL endpoint contracts at save time and reject with a
 // menu-shaped error naming the instance path, the offence and the finite valid set — which is why
 // the parameters are `unknown` rather than an imported spec type: the model emits a TypeScript
 // OBJECT LITERAL (trailing commas and comments legal, never a JSON string), and the host, not the
-// DTS, is what tells it which of the eight section kinds and twenty-four elements exist.
-export const PROJECT_VIEW_DTS = `/** Write a page as a validated VIEW SPEC (pages/<route>.view.json) + its generated wrapper. Sections: list|detail|create|stats|markdown|chat|toolbar|timeline. Bindings are paths ($.field), never expressions. */
+// DTS, is what tells it which section kinds and elements exist.
+export const PROJECT_VIEW_DTS = `/** Write a page as a validated VIEW SPEC (views/<route>.view.json). Sections: list|detail|create|stats|markdown|chat|toolbar|timeline|board|calendar|chart. Bindings are paths ($.field), never expressions. */
 declare function writeProjectView(route: string, spec: unknown): { ok: boolean; error?: string };
 /** Write a reusable element composition with typed props, referenced from any view as { use: '<Name>' }. PascalCase. */
 declare function writeProjectViewComponent(name: string, def: unknown): { ok: boolean; error?: string };
@@ -366,18 +344,6 @@ declare function writeProjectViewComponent(name: string, def: unknown): { ok: bo
 declare function writeProjectViewLayout(prefix: string, spec: unknown): { ok: boolean; error?: string };
 /** Write the app shell — nav entries/groups, per-entity subnav, brand, assistant dock. Every target must be a real static route. */
 declare function writeProjectViewShell(shell: unknown): { ok: boolean; error?: string };`;
-
-// `pages:write` ALSO earns `buildApp` — build + PROGRAMMATICALLY CHECK the live app: the
-// project-app typecheck, THEN the per-endpoint contract generation, THEN the esbuild bundle,
-// each only if the previous phase passed. Three phases, not four — the write-time contract lint
-// is real but throws at the WRITER during the authoring turn (`app/authoring/lint.ts`), so it
-// never appears in this error list. Value-yielding (Promise,
-// like `apiCall`): the heavy tsc + esbuild run host-side. It returns the STRUCTURED
-// error list (exit-status ground truth, never a model self-assessment) a build gate
-// node reads to fix the offending page/component and re-check until the app is clean
-// (or fails loudly) — a clean resolve sets `built:true` for ALL routes. `phase` says
-// which check produced each error; `file` is project-relative.
-export const BUILD_APP_DTS = `declare function buildApp(): Promise<{ ok: boolean; built: boolean; routes: string[]; errors: Array<{ phase: 'typecheck' | 'contract' | 'build'; file: string; line?: number; column?: number; message: string }> }>;`;
 
 // `hooks:write` earns the plan-S11 LIVE-PROJECT authoring writers — the automator
 // authors event hooks (`hooks/<slug>.ts`) + emitter defs (`events/<name>.ts`) and the
@@ -499,7 +465,6 @@ declare function teamCreateChannel(name: string, opts?: { categoryId?: string })
  */
 export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
   'api:call': API_CALL_DTS,
-  'pages:write': [PROJECT_PAGE_DTS, PROJECT_COMPONENT_DTS, BUILD_APP_DTS].join('\n'),
   'views:write': PROJECT_VIEW_DTS,
   'api:write': PROJECT_API_DTS,
   'hooks:write': PROJECT_AUTHORING_DTS,

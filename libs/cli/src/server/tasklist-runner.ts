@@ -47,8 +47,8 @@ export interface CodeNodeFactoryDeps {
   connectionResolver: ConnectionResolver;
   /** Per-node worker wall-clock budget (ms). Omit for the worker-load default. */
   timeoutMs?: number;
-  /** Typed live-project writers (`writeProjectTable`/`writeProjectApi`/`writeProjectPage`/
-   *  `writeProjectComponent`/…) for CODE nodes that author files — the SAME host impls the
+  /** Typed live-project writers (`writeProjectTable`/`writeProjectApi`/`writeProjectView`/
+   *  `writeProjectViewComponent`/…) for CODE nodes that author files — the SAME host impls the
    *  agent nodes use, exposed on `ctx.<name>`. Omit for a project with no authoring. */
   projectAuthoring?: ProjectAuthoringGlobals;
 }

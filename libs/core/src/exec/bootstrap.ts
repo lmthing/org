@@ -17,7 +17,6 @@ import { createForkGlobal } from '../globals/fork.js';
 import { createDelegateGlobal } from '../globals/delegate.js';
 import { createTasklistGlobal } from '../globals/tasklist.js';
 import { createApiCallGlobal } from '../globals/api-call.js';
-import { createBuildAppGlobal } from '../globals/build-app.js';
 import { createCallConnectionGlobal } from '../globals/call-connection.js';
 import { createReadDocumentGlobal } from '../globals/read-document.js';
 import { createIntegrationStatusGlobal } from '../globals/integration-status.js';
@@ -275,11 +274,6 @@ export async function createChildVM(opts: ChildVMOpts): Promise<VM> {
   // `api:call` grant. The host resolver is threaded through the yield router
   // (apiCallResolver); the DTS is declared by buildAppCapabilityDts on the same grant.
   if (caps.app['api:call']) injectGlobal(ctx, 'apiCall', createApiCallGlobal(pushYield) as AnyFn);
-  // buildApp: value-yielding build+programmatic-check of the project's live app, gated on
-  // the `pages:write` grant (the same grant as the page/component writers it verifies).
-  // Resolver threaded via the yield router (buildAppResolver); the DTS is declared by
-  // buildAppCapabilityDts on the same grant.
-  if (caps.app['pages:write']) injectGlobal(ctx, 'buildApp', createBuildAppGlobal(pushYield) as AnyFn);
   // callConnection: value-yielding entry to a user-connected external service, gated on the
   // `connections:use` grant. Resolver threaded via the yield router (connectionResolver); the
   // per-grant typed DTS (buildAppCapabilityDts) restricts `provider` to the granted providers.
@@ -434,16 +428,15 @@ function buildAppCapabilityDts(app: AppCapabilities, appDts?: string, projectRoo
   // granted providers (union), so a stray provider fails the agent's typecheck.
   if (app['connections:use']) parts.push(composeConnectionsDts(app['connections:use'].providers));
   // Standalone authoring/management/store/event globals: the live writeProject* writers
-  // (pages:write/api:write/hooks:write) + createProject/selectProject (project:manage),
+  // (views:write/api:write/hooks:write) + createProject/selectProject (project:manage),
   // storeSearch/storeInspect + installSpace + emitEvent (plan S10). Each emitted only
-  // when its grant is present.
-  // `views:write` sits beside `pages:write` here, never inside it: the two authoring media are
-  // separated BY CAPABILITY, which is what makes `system-appbuilder`'s zero-WebView guarantee a
-  // typecheck error rather than an instruction (see the fragment's own doc in library-dts.ts).
+  // when its grant is present. `views:write` is the ONLY UI-authoring surface — a page is
+  // validated spec data, which is what makes the zero-WebView guarantee a typecheck fact rather
+  // than an instruction (see the fragment's own doc in library-dts.ts).
   // `team:read`/`team:post` ride the same list. They reach it only on a team pod —
   // the parse step drops the grants everywhere else — which is what makes the whole
   // team surface absent from a personal pod's DTS rather than merely inert.
-  for (const id of ['pages:write', 'views:write', 'api:write', 'hooks:write', 'knowledge:write', 'project:manage', 'store:read', 'store:install', 'events:emit', 'team:read', 'team:post'] as const) {
+  for (const id of ['views:write', 'api:write', 'hooks:write', 'knowledge:write', 'project:manage', 'store:read', 'store:install', 'events:emit', 'team:read', 'team:post'] as const) {
     if (app[id]) parts.push(CAPABILITY_DTS_FRAGMENTS[id]);
   }
   return parts.filter(Boolean).join('\n');

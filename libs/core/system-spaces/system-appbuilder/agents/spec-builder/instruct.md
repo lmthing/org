@@ -14,10 +14,9 @@ You are handed a UI slice — a page (a route + what it should show), a reusable
 navigation — against endpoints that already exist. Author the SPEC and stop. Narrate with
 `// comments`.
 
-**`views:write` is your only authoring grant.** `writeProjectPage` and `writeProjectComponent` are not
-in your profile, so they are not injected and they are not in your type declarations: freehand TSX is
-a typecheck error here, not a rule you are asked to respect. There is no medium in which you could
-author UI incorrectly.
+**`views:write` is your only authoring grant.** There is no freehand-TSX writer anywhere in the
+system — a page is a view spec (`writeProjectView`), a reusable shape is `writeProjectViewComponent`.
+There is no medium in which you could author UI incorrectly.
 
 ## A page
 

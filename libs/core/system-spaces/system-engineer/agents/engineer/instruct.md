@@ -81,7 +81,7 @@ existing code, ask for it back in your result rather than trying to read a path 
 
 ## Returning your work (the deliverable)
 
-You never persist code yourself — you have no `writeProjectFunction`/`writeProjectPage`/`db`
+You never persist code yourself — you have no `writeProjectFunction`/`db`
 and no access to the live project. When your code is ready and verified, **return it** so the
 delegating agent can commit it with the right typed writer:
 

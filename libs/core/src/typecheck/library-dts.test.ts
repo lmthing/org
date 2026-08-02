@@ -8,10 +8,7 @@ import {
   SCRATCH_DTS,
   composeDbDts,
   API_CALL_DTS,
-  PROJECT_PAGE_DTS,
-  PROJECT_COMPONENT_DTS,
   PROJECT_VIEW_DTS,
-  BUILD_APP_DTS,
   PROJECT_API_DTS,
   PROJECT_AUTHORING_DTS,
   PROJECT_MANAGE_DTS,
@@ -222,12 +219,12 @@ describe('standalone capability fragments', () => {
     expect(CAPABILITY_DTS_FRAGMENTS['connections:use']).toBeUndefined();
   });
 
-  it('the live-project write helpers are non-empty one-liners', () => {
-    for (const frag of [PROJECT_PAGE_DTS, PROJECT_API_DTS, PROJECT_COMPONENT_DTS]) {
-      expect(frag.trim().length).toBeGreaterThan(0);
-      expect(frag).not.toContain('\n');
-      expect(frag).toContain('declare function');
-    }
+  it('the live-project write helper (api:write) is a non-empty one-liner', () => {
+    // The legacy pages:write TSX writers (writeProjectPage/writeProjectComponent) are gone
+    // entirely — writeProjectApi is the surviving one-liner shape in this family.
+    expect(PROJECT_API_DTS.trim().length).toBeGreaterThan(0);
+    expect(PROJECT_API_DTS).not.toContain('\n');
+    expect(PROJECT_API_DTS).toContain('declare function');
   });
 });
 
@@ -254,7 +251,6 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
   it('maps the standalone capability ids and omits the db trio', () => {
     expect(CAPABILITY_DTS_FRAGMENTS).toEqual({
       'api:call': API_CALL_DTS,
-      'pages:write': [PROJECT_PAGE_DTS, PROJECT_COMPONENT_DTS, BUILD_APP_DTS].join('\n'),
       'views:write': PROJECT_VIEW_DTS,
       'api:write': PROJECT_API_DTS,
       'hooks:write': PROJECT_AUTHORING_DTS,
@@ -273,6 +269,8 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
     // so it is deliberately NOT a flat-map entry.
     expect(CAPABILITY_DTS_FRAGMENTS['db:read']).toBeUndefined();
     expect(CAPABILITY_DTS_FRAGMENTS['db:schema']).toBeUndefined();
+    // The legacy pages:write capability is gone — not a key that maps to anything.
+    expect(CAPABILITY_DTS_FRAGMENTS['pages:write']).toBeUndefined();
   });
 
   it('PROJECT_AUTHORING_DTS declares the three live-project writers under hooks:write', () => {
@@ -292,50 +290,39 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
     expect(PROJECT_TABLE_DTS).toContain('writeProjectTable(');
   });
 
-  it('pages:write / api:write earn the live-project writers (the catalog writers are gone)', () => {
-    // pages:write → writeProjectPage + writeProjectComponent (live project)
-    expect(CAPABILITY_DTS_FRAGMENTS['pages:write']).toContain('writeProjectPage(');
-    expect(CAPABILITY_DTS_FRAGMENTS['pages:write']).toContain('writeProjectComponent(');
+  it('views:write / api:write earn the live-project writers (the catalog writers are gone)', () => {
+    // views:write → the four spec writers (live project)
+    expect(CAPABILITY_DTS_FRAGMENTS['views:write']).toContain('writeProjectView(');
+    expect(CAPABILITY_DTS_FRAGMENTS['views:write']).toContain('writeProjectViewComponent(');
+    expect(CAPABILITY_DTS_FRAGMENTS['views:write']).toContain('writeProjectViewLayout(');
+    expect(CAPABILITY_DTS_FRAGMENTS['views:write']).toContain('writeProjectViewShell(');
     // api:write → writeProjectApi (live project)
     expect(CAPABILITY_DTS_FRAGMENTS['api:write']).toContain('writeProjectApi(');
   });
 
-  // `system-appbuilder`'s central guarantee — "100% spec, zero WebView by construction" — is not
-  // enforced by prose telling the model to avoid TSX. It is enforced HERE: a system-appbuilder agent
-  // holds `views:write` and NOT `pages:write`, so `writeProjectPage` is absent from its ambient
-  // DTS and a freehand-TSX attempt is a typecheck error it can see and retry.
-  //
-  // A capability profile lists capability IDs, not globals, so this only works while the two ids
-  // stay separate. Merging the view writers back into the `pages:write` bundle would silently hand
-  // every spec-only space the TSX writers, freehand UI would typecheck, and nothing but an
-  // instruction would remain. That is what these two assertions exist to prevent.
-  it('views:write and pages:write are DISJOINT — the two authoring media, separated by capability', () => {
+  // `system-appbuilder`'s central guarantee — "100% spec, zero WebView by construction" — used to
+  // be enforced by keeping `views:write` and the legacy `pages:write` (freehand-TSX) capability
+  // disjoint. Now it is enforced more strongly: the legacy capability and its writers
+  // (`writeProjectPage`/`writeProjectComponent`/`buildApp`) are DELETED from the codebase, so they
+  // appear in NO capability's DTS fragment at all — there is no id left that could hand them out.
+  it('views:write earns the spec writers; the deleted legacy TSX writers appear in no fragment', () => {
     const views = CAPABILITY_DTS_FRAGMENTS['views:write'];
-    const pages = CAPABILITY_DTS_FRAGMENTS['pages:write'];
 
-    // views:write earns the three spec writers…
+    // views:write earns the four spec writers…
     expect(views).toContain('writeProjectView(');
     expect(views).toContain('writeProjectViewComponent(');
+    expect(views).toContain('writeProjectViewLayout(');
     expect(views).toContain('writeProjectViewShell(');
-    // …and NOT the TSX writers. (`writeProjectViewComponent` contains the substring
+    // …and NOT the deleted TSX writers. (`writeProjectViewComponent` contains the substring
     // `writeProjectView`, so the TSX names are matched with their own open-paren.)
     expect(views).not.toContain('writeProjectPage(');
     expect(views).not.toContain('writeProjectComponent(');
 
-    // pages:write earns the TSX writers and NOT the spec writers.
-    expect(pages).toContain('writeProjectPage(');
-    expect(pages).toContain('writeProjectComponent(');
-    expect(pages).not.toContain('writeProjectView(');
-    expect(pages).not.toContain('writeProjectViewComponent(');
-    expect(pages).not.toContain('writeProjectViewShell(');
-  });
-
-  it('buildApp stays under pages:write — the spec builder gates its build host-side', () => {
-    // Moving `buildApp` to `views:write` would look like a convenience and would be the same
-    // mistake in reverse: the spec builder's build gate is `16-verify`, a HOST-run code node calling
-    // `buildProjectApp`, precisely so the verdict is exit status rather than a model self-report.
-    expect(CAPABILITY_DTS_FRAGMENTS['pages:write']).toContain('buildApp(');
-    expect(CAPABILITY_DTS_FRAGMENTS['views:write']).not.toContain('buildApp(');
+    // The deleted globals appear in NO fragment in the registry, granted or not.
+    for (const frag of Object.values(CAPABILITY_DTS_FRAGMENTS)) {
+      expect(frag).not.toContain('writeProjectPage(');
+      expect(frag).not.toContain('buildApp(');
+    }
   });
 });
 

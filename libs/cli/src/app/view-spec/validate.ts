@@ -481,7 +481,7 @@ function namedTypeBodies(src: string): Map<string, string> {
  * deep — the textual twin of {@link outputFieldUniverse}.
  *
  * A regex where the async path has a real JSON Schema, because the writers are SYNCHRONOUS host
- * globals (mirroring `writeProjectPage`) and `generateProjectContracts` is a `ts-json-schema-
+ * globals (mirroring `writeProjectView`) and `generateProjectContracts` is a `ts-json-schema-
  * generator` run per handler file.
  *
  * **`undefined` whenever the list would be INCOMPLETE**, and never a partial one. A partial menu is
