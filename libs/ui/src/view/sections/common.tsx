@@ -201,7 +201,13 @@ export function useSectionSource(args: SourceArgs): SectionSource {
     const base = fromOther
       ? resolveArray(args.from, scope)
       : args.from
-        ? resolveArray(args.from, { ...scope, self: query.data })
+        ? // `from` into THIS section's own query resolves `$` against the section's RECORD, the
+          // same unwrap `extractRecord` applies for stats/detail — an endpoint that answers
+          // `{ items: [record] }` is answering with a record, so `from: '$.longest_waiting'` must
+          // reach `record.longest_waiting`, not `{items:[…]}.longest_waiting` (which is nothing).
+          // Without the unwrap a dashboard that pairs a stats strip with a list off ONE endpoint
+          // renders the stats and an empty list over real data (`30-bike-workshop` run 204).
+          resolveArray(args.from, { ...scope, self: extractRecord(query.data) })
         : extractRows(query.data)
     return args.limit ? base.slice(0, args.limit) : base
   }, [fromOther, args.from, args.limit, query.data, scope.data])

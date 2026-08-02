@@ -371,6 +371,46 @@ describe('a record section against an `{ items: [record] }` envelope (bike-works
     // declared `format` is inferred rather than printed raw (see the defaults suite).
     await waitFor(() => expect(screen.getByText(isoDay('2026-07-27'))).toBeInTheDocument())
   })
+
+  it('a LIST sourced with `from` off the SAME enveloped endpoint draws its rows (run 204)', async () => {
+    // The endpoint answers ONE dashboard record wrapped in `{ items: [record] }`; the record holds
+    // the aggregate fields the stats strip reads AND the `longest_waiting` array the list draws.
+    // `from: '$.longest_waiting'` must reach `record.longest_waiting` (the envelope unwrapped),
+    // exactly as the stats card's `$.in_shop_count` does — before the fix the list rendered empty.
+    const BODY_WITH_LIST = {
+      items: [
+        {
+          in_shop_count: 3,
+          longest_waiting: [
+            { id: 'j1', customer_name: 'Aoife Brennan', bike_name: 'Specialized Allez' },
+            { id: 'j2', customer_name: 'Tomasz Nowak', bike_name: 'Giant Escape' },
+          ],
+        },
+      ],
+    }
+    const { client } = stubClient({ frontPage: BODY_WITH_LIST })
+    render(
+      <ViewRenderer
+        spec={page([
+          { kind: 'stats', query: 'frontPage', cards: [{ label: 'Bikes in shop', value: '$.in_shop_count' }] },
+          {
+            kind: 'list',
+            id: 'waiting',
+            query: 'frontPage',
+            from: '$.longest_waiting',
+            item: { title: '$.customer_name', caption: '$.bike_name' },
+            empty: { title: 'No bikes waiting', message: 'nothing here' },
+          },
+        ])}
+        client={client as never}
+      />,
+    )
+    await waitFor(() => expect(screen.getByText('Bikes in shop')).toBeInTheDocument())
+    // The list rows — present only if `from` reached the array inside the record.
+    expect(screen.getByText('Aoife Brennan')).toBeInTheDocument()
+    expect(screen.getByText('Tomasz Nowak')).toBeInTheDocument()
+    expect(screen.queryByText('No bikes waiting')).not.toBeInTheDocument()
+  })
 })
 
 describe('markdown + toolbar', () => {
