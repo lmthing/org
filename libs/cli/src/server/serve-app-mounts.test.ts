@@ -15,7 +15,7 @@
  * that the always-on root mount does not shadow the SPA.
  */
 import { describe, it, expect, afterAll } from 'vitest';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Session, createMockStreamFn } from '@lmthing/core';
@@ -69,7 +69,38 @@ export default async function handler() { return { items: ['a'] } }
   return root;
 }
 
-async function startServer(lmthingRoot: string): Promise<string> {
+async function scratchSpecRoot(projectId: string): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), 'lm-spec-mounts-'));
+  tmpDirs.push(root);
+  const project = join(root, projectId);
+  await mkdir(join(project, 'views'), { recursive: true });
+  await writeFile(join(project, 'app.json'), JSON.stringify({ format: 2, title: 'Spec app' }));
+  await writeFile(
+    join(project, 'views', 'index.view.json'),
+    JSON.stringify({ route: 'index', title: 'Spec home', sections: [{ kind: 'markdown', text: 'Hello' }] }),
+    'utf8',
+  );
+  return root;
+}
+
+async function shellDist(): Promise<string> {
+  const dist = await mkdtemp(join(tmpdir(), 'app-shell-dist-'));
+  tmpDirs.push(dist);
+  await mkdir(join(dist, 'assets'), { recursive: true });
+  await writeFile(
+    join(dist, 'index.html'),
+    '<!doctype html><html><head></head><body data-app-shell="true"><div id="root"></div><script type="module" src="./assets/app-shell.js"></script></body></html>',
+  );
+  await writeFile(join(dist, 'assets', 'app-shell.js'), 'console.log("app shell")');
+  return dist;
+}
+
+async function startServer(lmthingRoot: string, appShellDist?: string): Promise<string> {
+  const previousAppShell = process.env['LM_APP_SHELL'];
+  const previousAppShellDist = process.env['LM_APP_SHELL_DIST'];
+  if (appShellDist) process.env['LM_APP_SHELL_DIST'] = appShellDist;
+  else process.env['LM_APP_SHELL'] = '0';
+
   const manager = new SessionManager({
     streamFn: mockStreamFn,
     snapshotsDir: join(lmthingRoot, '.snaps'),
@@ -94,6 +125,10 @@ async function startServer(lmthingRoot: string): Promise<string> {
     lmthingRoot,
   });
   servers.push(handle);
+  if (previousAppShell === undefined) delete process.env['LM_APP_SHELL'];
+  else process.env['LM_APP_SHELL'] = previousAppShell;
+  if (previousAppShellDist === undefined) delete process.env['LM_APP_SHELL_DIST'];
+  else process.env['LM_APP_SHELL_DIST'] = previousAppShellDist;
   return `http://localhost:${handle.port}`;
 }
 
@@ -135,5 +170,52 @@ describe('project-app mounts (route table)', () => {
       expect(body).not.toContain('has no page app');
       expect(body).not.toContain('window.__APP_BASE__');
     }
+  }, 60_000);
+
+  it.each([
+    ['reserved prefix', (p: string) => `/app/${p}`],
+    ['clean root URL', (p: string) => `/${p}`],
+  ])('serves the prebuilt shell without a project page build on the %s mount', async (_label, mount) => {
+    const projectId = 'spec-app';
+    const root = await scratchSpecRoot(projectId);
+    const base = await startServer(root, await shellDist());
+
+    const page = await fetch(`${base}${mount(projectId)}/nested/route`);
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).toContain('data-app-shell="true"');
+    expect(html).toContain(`<base href="${mount(projectId)}/">`);
+    expect(html).toContain(`window.__APP_BASE__ = "${mount(projectId)}"`);
+
+    const asset = await fetch(`${base}${mount(projectId)}/assets/app-shell.js`);
+    expect(asset.status).toBe(200);
+    expect(await asset.text()).toBe('console.log("app shell")');
+
+    await expect(stat(join(root, projectId, '.data', 'pages-dist'))).rejects.toMatchObject({ code: 'ENOENT' });
+  }, 60_000);
+
+  it('keeps a legacy TSX project on its per-project bundle while the shell is enabled', async () => {
+    const projectId = 'legacy-app';
+    const base = await startServer(await scratchRoot(projectId), await shellDist());
+
+    const page = await fetch(`${base}/app/${projectId}/`);
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).not.toContain('data-app-shell="true"');
+    expect(html).toContain(`<base href="/app/${projectId}/">`);
+  }, 60_000);
+
+  it('uses the legacy bundle for a spec project when LM_APP_SHELL=0', async () => {
+    const projectId = 'spec-with-wrapper';
+    const root = await scratchSpecRoot(projectId);
+    await mkdir(join(root, projectId, 'pages'), { recursive: true });
+    await writeFile(join(root, projectId, 'pages', 'index.tsx'), 'export default function Home() { return <div>legacy wrapper</div> }');
+    const base = await startServer(root);
+
+    const page = await fetch(`${base}/app/${projectId}/`);
+    expect(page.status).toBe(200);
+    const html = await page.text();
+    expect(html).not.toContain('data-app-shell="true"');
+    expect(html).toContain(`<base href="/app/${projectId}/">`);
   }, 60_000);
 });

@@ -15,6 +15,7 @@
  */
 import { describe, expect, it, afterAll } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -85,4 +86,42 @@ describe('runProjectAppCheck — contract phase', () => {
     // The only error is the contract one — no esbuild/`phase:'build'` noise layered on top.
     expect(result.errors.every((e) => e.phase === 'contract')).toBe(true);
   }, 30_000);
+});
+
+/** A spec app (W6): `views/` holds a view spec, there is no `pages/` dir, so `runProjectAppCheck`
+ *  takes the AppHost branch — typecheck covers `api/` only, and the "build" phase is
+ *  {@link renderSpecAppSmoke} mounting every view through the real renderer instead of esbuild. */
+async function specProject(): Promise<string> {
+  const root = await scratch('lm-check-spec-');
+  await mkdir(join(root, 'api', 'recipes'), { recursive: true });
+  await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'spec-scratch', version: '0.0.0' }));
+  await writeFile(
+    join(root, 'api', 'recipes', 'GET.ts'),
+    `export const name = 'listRecipes';
+export interface Output { items: { id: string; title: string }[]; }
+export default async function handler() { return { items: [] }; }
+`,
+    'utf8',
+  );
+  const { createProjectAuthoringGlobals } = await import('../authoring/globals.js');
+  const pa = createProjectAuthoringGlobals({ projectRoot: root });
+  const written = pa.writeProjectView('index', {
+    title: 'Recipes',
+    sections: [{ kind: 'list', query: 'listRecipes', item: { title: '$.title' } }],
+  });
+  expect(written).toEqual({ ok: true });
+  return root;
+}
+
+describe('runProjectAppCheck — spec-app (AppHost) branch', () => {
+  it('mounts every view through the renderer and reports ok:true, built:true with no per-project bundle', async () => {
+    const root = await specProject();
+    const result = await runProjectAppCheck(root);
+    expect(result.ok).toBe(true);
+    expect(result.built).toBe(true);
+    expect(result.routes).toEqual(['/']);
+    expect(result.errors).toEqual([]);
+    // The AppHost branch runs no esbuild build, so no per-project pages bundle is emitted.
+    expect(existsSync(join(root, '.data', 'pages-dist'))).toBe(false);
+  }, 60_000);
 });

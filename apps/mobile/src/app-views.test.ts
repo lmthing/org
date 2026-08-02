@@ -54,6 +54,7 @@ describe('fetchAppTarget', () => {
       body: {
         project: 'kitchen',
         views: VIEWS,
+        layouts: [{ prefix: 'recipes', sections: [] }],
         components: [{ name: 'RecipeCard', node: {} }],
         shell: { brand: 'Kitchen' },
         endpoints: { listRecipes: { method: 'GET', routePath: '/recipes' } },
@@ -63,6 +64,7 @@ describe('fetchAppTarget', () => {
     expect(target.kind).toBe('native')
     if (target.kind !== 'native') return
     expect(target.app.views).toHaveLength(4)
+    expect(target.app.layouts).toEqual([{ prefix: 'recipes', sections: [] }])
     expect(target.app.endpoints['listRecipes']).toMatchObject({ method: 'GET' })
     expect(target.app.shell).toMatchObject({ brand: 'Kitchen' })
   })

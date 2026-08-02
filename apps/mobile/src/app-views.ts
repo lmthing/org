@@ -15,20 +15,22 @@
  * the thing that decides the branch are the same fetch.
  *
  * The payload carries the endpoint manifest as well as the specs, because on web
- * that manifest is injected into the host page as `window.__APP_ENDPOINTS__` and
- * here there is no host page to inject anything into.
+ * that manifest is injected into the host page; here there is no host page to
+ * inject anything into. Layouts travel with the same payload so both hosts compose
+ * the same nested frame around a matching route.
  *
  * Not a screen and not React: `AppScreen` owns the state and the chrome. This module
  * is the transport plus the two pure route lookups the host needs, so both can be
  * tested without a renderer.
  */
 
-import type { EndpointManifest, ShellSpec, ViewComponentSpec, ViewSpec } from '@lmthing/ui/view'
+import type { EndpointManifest, ShellSpec, ViewComponentSpec, ViewLayoutSpec, ViewSpec } from '@lmthing/ui/view'
 
 /** The `GET /api/apps/:id/views` body — everything the renderer needs, in one round trip. */
 export interface AppViews {
   project: string
   views: ViewSpec[]
+  layouts: ViewLayoutSpec[]
   components: ViewComponentSpec[]
   shell: ShellSpec | null
   /** The native twin of `window.__APP_ENDPOINTS__`, straight into `createViewClient`. */
@@ -71,6 +73,7 @@ export async function fetchAppTarget(
       app: {
         project: typeof body.project === 'string' ? body.project : projectId,
         views,
+        layouts: Array.isArray(body.layouts) ? body.layouts : [],
         components: Array.isArray(body.components) ? body.components : [],
         shell: body.shell ?? null,
         endpoints: body.endpoints ?? {},

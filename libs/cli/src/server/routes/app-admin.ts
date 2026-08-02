@@ -35,6 +35,7 @@ import type { EndpointContract } from '../../app/build/schema.js';
 import { loadHooks, loadHooksState, type LoadedHook } from '../../app/hooks/index.js';
 import { buildProjectPages } from '../../app/build/pages.js';
 import { runProjectAppCheck } from '../../app/build/check.js';
+import { loadProjectViews, viewRoutePath } from '../../app/view-spec/files.js';
 import type { ProjectDb } from '../../app/store.js';
 
 // ── Structural manager surface (satisfied by SessionManager; mockable in tests) ─
@@ -58,9 +59,9 @@ type AppHandler = (
 // ── Path scoping ────────────────────────────────────────────────────────────
 
 /** The app-layer directories that are siblings of `spaces/` (writable via app-file routes). */
-const APP_DIRS = new Set(['database', 'pages', 'api', 'hooks', 'components', 'lib']);
+const APP_DIRS = new Set(['database', 'pages', 'views', 'api', 'hooks', 'components', 'lib']);
 /** Root files (no dir prefix) the app-file routes may touch. */
-const ROOT_FILES = new Set(['package.json', 'tsconfig.json']);
+const ROOT_FILES = new Set(['package.json', 'app.json', 'shell.view.json', 'tsconfig.json']);
 /** Segments that are NEVER reachable: `.data/` (runtime state) + `types/` (generated). */
 const BLOCKED_DIRS = new Set(['.data', 'types']);
 
@@ -444,6 +445,10 @@ export function handleBuildStatus(_manager: AppAdminManager, lmthingRoot: string
       return;
     }
     const projectRoot = join(lmthingRoot, projectId);
+    if (loadProjectViews(projectRoot).views.length > 0) {
+      sendJson(res, 200, { built: true, stale: false, assetManifest: [] });
+      return;
+    }
     const info = await pagesBuildInfo(projectRoot);
     sendJson(res, 200, { built: info.built, stale: info.stale, assetManifest: info.assetManifest });
   };
@@ -473,6 +478,15 @@ export function handleRebuild(
       return;
     }
     const projectRoot = join(lmthingRoot, projectId);
+    const views = loadProjectViews(projectRoot).views;
+    if (views.length > 0) {
+      sendJson(res, 200, {
+        built: true,
+        assetManifest: [],
+        routes: views.map((view) => ({ routePath: viewRoutePath(view.route), file: view.path })),
+      });
+      return;
+    }
     try {
       const result = await buildProjectPages(projectRoot, { force: true });
       onBuilt?.(projectId);
@@ -563,16 +577,9 @@ async function walkPages(
   }
 }
 
-/** Map a page file to its route pattern (`index` collapses; `[id]` → `:id`). */
+/** Map a legacy page file to its served route pattern (via the shared {@link viewRoutePath}). */
 function pageRoutePath(pagesRoot: string, file: string): string {
-  const rel = relative(pagesRoot, file).replace(PAGE_EXT, '');
-  const segs = rel.split(sep).filter((s) => s.length > 0);
-  if (segs.length > 0 && segs[segs.length - 1] === 'index') segs.pop();
-  const parts = segs.map((s) => {
-    const m = /^\[(.+)\]$/.exec(s);
-    return m ? `:${m[1]}` : s;
-  });
-  return '/' + parts.join('/');
+  return viewRoutePath(relative(pagesRoot, file).replace(PAGE_EXT, '').split(sep).join('/'));
 }
 
 interface PagesCache {

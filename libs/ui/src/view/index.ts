@@ -9,9 +9,9 @@
  * ```
  *
  * Two consumers, one renderer:
- *  - **web** — the generated wrapper page (`pages/<route>.tsx`) bundles it, with the spec
- *    inlined and the endpoint manifest injected as today;
- *  - **native** — `apps/mobile` imports it directly and feeds it a spec fetched from
+ *  - **web** — the prebuilt AppHost (`apps/app-shell`) imports it and feeds it the specs it
+ *    fetches from `GET /api/apps/:id/views` — the SAME transport native uses;
+ *  - **native** — `apps/mobile` imports it directly and feeds it a spec fetched from the same
  *    `GET /api/apps/:id/views`. **No WebView on any page, by construction.**
  *
  * Everything below `ViewRenderer` is built on `Prim.*` and the `elements/*` catalogue,

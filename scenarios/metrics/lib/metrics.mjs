@@ -287,7 +287,8 @@ export function verifyFindings(verify) {
   return byPhase;
 }
 
-/** 7. `buildApp` — the real typecheck + esbuild bundle over the generated wrappers. */
+/** 7. the build gate — the pod's real typecheck + build verdict (esbuild bundle for a legacy TSX
+ *  app; the shared-renderer mount smoke for a spec app). */
 export function gateBuild({ verify, openApp }) {
   const source = 'trace scope value `verify.{ok,built,routes}` (host-run 16-verify → buildProjectApp) · cross-check step-NN.json appCheck';
   if (!verify) {

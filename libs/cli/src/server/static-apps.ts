@@ -1,4 +1,4 @@
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, stat, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve, dirname, join, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -68,6 +68,46 @@ function findAppsBase(): string {
 export function resolveAppDist(): string {
   const base = findAppsBase();
   return process.env['LM_APP_DIST'] ?? resolve(base, 'web/dist');
+}
+
+/**
+ * Resolve the prebuilt `@lmthing/app-shell` dist dir — the ONE static Vite build
+ * that renders EVERY view-spec app (the project id is a runtime route param, so
+ * a single dist serves all of them). Mirrors {@link resolveAppDist}: walks up from
+ * this module to find `apps/app-shell/dist`, with `LM_APP_SHELL_DIST` (absolute path)
+ * as the override following the `LM_APP_DIST` precedent.
+ *
+ * Used for a project with view specs unless `LM_APP_SHELL === '0'`; otherwise the
+ * legacy per-project esbuild bundle is served and this dist is never touched.
+ */
+export function resolveAppShellDist(): string {
+  const base = findAppsBase();
+  return process.env['LM_APP_SHELL_DIST'] ?? resolve(base, 'app-shell/dist');
+}
+
+/**
+ * Walk a dist directory and return every file as a relative path (forward-slash
+ * separated) — the asset-manifest shape {@link createPageServeHandler} expects. Used
+ * once at boot for the static app-shell, whose Vite build does not hand us a manifest
+ * the way the per-project esbuild build does.
+ */
+export async function scanDistManifest(distDir: string): Promise<string[]> {
+  const out: string[] = [];
+  async function walk(dir: string, prefix: string): Promise<void> {
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => null);
+    if (!entries) return;
+    for (const entry of entries) {
+      const name = String(entry.name);
+      const rel = prefix ? `${prefix}/${name}` : name;
+      if (entry.isDirectory()) {
+        await walk(join(dir, name), rel);
+      } else if (entry.isFile()) {
+        out.push(rel);
+      }
+    }
+  }
+  await walk(distDir, '');
+  return out;
 }
 
 // ─── index.html cache ─────────────────────────────────────────────────────────

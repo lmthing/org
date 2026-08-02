@@ -42,15 +42,10 @@ function writeTree(root, files) {
   }
 }
 
-// The real banner text, fetched the same way the module fetches it — never retyped, per the module's
-// own rule ("a harness that carries its own copy of the wrapper banner goes quietly green the day the
-// banner is reworded").
-const REAL_K = productConstants({ fresh: true });
-
-function wrapperFile(route, { generated = true } = {}) {
-  return generated
-    ? `/**\n * ${REAL_K.wrapperBanner}\n * route: ${route}\n */\nexport default function Page() { return null; }\n`
-    : `// hand-written page for ${route}\nexport default function Page() { return <div>hi</div>; }\n`;
+/** A hand-authored React page — under v2 there are NO generated wrappers, so any `.tsx` in a spec
+ *  app is a web-only page the harness must surface (`handAuthoredPages`). */
+function handAuthoredPage(route) {
+  return `// hand-written page for ${route}\nexport default function Page() { return <div>hi</div>; }\n`;
 }
 
 // ── servedPath ───────────────────────────────────────────────────────────────────────────────────
@@ -72,21 +67,17 @@ describe('servedPath', () => {
 describe('productConstants — constants extracted from the product source, never retyped', () => {
   it('extracts all three from the real sdk/org source tree with nothing missing', () => {
     const K = productConstants({ fresh: true });
-    expect(typeof K.wrapperBanner).toBe('string');
-    expect(K.wrapperBanner.length).toBeGreaterThan(0);
     expect(typeof K.emptyFormSentinel).toBe('string');
     expect(Number.isFinite(K.shellDeriveMaxRoutes)).toBe(true);
     expect(K.missing).toEqual([]);
   });
 
   it('a source file that is simply absent comes back null WITH a `missing` entry — never a throw or a guess', () => {
-    const root = mkTmp(); // empty — none of the three files exist under it
+    const root = mkTmp(); // empty — none of the constant files exist under it
     const K = productConstants({ root, fresh: true });
-    expect(K.wrapperBanner).toBeNull();
     expect(K.emptyFormSentinel).toBeNull();
     expect(K.shellDeriveMaxRoutes).toBeNull();
-    expect(K.missing).toHaveLength(3);
-    expect(K.missing.join(' ')).toMatch(/wrapper\.ts/);
+    expect(K.missing).toHaveLength(2);
     expect(K.missing.join(' ')).toMatch(/form\.tsx/);
     expect(K.missing.join(' ')).toMatch(/schema\.ts/);
   });
@@ -94,15 +85,13 @@ describe('productConstants — constants extracted from the product source, neve
   it('a source file present but whose SHAPE no longer matches the pattern also comes back null+missing, not a stale guess', () => {
     const root = mkTmp();
     writeTree(root, {
-      'libs/cli/src/app/view-spec/wrapper.ts': '// the banner comment was reworded away entirely, no AUTO-GENERATED line here\n',
       'libs/ui/src/view/form.tsx': '// fields.length === 0 branch removed in a refactor\n',
       'libs/cli/src/app/view-spec/schema.ts': '// SHELL_DERIVE_MAX_ROUTES renamed to something else\n',
     });
     const K = productConstants({ root, fresh: true });
-    expect(K.wrapperBanner).toBeNull();
     expect(K.emptyFormSentinel).toBeNull();
     expect(K.shellDeriveMaxRoutes).toBeNull();
-    expect(K.missing).toHaveLength(3);
+    expect(K.missing).toHaveLength(2);
   });
 
   it('caches until `fresh: true` is passed', () => {
@@ -134,51 +123,45 @@ describe('viewFacts', () => {
     expect(viewFacts(root)).toBeNull();
   });
 
-  // The bug this module's docblock originally got wrong (fixed while wiring this in): an
-  // appbuilder-TSX project (06-tanzania, 07-life-admin, 08-small-shop, 09-home-renovation,
+  // An appbuilder-TSX project (06-tanzania, 07-life-admin, 08-small-shop, 09-home-renovation,
   // 10-family-recipes all do this for real) HAS a `pages/` dir full of hand-written `.tsx` and NOT ONE
-  // `.view.json` anywhere. That must stay a cheap null, not a false "every page is a wrapper-banner
-  // offender" report.
+  // `.view.json` anywhere. That must stay a cheap null — the view-facts pipeline never touched it.
   it('returns null for a pages/ dir with .tsx pages but ZERO .view.json anywhere (appbuilder-TSX, not viewbuilder)', () => {
     const root = mkTmp();
     writeTree(root, {
-      'pages/index.tsx': wrapperFile('index', { generated: false }),
-      'pages/contacts.tsx': wrapperFile('contacts', { generated: false }),
+      'pages/index.tsx': handAuthoredPage('index'),
+      'pages/contacts.tsx': handAuthoredPage('contacts'),
       'pages/_layout.tsx': 'export default function Layout() { return null; }\n',
     });
     expect(viewFacts(root)).toBeNull();
   });
 
-  it('a minimal spec + a properly generated wrapper: specRoutes, kindCounts, wrapperBannersOk', () => {
+  it('a minimal v2 spec app (views/): specRoutes, kindCounts, no hand-authored pages', () => {
     const root = mkTmp();
     writeTree(root, {
-      'pages/index.view.json': { sections: [{ kind: 'stats' }, { kind: 'list', query: 'listThings' }] },
-      'pages/index.tsx': wrapperFile('index'),
+      'views/index.view.json': { sections: [{ kind: 'stats' }, { kind: 'list', query: 'listThings' }] },
     });
     const facts = viewFacts(root, { endpoints: [{ name: 'listThings' }, { name: 'createThing' }] });
     expect(facts).not.toBeNull();
     expect(facts.specRoutes).toEqual(['index']);
     expect(facts.kindCounts).toEqual({ stats: 1, list: 1 });
     expect(facts.routes.index.sections).toEqual([{ kind: 'stats' }, { kind: 'list', endpoint: 'listThings' }]);
-    expect(facts.wrapperBanners.ok).toBe(1);
-    expect(facts.wrapperBanners.offenders).toEqual([]);
+    expect(facts.handAuthoredPages).toEqual([]);
     expect(facts.endpointCount).toBe(2);
     expect(facts.malformed).toEqual([]);
   });
 
-  // The Wave-2-shaped regression this module exists to catch — MUST NOT be swallowed by the
-  // appbuilder-TSX fix above, because a real spec is present here.
-  it('a spec whose wrapper is NOT the generated banner is flagged as a hand-authored offender', () => {
+  // The regression the `handAuthoredPages` fact exists to catch: under v2 there are NO generated
+  // wrappers, so any `.tsx` living in a spec app is a web-only page — surfaced, not tolerated.
+  it('a `.tsx` beside a spec is flagged in handAuthoredPages (a web-only page)', () => {
     const root = mkTmp();
     writeTree(root, {
-      'pages/index.view.json': { sections: [{ kind: 'list', query: 'listThings' }] },
-      'pages/index.tsx': wrapperFile('index', { generated: false }),
+      'views/index.view.json': { sections: [{ kind: 'list', query: 'listThings' }] },
+      'pages/index.tsx': handAuthoredPage('index'),
     });
     const facts = viewFacts(root);
-    expect(facts.wrapperBanners.ok).toBe(0);
-    expect(facts.wrapperBanners.offenders).toEqual(['pages/index.tsx']);
+    expect(facts.handAuthoredPages).toEqual(['pages/index.tsx']);
     const compact = compactViewFacts(facts);
-    expect(compact.wrapperBannersOk).toBe(false);
     expect(compact.handAuthoredPages).toEqual(['pages/index.tsx']);
   });
 
@@ -239,17 +222,15 @@ describe('viewFacts', () => {
     expect(facts.shell.topLevelStaticRoutes).toBe(1);
   });
 
-  it('routesWithoutSpec / specsWithoutWrapper are computed from the actual set difference', () => {
+  it('handAuthoredPages lists every .tsx/.jsx across both v2 and v1 dirs, sorted', () => {
     const root = mkTmp();
     writeTree(root, {
-      'pages/index.view.json': { sections: [{ kind: 'list', query: 'x' }] },
-      'pages/index.tsx': wrapperFile('index'),
-      'pages/orphan-wrapper.tsx': wrapperFile('orphan-wrapper'), // a .tsx with no matching spec
-      'pages/orphan-spec.view.json': { sections: [{ kind: 'list', query: 'y' }] }, // a spec with no wrapper yet
+      'views/index.view.json': { sections: [{ kind: 'list', query: 'x' }] },
+      'pages/legacy.tsx': handAuthoredPage('legacy'),
+      'views/stray.jsx': handAuthoredPage('stray'),
     });
     const facts = viewFacts(root);
-    expect(facts.routesWithoutSpec).toEqual(['orphan-wrapper']);
-    expect(facts.specsWithoutWrapper).toEqual(['orphan-spec']);
+    expect(facts.handAuthoredPages).toEqual(['pages/legacy.tsx', 'views/stray.jsx']);
   });
 
   it('endpointCount is null when opts.endpoints is not an array (never a guessed 0)', () => {
@@ -336,8 +317,7 @@ describe('compactViewFacts', () => {
   it('projects a full facts object down to the judge-sized shape, with native folded in', () => {
     const root = mkTmp();
     writeTree(root, {
-      'pages/index.view.json': { sections: [{ kind: 'list', query: 'listThings' }] },
-      'pages/index.tsx': wrapperFile('index'),
+      'views/index.view.json': { sections: [{ kind: 'list', query: 'listThings' }] },
     });
     const facts = viewFacts(root, { endpoints: [{ name: 'listThings' }] });
     const native = { status: 200, viewCount: 1, wouldRenderNatively: true };
@@ -346,7 +326,7 @@ describe('compactViewFacts', () => {
     expect(compact.specRoutes).toEqual(['index']);
     expect(compact.endpointCount).toBe(1);
     expect(compact.sectionKinds).toEqual({ index: ['list'] });
-    expect(compact.wrapperBannersOk).toBe(true);
+    expect(compact.handAuthoredPages).toEqual([]);
     expect(compact.native).toBe(native);
   });
 });
@@ -413,9 +393,8 @@ describe('live fixtures — scenarios/*/runs on disk (skips silently if absent)'
     expect(facts).not.toBeNull();
     expect(facts.specRoutes).toContain('index');
     expect(facts.malformed).toEqual([]);
-    // Whatever wrapper the real build produced, this module's own read of it must be internally
-    // consistent: every "generated" verdict is a boolean, not null (banner constant resolves for real).
-    for (const w of facts.wrappers) expect(typeof w.generated).toBe('boolean');
+    // handAuthoredPages is always an array — a real spec run has no stray React pages.
+    expect(Array.isArray(facts.handAuthoredPages)).toBe(true);
   });
 
   const plantCare1 = realRoot('13-plant-care', 'runs', '1', 'data', '.lmthing', 'plant-care');

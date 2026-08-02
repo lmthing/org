@@ -17,11 +17,11 @@
  *
  * ## The two configurations, and why nothing here assumes an origin
  *
- * | | web (a generated wrapper page) | native (`apps/mobile`) |
+ * | | web (the prebuilt AppHost) | native (`apps/mobile`) |
  * |---|---|---|
  * | `baseUrl`  | the app base (`…/app/<project>`), often relative | the ABSOLUTE pod URL |
  * | `getToken` | omitted — the pod is same-origin and cookie-authed | the pod token |
- * | `endpoints`| injected as `window.__APP_ENDPOINTS__` | from `GET /api/apps/:id/views` |
+ * | `endpoints`| from `GET /api/apps/:id/views` | from `GET /api/apps/:id/views` |
  *
  * This is the `createTeamClient` pattern (`src/team/client.ts`): where the pod is and how
  * a token is obtained are CONFIGURATION, so the same code runs in a browser tab served by

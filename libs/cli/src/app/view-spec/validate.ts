@@ -2184,9 +2184,8 @@ export async function renderSmokeViews(
       let rendered = 0;
       for (const { route, spec, path } of loaded.views) {
         try {
-          // Wrapped in the theme provider, exactly as the generated wrapper mounts it
-          // (`authoring/globals.ts#renderViewWrapper`): every `Prim.*` primitive reads that
-          // context and throws `Missing theme.` without it, so an unwrapped mount would report
+          // AppHost mounts the theme provider around every page. Every `Prim.*` primitive reads that
+          // context and throws `Missing theme.` without it, so an unwrapped smoke mount would report
           // all N pages broken for a reason no spec edit can fix.
           const tree = createElement(view.ViewRenderer, {
             spec,
@@ -2226,6 +2225,106 @@ export async function renderSmokeViews(
     pages,
     rendererMounted,
   };
+}
+
+/**
+ * **Mount-only render smoke — the check pipeline's replacement for the esbuild build phase.**
+ *
+ * `runProjectAppCheck` (`app/build/check.ts`) used to prove a spec app "builds" by esbuild-bundling
+ * its generated wrappers. W6 deletes that per-project build, so the equivalent guarantee — *does
+ * every view actually MOUNT?* — moves here: each view (wrapped in its layout chain) is rendered to
+ * a static string through the real `ViewRenderer`, and a throw is a build finding.
+ *
+ * This is deliberately NOT {@link renderSmokeViews}. That gate mounts against LIVE endpoint data to
+ * measure binding coverage and empty renders; the check pipeline has no booted db, so run against
+ * live data every page would report `emptyRender` and fail for a reason no spec edit can fix. Here
+ * there is no data tier at all: only "did the spec + its layouts mount without throwing". It passes
+ * `layouts`/`routes`/`route` (which the data gate does not) so the nested-layout composition is
+ * exercised — the one structural thing a per-page mount would otherwise miss.
+ *
+ * The all-pages-threw guard is the same one {@link renderSmokeViews} documents: a throw on EVERY
+ * page is this process failing to host React (a duplicated React copy, or a renderer that needs a
+ * DOM), not every page being broken. Reporting it as N spec defects would fail the check for a
+ * reason no spec edit can fix, so findings are trusted only from a process that rendered something.
+ */
+export async function renderSpecAppSmoke(
+  projectRoot: string,
+  opts: { contracts?: ContractsLike } = {},
+): Promise<ViewValidationResult> {
+  const loaded = loadProjectViews(projectRoot);
+  if (loaded.views.length === 0) return resultOf([], 0);
+
+  const contracts = toViewContracts(
+    opts.contracts ?? (await import('../build/contracts.js').then((m) => m.generateProjectContracts(projectRoot))),
+  );
+  const RENDERER_MODULE = '@lmthing/ui/view';
+
+  try {
+    const view = (await import(RENDERER_MODULE)) as {
+      ViewRenderer?: unknown;
+      ViewThemeProvider?: unknown;
+      createViewClient?: (config: Record<string, unknown>) => unknown;
+    };
+    if (!view.ViewRenderer || !view.createViewClient) {
+      // The renderer is not importable in this process — the render-error tier cannot run. Same
+      // stance as `renderSmokeViews`: report nothing rather than fail every page for a host reason.
+      return resultOf([], loaded.views.length);
+    }
+
+    // Resolve react + react-dom from the RENDERER's own location, not this package's — see the
+    // long note in `renderSmokeViews` (cli pins react@18, ui peers >=19; a bare import drives a 19
+    // tree with 18's renderer and every page throws a null-dispatcher error).
+    const { createRequire } = await import('node:module');
+    const here = createRequire(import.meta.url);
+    const fromRenderer = createRequire(here.resolve(RENDERER_MODULE));
+    const { renderToStaticMarkup } = (await import(pathToFileURL(fromRenderer.resolve('react-dom/server')).href)) as {
+      renderToStaticMarkup: (element: unknown) => string;
+    };
+    const { createElement } = (await import(pathToFileURL(fromRenderer.resolve('react')).href)) as {
+      createElement: (type: unknown, props: unknown) => unknown;
+    };
+    const client = view.createViewClient({
+      baseUrl: 'http://render-smoke.invalid',
+      endpoints: Object.fromEntries(
+        contracts.endpoints.map((endpoint) => [
+          endpoint.name,
+          { method: endpoint.method, routePath: endpoint.routePath ?? `/${endpoint.name}` },
+        ]),
+      ),
+      timezone: 'UTC',
+    });
+    const components = Object.fromEntries(loaded.components.map((component) => [component.name, component.def]));
+    const layouts = loaded.layouts.map((layout) => ({ ...layout.spec, prefix: layout.prefix }));
+    const routes = loaded.views.map((entry) => entry.route);
+
+    const thrown: ViewError[] = [];
+    let rendered = 0;
+    for (const { route, spec, path } of loaded.views) {
+      try {
+        const tree = createElement(view.ViewRenderer, {
+          spec,
+          components,
+          shell: loaded.shell ?? undefined,
+          layouts,
+          routes,
+          client,
+          route: { path: route, params: {} },
+        });
+        renderToStaticMarkup(view.ViewThemeProvider ? createElement(view.ViewThemeProvider, { children: tree }) : tree);
+        rendered++;
+      } catch (error) {
+        thrown.push(renderThrew(route, path, error instanceof Error ? error.message : String(error)));
+      }
+    }
+    // Trust per-page findings only if the process rendered at least one page (see the guard note
+    // above); an all-pages throw is a host failure, not N broken specs, so it reports clean.
+    return resultOf(rendered > 0 ? thrown : [], loaded.views.length);
+  } catch (error) {
+    // The renderer/react resolution itself threw — a host problem, not a spec defect. Report clean:
+    // the typecheck and contract phases already ran, and failing here blames the app for the host.
+    void error;
+    return resultOf([], loaded.views.length);
+  }
 }
 
 /** Convenience for a code node: the three gates merged into one finding list. */

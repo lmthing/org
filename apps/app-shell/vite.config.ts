@@ -17,5 +17,13 @@ import { createViteConfig } from '@lmthing/utils/vite'
  * calls `useTheme()`/`getConfig()`, which throws `Err0` unless `createTamagui()` ran as a
  * retained side-effect. `UiThemeProvider` imports `tamaguiConfig` as a VALUE (a use no
  * bundler may elide), so the guard passes; do NOT bypass the factory.
+ *
+ * `base: './'` — emit RELATIVE asset URLs (`./assets/…`), not Vite's default root-absolute
+ * `/assets/…`. The pod serves this ONE dist at `/app/<projectId>/` (and `/<projectId>/` in
+ * prod), and the serve layer (`createPageServeHandler` in libs/cli/src/app/pages-serve.ts)
+ * injects `<base href="/app/<projectId>/">` so relative URLs resolve at ANY route depth.
+ * Root-absolute URLs would bypass `<base>` and resolve against the pod root — hitting the
+ * wrong static handler. `apps/desktop` sets `base: './'` for the same reason (Tauri's
+ * custom protocol). This MUST stay './' for the serve-layer reuse to work.
  */
-export default createViteConfig(__dirname, undefined, { tailwind: false, router: false })
+export default createViteConfig(__dirname, { base: './' }, { tailwind: false, router: false })

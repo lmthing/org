@@ -40,6 +40,7 @@ import { safeProjectId, RESERVED_PROJECT_IDS } from '../projects.js';
 import type { AppAdminManager } from './app-admin.js';
 import { generateProjectContracts } from '../../app/build/contracts.js';
 import { buildProjectPages } from '../../app/build/pages.js';
+import { loadProjectViews } from '../../app/view-spec/files.js';
 
 /** Public store base — the CLI downloads catalog apps from `${STORE_URL}/projects/…`
  *  (there is NO local catalog in the pod). Overridable for tests / self-hosting. */
@@ -66,9 +67,9 @@ export type AppsInstallManager = AppAdminManager;
 // ── App-template scoping (mirrors APP_DIRS/ROOT_FILES in app-admin.ts) ────────
 
 /** The app-layer directories copied from a catalog app into the runtime root. */
-const APP_TEMPLATE_DIRS = ['database', 'pages', 'api', 'hooks', 'components', 'lib', 'spaces'];
+const APP_TEMPLATE_DIRS = ['database', 'pages', 'views', 'api', 'hooks', 'components', 'lib', 'spaces'];
 /** Root-level files copied verbatim. */
-const APP_TEMPLATE_ROOT_FILES = ['package.json', 'project.json', 'tsconfig.json'];
+const APP_TEMPLATE_ROOT_FILES = ['package.json', 'project.json', 'app.json', 'shell.view.json', 'tsconfig.json'];
 /** NEVER copied: `.data/` (runtime state — db, build caches) and `types/` (generated). */
 
 // ── Catalog listing ───────────────────────────────────────────────────────────
@@ -324,6 +325,7 @@ async function tryBuildContracts(dest: string): Promise<BuildStepResult> {
 }
 
 async function tryBuildPages(dest: string): Promise<BuildStepResult> {
+  if (loadProjectViews(dest).views.length > 0) return { ok: true, built: true, assetCount: 0 };
   if (!existsSync(join(dest, 'pages'))) return { ok: true, built: false, assetCount: 0 };
   try {
     const result = await buildProjectPages(dest, { force: true });

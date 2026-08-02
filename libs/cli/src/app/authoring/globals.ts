@@ -33,15 +33,7 @@ import {
   topLevelKeys,
 } from './lint.js';
 import { saveTypecheckError } from './save-typecheck.js';
-import {
-  SHELL_SPEC_PATH,
-  loadProjectViews,
-  viewComponentPath,
-  viewLayoutPath,
-  viewSpecPath,
-  viewWrapperPath,
-} from '../view-spec/files.js';
-import { renderViewWrapper } from '../view-spec/wrapper.js';
+import { SHELL_SPEC_PATH, viewComponentPath, viewLayoutPath, viewSpecPath } from '../view-spec/files.js';
 import {
   formatViewErrors,
   loadViewContracts,
@@ -181,22 +173,20 @@ export interface ProjectAuthoringGlobals {
    *  injected until a table already exists, so an agent could not otherwise insert into a
    *  table it just created. */
   writeProjectTable: (name: string, schema: unknown, rows?: unknown[]) => { ok: boolean; error?: string };
-  /** Write `<projectRoot>/pages/<route>.view.json` (a VIEW SPEC) plus its generated
-   *  `pages/<route>.tsx` wrapper — the ONE UI-authoring surface (`system-appbuilder`).
+  /** Write `<projectRoot>/views/<route>.view.json` (a VIEW SPEC), the one UI-authoring
+   *  surface (`system-appbuilder`).
    *
    *  A view is data, not TSX: the spec is validated against the project's endpoint contracts at
    *  save time (`view-spec/validate.ts#validateViewSpec`) and rendered by the shared
-   *  `ViewRenderer` on both the web bundle and the native mobile app. The wrapper is what keeps
-   *  the page build unchanged — see `view-spec/wrapper.ts`. */
+   *  `ViewRenderer` in the prebuilt AppHost and the native mobile app. */
   writeProjectView: (route: string, spec: unknown) => { ok: boolean; error?: string };
   /** Write `views/<prefix>/_layout.view.json` — the frame every route under `prefix` renders in. */
   writeProjectViewLayout: (prefix: string, spec: unknown) => { ok: boolean; error?: string };
-  /** Write `<projectRoot>/pages/components/<Name>.view.json` (a reusable element composition with
-   *  typed props). Validated exactly like a view; every reference to it is re-checked at the
-   *  referencing view's own save. Writing one re-emits every wrapper, because wrappers inline the
-   *  components they render with. */
+  /** Write `<projectRoot>/components/<Name>.view.json` (a reusable element composition with typed
+   *  props). Validated exactly like a view; every reference to it is re-checked at the referencing
+   *  view's own save. */
   writeProjectViewComponent: (name: string, def: unknown) => { ok: boolean; error?: string };
-  /** Write `<projectRoot>/pages/_shell.view.json` (the app's nav/brand/assistant shell).
+  /** Write `<projectRoot>/shell.view.json` (the app's nav/brand/assistant shell).
    *
    *  Optional but not always derivable: the renderer derives nav from the route list only for a
    *  small, flat app (`SHELL_DERIVE_MAX_ROUTES`), and T0 measured 0/5 catalogue apps reproducing
@@ -559,59 +549,6 @@ export function createProjectAuthoringGlobals(opts: {
   // that reported failures differently would need its own retry handling in every prompt that
   // calls it.
 
-  /** The AUTO-GENERATED marker every wrapper carries — the guard against clobbering a real page. */
-  const WRAPPER_MARKER = 'Written by `writeProjectView`';
-
-  /**
-   * (Re-)emit `pages/<route>.tsx` for every view spec on disk.
-   *
-   * Every write goes through here, not just a view write, because a wrapper inlines the spec AND
-   * the components AND the shell it renders with. Writing a component after the pages that use it
-   * would otherwise leave every one of them holding the old definition — a stale-bundle bug with
-   * no symptom at authoring time and no obvious cause at render time. Re-emitting all of them is
-   * one small file write per page; getting the dependency tracking wrong once is a ghost.
-   */
-  function emitViewWrappers(): { ok: boolean; error?: string } {
-    const loaded = loadProjectViews(projectRoot);
-    const components = Object.fromEntries(loaded.components.map((c) => [c.name, c.def]));
-    for (const { route, spec } of loaded.views) {
-      const rel = viewWrapperPath(route);
-      const abs = safeResolve(projectRoot, rel);
-      if (existsSync(abs)) {
-        let current = '';
-        try {
-          current = readFileSync(abs, 'utf8');
-        } catch {
-          /* unreadable — treat as absent and overwrite */
-        }
-        if (current && !current.includes(WRAPPER_MARKER)) {
-          return {
-            ok: false,
-            error:
-              `refusing to overwrite ${rel}: it is a hand-written React page, not a generated view ` +
-              `wrapper. A route is either a spec page or a TSX page, never both. Delete the .tsx ` +
-              `first if the spec is meant to replace it.`,
-          };
-        }
-      }
-      const out = writeUnder(
-        rel,
-        renderViewWrapper({
-          spec,
-          components,
-          shell: loaded.shell,
-          // The whole app's routes and layouts ride along, because a wrapper is a standalone
-          // page module: without the route list the shell derives navigation from ONE route,
-          // and without the layouts a child page renders with no frame.
-          routes: loaded.views.map((v) => v.route),
-          layouts: loaded.layouts.map((l) => l.spec),
-        }),
-      );
-      if (!out.ok) return out;
-    }
-    return { ok: true };
-  }
-
   /** The project's spec vocabulary, with `extra` treated as already-present (the artifact being
    *  written is not on disk yet, so a self-reference would otherwise fail to resolve). */
   function contractsFor(extra: { route?: string; component?: ViewComponentSpec }): ReturnType<typeof loadViewContracts> {
@@ -627,7 +564,7 @@ export function createProjectAuthoringGlobals(opts: {
   }
 
   /**
-   * Write a VIEW SPEC into the live project and generate its wrapper page.
+   * Write a VIEW SPEC into the live project.
    *
    * The spec's own `route` is normalized from the `route` argument, so the model writes it once.
    * Everything else is checked before anything lands: shape (ajv), every `query`/`mutation`/
@@ -671,12 +608,10 @@ export function createProjectAuthoringGlobals(opts: {
 
     const out = writeUnder(viewSpecPath(rel), `${JSON.stringify(normalized, null, 2)}\n`);
     if (!out.ok) return out;
-    const wrappers = emitViewWrappers();
-    if (!wrappers.ok) return wrappers;
     try {
       onAppWrite?.('page', rel);
     } catch {
-      /* best-effort — the spec and its wrapper already landed */
+      /* best-effort — the spec already landed */
     }
     return { ok: true };
   }
@@ -685,8 +620,7 @@ export function createProjectAuthoringGlobals(opts: {
    * Write a nested LAYOUT — the frame every route under `prefix` renders inside.
    *
    * Same four steps as {@link writeProjectView} over the same vocabulary, plus the one rule that
-   * makes a layout a layout: exactly one `outlet`. Writing it re-emits every wrapper, because a
-   * layout is inlined into each page it frames — the same reason a component write does.
+   * makes a layout a layout: exactly one `outlet`.
    */
   function writeProjectViewLayout(prefix: string, spec: unknown): { ok: boolean; error?: string } {
     let rel: string;
@@ -722,12 +656,10 @@ export function createProjectAuthoringGlobals(opts: {
 
     const out = writeUnder(viewLayoutPath(rel), `${JSON.stringify(normalized, null, 2)}\n`);
     if (!out.ok) return out;
-    const wrappers = emitViewWrappers();
-    if (!wrappers.ok) return wrappers;
     try {
       onAppWrite?.('page', rel);
     } catch {
-      /* best-effort — the layout and the wrappers already landed */
+      /* best-effort — the layout already landed */
     }
     return { ok: true };
   }
@@ -763,8 +695,6 @@ export function createProjectAuthoringGlobals(opts: {
 
     const out = writeUnder(viewComponentPath(name), `${JSON.stringify(normalized, null, 2)}\n`);
     if (!out.ok) return out;
-    const wrappers = emitViewWrappers();
-    if (!wrappers.ok) return wrappers;
     try {
       onAppWrite?.('component', name);
     } catch {
@@ -788,8 +718,6 @@ export function createProjectAuthoringGlobals(opts: {
 
     const out = writeUnder(SHELL_SPEC_PATH, `${JSON.stringify(shell, null, 2)}\n`);
     if (!out.ok) return out;
-    const wrappers = emitViewWrappers();
-    if (!wrappers.ok) return wrappers;
     try {
       onAppWrite?.('page', '_shell');
     } catch {

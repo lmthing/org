@@ -3,30 +3,24 @@
  *
  * `snapshot()` recorded spaces, `appTables`, `appManifest`, delegates, yields, errors and the reply
  * — and nothing whatsoever about view specs. So every `expect` in the T3 scenarios (`11-clinic`,
- * `12-rentals`) about a `timeline` section, a `prefill` block, a `poll.while`, the generated-wrapper
- * banner or an endpoint count degraded to prose the judge had to take on faith, or go and read off
- * disk itself — which it does inconsistently or not at all.
+ * `12-rentals`) about a `timeline` section, a `prefill` block, a `poll.while`, or an endpoint count
+ * degraded to prose the judge had to take on faith, or go and read off disk itself — which it does
+ * inconsistently or not at all.
  *
  * Everything here is DERIVED FROM ARTIFACTS, never from a model's account of them:
  *
- *  - the specs on disk (`pages/**\/*.view.json`, `pages/components/*.view.json`,
- *    `pages/_shell.view.json`) — the layout is `libs/cli/src/app/view-spec/files.ts`'s;
- *  - the generated wrappers (`pages/**\/*.tsx`) — the routes the pages BUILD discovers, per
- *    `libs/cli/src/app/build/pages.ts#walkPages`;
- *  - two literal strings and one numeric bound READ OUT OF THE PRODUCT SOURCE
- *    ({@link productConstants}), never retyped here: a harness that carries its own copy of the
- *    wrapper banner goes quietly green the day the banner is reworded.
+ *  - v2 specs on disk (`views/**\/*.view.json`, `components/*.view.json`, `shell.view.json`);
+ *  - v1 `pages/**\/*.view.json` artifacts, which remain readable for compatibility;
+ *  - the numeric shell-navigation bound read from product source, never retyped here.
  *
  * **Cheap by construction.** This runs at the end of every step, so it is synchronous local-disk
- * reads only: one `readdir` walk of `pages/`, a `JSON.parse` per spec, and the FIRST FEW HUNDRED
- * BYTES of each wrapper `.tsx` (a wrapper inlines the whole spec — reading them whole would be the
- * expensive mistake). A project with no `pages/` dir costs one failed `readdir` and returns null, so
- * scenarios 06–10 pay nothing and their step evidence is byte-identical to before.
+ * reads only: a recursive `readdir` walk of the spec directories and a `JSON.parse` per spec. A
+ * project with no view artifacts returns null, so legacy TSX apps pay nothing.
  *
- * The pod-side twin (`GET /api/apps/:id/views`, the NATIVE transport) is `nativeViewFacts` — the one
- * asynchronous function here, and the only place the harness reaches the native path at all.
+ * The pod-side twin (`GET /api/apps/:id/views`) is `nativeViewFacts` — the one asynchronous function
+ * here, and the only place the harness reaches the shared renderer's transport at all.
  */
-import { readdirSync, readFileSync, statSync, existsSync, openSync, readSync, closeSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { SDK_ORG } from './paths.mjs';
 
@@ -34,13 +28,6 @@ import { SDK_ORG } from './paths.mjs';
 
 /** Where each borrowed constant lives, and how to find it in that file. */
 const CONSTANT_SOURCES = {
-  // `renderViewWrapper` opens every generated page with this line. A hand-written page that renders
-  // is still a failure — the whole promise is that no page of a viewbuilder app is web-only.
-  wrapperBanner: {
-    file: 'libs/cli/src/app/view-spec/wrapper.ts',
-    // The first occurrence inside the template literal `renderViewWrapper` returns.
-    re: /^\s*\*?\s*(AUTO-GENERATED[^\n*]*?)\s*$/m,
-  },
   // What `SchemaForm` renders when the endpoint's Input schema derived ZERO fields — the exact
   // Wave-2 "every form in every app" bug, which `appCheck` passes cleanly.
   emptyFormSentinel: {
@@ -62,9 +49,8 @@ let constantsCache = null;
  * The product's own strings/bounds, extracted from source on first use.
  *
  * A constant that cannot be extracted comes back `null` WITH a `missing` entry — never a guessed
- * default. A check that depends on a null constant reports itself unmeasured (see
- * {@link viewFacts}'s `wrapperBanners: null`), because a banner check that silently passes when it
- * cannot find the banner is worse than no check at all.
+ * default. A check that depends on a null constant reports itself unmeasured rather than guessing
+ * a product value.
  */
 export function productConstants({ root = SDK_ORG, fresh = false } = {}) {
   if (constantsCache && !fresh) return constantsCache;
@@ -91,8 +77,10 @@ export function productConstants({ root = SDK_ORG, fresh = false } = {}) {
 // ── the on-disk walk ───────────────────────────────────────────────────────────────────────────
 
 const VIEW_EXT = '.view.json';
+/** A hand-authored React page — never emitted by the spec pipeline, so its presence in a spec app
+ *  is the "web-only page" regression this fact exists to surface. */
 const PAGE_EXT = /\.(tsx|jsx)$/;
-/** `files.ts#walkViewFiles` and `pages.ts#walkPages` skip the same dirs — keep them in step. */
+/** `files.ts#walkViewFiles` skips component definitions while walking a spec tree. */
 const SKIP_DIRS = new Set(['components', 'lib']);
 
 function readdirSafe(dir) {
@@ -103,8 +91,8 @@ function readdirSafe(dir) {
   }
 }
 
-/** Every route-bearing file under `pages/`, by extension test. Mirrors both product walkers. */
-function walk(pagesDir, dir, test, out) {
+/** Every route-bearing view file under one spec directory. */
+function walk(specDir, dir, test, out) {
   for (const entry of readdirSafe(dir) ?? []) {
     const abs = join(dir, entry.name);
     let isDir = entry.isDirectory();
@@ -117,7 +105,7 @@ function walk(pagesDir, dir, test, out) {
     }
     if (isDir) {
       if (SKIP_DIRS.has(entry.name) || entry.name.startsWith('_') || entry.name.startsWith('.')) continue;
-      walk(pagesDir, abs, test, out);
+      walk(specDir, abs, test, out);
       continue;
     }
     if (!test(entry.name)) continue;
@@ -126,9 +114,9 @@ function walk(pagesDir, dir, test, out) {
   }
 }
 
-/** `<pages>/recipes/[id].view.json` → `recipes/[id]` (the AUTHORING route, as persisted). */
-function authoringRoute(pagesDir, abs, ext) {
-  const rel = relative(pagesDir, abs);
+/** `<views>/recipes/[id].view.json` → `recipes/[id]` (the AUTHORING route, as persisted). */
+function authoringRoute(specDir, abs, ext) {
+  const rel = relative(specDir, abs);
   return rel.slice(0, rel.length - ext.length).split(sep).join('/');
 }
 
@@ -137,27 +125,6 @@ export function servedPath(route) {
   const segs = route.split('/').filter(Boolean);
   if (segs[segs.length - 1] === 'index') segs.pop();
   return '/' + segs.map((s) => s.replace(/^\[(.+)\]$/, ':$1')).join('/');
-}
-
-/** Read only the head of a file — a wrapper inlines its whole spec, so never read it all. */
-function readHead(abs, bytes = 400) {
-  let fd;
-  try {
-    fd = openSync(abs, 'r');
-    const buf = Buffer.alloc(bytes);
-    const n = readSync(fd, buf, 0, bytes, 0);
-    return buf.subarray(0, n).toString('utf8');
-  } catch {
-    return null;
-  } finally {
-    if (fd !== undefined) {
-      try {
-        closeSync(fd);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
 }
 
 function parseJsonFile(abs) {
@@ -217,159 +184,129 @@ function sectionDigest(s) {
 // ── the facts ──────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Every view-spec fact derivable from one project directory, or `null` when the project has no
- * `pages/` dir at all, OR (see the FIX note below) when that `pages/` dir has not one `.view.json`
- * anywhere in it — a project the view-spec pipeline never touched.
- *
- * Returns the RICH form — the runner stores it in `rec.state` (so it lands in
- * `step-NN.full.json` for drill-down) and `compactViewFacts` reduces it for `step-NN.json`.
- *
- * FIX (found while wiring this into `snapshot()`): the module originally bailed to `null` only on a
- * missing `pages/` dir, and claimed on that basis that "scenarios 06–10 pay nothing". False — every
- * real run under `06-tanzania/07-life-admin/08-small-shop/09-home-renovation/10-family-recipes`
- * DOES have a `pages/` dir (the OLD appbuilder pipeline writes `.tsx` straight into it), so the old
- * code fell through to a full facts object every time, reporting `wrapperBannersOk:false` and every
- * route in `handAuthoredPages` — which reads as "the wrapper-banner regression this module exists to
- * catch" when it is really just a non-viewbuilder app doing exactly what it is supposed to do. Bailing
- * on "zero `.view.json` anywhere" (no page spec, no component, no shell) instead of "no `pages/` dir"
- * restores the "06–10 pay nothing" invariant for real and stops that false signal from ever landing in
- * evidence a judge might read.
+ * Every view-spec fact derivable from one project directory. V2 locations win on duplicate routes,
+ * matching `loadProjectViews`; v1 locations remain visible only for compatibility.
  *
  * @param {string} projectRoot  `<dataDir>/.lmthing/<projectId>`
  * @param {{ endpoints?: Array<{name?:string}>|null, sdkRoot?: string }} [opts]
- *   `endpoints` is the app manifest's own endpoint list — already fetched by `snapshot`, so the
- *   endpoint count costs nothing extra.
  */
 export function viewFacts(projectRoot, { endpoints = null, sdkRoot = SDK_ORG } = {}) {
-  const pagesDir = join(projectRoot, 'pages');
-  if (!existsSync(pagesDir)) return null;
-
-  const specFiles = [];
-  walk(pagesDir, pagesDir, (n) => n.endsWith(VIEW_EXT), specFiles);
-  const componentsDir = join(pagesDir, 'components');
-  const componentEntries = (readdirSafe(componentsDir) ?? []).filter((e) => e.isFile() && e.name.endsWith(VIEW_EXT));
-  const shellPath = join(pagesDir, `_shell${VIEW_EXT}`);
-  const shellExists = existsSync(shellPath);
-  // No spec, no component, no shell ⇒ this `pages/` dir was never authored through the view-spec
-  // pipeline at all (see the FIX note above) — bail before the pricier wrapper-head reads and the
-  // product-source scan, same as the no-`pages/`-dir case.
-  if (specFiles.length === 0 && componentEntries.length === 0 && !shellExists) return null;
-
-  const K = productConstants({ root: sdkRoot });
-
-  const wrapperFiles = [];
-  walk(pagesDir, pagesDir, (n) => PAGE_EXT.test(n), wrapperFiles);
-
+  const v2Dir = join(projectRoot, 'views');
+  const v1Dir = join(projectRoot, 'pages');
+  const sources = [
+    { dir: v2Dir, prefix: 'views' },
+    { dir: v1Dir, prefix: 'pages' },
+  ];
   const malformed = [];
   const routes = {};
-  for (const abs of specFiles.sort()) {
-    const route = authoringRoute(pagesDir, abs, VIEW_EXT);
-    const { value: spec, error } = parseJsonFile(abs);
-    if (error) {
-      malformed.push({ file: `pages/${route}${VIEW_EXT}`, message: error });
-      continue;
+  const seen = new Set();
+
+  for (const { dir, prefix } of sources) {
+    const specFiles = [];
+    walk(dir, dir, (name) => name.endsWith(VIEW_EXT), specFiles);
+    for (const abs of specFiles.sort()) {
+      const route = authoringRoute(dir, abs, VIEW_EXT);
+      if (seen.has(route)) continue;
+      const { value: spec, error } = parseJsonFile(abs);
+      if (error) {
+        malformed.push({ file: `${prefix}/${route}${VIEW_EXT}`, message: error });
+        continue;
+      }
+      if (!spec || typeof spec !== 'object' || !Array.isArray(spec.sections)) {
+        malformed.push({ file: `${prefix}/${route}${VIEW_EXT}`, message: 'not a view spec (needs a `sections` array)' });
+        continue;
+      }
+      seen.add(route);
+      routes[route] = {
+        layout: spec.layout ?? null,
+        title: spec.title ?? null,
+        ...(spec.route && spec.route !== route ? { routeFieldMismatch: spec.route } : {}),
+        sections: spec.sections.map(sectionDigest),
+      };
     }
-    if (!spec || typeof spec !== 'object' || !Array.isArray(spec.sections)) {
-      malformed.push({ file: `pages/${route}${VIEW_EXT}`, message: 'not a view spec (needs a `sections` array)' });
-      continue;
-    }
-    routes[route] = {
-      // `layout` ABSENT is the healthy case — the renderer predicts the archetype. Present means the
-      // model overrode the prediction, which is the plan's layout-override ratchet metric.
-      layout: spec.layout ?? null,
-      title: spec.title ?? null,
-      // The spec's own `route` field is recorded ONLY when it disagrees with the file path: the file
-      // path is the route of record everywhere (writer, build, spec-fetch route), so a divergence is
-      // a real defect and not a stylistic note.
-      ...(spec.route && spec.route !== route ? { routeFieldMismatch: spec.route } : {}),
-      sections: spec.sections.map(sectionDigest),
-    };
   }
 
-  // ── components + shell ───────────────────────────────────────────────────────────────────────
-  // `componentsDir`/`componentEntries`/`shellPath`/`shellExists` were already computed above, for the
-  // early-bail check — reused here rather than re-walked.
+  const componentSources = [
+    { dir: join(projectRoot, 'components'), prefix: 'components' },
+    { dir: join(v1Dir, 'components'), prefix: 'pages/components' },
+  ];
   const components = [];
-  for (const entry of componentEntries) {
-    const name = entry.name.slice(0, -VIEW_EXT.length);
-    const { value: def, error } = parseJsonFile(join(componentsDir, entry.name));
-    if (error || !def || typeof def !== 'object' || def.node === undefined || def.node === null) {
-      malformed.push({ file: `pages/components/${entry.name}`, message: error ?? 'not a view component (needs a `node`)' });
-      continue;
+  const seenComponents = new Set();
+  for (const { dir, prefix } of componentSources) {
+    for (const entry of readdirSafe(dir) ?? []) {
+      if (!entry.isFile() || !entry.name.endsWith(VIEW_EXT)) continue;
+      const name = entry.name.slice(0, -VIEW_EXT.length);
+      if (seenComponents.has(name)) continue;
+      const { value: def, error } = parseJsonFile(join(dir, entry.name));
+      if (error || !def || typeof def !== 'object' || def.node === undefined || def.node === null) {
+        malformed.push({ file: `${prefix}/${entry.name}`, message: error ?? 'not a view component (needs a `node`)' });
+        continue;
+      }
+      seenComponents.add(name);
+      components.push({ name, props: Object.keys(def.props ?? {}) });
     }
-    components.push({ name, props: Object.keys(def.props ?? {}) });
   }
 
-  // AUTHORED means the file exists. `derivable` says whether the renderer COULD have derived a nav
-  // (≤ SHELL_DERIVE_MAX_ROUTES top-level static routes) — which is what separates a real override
-  // from a forced one. T1's single shell override was forced (13 routes ≫ 5), and the metric has to
-  // be able to say so.
-  const topLevelStatic = new Set(
-    Object.keys(routes)
-      .filter((r) => !r.includes('[') && !r.includes('/'))
-      .map((r) => r),
-  );
-  let shell = { authored: false, derivable: topLevelStatic.size <= (K.shellDeriveMaxRoutes ?? Infinity), topLevelStaticRoutes: topLevelStatic.size };
-  if (shellExists) {
-    const { value: sh, error } = parseJsonFile(shellPath);
+  const shellSources = [
+    { path: join(projectRoot, `shell${VIEW_EXT}`), file: `shell${VIEW_EXT}` },
+    { path: join(v1Dir, `_shell${VIEW_EXT}`), file: `pages/_shell${VIEW_EXT}` },
+  ];
+  const shellSource = shellSources.find(({ path }) => existsSync(path));
+  const K = productConstants({ root: sdkRoot });
+  const topLevelStatic = new Set(Object.keys(routes).filter((route) => !route.includes('[') && !route.includes('/')));
+  let shell = {
+    authored: false,
+    derivable: topLevelStatic.size <= (K.shellDeriveMaxRoutes ?? Infinity),
+    topLevelStaticRoutes: topLevelStatic.size,
+  };
+  if (shellSource) {
+    const { value: sh, error } = parseJsonFile(shellSource.path);
     if (error || !sh || typeof sh !== 'object') {
-      malformed.push({ file: `pages/_shell${VIEW_EXT}`, message: error ?? 'not an object' });
+      malformed.push({ file: shellSource.file, message: error ?? 'not an object' });
     } else {
-      const navRoutes = (sh.nav ?? []).map((n) => n.route).filter(Boolean);
-      const groups = (sh.groups ?? []).map((g) => ({ label: g.label ?? null, home: g.home ?? null, routes: g.routes ?? [] }));
+      const navRoutes = (sh.nav ?? []).map((nav) => nav.route).filter(Boolean);
+      const groups = (sh.groups ?? []).map((group) => ({
+        label: group.label ?? null,
+        home: group.home ?? null,
+        routes: group.routes ?? [],
+      }));
       shell = {
         ...shell,
         authored: true,
         brand: sh.brand ?? null,
         nav: navRoutes,
         groups,
-        subnav: (sh.subnav ?? []).map((s) => s.match).filter(Boolean),
+        subnav: (sh.subnav ?? []).map((subnav) => subnav.match).filter(Boolean),
         assistant: sh.assistant?.agent ?? null,
         placement: sh.placement ?? null,
-        // Grouped nav is the T0 finding: 4/5 catalogue apps hand-group 13–21 routes into 4–6
-        // destinations, so a flat list at this size is an unusable phone tab bar.
         destinationCount: groups.length || navRoutes.length,
       };
     }
   }
 
-  // ── wrappers: the banner, and the routes with no spec ────────────────────────────────────────
-  const banner = K.wrapperBanner;
-  const wrappers = [];
-  for (const abs of wrapperFiles.sort()) {
-    const route = authoringRoute(pagesDir, abs, abs.endsWith('.jsx') ? '.jsx' : '.tsx');
-    const head = readHead(abs);
-    wrappers.push({
-      route,
-      file: `pages/${relative(pagesDir, abs).split(sep).join('/')}`,
-      generated: banner && head != null ? head.includes(banner) : null,
-      hasSpec: Object.prototype.hasOwnProperty.call(routes, route),
-    });
+  // Bail to null (a non-viewbuilder app) only when NOTHING view-spec-shaped was found. A malformed
+  // spec/component still counts as "the pipeline touched this project" — dropping it here would bury
+  // exactly the broken artifact the harness exists to surface, reporting the app as never-built.
+  if (Object.keys(routes).length === 0 && components.length === 0 && !shellSource && malformed.length === 0) return null;
+
+  const handAuthoredPages = [];
+  for (const { dir, prefix } of sources) {
+    const files = [];
+    walk(dir, dir, (name) => PAGE_EXT.test(name), files);
+    handAuthoredPages.push(...files.map((file) => `${prefix}/${relative(dir, file).split(sep).join('/')}`));
+  }
+  const kindCounts = {};
+  for (const route of Object.values(routes)) {
+    for (const section of route.sections) kindCounts[section.kind ?? '?'] = (kindCounts[section.kind ?? '?'] ?? 0) + 1;
   }
 
-  const specRoutes = Object.keys(routes).sort();
-  const wrapperRoutes = wrappers.map((w) => w.route);
-  const offenders = wrappers.filter((w) => w.generated === false).map((w) => w.file);
-  const unreadable = wrappers.filter((w) => w.generated === null).map((w) => w.file);
-
-  const kindCounts = {};
-  for (const r of Object.values(routes)) for (const s of r.sections) kindCounts[s.kind ?? '?'] = (kindCounts[s.kind ?? '?'] ?? 0) + 1;
-
   return {
-    specRoutes,
+    specRoutes: Object.keys(routes).sort(),
     components,
     shell,
-    wrappers,
     kindCounts,
     malformed,
-    /** A `.tsx` route the pages build serves that has NO spec — the app is web-only THERE. */
-    routesWithoutSpec: wrapperRoutes.filter((r) => !Object.prototype.hasOwnProperty.call(routes, r)).sort(),
-    /** A spec with no wrapper — the page will not build at all until a view/component/shell write re-emits. */
-    specsWithoutWrapper: specRoutes.filter((r) => !wrapperRoutes.includes(r)),
-    wrapperBanners:
-      banner == null
-        ? null // constant unextractable ⇒ UNMEASURED, never a silent pass
-        : { banner, total: wrappers.length, ok: wrappers.length - offenders.length - unreadable.length, offenders, unreadable },
+    handAuthoredPages: handAuthoredPages.sort(),
     routes,
     endpointCount: Array.isArray(endpoints) ? endpoints.length : null,
     constantsMissing: K.missing.length ? K.missing : undefined,
@@ -442,7 +379,6 @@ export function viewShapes(facts) {
 export function compactViewFacts(facts, native = null) {
   if (!facts) return native ? { native } : undefined;
   const shapes = viewShapes(facts);
-  const wb = facts.wrapperBanners;
   return {
     specCount: facts.specRoutes.length,
     specRoutes: facts.specRoutes,
@@ -465,11 +401,10 @@ export function compactViewFacts(facts, native = null) {
     timelines: shapes.timelines,
     chatRoutes: shapes.chats,
     polls: shapes.polls,
-    wrapperBannersOk: wb == null ? null : wb.offenders.length === 0 && wb.unreadable.length === 0 && wb.total > 0,
-    wrapperCount: wb?.total ?? facts.wrappers.length,
-    handAuthoredPages: wb?.offenders ?? null,
-    routesWithoutSpec: facts.routesWithoutSpec,
-    specsWithoutWrapper: facts.specsWithoutWrapper,
+    // A spec app has NO hand-authored React pages — the whole promise is that no page is web-only.
+    // A non-empty list here is the "a `.tsx` slipped into a spec app" regression (the successor to
+    // the old wrapper-banner check, now that there are no generated wrappers to inspect).
+    handAuthoredPages: facts.handAuthoredPages,
     malformed: facts.malformed.length ? facts.malformed : [],
     ...(facts.constantsMissing ? { constantsMissing: facts.constantsMissing } : {}),
     ...(native ? { native } : {}),

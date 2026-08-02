@@ -29,9 +29,12 @@ schema.ts        types + JSON Schema + shape validators   ← the pinned contrac
 messages.ts      menu-shaped rejections (the model-facing text)
 validate.ts      name resolution, binding cross-checks,
                  app-wide checks, render smoke
-files.ts         the on-disk layout (spec / wrapper / component / shell paths)
-wrapper.ts       the generated `pages/<route>.tsx` that renders a spec
+files.ts         the on-disk layout (spec / layout / component / shell paths)
 ```
+
+Specs are rendered at runtime by the prebuilt AppHost (`apps/app-shell`) on web and by
+`apps/mobile` natively — both fetch them from `GET /api/apps/:id/views`. There is no generated
+per-page `.tsx` and no per-project bundle.
 
 `schema.ts` answers *"is this well-formed?"*; `validate.ts` answers *"is this true of THIS
 project?"* — and `messages.ts` is how either answer is phrased, because a rejection that does

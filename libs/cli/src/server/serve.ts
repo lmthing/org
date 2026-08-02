@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { WebSocketServer } from 'ws';
-import { createStaticApps, resolveAppDist } from './static-apps.js';
+import { createStaticApps, resolveAppDist, resolveAppShellDist, scanDistManifest } from './static-apps.js';
 import { createDevWeb, type DevWeb } from './dev-web.js';
 import type { SessionManager, SessionEntry } from './session-manager.js';
 import type { UiControlAction } from '../rpc/events.js';
@@ -45,7 +45,7 @@ import {
   handleListRows, handleUpdateRow, handleBuildStatus, handleRebuild, handleAppCheck,
 } from './routes/app-admin.js';
 import { handleListApps, handleInstallApp } from './routes/apps.js';
-import { handleAppViews } from './routes/app-views.js';
+import { handleAppViews, readProjectViewSpecs, type ProjectViewSpecs } from './routes/app-views.js';
 import {
   handleListChannels, handleCreateChannel, handlePatchChannel, handleCreateDm,
   handleListCategories, handleCreateCategory, handlePatchCategory, handleDeleteCategory,
@@ -146,6 +146,28 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   }
 
   const staticApps = createStaticApps(resolveAppDist());
+
+  // ── App-shell dark-launch (W6 step 2) ──────────────────────────────────────
+  // Resolve the prebuilt @lmthing/app-shell dist ONCE at boot. A valid dist is
+  // enabled by default; LM_APP_SHELL=0 is the dark-launch escape hatch and an invalid
+  // or absent dist keeps every project on its legacy per-project bundle.
+  let appShellBundle: { outDir: string; assetManifest: string[] } | null = null;
+  if (process.env['LM_APP_SHELL'] !== '0') {
+    try {
+      const shellDist = resolveAppShellDist();
+      const manifest = await scanDistManifest(shellDist);
+      if (manifest.length === 0 || !manifest.includes('index.html')) {
+        console.warn(`[serve] no usable app-shell dist at ${shellDist} — legacy fallback`);
+      } else {
+        appShellBundle = { outDir: shellDist, assetManifest: manifest };
+        console.log(`[serve] app-shell enabled (${manifest.length} assets from ${shellDist})`);
+      }
+    } catch (err) {
+      console.warn(
+        `[serve] app-shell dist resolution failed: ${err instanceof Error ? err.message : err} — legacy fallback`,
+      );
+    }
+  }
   // Dev only: when LM_DEV_WEB points at the web app source, serve it in-process
   // via Vite (HMR) on THIS port — no separate dev-server port. Set by `pnpm thing`.
   let devWeb: DevWeb | null = null;
@@ -361,6 +383,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // Project-app PAGES — `/app/<project>/*` (non-api). The built React bundle is served
   // with an asset-manifest SPA fallback (dotted route params route client-side) + a strict
   // CSP. Registered AFTER the api route so `…/api/*` matches first.
+  type PageHandler = (req: IncomingMessage, res: ServerResponse, params: Record<string, string>) => Promise<void>;
   const getOutDirForProject = async (projectId: string): Promise<{ outDir: string; assetManifest: string[] } | null> => {
     if (!effectiveLmthingRoot) return null;
     if (!pageBuildCache.has(projectId)) {
@@ -375,7 +398,43 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     }
     return pageBuildCache.get(projectId) ?? null;
   };
-  router.add('*', '/app/:projectId/*', createPageServeHandler(getOutDirForProject));
+
+  // ── App-shell dark-launch branch (W6 step 2) ──────────────────────────────
+  // When the prebuilt shell dist was resolved at boot AND a project has view specs
+  // (views.length > 0 — the same discriminator native uses), serve the shell instead
+  // of the per-project esbuild bundle: ONE static dist for every spec app, NO
+  // buildProjectPages call, NO pageBuildCache entry. Everything else (LM_APP_SHELL=0,
+  // no specs, payload threw, no lmthingRoot) falls through to the legacy handler. The shell
+  // handler IS createPageServeHandler with a fixed bundle — the SAME CSP, path-traversal
+  // guard, <base>/window.__APP_BASE__ injection and SPA fallback apply, with zero
+  // duplication of that security-sensitive logic.
+  function branchAppShell(legacy: PageHandler, shell: PageHandler | null): PageHandler {
+    if (!shell || !appShellBundle || !effectiveLmthingRoot) return legacy;
+    const root = effectiveLmthingRoot;
+    const shellHandler = shell;
+    return async (req, res, params) => {
+      let specs: ProjectViewSpecs | undefined;
+      try {
+        specs = readProjectViewSpecs(join(root, params['projectId']!));
+      } catch {
+        /* malformed payload — fall through to legacy (a spec app whose payload is
+         * broken still renders via the legacy wrapper bundle if one exists). */
+      }
+      if (specs && specs.views.length > 0) {
+        return shellHandler(req, res, params);
+      }
+      return legacy(req, res, params);
+    };
+  }
+
+  // Shell handler for the reserved `/app` mount. Same handler, fixed bundle closure.
+  const shellPageServe: PageHandler | null = appShellBundle
+    ? (() => {
+        const bundle = appShellBundle;
+        return createPageServeHandler(async () => bundle);
+      })()
+    : null;
+  router.add('*', '/app/:projectId/*', branchAppShell(createPageServeHandler(getOutDirForProject), shellPageServe));
 
   // Project-app ROOT mount — `/<project>/*` (+ `/<project>/api/*`), the SAME app
   // served with NO `/app` prefix so lmthing.app can show clean URLs
@@ -399,7 +458,14 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     if (devWeb) { devWeb.handle(req, res); return; }
     void staticApps.handle(req, res);
   };
-  const rootPageServe = createPageServeHandler(getOutDirForProject, '', webFallback);
+  // Shell handler for the root mount — same fixed bundle, empty mountPrefix + webFallback.
+  const shellRootPageServe: PageHandler | null = appShellBundle
+    ? (() => {
+        const bundle = appShellBundle;
+        return createPageServeHandler(async () => bundle, '', webFallback);
+      })()
+    : null;
+  const rootPageServe = branchAppShell(createPageServeHandler(getOutDirForProject, '', webFallback), shellRootPageServe);
   router.add('*', '/:projectId/api/*', async (req, res, params) => {
     if (RESERVED_ROOT_SEGMENTS.has(params['projectId']!)) { webFallback(req, res); return; }
     await appApiHandler(req, res, params);

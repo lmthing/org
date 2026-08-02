@@ -121,8 +121,7 @@ export function AppHost() {
     if (!payload || cp !== '/') return
     const initialRoute = pickInitialRoute(payload.views, payload.shell)
     if (initialRoute) {
-      // Path-absolute (via `toHref`) so resolution does not depend on a trailing slash on the
-      // served app base: `/app/<proj>` and `/app/<proj>/` both land on `/app/<proj>/<initial>`.
+      // Re-apply the mount prefix so a root landing does not navigate outside this app.
       window.history.replaceState({}, '', toHref('/' + initialRoute))
       setPath(window.location.pathname)
     }

@@ -10,19 +10,14 @@
  * views/<seg>/_layout.view.json        a NESTED LAYOUT      (authored, any depth)
  * components/<Name>.view.json          a view component def (authored, TOP LEVEL)
  * shell.view.json                      the app shell        (authored, TOP LEVEL)
- * pages/<route>.tsx                    the wrapper          (GENERATED — never authored)
  * ```
  *
  * Three moves, each removing an exception rather than adding one:
  *
- *  - **`views/` holds JSON and nothing else.** The directory that used to hold both the specs and
- *    their generated `.tsx` now holds only specs, so "is there hand-written React in this app?"
- *    is answered by the format instead of by a lint. `pages/` survives as a purely generated
- *    directory until the prebuilt app shell removes it entirely.
- *  - **`components/` and `shell.view.json` are top level.** They were under `pages/` only because
- *    the route walk was the only thing that read them, and both had to be hidden from it — the
- *    `components/` directory by name and the shell by an `_` prefix. At the top level the route
- *    tree has no exceptions to skip.
+ *  - **`views/` holds JSON and nothing else.** The prebuilt app shell fetches these specs directly,
+ *    so a spec app has no generated React source or per-project bundle.
+ *  - **`components/` and `shell.view.json` are top level.** They no longer need to hide from a page
+ *    route walk because AppHost fetches them alongside the view specs.
  *  - **`_layout.view.json` nests.** A layout frames every route beneath its directory, which is
  *    what lets an entity's header and sub-nav be authored once for a family instead of repeated
  *    on every child page.
@@ -46,7 +41,7 @@ export const VIEW_EXT = '.view.json';
 /** The v2 spec directory. */
 export const VIEWS_DIR = 'views';
 
-/** The v1 spec directory, still read. Also where generated wrappers live, in both versions. */
+/** The v1 spec directory, still read for compatibility with existing projects. */
 export const PAGES_DIR = 'pages';
 
 /** The v2 component directory — top level. */
@@ -72,17 +67,6 @@ export function viewSpecPath(route: string): string {
 /** `trips/[tripId]` → `views/trips/[tripId]/_layout.view.json`. The WRITE path. */
 export function viewLayoutPath(prefix: string): string {
   return join(VIEWS_DIR, prefix, LAYOUT_BASENAME);
-}
-
-/**
- * `recipes/[id]` → `pages/recipes/[id].tsx` — the generated wrapper the pages build discovers.
- *
- * Still under `pages/` in v2, and deliberately: the build walks that directory, and moving the
- * wrappers would be a build change for no gain while the wrappers still exist at all. They stop
- * existing when the prebuilt app shell lands, at which point `pages/` goes with them.
- */
-export function viewWrapperPath(route: string): string {
-  return join(PAGES_DIR, `${route}.tsx`);
 }
 
 /** `RecipeCard` → `components/RecipeCard.view.json`. The WRITE path. */
@@ -161,6 +145,19 @@ function walkViewFiles(dir: string, out: { pages: string[]; layouts: string[] })
 /** A view file's path back to its authoring route (`views/recipes/[id].view.json` → `recipes/[id]`). */
 export function routeOfViewFile(specDir: string, abs: string): string {
   return relative(specDir, abs).slice(0, -VIEW_EXT.length).split(sep).join('/');
+}
+
+/**
+ * An authoring route → the pattern it is SERVED at: `index` collapses (`index` → `/`,
+ * `recipes/index` → `/recipes`) and a `[param]` segment becomes `:param` (`recipes/[id]` →
+ * `/recipes/:id`). The single source of truth for that mapping — the rebuild route list, the
+ * check pipeline's `routes`, and the legacy page walker all go through here so a spec app and a
+ * TSX app describe their routes identically.
+ */
+export function viewRoutePath(route: string): string {
+  const segs = route.split('/').filter((s) => s.length > 0);
+  if (segs[segs.length - 1] === 'index') segs.pop();
+  return '/' + segs.map((s) => s.replace(/^\[(.+)\]$/, ':$1')).join('/');
 }
 
 /** A layout file's path back to the prefix it frames (`views/trips/[id]/_layout.view.json` → `trips/[id]`). */
@@ -250,17 +247,6 @@ export function loadProjectViews(projectRoot: string): LoadedViews {
   }
 
   return { views, layouts, components, shell, malformed };
-}
-
-/** Every authoring route that has a view spec — what the writers re-emit wrappers for. */
-export function listViewRoutes(projectRoot: string): string[] {
-  const out = new Set<string>();
-  for (const specDir of specDirs(projectRoot)) {
-    const found = { pages: [] as string[], layouts: [] as string[] };
-    walkViewFiles(specDir, found);
-    for (const f of found.pages) out.add(routeOfViewFile(specDir, f));
-  }
-  return [...out].sort();
 }
 
 /**

@@ -153,8 +153,8 @@ export function AppScreen({
  *     the clipboard, a confirmation. Each is one line of React Native, and each would otherwise be
  *     a silent no-op on a device.
  *
- * Everything else is `@lmthing/ui/view`'s, which is the point: the web wrapper page renders these
- * same specs with the same renderer and the same client.
+ * Everything else is `@lmthing/ui/view`'s, which is the point: AppHost renders these same specs,
+ * layouts, and client calls through the same renderer.
  */
 function NativeApp({
   app,
@@ -213,6 +213,7 @@ function NativeApp({
       spec={resolved.spec}
       components={app.components}
       shell={app.shell ?? undefined}
+      layouts={app.layouts}
       client={client}
       // The host-routing seam. On web these come from the URL and the generated wrapper; here
       // the host is the only thing that knows them, because there is no URL to hold them.

@@ -68,8 +68,13 @@ import type { AppCheckError } from './check.js';
 import { loadApiRoutes } from '../api/loader.js';
 import { buildClientApiDts } from './apicall-dts.js';
 
-/** The three project source roots the typecheck program covers. */
-const SOURCE_DIRS = ['pages', 'components', 'api'];
+/** The project source roots the legacy TSX typecheck covers. */
+const SOURCE_DIRS = ['pages', 'components', 'api'] as const;
+
+export interface TypecheckProjectAppOptions {
+  /** A view-spec app has no project UI source; only its API handlers need TypeScript checking. */
+  sourceDirs?: readonly string[];
+}
 
 /** File extensions treated as project TS source. */
 const TS_EXT = /\.(ts|tsx)$/;
@@ -303,14 +308,15 @@ ${dataHooks}
 }
 
 /**
- * The shared **view renderer** — the module a \`writeProjectView\` wrapper page imports, and the
- * SAME one the mobile app imports to render the identical spec natively.
+ * The shared **view renderer** — the module the prebuilt AppHost imports to render a project's
+ * specs on the web, and the SAME one the mobile app imports to render the identical spec natively.
+ * A legacy hand-authored TSX page may still import it directly, which is why this ambient shim
+ * exists in the project typecheck program.
  *
- * Declared loosely on purpose. A wrapper is HOST-GENERATED (\`app/view-spec/wrapper.ts\`), never
- * authored, so there is no model mistake for a precise type to catch here — the spec's real
- * contract is enforced at write time by \`app/view-spec/validate.ts\`, against the project's
- * endpoints, in a form a JSON-Schema-shaped \`.d.ts\` could not express anyway. Its only job is to
- * stop \`tsc\` reporting "Cannot find module" on every spec page in the project.
+ * Declared loosely on purpose. A view spec is not TypeScript — its real contract is enforced at
+ * write time by \`app/view-spec/validate.ts\`, against the project's endpoints, in a form a
+ * JSON-Schema-shaped \`.d.ts\` could not express anyway. This shim's only job is to stop \`tsc\`
+ * reporting "Cannot find module" on a page that imports the renderer.
  */
 declare module '@lmthing/ui/view' {
   export const ViewRenderer: (props: {
@@ -321,8 +327,8 @@ declare module '@lmthing/ui/view' {
     [k: string]: any;
   }) => any;
 
-  /** The theme context every \`Prim.*\` the renderer is built from requires. The generated
-   *  wrapper mounts it because a project-app page bundle has no root that supplies one. */
+  /** The theme context every \`Prim.*\` the renderer is built from requires. AppHost mounts it
+   *  because a project-app page has no root that otherwise supplies one. */
   export const ViewThemeProvider: (props: { children?: any }) => any;
 
   export function createViewClient(opts: {
@@ -446,9 +452,13 @@ function createProgramHost(
  * source — diagnostics inside the synthetic ambient or the generated `.d.ts` are
  * dropped (they are build-generated, never author-fixable).
  */
-export async function typecheckProjectApp(projectRoot: string): Promise<AppCheckError[]> {
+export async function typecheckProjectApp(
+  projectRoot: string,
+  opts: TypecheckProjectAppOptions = {},
+): Promise<AppCheckError[]> {
+  const sourceDirs = opts.sourceDirs ?? SOURCE_DIRS;
   const sourceFiles = (
-    await Promise.all(SOURCE_DIRS.map((d) => collectSourceFiles(join(projectRoot, d))))
+    await Promise.all(sourceDirs.map((d) => collectSourceFiles(join(projectRoot, d))))
   ).flat();
 
   const generatedDtsPath = join(projectRoot, 'types', 'generated.d.ts');

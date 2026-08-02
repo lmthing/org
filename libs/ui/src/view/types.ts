@@ -10,8 +10,8 @@
  *
  * So this module mirrors the contract's TypeScript half, structurally. TypeScript is
  * structural, so a `ViewSpec` produced against `schema.ts` assigns to {@link ViewSpec}
- * here with no adapter — which is exactly what the CLI agent's generated wrapper page and
- * the mobile agent's native screen rely on.
+ * here with no adapter — which is exactly what the prebuilt AppHost and the mobile agent's
+ * native screen rely on.
  *
  * **Rules for keeping the two honest**
  *  - `schema.ts` is the source of truth. A change there is a change here, in the same

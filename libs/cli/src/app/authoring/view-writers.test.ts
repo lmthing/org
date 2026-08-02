@@ -8,8 +8,8 @@
  *     lint does — a `{ ok:false }` a tasklist node can ignore is not a gate;
  *  2. **nothing lands on a rejection** — a half-validated spec on disk is worse than no spec,
  *     because the next gate reads it as intentional;
- *  3. **the wrapper is generated, and regenerated**, which is the entire reason the pages build
- *     needs no changes. A component written after the pages that use it must reach them.
+ *  3. **only spec data is written** — the prebuilt AppHost reads views/components/shell at runtime,
+ *     so no generated TSX page can shadow or stale the authored JSON.
  */
 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -62,7 +62,7 @@ export default async function handler() { return { id: '1' }; }
 
   // ── writeProjectView ───────────────────────────────────────────────────────
 
-  it('persists the spec AND generates the wrapper page, and fires onAppWrite', () => {
+  it('persists only the normalized spec and fires onAppWrite', () => {
     const pa = make();
     const res = pa.writeProjectView('recipes', {
       title: 'Recipes',
@@ -70,47 +70,18 @@ export default async function handler() { return { id: '1' }; }
     });
     expect(res).toEqual({ ok: true });
 
-    // 1. the spec, with its route normalized in from the first argument
     const spec = JSON.parse(read('views', 'recipes.view.json'));
     expect(spec.route).toBe('recipes');
     expect(spec.sections[0].query).toBe('listRecipes');
-
-    // 2. the wrapper — an ordinary `.tsx` the page build will discover, hash and bundle
-    const wrapper = read('pages', 'recipes.tsx');
-    expect(wrapper).toContain("import { ViewRenderer, ViewThemeProvider, createViewClient } from '@lmthing/ui/view';");
-    expect(wrapper).toContain('export default function View()');
-    expect(wrapper).toContain('<ViewRenderer');
-    expect(wrapper).toContain('"query": "listRecipes"'); // the spec is INLINED, not fetched
-    expect(wrapper).toContain('AUTO-GENERATED');
-
-    // ── the three things the T1 golden-app live run proved are LOAD-BEARING ───────────────
-    // Each was absent, each broke EVERY route of a real app, and none of them can be caught by
-    // a jsdom render test (which supplies its own provider, its own client and its own params).
-
-    // 1. the theme provider — without it every `Prim.*` throws `Missing theme.` and every page
-    //    renders the error boundary, because a project-app bundle has no root that supplies one.
-    expect(wrapper).toContain('<ViewThemeProvider>');
-
-    // 2. the client is built INSIDE the component. ESM hoists this module above the entry's
-    //    `mountApp({ manifest })`, so a module-scope `createViewClient` captures `{}` and every
-    //    endpoint resolves to `unknown endpoint "x"`.
-    const clientAt = wrapper.indexOf('createViewClient({');
-    const componentAt = wrapper.indexOf('export default function View()');
-    expect(clientAt).toBeGreaterThan(componentAt);
-
-    // 3. route params are passed through — `$route.*` resolves against this prop, so without it
-    //    every `[param]` page queries for the wrong record (or none).
-    expect(wrapper).toContain('useParams');
-    expect(wrapper).toContain('route={route}');
-
+    expect(existsSync(join(projectRoot, 'pages', 'recipes.tsx'))).toBe(false);
     expect(appWrites).toEqual([{ kind: 'page', route: 'recipes' }]);
   });
 
-  it('writes a nested route into nested dirs', () => {
+  it('writes a nested route into nested view dirs without a TSX page', () => {
     const pa = make();
     expect(pa.writeProjectView('recipes/[id]', { sections: [{ kind: 'detail', query: 'listRecipes' }] }).ok).toBe(true);
     expect(existsSync(join(projectRoot, 'views', 'recipes', '[id].view.json'))).toBe(true);
-    expect(existsSync(join(projectRoot, 'pages', 'recipes', '[id].tsx'))).toBe(true);
+    expect(existsSync(join(projectRoot, 'pages', 'recipes', '[id].tsx'))).toBe(false);
   });
 
   it('THROWS a LintError with the menu-shaped message on a bad endpoint name — and writes nothing', () => {
@@ -174,18 +145,17 @@ export default async function handler() { return { id: '1' }; }
     expect(res.error).toContain("the spec declares route \"index\"");
   });
 
-  it('refuses to overwrite a hand-written React page at the same route', () => {
+  it('does not let a legacy TSX page block a spec at the same route', () => {
     mkdirSync(join(projectRoot, 'pages'), { recursive: true });
     writeFileSync(join(projectRoot, 'pages', 'recipes.tsx'), 'export default () => <div />;\n');
     const pa = make();
-    const res = pa.writeProjectView('recipes', { sections: [{ kind: 'list', query: 'listRecipes' }] });
-    expect(res.ok).toBe(false);
-    expect(res.error).toContain('it is a hand-written React page');
+    expect(pa.writeProjectView('recipes', { sections: [{ kind: 'list', query: 'listRecipes' }] })).toEqual({ ok: true });
+    expect(existsSync(join(projectRoot, 'views', 'recipes.view.json'))).toBe(true);
   });
 
   // ── writeProjectViewLayout ─────────────────────────────────────────────────
 
-  it('writes a nested layout and frames its children through the wrapper', () => {
+  it('writes a nested layout beside its child spec without a generated page', () => {
     const pa = make();
     expect(
       pa.writeProjectViewLayout('recipes', {
@@ -196,15 +166,8 @@ export default async function handler() { return { id: '1' }; }
       }),
     ).toEqual({ ok: true });
     expect(existsSync(join(projectRoot, 'views', 'recipes', '_layout.view.json'))).toBe(true);
-
-    // A page under the prefix carries the layout in its wrapper — that is how the frame reaches
-    // the browser without the page authoring a word of it.
-    expect(
-      pa.writeProjectView('recipes/[id]', { sections: [{ kind: 'list', query: 'listRecipes' }] }),
-    ).toEqual({ ok: true });
-    const wrapper = read('pages', 'recipes', '[id].tsx');
-    expect(wrapper).toContain('"kind": "outlet"');
-    expect(wrapper).toContain('"prefix": "recipes"');
+    expect(pa.writeProjectView('recipes/[id]', { sections: [{ kind: 'list', query: 'listRecipes' }] })).toEqual({ ok: true });
+    expect(existsSync(join(projectRoot, 'pages', 'recipes', '[id].tsx'))).toBe(false);
   });
 
   it('refuses a layout with no outlet — it would swallow every child route', () => {
@@ -257,34 +220,30 @@ export default async function handler() { return { id: '1' }; }
     expect(res.error).toContain('is not PascalCase');
   });
 
-  it('RE-EMITS every wrapper when a component changes, so no page holds a stale copy', () => {
+  it('updates a component independently because AppHost fetches it with the page spec', () => {
     const pa = make();
     pa.writeProjectViewComponent('RecipeCard', { props: { title: 'string' }, node: { el: 'text', text: '$props.title' } });
     pa.writeProjectView('recipes', {
       sections: [{ kind: 'list', query: 'listRecipes', item: { use: 'RecipeCard', props: { title: '$.title' } } }],
     });
-    expect(read('pages', 'recipes.tsx')).toContain('"el": "text"');
-
-    // Rewrite the component AFTER the page: the page's inlined copy must follow.
     pa.writeProjectViewComponent('RecipeCard', {
       props: { title: 'string' },
       node: { el: 'heading', text: '$props.title' },
     });
-    const wrapper = read('pages', 'recipes.tsx');
-    expect(wrapper).toContain('"el": "heading"');
-    expect(wrapper).not.toContain('"el": "text"');
+    expect(read('components', 'RecipeCard.view.json')).toContain('"el": "heading"');
+    expect(existsSync(join(projectRoot, 'pages', 'recipes.tsx'))).toBe(false);
   });
 
   // ── writeProjectViewShell ──────────────────────────────────────────────────
 
-  it('writes the shell and inlines it into every wrapper', () => {
+  it('writes the shell independently of page artifacts', () => {
     const pa = make();
     pa.writeProjectView('recipes', { sections: [{ kind: 'list', query: 'listRecipes' }] });
     expect(pa.writeProjectViewShell({ brand: 'Kitchen', nav: [{ route: 'recipes', label: 'Recipes' }] })).toEqual({
       ok: true,
     });
-    expect(existsSync(join(projectRoot, 'shell.view.json'))).toBe(true);
-    expect(read('pages', 'recipes.tsx')).toContain('"brand": "Kitchen"');
+    expect(read('shell.view.json')).toContain('"brand": "Kitchen"');
+    expect(existsSync(join(projectRoot, 'pages', 'recipes.tsx'))).toBe(false);
   });
 
   it('lets a shell nav target that is not YET a route through, and says so', async () => {
