@@ -124,4 +124,31 @@ describe('runProjectAppCheck — spec-app (AppHost) branch', () => {
     // The AppHost branch runs no esbuild build, so no per-project pages bundle is emitted.
     expect(existsSync(join(root, '.data', 'pages-dist'))).toBe(false);
   }, 60_000);
+
+  // W10 — the by-path render probe's mechanical predecessor: `renderSpecAppSmoke` used to mount
+  // every parameterised route with `params: {}`, so `$route.<param>` always resolved to nothing —
+  // silently, since a null binding just renders empty rather than throwing (S1). A `[id]` route
+  // mounting clean here is necessary but not sufficient to prove the placeholder param actually
+  // reaches the binding; it at least proves the extraction (`route.matchAll(/\[([A-Za-z][A-Za-z0-9]*)\]/g)`)
+  // never throws on a real parameterised route, including one with MULTIPLE params.
+  it('mounts a [param] route clean — the placeholder param path does not throw, single or nested', async () => {
+    const root = await specProject();
+    const { createProjectAuthoringGlobals } = await import('../authoring/globals.js');
+    const pa = createProjectAuthoringGlobals({ projectRoot: root });
+    const w1 = pa.writeProjectView('recipes/[id]', {
+      title: 'Recipe',
+      sections: [{ kind: 'detail', id: 'detail', query: 'listRecipes', param: '$route.id' }],
+    });
+    expect(w1).toEqual({ ok: true });
+    const w2 = pa.writeProjectView('recipes/[id]/steps/[stepId]', {
+      title: 'Step',
+      sections: [{ kind: 'detail', id: 'detail', query: 'listRecipes', param: '$route.id' }],
+    });
+    expect(w2).toEqual({ ok: true });
+
+    const result = await runProjectAppCheck(root);
+    expect(result.ok).toBe(true);
+    expect(result.routes.sort()).toEqual(['/', '/recipes/:id', '/recipes/:id/steps/:stepId'].sort());
+    expect(result.errors).toEqual([]);
+  }, 60_000);
 });

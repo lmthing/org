@@ -2301,6 +2301,14 @@ export async function renderSpecAppSmoke(
     let rendered = 0;
     for (const { route, spec, path } of loaded.views) {
       try {
+        // A `[param]` segment gets a PLACEHOLDER value, not `{}` — a binding reading `$route.<param>`
+        // (directly, or as a query `input` key resolved before any effect fires) otherwise renders
+        // `undefined` on every parameterised route, every run, regardless of what the spec actually
+        // does with it. Same extraction `validateViewSpec` uses for `ctx.routeParams` (validate.ts
+        // ~1209), so a route's param NAMES are never re-derived with a second, driftable regex.
+        const params = Object.fromEntries(
+          [...route.matchAll(/\[([A-Za-z][A-Za-z0-9]*)\]/g)].map((m) => [m[1] as string, 'smoke-test-id']),
+        );
         const tree = createElement(view.ViewRenderer, {
           spec,
           components,
@@ -2308,7 +2316,7 @@ export async function renderSpecAppSmoke(
           layouts,
           routes,
           client,
-          route: { path: route, params: {} },
+          route: { path: route, params },
         });
         renderToStaticMarkup(view.ViewThemeProvider ? createElement(view.ViewThemeProvider, { children: tree }) : tree);
         rendered++;
