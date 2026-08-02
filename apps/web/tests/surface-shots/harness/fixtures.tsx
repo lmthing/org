@@ -19,6 +19,7 @@ import * as React from 'react'
 import { TeamChannelsView } from '@lmthing/ui/team'
 import type { TeamClient } from '@lmthing/ui/team'
 import { ChatView } from '@lmthing/ui/chat/app/ChatView'
+import { AppShell } from '@lmthing/ui/chat/app/AppShell'
 import { DevPanel } from '@lmthing/ui/chat/app/DevPanel'
 import { useStore } from '@lmthing/ui/chat/store/store'
 import type { ConvoBlock } from '@lmthing/ui/chat/store/model'
@@ -286,6 +287,36 @@ function Chat() {
   return <ChatView projectId="trips" />
 }
 
+/**
+ * The whole chat surface — `AppShell`, so the real `Sidebar` is in the picture beside the
+ * transcript, docked at the desktop viewport and behind the hamburger on a phone.
+ *
+ * This is the only fixture that photographs the sidebar at all, which is why the `APP` section
+ * (a project's application pages, [org/docs/chat/views.md]) needed it: the section is built from
+ * a manifest fetch and rendered by a shared element, and until something mounted the sidebar
+ * whole, no gate in this repo could see whether it painted.
+ */
+function ChatShellFixture() {
+  const [ready, setReady] = React.useState(false)
+  React.useEffect(() => {
+    seedChat()
+    useStore.setState({
+      // What `ChatShell` would have established on boot: a selected project and an open session.
+      // The sidebar fetches the rest for itself (see `entry.tsx`'s pod stub).
+      projects: [
+        { id: 'trips', name: 'Trips', createdAt: '2026-01-01T00:00:00.000Z' },
+        { id: 'user', name: 'Personal', createdAt: '2026-01-01T00:00:00.000Z' },
+      ],
+      activeProjectId: 'trips',
+      activeSessionId: 'sess-fixture',
+      sessionTitle: 'Three days in Lisbon',
+    } as never)
+    setReady(true)
+  }, [])
+  if (!ready) return null
+  return <AppShell />
+}
+
 function ChatEmpty() {
   React.useEffect(() => {
     useStore.setState({ mode: 'live', connection: 'connecting', sessionId: '', model: { nodes: {}, rootId: null, blocks: [], rawEvents: [], lastSeq: 0 } } as never)
@@ -456,6 +487,7 @@ export const FIXTURES: Record<string, () => React.ReactElement> = {
   // `hasMore: false` — a feature nobody can see is a feature nobody can review.
   'team-paging': () => <TeamPaging />,
   chat: () => <Chat />,
+  'chat-shell': () => <ChatShellFixture />,
   'chat-empty': () => <ChatEmpty />,
   'chat-devpanel': () => <ChatDevPanel />,
 }
