@@ -321,19 +321,22 @@ after every promotion.
 That is the "always working" property, and it survives budget exhaustion, a pod recycle and a model
 failure — the worst outcome becomes *fewer features*, never *a broken app*.
 
-### 8.1 Tasklist engine features this needs
+### 8.1 Tasklist engine features this needs  ✅ **DONE** (W8)
 
-The planning/slicing flow above is not expressible in today's tasklist engine. Three additions, each
-independently useful:
+The planning/slicing flow above is not expressible in today's tasklist engine. Two node kinds — plus
+`forEach` extended to work over one of them — cover all three needs, each independently useful:
 
 | feature | what it is | why the flow needs it |
 |---|---|---|
-| **`forEachDynamic`** | fan out over a value produced at runtime by an upstream node, not a statically-named plan array | slices are discovered in P5, not known when the tasklist is authored |
-| **`subgraph`** | a node that runs a named sub-tasklist with its own inputs and returns one envelope | a slice is a small DAG (`model → queries → views → gates`); today it would have to be inlined N times |
-| **`checkpoint`** | a node that commits a promotion and marks a resume point in the journal | rollback and resume-after-crash need a durable "last green" marker |
+| **`kind:'subgraph'`** | a node (`subgraph: <name>` frontmatter) that runs a named sub-tasklist recursively via the same `runTasklist`, seeded exactly like a code node, and unwraps its `TaskEnvelope.data` as its own output; degradation folds up re-labelled `<id>/<inner>`, and a call-stack guard fails a cycle loudly | a slice is a small DAG (`model → queries → views → gates`); today it would be inlined N times |
+| **`forEach` over a subgraph** | the existing host-driven fan-out applied to a subgraph node — fan a whole sub-DAG out over a runtime-produced array (`item`/`index` seeded into each sub-run). This *is* the "dynamic" fan-out: the array is whatever an upstream node produced this run | slices are discovered in P5, not known when the tasklist is authored |
+| **`kind:'checkpoint'`** | a barrier node (`checkpoint: true`) that runs no fork and hands the host a `CheckpointSnapshot` (`{tasklist, id, done[], outputs}`) via an injected `onCheckpoint`; `runTasklist({resume})` replays it, marking those tasks done so a crashed run skips past them. Core keeps NO filesystem — persistence is the host's, exactly like `codeNodeCtxFactory` | rollback and resume-after-crash need a durable "last green" marker |
 
 Absent these, a slice pipeline degenerates into a single huge node — exactly the context blow-up §9
-exists to prevent.
+exists to prevent. Shape and semantics are pinned by `libs/core/src/tasklist/subgraph.test.ts` (subgraph
+unwrap, dynamic fan-out, degrade fold-up, checkpoint snapshot + resume, cycle/target/mutual-exclusion
+validation). The one deliberately-deferred piece is the host's on-disk checkpoint *journal* (a thin
+`onCheckpoint` → JSONL adapter), wired where it is consumed in W9.
 
 ---
 
@@ -444,10 +447,15 @@ handlers; derived `invalidates`, `x-options`, `param`; `generate --check`.
 **Acceptance:** ≥85% of endpoints on the scenario corpus are declarative; a hand-edited generated file
 is a hard error.
 
-### W8 — Tasklist engine features
+### W8 — Tasklist engine features  ✅ **DONE**
 
-`forEachDynamic`, `subgraph`, `checkpoint` (§8.1), with unit tests in `libs/core/src/spaces`.
-**Acceptance:** a slice sub-tasklist runs from a runtime-produced list and journals a checkpoint.
+`kind:'subgraph'`, `forEach` over a subgraph, `kind:'checkpoint'` (§8.1). Loader parsing +
+mutual-exclusion validation in `libs/core/src/spaces/tasklist-load.ts`; recursion guard, target
+validation, resume pre-population and the two dispatch branches in `libs/core/src/tasklist/orchestrator.ts`
+(new exports `CheckpointSnapshot`/`CheckpointHook`); tests in `libs/core/src/tasklist/subgraph.test.ts`.
+**Acceptance met:** a subgraph fans out from a runtime-produced list (`mkRuns === 3`) and a checkpoint
+snapshot round-trips through `resume` so the pre-checkpoint step does not re-run. Host JSONL journal
+deferred to W9 (its only consumer).
 
 ### W9 — The planning + slice pipeline
 

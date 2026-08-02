@@ -56,6 +56,27 @@ export interface CodeNodeContext {
  */
 export type CodeNodeCtxFactory = (node: TaskNode) => CodeNodeContext;
 
+/**
+ * A snapshot of a tasklist run at a `kind:'checkpoint'` barrier: the tasks
+ * completed so far and their raw outputs. The host persists it (a durable
+ * "last green" marker) and can hand it back as {@link RunTasklistOptions.resume}
+ * so a crashed/interrupted run skips the work already done. Core keeps NO
+ * filesystem — persistence is entirely the host's, exactly like
+ * {@link CodeNodeCtxFactory}.
+ */
+export interface CheckpointSnapshot {
+  /** The tasklist this checkpoint belongs to (a subgraph reports its own name). */
+  tasklist: string;
+  /** The checkpoint node's id. */
+  id: string;
+  /** Ids of every task done at this point (schedule order not guaranteed). */
+  done: string[];
+  /** Each done task's raw output, keyed by task id. */
+  outputs: Record<string, unknown>;
+}
+
+export type CheckpointHook = (cp: CheckpointSnapshot) => void | Promise<void>;
+
 export interface RunTasklistOptions {
   name: string;
   space: Space;
@@ -66,6 +87,19 @@ export interface RunTasklistOptions {
   /** Host-provided runner for `kind:'code'` nodes (see {@link CodeNodeCtxFactory}).
    *  Omit outside a CLI/pod context — code nodes then fail as required-task errors. */
   codeNodeCtxFactory?: CodeNodeCtxFactory;
+  /** Called when a `kind:'checkpoint'` node runs, with a {@link CheckpointSnapshot}.
+   *  Propagated into subgraphs so a nested checkpoint persists too. Omit to make
+   *  checkpoint nodes plain no-op barriers. */
+  onCheckpoint?: CheckpointHook;
+  /** Pre-populate completed tasks + their outputs from a persisted checkpoint, so a
+   *  resumed run skips work already done. Only the top-level run resumes; subgraphs
+   *  always run fresh. A task id not present in this tasklist is ignored. */
+  resume?: { done?: string[]; outputs?: Record<string, unknown> };
+  /** Internal recursion guard: the chain of tasklist names currently on the stack.
+   *  A `subgraph` node naming a tasklist already on the stack is a cycle and fails
+   *  loudly. Set by the orchestrator when it descends into a subgraph — callers
+   *  leave it undefined. */
+  stack?: string[];
 }
 
 /**
@@ -100,7 +134,17 @@ function flattenForInput(upstream: Record<string, unknown>): Record<string, unkn
 }
 
 export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelope> {
-  const { name, space, forkEngine, seed, tracer, parentScope, codeNodeCtxFactory } = opts;
+  const { name, space, forkEngine, seed, tracer, parentScope, codeNodeCtxFactory, onCheckpoint, resume } = opts;
+
+  // Recursion guard: a subgraph naming a tasklist already on the call stack would
+  // recurse forever. Fail loudly with the full cycle rather than blow the stack.
+  const stack = opts.stack ?? [];
+  if (stack.includes(name)) {
+    throw new Error(
+      `Subgraph cycle detected: tasklist "${name}" is already running (stack: ${[...stack, name].join(' → ')})`,
+    );
+  }
+  const callStack = [...stack, name];
 
   const tasklistDir = space.tasklists[name];
   if (!tasklistDir) {
@@ -137,6 +181,23 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
   validateDag(tasks);
   const goalTask = resolveGoalTask(tasks);
 
+  // Fail fast on an unresolvable / self-recursive subgraph target rather than mid-run:
+  // a typo'd sub-tasklist name should read as an authoring error, not a task failure.
+  for (const task of Object.values(tasks)) {
+    if (task.kind !== 'subgraph') continue;
+    const sub = task.subgraph!;
+    if (!space.tasklists[sub]) {
+      throw new Error(
+        `Task "${task.id}" is a subgraph of "${sub}", which is not a tasklist in this space`,
+      );
+    }
+    if (callStack.includes(sub)) {
+      throw new Error(
+        `Task "${task.id}" subgraph "${sub}" would recurse into a tasklist already running (stack: ${[...callStack, sub].join(' → ')})`,
+      );
+    }
+  }
+
   // Mint a tasklist node so the tree shows this orchestration scope
   const tasklistScope = tracer && parentScope
     ? tracer.child(parentScope, 'tasklist', `tasklist:${name}`, { tasklist: name })
@@ -146,6 +207,20 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
   const skipped = new Set<string>();
   const allOutputs: Record<string, unknown> = {};
   let goalOutput: unknown;
+
+  // Resume from a persisted checkpoint: mark the recorded tasks done and restore
+  // their outputs, so `findReadyTasks` never re-offers work already committed.
+  // Unknown ids (a tasklist edited since the checkpoint) are ignored — the run
+  // simply redoes those nodes. If the goal itself was already done, seed its output.
+  if (resume) {
+    for (const id of resume.done ?? []) {
+      if (tasks[id]) done.add(id);
+    }
+    for (const [id, out] of Object.entries(resume.outputs ?? {})) {
+      if (tasks[id] && done.has(id)) allOutputs[id] = out;
+    }
+    if (goalTask && done.has(goalTask.id)) goalOutput = allOutputs[goalTask.id];
+  }
   // Degradation aggregation (Phase 3): labels of every salvaged task / forEach
   // element (e.g. "investigate[3]"), plus the goal task's own degradation state.
   const degradedTasks: string[] = [];
@@ -431,6 +506,72 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
               if (!goalReason) goalReason = reason ?? 'no_resolve';
             }
           };
+
+          // CHECKPOINT NODE: a barrier that records a durable "last green" marker.
+          // It runs no fork and produces a fixed `{ ok, checkpoint }`; its whole
+          // effect is to hand the host a snapshot of everything done so far (this
+          // node included) so a crashed run can resume past it. With no onCheckpoint
+          // hook it is a plain no-op barrier — still useful as a DAG join point.
+          if (task.kind === 'checkpoint') {
+            const output: Record<string, unknown> = { ok: true, checkpoint: task.id };
+            if (onCheckpoint) {
+              await onCheckpoint({
+                tasklist: name,
+                id: task.id,
+                done: [...done, task.id],
+                outputs: { ...allOutputs, [task.id]: output },
+              });
+            }
+            return { task, output };
+          }
+
+          // SUBGRAPH NODE: run a named sub-tasklist (recursively, same engine) and
+          // unwrap its TaskEnvelope.data as this node's output. Seeded exactly like a
+          // code node — the filtered tasklist seed merged with upstream outputs, plus
+          // `item`/`index` when this node also has `forEach` (fan a whole sub-DAG out
+          // over a runtime-produced array — the slice-per-item pipeline). A degraded
+          // sub-run folds up: its `ok:false` degrades this node, and its inner
+          // degradedTasks are re-labelled `<thisId>/<inner>` so the boundary envelope
+          // still names every salvage. The call stack (checked above) prevents cycles.
+          if (task.kind === 'subgraph') {
+            const subName = task.subgraph!;
+            const baseSeed: Record<string, unknown> = { ...(seedFor(task) ?? {}), ...upstreamOutputs };
+            const runSub = (extra?: Record<string, unknown>, scope?: TraceScope): Promise<TaskEnvelope> =>
+              runTasklist({
+                name: subName,
+                space,
+                forkEngine,
+                seed: extra ? { ...baseSeed, ...extra } : baseSeed,
+                tracer,
+                parentScope: scope ?? taskScope,
+                codeNodeCtxFactory,
+                onCheckpoint,
+                stack: callStack,
+              });
+            const foldSub = (env: TaskEnvelope, label: string): unknown => {
+              if (!env.ok) noteDegraded(label, env.reason);
+              for (const inner of env.degradedTasks ?? []) degradedTasks.push(`${label}/${inner}`);
+              return env.data;
+            };
+            if (task.forEach) {
+              const items = resolveForEachItems(task.forEach, allOutputs);
+              const output = await Promise.all(
+                items.map(async (item, index) => {
+                  const elemScope = tracer && taskScope
+                    ? tracer.child(taskScope, 'task', `subgraph:${task.id}[${index}]`, { tasklist: name, forEachIndex: index })
+                    : undefined;
+                  const env = await runSub({ item, index }, elemScope);
+                  const data = foldSub(env, `${task.id}[${index}]`);
+                  if (tracer && elemScope) tracer.end(elemScope, 'done', { result: data, ...(env.ok ? {} : { degraded: true, reason: env.reason }) });
+                  return data;
+                }),
+              );
+              return { task, output };
+            }
+            const env = await runSub();
+            const output = foldSub(env, task.id);
+            return { task, output };
+          }
 
           // forEach: host-driven fan-out. Resolve the referenced upstream array and run the
           // task once per element (parallel, within the engine's concurrency cap), injecting

@@ -9,14 +9,25 @@ export interface TaskNode {
   id: string;
   /** Node kind: `'agent'` runs a model fork over `instruction` (an `NN-<id>.md`
    *  file); `'code'` runs a host-injected `run(ctx, inputs)` loaded from
-   *  `codeModulePath` (an `NN-<id>.ts` file). Defaults to `'agent'`. Core NEVER
-   *  imports/executes a code node's module — the CLI/pod does, via the
+   *  `codeModulePath` (an `NN-<id>.ts` file); `'subgraph'` runs a named
+   *  sub-tasklist (recursively, via the same `runTasklist`) and unwraps its
+   *  `TaskEnvelope.data` as this node's output; `'checkpoint'` is a barrier that
+   *  records a durable "last green" resume marker. Defaults to `'agent'`. Core
+   *  NEVER imports/executes a code node's module — the CLI/pod does, via the
    *  orchestrator's injected `codeNodeCtxFactory` (keeps core free of any
    *  transpile/Node-worker runtime). */
-  kind: 'agent' | 'code';
+  kind: 'agent' | 'code' | 'subgraph' | 'checkpoint';
   /** Absolute path to the code node's `.ts` module (`kind:'code'` only). Handed
    *  verbatim to the injected `codeNodeCtxFactory`; core does not read it. */
   codeModulePath?: string;
+  /** Name of the sub-tasklist a `kind:'subgraph'` node runs (frontmatter
+   *  `subgraph:`). Resolved against `space.tasklists` at run time; its seed is
+   *  the same `{ ...tasklistSeed, ...upstreamOutputs }` a code node receives (plus
+   *  `item`/`index` when this node also has `forEach`), and its `TaskEnvelope.data`
+   *  becomes this node's output — so a slice (`model → queries → views → gates`)
+   *  is one node, not N inlined copies. A subgraph naming a tasklist already on the
+   *  call stack is a cycle and fails loudly. */
+  subgraph?: string;
   instruction: string; // body of the .md file (empty for code nodes)
   output: Record<string, string>; // JSON-schema-ish: field -> type
   input?: Record<string, string>; // JSON-schema-ish: field -> type
@@ -148,6 +159,36 @@ function buildTaskNode(
 
   const task: TaskNode = { id, kind, instruction, output };
   if (codeModulePath) task.codeModulePath = codeModulePath;
+
+  // Control-node kinds are md-authored (a `.ts` file is always a code node). A
+  // `subgraph:` frontmatter key turns the node into a sub-tasklist call; a
+  // `checkpoint: true` key turns it into a durable resume barrier. The two are
+  // mutually exclusive, and neither can ride on a code node.
+  if (kind !== 'code') {
+    const hasSubgraph = data['subgraph'] !== undefined;
+    const hasCheckpoint = data['checkpoint'] !== undefined;
+    if (hasSubgraph && hasCheckpoint) {
+      throw new Error(
+        `Task "${id}" (${filePath}): a node is either a "subgraph" or a "checkpoint", not both`,
+      );
+    }
+    if (hasSubgraph) {
+      if (typeof data['subgraph'] !== 'string' || !data['subgraph'].trim()) {
+        throw new Error(
+          `Task "${id}" (${filePath}): "subgraph" must name the sub-tasklist to run (a non-empty string)`,
+        );
+      }
+      task.kind = 'subgraph';
+      task.subgraph = data['subgraph'].trim();
+    } else if (hasCheckpoint) {
+      if (data['checkpoint'] !== true) {
+        throw new Error(
+          `Task "${id}" (${filePath}): "checkpoint" is a marker — set it to \`true\` or omit it`,
+        );
+      }
+      task.kind = 'checkpoint';
+    }
+  }
 
   if (data['input'] && typeof data['input'] === 'object' && !Array.isArray(data['input'])) {
     const input: Record<string, string> = {};
