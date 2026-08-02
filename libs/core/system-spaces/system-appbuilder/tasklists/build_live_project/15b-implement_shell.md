@@ -22,7 +22,7 @@ the routes that ACTUALLY landed). The writer is
 writeProjectViewShell(shell: unknown): { ok: boolean; error?: string }
 ```
 
-— ONE argument, a plain object literal (never a JSON string), landing at `pages/_shell.view.json`.
+— ONE argument, a plain object literal (never a JSON string), landing at `shell.view.json` (top level).
 It is synchronous and returns `{ ok, error? }`: branch on `w.ok`, read `w.error`; never treat it as
 an array and never `await` it.
 

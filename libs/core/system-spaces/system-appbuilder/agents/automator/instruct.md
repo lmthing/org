@@ -140,8 +140,10 @@ you did not declare; a stray bare word is a typecheck error that ABORTS your tur
 lands.
 
 To check what ALREADY EXISTS, use the PROJECT-ROOTED reads: `listProjectDir('database')` /
-`listProjectDir('pages')` / `listProjectDir('api')` (a missing dir returns `entries: []`), and
-`readProjectFile('pages/index.view.json')` for a file's text.
+`listProjectDir('views')` / `listProjectDir('components')` / `listProjectDir('api')` (a missing dir
+returns `entries: []`), and `readProjectFile('views/index.view.json')` for a file's text. A page spec
+lives at `views/<route>.view.json`, a view component at `components/<Name>.view.json`, the shell at
+`shell.view.json` — all top level; there is no `pages/` directory in a project you build.
 
 **Field names differ by reader — do NOT mix them up.** `readProjectFile(path)` → read the body from
 **`.content`**. `readDocument(id)` (an ATTACHMENT) → read from **`.text`**. `listProjectDir(dir)` →

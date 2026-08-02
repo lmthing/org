@@ -22,10 +22,10 @@ sections), `plan_view_components`, `plan_tables`, and `implement_view_components
 
 READ the artifact first — `readProjectFile(item.path).content`. Every spec artifact is JSON, so
 `JSON.parse` it, edit the ONE field the error names, and write the OBJECT back through its writer.
-The layout: a page is `pages/<route>.view.json`, a view component is
-`pages/components/<Name>.view.json`, the shell is `pages/_shell.view.json`. (`pages/<route>.tsx` is
-HOST-GENERATED from the spec — never edit or write one; fix the `.view.json` and the wrapper is
-re-emitted for you.) Then fix EACH error, grounded in the real artifacts, never a guess.
+The layout (all top level): a page is `views/<route>.view.json`, a view component is
+`components/<Name>.view.json`, the shell is `shell.view.json`. There is no generated `.tsx` and no
+`pages/` dir — a spec is rendered directly by the shared renderer, so fixing the `.view.json` IS the
+fix. Then fix EACH error, grounded in the real artifacts, never a guess.
 
 **The gate already decided WHICH artifact is at fault — do not second-guess it.** A defect seen on a
 page is often an endpoint's: `verify` routes it to the endpoint's file, and you will be handed that

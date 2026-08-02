@@ -3,9 +3,9 @@
  *
  * Three ground truths are merged here, and NONE of them is a model self-assessment:
  *
- *  1. **`buildProjectApp()`** — the real project-app typecheck then the esbuild bundle, over the
- *     generated page wrappers (`writeProjectView` persists `pages/<route>.view.json` AND host-writes
- *     the trivial `pages/<route>.tsx` that renders it), the api handlers and the hooks.
+ *  1. **`buildProjectApp()`** — the real project-app typecheck plus, for a spec app, a mount smoke
+ *     of every view + layout chain through the shared renderer (`writeProjectView` persists
+ *     `views/<route>.view.json`; there is no generated `.tsx`), the api handlers and the hooks.
  *  2. **`validateAppViews()`** — the WHOLE-APP static checks a per-artifact save cannot make: an
  *     orphan route no nav reaches, a nav target that is not a route, a declared component nothing
  *     uses, a `reveals`/`rowAction`/`prefill` target that resolves nowhere app-wide, a page with no
@@ -128,10 +128,13 @@ interface RenderSmokeResult extends ViewValidationResult {
   rendererMounted: boolean;
 }
 
-/** `libs/cli/src/app/view-spec/files.ts#SHELL_SPEC_PATH` — `_`-prefixed, so never a route. */
-const SHELL_SPEC_PATH = 'pages/_shell.view.json';
-/** `libs/cli/src/app/view-spec/files.ts#VIEW_COMPONENT_DIR`, under `pages/`. */
-const VIEW_COMPONENT_PREFIX = 'pages/components/';
+/** The v2 canonical shell spec path (top level) — where an app-wide finding with no file of its own
+ *  is attributed, since the shell is the artifact that owns the whole-app nav. */
+const SHELL_SPEC_PATH = 'shell.view.json';
+/** Every shell spec path a finding might carry — v2 (top level) and legacy v1 (`pages/_shell.view.json`). */
+const SHELL_SPEC_PATHS = [SHELL_SPEC_PATH, 'pages/_shell.view.json'];
+/** The view-component dir prefix, v2 (top-level `components/`) and legacy v1 (`pages/components/`). */
+const VIEW_COMPONENT_PREFIXES = ['components/', 'pages/components/'];
 
 interface Finding {
   line?: number;
@@ -333,11 +336,12 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     }
   }
 
-  // ORDER MATTERS: the component dir and the shell both live UNDER `pages/`, so the generic page
-  // branch has to come last or every component would be handed to the fixer as a view.
+  // ORDER MATTERS: shell and component paths must be tested BEFORE the generic view fallback, or a
+  // component/shell would be handed to the fixer as a view. Both v2 (top-level) and v1 (under
+  // `pages/`) layouts are recognised, because findings carry whichever path landed on disk.
   const kindOf = (path: string): string => {
-    if (path === SHELL_SPEC_PATH) return 'shell';
-    if (path.startsWith(VIEW_COMPONENT_PREFIX)) return 'viewComponent';
+    if (SHELL_SPEC_PATHS.includes(path)) return 'shell';
+    if (VIEW_COMPONENT_PREFIXES.some((p) => path.startsWith(p))) return 'viewComponent';
     if (path.startsWith('api/')) return 'api';
     if (path.startsWith('hooks/')) return 'hook';
     return 'view';

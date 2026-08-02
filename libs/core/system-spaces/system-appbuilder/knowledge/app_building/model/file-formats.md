@@ -84,8 +84,8 @@ signal 4xx/5xx.
 - A `create` section declares NO fields — they derive from the mutation's `Input` JSON Schema. Give a
   foreign-key Input property an `x-options` annotation (`{ query, label, value }`) so it renders as a
   select instead of a UUID text box.
-- The writer host-generates the trivial `pages/<route>.tsx` wrapper that renders the spec, so the
-  existing page walk/hash/cache machinery is untouched.
+- The writer persists ONLY the spec JSON — no `.tsx`, no `pages/` dir. The prebuilt AppHost (web) and
+  the native app fetch the specs and render them directly, so there is nothing generated to keep in sync.
 
 ## Layout — `writeProjectViewLayout(prefix, spec)` → `views/<prefix>/_layout.view.json`
 
