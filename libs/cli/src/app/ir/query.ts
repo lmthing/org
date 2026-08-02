@@ -77,6 +77,12 @@ export type LimitSpec = number | { input?: string; default: number; max?: number
 /** A source for one `set` column on a create/update: an input field or a literal value. */
 export type SetSource = { input: string; optional?: boolean } | { value: JsonScalar };
 
+/** A source for one companion `set` column on a **toggle** (§7): the value depends on which way the
+ *  flip goes, so a plain `{ value }`/`{ input }` (which cannot express "different value each direction")
+ *  is not enough. `'now'` is the current ISO timestamp — the one dynamic value a toggle-companion field
+ *  legitimately needs (a `collected_date` stamped when a job is picked up, cleared when it is not). */
+export type ToggleSetSource = { whenTrue: JsonScalar | 'now'; whenFalse: JsonScalar | 'now' };
+
 /** The declarative query IR — one `api/<name>.query.json`. */
 export interface QueryIr {
   /** The endpoint's stable id — `export const name`, and how a view binds it (`useApi('<name>')`). */
@@ -97,8 +103,9 @@ export interface QueryIr {
   /** Computed fields: row-level for list/get, the whole summary object for aggregate. */
   compute?: Record<string, Formula>;
   /** create/update: the columns to write, sourced from input or literals. Generated columns
-   *  (uuid/now) are filled by the store on insert and are omitted here. */
-  set?: Record<string, SetSource>;
+   *  (uuid/now) are filled by the store on insert and are omitted here. toggle: OPTIONAL companion
+   *  columns to write in the SAME update as the flip (`ToggleSetSource` only — see toggleField). */
+  set?: Record<string, SetSource | ToggleSetSource>;
   /** toggle: the boolean column to flip. */
   toggleField?: string;
 }
@@ -310,10 +317,18 @@ export function validateQueryIr(ir: unknown, tables: Map<string, TableSchema>): 
     push(`a "${kind}" needs a "set" map (column → { input } | { value })`);
   }
   if (q.set !== undefined && typeof q.set === 'object' && q.set !== null) {
-    for (const [col, src] of Object.entries(q.set as Record<string, SetSource>)) {
+    for (const [col, src] of Object.entries(q.set as Record<string, SetSource | ToggleSetSource>)) {
       if (!knownCol(col)) push(`set.${col}: no column "${col}" on "${q.entity}". Columns: ${colList()}.`);
-      const ok = src && typeof src === 'object' && ('input' in src || 'value' in src);
-      if (!ok) push(`set.${col}: must be { input: "<field>" } or { value: <literal> }`);
+      const isPlain = src && typeof src === 'object' && ('input' in src || 'value' in src);
+      const isToggleConditional = src && typeof src === 'object' && 'whenTrue' in src && 'whenFalse' in src;
+      if (kind === 'toggle') {
+        if (!isPlain && !isToggleConditional) {
+          push(`set.${col}: on a toggle, must be { input } | { value } (always the same) or { whenTrue, whenFalse } (depends on the flip direction)`);
+        }
+      } else {
+        if (isToggleConditional) push(`set.${col}: { whenTrue, whenFalse } is only valid on a "toggle" — a ${kind} has no flip direction to key off of`);
+        else if (!isPlain) push(`set.${col}: must be { input: "<field>" } or { value: <literal> }`);
+      }
     }
   }
   if (kind === 'update' && routeParams(String(q.route)).length === 0 && !(q.where && (q.where as unknown[]).length)) {
@@ -537,6 +552,28 @@ function setLiteral(set: Record<string, SetSource>): string {
   return `{ ${parts.join(', ')} }`;
 }
 
+/** Is this `set` entry a toggle-conditional source (`{ whenTrue, whenFalse }`), as opposed to a plain
+ *  create/update `SetSource` (`{ input }` / `{ value }`)? */
+function isToggleConditionalSource(src: SetSource | ToggleSetSource): src is ToggleSetSource {
+  return typeof src === 'object' && src !== null && 'whenTrue' in src && 'whenFalse' in src;
+}
+
+/** Narrow an IR `set` map to its plain (create/update) entries — `validateQueryIr` already rejects a
+ *  `{ whenTrue, whenFalse }` entry on anything but a toggle, so this is a type-level narrowing of an
+ *  invariant already enforced at runtime, not a second check. */
+function plainSetEntries(set: Record<string, SetSource | ToggleSetSource> | undefined): Record<string, SetSource> {
+  const out: Record<string, SetSource> = {};
+  for (const [col, src] of Object.entries(set ?? {})) {
+    if (!isToggleConditionalSource(src)) out[col] = src;
+  }
+  return out;
+}
+
+/** A toggle companion value (`'now'` or a JSON literal) as a JS expression. */
+function toggleValueExpr(value: JsonScalar | 'now'): string {
+  return value === 'now' ? 'new Date().toISOString()' : JSON.stringify(value);
+}
+
 /**
  * Generate the self-contained `<METHOD>.ts` handler for a query IR. Assumes {@link validateQueryIr}
  * has passed (it re-derives nothing it cannot from a valid IR). `tables` types the Input/Output.
@@ -612,7 +649,7 @@ export function generateQueryHandler(ir: QueryIr, tables: Map<string, TableSchem
     outputDecl = `interface _Item {\n${itemFields(ir, table).map((f) => `  ${f}`).join('\n')}\n}\nexport interface Output { items: _Item[]; }`;
     body = [
       `export default async function handler(input: Input, ctx: _Ctx): Promise<Output> {`,
-      `  const created = await ctx.db.insert(${JSON.stringify(ir.entity)}, ${setLiteral(ir.set ?? {})});`,
+      `  const created = await ctx.db.insert(${JSON.stringify(ir.entity)}, ${setLiteral(plainSetEntries(ir.set))});`,
       `  const row = (Array.isArray(created) ? created[0] : created) as _Item;`,
       `  return { items: [row] };`,
       `}`,
@@ -622,7 +659,7 @@ export function generateQueryHandler(ir: QueryIr, tables: Map<string, TableSchem
     outputDecl = `interface _Item {\n${itemFields(ir, table).map((f) => `  ${f}`).join('\n')}\n}\nexport interface Output { items: _Item[]; }`;
     body = [
       `export default async function handler(input: Input, ctx: _Ctx): Promise<Output> {`,
-      `  const n = await ctx.db.update(${JSON.stringify(ir.entity)}, { where: { ${JSON.stringify(pk)}: input[${JSON.stringify(idParam)}] }, set: ${setLiteral(ir.set ?? {})} });`,
+      `  const n = await ctx.db.update(${JSON.stringify(ir.entity)}, { where: { ${JSON.stringify(pk)}: input[${JSON.stringify(idParam)}] }, set: ${setLiteral(plainSetEntries(ir.set))} });`,
       `  if (n === 0) throw new HttpError(404, ${JSON.stringify(`no ${ir.entity} to update`)});`,
       `  const [row] = (await ctx.db.query(${JSON.stringify(ir.entity)})).filter((r) => r[${JSON.stringify(pk)}] === input[${JSON.stringify(idParam)}]);`,
       `  return { items: [row as _Item] };`,
@@ -632,14 +669,29 @@ export function generateQueryHandler(ir: QueryIr, tables: Map<string, TableSchem
     // toggle
     const pk = primaryKeyOf(table);
     const field = ir.toggleField as string;
-    outputDecl = `export interface Output { items: Array<{ ${JSON.stringify(pk)}: string; ${JSON.stringify(field)}: boolean }>; }`;
+    const companions = Object.entries(ir.set ?? {}).filter(
+      (e): e is [string, ToggleSetSource] => isToggleConditionalSource(e[1]),
+    );
+    const companionFields = companions
+      .map(([col, src]) => {
+        const nullable = src.whenTrue === null || src.whenFalse === null;
+        return `${JSON.stringify(col)}: ${tsForColumn(columnType(table, col))}${nullable ? ' | null' : ''};`;
+      })
+      .join('\n  ');
+    outputDecl = `export interface Output { items: Array<{ ${JSON.stringify(pk)}: string; ${JSON.stringify(field)}: boolean;${companionFields ? `\n  ${companionFields}` : ''} }>; }`;
+    const companionConsts = companions.map(
+      ([col, src]) => `  const ${col} = next ? ${toggleValueExpr(src.whenTrue)} : ${toggleValueExpr(src.whenFalse)};`,
+    );
+    const companionSetParts = companions.map(([col]) => `${JSON.stringify(col)}: ${col}`);
+    const companionItemParts = companions.map(([col]) => `${JSON.stringify(col)}: ${col}`);
     body = [
       `export default async function handler(input: Input, ctx: _Ctx): Promise<Output> {`,
       `  const [row] = (await ctx.db.query(${JSON.stringify(ir.entity)})).filter((r) => r[${JSON.stringify(pk)}] === input[${JSON.stringify(idParam)}]);`,
       `  if (!row) throw new HttpError(404, ${JSON.stringify(`no such ${ir.entity}`)});`,
       `  const next = !row[${JSON.stringify(field)}];`,
-      `  await ctx.db.update(${JSON.stringify(ir.entity)}, { where: { ${JSON.stringify(pk)}: input[${JSON.stringify(idParam)}] }, set: { ${JSON.stringify(field)}: next } });`,
-      `  return { items: [{ ${JSON.stringify(pk)}: input[${JSON.stringify(idParam)}], ${JSON.stringify(field)}: next }] };`,
+      ...companionConsts,
+      `  await ctx.db.update(${JSON.stringify(ir.entity)}, { where: { ${JSON.stringify(pk)}: input[${JSON.stringify(idParam)}] }, set: { ${JSON.stringify(field)}: next${companionSetParts.length ? ', ' + companionSetParts.join(', ') : ''} } });`,
+      `  return { items: [{ ${JSON.stringify(pk)}: input[${JSON.stringify(idParam)}], ${JSON.stringify(field)}: next${companionItemParts.length ? ', ' + companionItemParts.join(', ') : ''} }] };`,
       `}`,
     ];
   }

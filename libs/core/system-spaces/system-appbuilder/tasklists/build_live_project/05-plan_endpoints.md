@@ -125,6 +125,22 @@ path; the declarative IR cannot express them and must not be forced to.
 }
 ```
 
+**A toggle that ALSO needs to stamp a companion field on the SAME flip is STILL declarative — this is
+not the signal to hand-write it.** Give that column a `set` entry shaped `{ whenTrue, whenFalse }`
+(`"now"` = current timestamp, anything else a literal) — never `{ input }`/`{ value }` for this, since
+those have no "which direction did it flip" to key off of:
+
+```typescript
+{
+  name: 'job-toggle-collected', route: 'jobs/[id]/collect/PATCH',
+  purpose: 'Flip collected; stamp collectedDate when collecting, clear it when un-collecting',
+  tables: ['job'], fields: [ 'id: string', 'collected: boolean', 'collectedDate: string | null' ],
+  declarative: true,
+  kind: 'toggle', entity: 'job', toggleField: 'collected',
+  set: { collectedDate: { whenTrue: 'now', whenFalse: null } },
+}
+```
+
 The declarative IR shape (`kind`/`entity`/`where`/`order`/`limit`/`include`/`compute`/`set`/
 `toggleField`) is `writeProjectQuery`'s own parameter — its TYPE is in your ambient DTS
 (`declare function writeProjectQuery`), so read that signature for the exact field names and the
@@ -208,9 +224,28 @@ you what the rest of the contract must line up with. If `feedback` is not in sco
 pass; ignore this section.
 
 
+**The declarative fields (`declarative`/`kind`/`entity`/`where`/`order`/`limit`/`include`/`compute`/
+`set`/`toggleField`) belong on the SAME endpoint object you resolve here — they are NOT a separate pass,
+NOT a comment, NOT something you work out and then drop.** If your own reasoning above concluded an
+endpoint is declarative, the object you put in `endpoints: […]` below MUST carry `declarative: true`
+plus its IR fields — an endpoint you decided was declarative but resolved WITHOUT those fields is
+IDENTICAL, to every downstream node, to one you never considered declarative at all; the decision only
+counts if it is on the object.
+
 ```typescript
 currentTask.resolve({
   endpoints: [
+    // A PLAIN endpoint — declarative. The IR fields ride on THIS SAME object, not a separate one.
+    {
+      name: 'jobs-list', route: 'jobs/list/GET', purpose: 'Open jobs, newest first',
+      tables: [ 'job' ],
+      fields: [ 'id: string', 'status: string', 'hours: number' ],
+      declarative: true,
+      kind: 'list', entity: 'job',
+      order: [ { field: 'createdAt', dir: 'desc' } ],
+    },
+    // A BESPOKE endpoint — cross-table lookup / grouped breakdown / date pick / label. No `declarative`
+    // key at all (never `declarative: false` — simply omit it), so `implement_endpoints` hand-writes it.
     {
       name: '<unique-hyphen-id>',
       route: '<path>/GET',

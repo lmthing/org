@@ -35,6 +35,7 @@ const JOB: TableSchema = {
     status: { type: 'string', description: 'status', required: true },
     hours: { type: 'number', description: 'labour hours', default: 0 },
     collected: { type: 'boolean', description: 'picked up?', default: false },
+    collectedDate: { type: 'date', description: 'when it was picked up', required: false },
     createdAt: { type: 'date', description: 'created', generated: 'now' },
   },
   relations: { parts: { hasMany: 'part', via: 'jobId', description: 'parts fitted' } },
@@ -108,6 +109,28 @@ describe('validateQueryIr', () => {
       TABLES,
     );
     expect(res.errors.join(' ')).toMatch(/needs a \[param\]/);
+  });
+
+  it('accepts a toggle with a { whenTrue, whenFalse } companion field', () => {
+    const res = validateQueryIr(
+      {
+        name: 'x', kind: 'toggle', entity: 'job', route: 'jobs/[id]/toggle', toggleField: 'collected',
+        set: { collectedDate: { whenTrue: 'now', whenFalse: null } },
+      },
+      TABLES,
+    );
+    expect(res.errors).toEqual([]);
+  });
+
+  it('rejects { whenTrue, whenFalse } on a create/update — no flip direction to key off of', () => {
+    const res = validateQueryIr(
+      {
+        name: 'x', kind: 'update', entity: 'job', route: 'jobs/[id]',
+        set: { collectedDate: { whenTrue: 'now', whenFalse: null } },
+      },
+      TABLES,
+    );
+    expect(res.errors.join(' ')).toMatch(/only valid on a "toggle"/);
   });
 
   it('rejects a create/update with no set map', () => {
@@ -266,6 +289,21 @@ describe('generateQueryHandler — parses + typechecks standalone, every kind', 
     assertParses(source);
     expect(typecheckStandalone(source)).toEqual([]);
   });
+
+  it('toggle with a { whenTrue: "now", whenFalse: null } companion field — the bike-workshop shape', () => {
+    const ir: QueryIr = {
+      name: 'job-toggle-collected',
+      kind: 'toggle',
+      entity: 'job',
+      route: 'jobs/[id]/toggle-collected',
+      toggleField: 'collected',
+      set: { collectedDate: { whenTrue: 'now', whenFalse: null } },
+    };
+    const { source } = generateQueryHandler(ir, TABLES);
+    assertParses(source);
+    expect(typecheckStandalone(source)).toEqual([]);
+    expect(source).toContain('new Date().toISOString()');
+  });
 });
 
 function generateQueryHandlerBanner(name: string): string {
@@ -400,6 +438,34 @@ describe('generateQueryHandler — end-to-end execution against a real project d
 
     const second = await runtime.handle('PATCH', `/jobs/${j.id}/toggle-collected`);
     expect((second.body as { items: Array<{ collected: boolean }> }).items[0].collected).toBe(false);
+  });
+
+  it('toggle with a companion field stamps it on flip-to-true and clears it on flip-to-false — real rows, real dates', async () => {
+    const root = await scratch();
+    await writeHandler(root, {
+      name: 'job-toggle-collected',
+      kind: 'toggle',
+      entity: 'job',
+      route: 'jobs/[id]/toggle-collected',
+      toggleField: 'collected',
+      set: { collectedDate: { whenTrue: 'now', whenFalse: null } },
+    });
+    const { runtime, project } = await runtimeFor(root);
+    const j = project.db.insert('job', { status: 'quoted', hours: 1, collected: false }) as { id: string };
+
+    const before = Date.now();
+    const first = await runtime.handle('PATCH', `/jobs/${j.id}/toggle-collected`);
+    expect(first.status).toBe(200);
+    const firstItem = (first.body as { items: Array<{ collected: boolean; collectedDate: string }> }).items[0];
+    expect(firstItem.collected).toBe(true);
+    expect(new Date(firstItem.collectedDate).getTime()).toBeGreaterThanOrEqual(before - 1000);
+    const [row1] = project.db.query('job', { where: { id: j.id } }) as Array<{ collectedDate: string }>;
+    expect(row1.collectedDate).toBe(firstItem.collectedDate); // the write actually landed, not just the response
+
+    const second = await runtime.handle('PATCH', `/jobs/${j.id}/toggle-collected`);
+    const secondItem = (second.body as { items: Array<{ collected: boolean; collectedDate: string | null }> }).items[0];
+    expect(secondItem.collected).toBe(false);
+    expect(secondItem.collectedDate).toBeNull(); // cleared on un-collect, not left stale
   });
 
   it('create inserts exactly the declared columns and returns the created row', async () => {

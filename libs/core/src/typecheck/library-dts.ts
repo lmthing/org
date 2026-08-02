@@ -337,7 +337,9 @@ declare function writeProjectQuery(name: string, query: {
   limit?: number | { input?: string; default: number; max?: number };
   include?: string[];
   compute?: Record<string, unknown>;
-  set?: Record<string, { input: string; optional?: boolean } | { value: unknown }>;
+  // On a toggle, a set entry may ALSO be { whenTrue, whenFalse } — a companion field stamped
+  // depending on the flip direction (e.g. collectedDate: { whenTrue: 'now', whenFalse: null }).
+  set?: Record<string, { input: string; optional?: boolean } | { value: unknown } | { whenTrue: unknown; whenFalse: unknown }>;
   toggleField?: string;
 }): { ok: boolean; error?: string };`;
 

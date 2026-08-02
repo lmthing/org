@@ -101,8 +101,24 @@ formula AST — `add sub mul div min max round coalesce` (arithmetic) and `sum c
 (reduce over an `include`d relation, or over the whole set inside an aggregate) — NOT TypeScript; a
 formula outside that set means this endpoint is NOT declarative, hand-write it above instead. `set`
 (create/update) maps a column to `{ "input": "<field>" }` or `{ "value": <literal> }`; `toggleField`
-(toggle) names the boolean column the handler flips. The exact IR shape is in your ambient DTS
-(`declare function writeProjectQuery`) — read it there, not from memory.
+(toggle) names the boolean column the handler flips.
+
+**A toggle that ALSO needs to stamp a companion field is STILL declarative** — do not hand-write it.
+Give that column a `set` entry shaped `{ "whenTrue": ..., "whenFalse": ... }` (not `{ input }`/
+`{ value }` — those are for create/update, which have no "flip direction"): `"now"` means the current
+timestamp, anything else is a literal.
+
+```json
+{
+  "name": "job-toggle-collected", "kind": "toggle", "entity": "job",
+  "route": "jobs/[id]/toggle-collected", "toggleField": "collected",
+  "set": { "collectedDate": { "whenTrue": "now", "whenFalse": null } }
+}
+```
+
+This is the exact shape a "mark collected, stamp the date; un-mark, clear it" toggle needs — reach for
+it BEFORE deciding a toggle-with-a-timestamp must be hand-written. The exact IR shape is in your
+ambient DTS (`declare function writeProjectQuery`) — read it there, not from memory.
 
 ## Page — `writeProjectView(route, spec)` → `views/<route>.view.json`
 
