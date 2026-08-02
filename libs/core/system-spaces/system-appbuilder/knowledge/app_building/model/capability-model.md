@@ -14,11 +14,11 @@ reaching the engine. This is least-privilege: give an agent exactly the caps its
 | Capability | Unlocks | Config |
 |---|---|---|
 | `project:manage` | `createProject`, `selectProject` | bare (no config) |
-| `db:schema` | `writeTableSchema`, `db.createTable`/`db.addColumn` | optional `{ tables: [...] }` |
+| `db:schema` | `writeProjectEntity` (declarative — PREFER this), `writeTableSchema`, `db.createTable`/`db.addColumn` | optional `{ tables: [...] }` |
 | `db:read` | `db.query`, `db.tables` | optional `{ tables: [...] }` |
 | `db:write` | `db.insert`, `db.update` | optional `{ tables: [...] }` |
 | `views:write` | `writeProjectView`, `writeProjectViewComponent`, `writeProjectViewShell` | bare |
-| `api:write` | `writeApi`, `writeProjectApi` | bare |
+| `api:write` | `writeProjectQuery` (declarative — PREFER this), `writeApi`, `writeProjectApi` | bare |
 | `hooks:write` | `writeHook` | bare |
 | `api:call` | `apiCall(name, input)` | required `{ allow: [...] }` |
 | `connections:use` | `callConnection`, `integrationStatus` | optional `{ providers: [...] }` |

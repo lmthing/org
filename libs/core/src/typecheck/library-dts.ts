@@ -319,7 +319,27 @@ export function composeConnectionsDts(providers: string[]): string {
 // (`api/<path>/<METHOD>.ts`) — which writes into the session's OWN project (the store-catalog
 // `writeApi` writer is gone) and republishes, so "turn this into an app I can open" produces a
 // real serving app in the live project. One-liner invariant preserved.
-export const PROJECT_API_DTS = `declare function writeProjectApi(route: string, src: string): { ok: boolean; error?: string };`;
+//
+// `writeProjectQuery` is the DECLARATIVE counterpart (W7, §7): most endpoints are projections
+// (list/get/aggregate/create/update/toggle), not programs — author the IR and the handler is
+// GENERATED straight to `api/<route>/<METHOD>.ts`, so it cannot disagree with its own contract.
+// Prefer it; keep `writeProjectApi`/`api/<name>.handler.ts` for the genuinely bespoke endpoint.
+export const PROJECT_API_DTS = `declare function writeProjectApi(route: string, src: string): { ok: boolean; error?: string };
+/** Declarative endpoint (api/<name>.query.json) — the handler is GENERATED, never hand-written. Prefer this over writeProjectApi for a list/get/aggregate/create/update/toggle. */
+declare function writeProjectQuery(name: string, query: {
+  kind: 'list' | 'get' | 'aggregate' | 'create' | 'update' | 'toggle';
+  entity: string;
+  route: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  description?: string;
+  where?: Array<{ field: string; op: '=' | '!=' | 'in' | 'not-in' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'is-null' | 'not-null'; input?: string; value?: unknown; default?: unknown }>;
+  order?: Array<{ field: string; dir?: 'asc' | 'desc' }>;
+  limit?: number | { input?: string; default: number; max?: number };
+  include?: string[];
+  compute?: Record<string, unknown>;
+  set?: Record<string, { input: string; optional?: boolean } | { value: unknown }>;
+  toggleField?: string;
+}): { ok: boolean; error?: string };`;
 
 // `views:write` — the ONLY UI-authoring capability, and the mechanism behind the zero-WebView
 // guarantee. It earns the VIEW-SPEC writers: a page is DATA (a validated object literal) rather
@@ -363,7 +383,31 @@ declare function writeProjectFunction(name: string, src: string): { ok: boolean;
 // The optional third arg SEEDS rows at table-creation time (host-side insert after the db
 // re-derives), so KNOWN data the user gave you to "move into the app" lands in one pass — the
 // agent can't insert into a table it just created (`db` isn't injected until a table exists).
-export const PROJECT_TABLE_DTS = `declare function writeProjectTable(name: string, schema: unknown, rows?: Array<Record<string, unknown>>): { ok: boolean; error?: string };`;
+//
+// `writeProjectEntity` is the DECLARATIVE counterpart (W7, §2.1): author FACTS
+// (`{ fact, type, values?, to?, currencyField? }`), not a column schema — the table is COMPILED,
+// never hand-written. Prefer it; `writeProjectTable` stays for a schema not worth modeling as facts.
+export const PROJECT_TABLE_DTS = `declare function writeProjectTable(name: string, schema: unknown, rows?: Array<Record<string, unknown>>): { ok: boolean; error?: string };
+/** Declarative entity model (model/<name>.entity.json) — compiled to database/<name>.json, never hand-written. Prefer this over writeProjectTable. */
+declare function writeProjectEntity(name: string, entity: {
+  entity: string;
+  title: string;
+  identity?: string;
+  fields: Record<string, {
+    fact: string;
+    type: 'id' | 'string' | 'text' | 'number' | 'decimal' | 'money' | 'boolean' | 'date' | 'json' | 'enum' | 'ref';
+    to?: string;
+    values?: string[];
+    unit?: string;
+    currencyField?: string;
+    required?: boolean;
+    unique?: boolean;
+    default?: unknown;
+    description?: string;
+    source?: string;
+  }>;
+  relations?: Record<string, { hasMany: string; via: string; description: string } | { belongsTo: string; via: string; description: string }>;
+}, rows?: Array<Record<string, unknown>>): { ok: boolean; error?: string };`;
 
 // The read-side twins of the writeProject* writers — PROJECT-ROOTED introspection. `listProjectDir`
 // lists the files under `<projectRoot>/<dir>` (a missing dir returns `entries: []`); `readProjectFile`

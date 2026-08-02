@@ -32,6 +32,45 @@ scalar. Pages read every endpoint as `data.items` (and an aggregate as `data.ite
 `items` silently gives the page nothing. `writeProjectApi` returns `{ ok, error? }`
 and validates the module at write time; rewrite and retry if `w.ok` is false. Emit one statement:
 
+## Check `item.declarative` FIRST — a declarative endpoint uses `writeProjectQuery`, never hand-written TS
+
+If `plan_endpoints` marked this endpoint `declarative: true`, it already carries the IR fields
+(`kind`, `entity`, `where`, `order`, `limit`, `include`, `compute`, `set`, `toggleField`) that
+`writeProjectQuery` needs — build the query object from those SAME fields, verbatim, call
+`writeProjectQuery`, resolve, and **stop — skip every section below**; the rest of this document
+(the hand-written handler contract) is for the NON-declarative endpoints only.
+
+```typescript
+const ep = item;
+if (ep.declarative) {
+  const query = {
+    name: ep.name,
+    kind: ep.kind,
+    entity: ep.entity,
+    route: ep.route.replace(/\/(GET|POST|PUT|PATCH|DELETE)$/, ''), // writeProjectQuery's route has NO method suffix
+    ...(ep.where ? { where: ep.where } : {}),
+    ...(ep.order ? { order: ep.order } : {}),
+    ...(ep.limit !== undefined ? { limit: ep.limit } : {}),
+    ...(ep.include ? { include: ep.include } : {}),
+    ...(ep.compute ? { compute: ep.compute } : {}),
+    ...(ep.set ? { set: ep.set } : {}),
+    ...(ep.toggleField ? { toggleField: ep.toggleField } : {}),
+  };
+  const w = writeProjectQuery(ep.name, query);
+  currentTask.resolve({ route: ep.route, name: ep.name, ok: w.ok });
+}
+```
+
+`w` is `{ ok, error? }`, exactly like `writeProjectApi` — branch on `w.ok`, read `w.error` and fix the
+IR (a bad `where.field`, an unknown `entity`, a `toggleField` that is not a real boolean column) and
+retry; never treat it as an array. A rejected declarative endpoint is still NEVER a reason to fall back
+to hand-writing it — the rejection names exactly what is wrong with the IR (`validateQueryIr`'s
+messages name the real columns/tables/relations), so fix the IR object, not the strategy.
+
+If this endpoint is NOT `declarative` (a cross-table lookup, a grouped breakdown, a date/timezone
+pick, a classification label — anything the closed compute formula set cannot express), continue
+reading below: it is hand-written, exactly as described.
+
 ## Satisfy the emitted type contract
 
 `emit_types` already wrote `types/contract.d.ts` from the plan, BEFORE this node ran, and the

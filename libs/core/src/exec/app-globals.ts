@@ -98,9 +98,19 @@ export interface AppGlobalImpls {
    *  `<projectRoot>/database/<name>.json` and re-derives the project's db. The ONLY
    *  data-model writer now — a project with no `database/*.json` boots NO db at all. */
   writeProjectTable?: (name: string, schema: unknown) => AuthoringResult;
+  /** LIVE-project ENTITY MODEL writer (`db:schema`, W7 §2.1) — the declarative counterpart of
+   *  `writeProjectTable`: writes `<projectRoot>/model/<name>.entity.json` (facts, not columns) and
+   *  COMPILES it straight to `<projectRoot>/database/<name>.json`, which is never hand-edited once an
+   *  entity model owns it. */
+  writeProjectEntity?: (name: string, entity: unknown, rows?: unknown[]) => AuthoringResult;
   /** LIVE-project API endpoint writer (`api:write`): writes
    *  `<projectRoot>/api/<path>/<METHOD>.ts` and republishes the served app. */
   writeProjectApi?: (route: string, src: string) => AuthoringResult;
+  /** LIVE-project DECLARATIVE QUERY writer (`api:write`, W7 §7) — the declarative counterpart of
+   *  `writeProjectApi`: writes `<projectRoot>/api/<name>.query.json` and GENERATES its handler straight
+   *  to `<projectRoot>/api/<route>/<METHOD>.ts`, so a list/get/aggregate/create/update/toggle endpoint
+   *  cannot disagree with its own contract. */
+  writeProjectQuery?: (name: string, query: unknown) => AuthoringResult;
   /** LIVE-project VIEW-SPEC writers (`views:write`) — the ONLY UI-authoring surface: a page as
    *  validated DATA, rendered by the shared `ViewRenderer` on the web bundle and natively in the
    *  mobile app. `writeProjectView` persists the spec; `writeProjectViewLayout` writes a nested
@@ -234,6 +244,7 @@ export function injectAppGlobals(
   if (app['views:write'] && impls.writeProjectViewComponent) injectGlobal(ctx, 'writeProjectViewComponent', impls.writeProjectViewComponent as (...a: unknown[]) => unknown);
   if (app['views:write'] && impls.writeProjectViewShell) injectGlobal(ctx, 'writeProjectViewShell', impls.writeProjectViewShell as (...a: unknown[]) => unknown);
   if (app['api:write'] && impls.writeProjectApi) injectGlobal(ctx, 'writeProjectApi', impls.writeProjectApi as (...a: unknown[]) => unknown);
+  if (app['api:write'] && impls.writeProjectQuery) injectGlobal(ctx, 'writeProjectQuery', impls.writeProjectQuery as (...a: unknown[]) => unknown);
   // Live-project authoring (S11) — same `hooks:write` grant, but these write into the
   // session's OWN project (not the catalog) and republish. Present only when the host
   // supplies them (a project-rooted session); a catalog-only appbuilder session leaves
@@ -245,6 +256,7 @@ export function injectAppGlobals(
   // OWN project (not the catalog). Present only when the host supplies it (a project-rooted
   // session); a catalog-only appbuilder session leaves it absent.
   if (app['db:schema'] && impls.writeProjectTable) injectGlobal(ctx, 'writeProjectTable', impls.writeProjectTable as (...a: unknown[]) => unknown);
+  if (app['db:schema'] && impls.writeProjectEntity) injectGlobal(ctx, 'writeProjectEntity', impls.writeProjectEntity as (...a: unknown[]) => unknown);
   if (app['project:manage']) {
     if (impls.createProject) injectGlobal(ctx, 'createProject', impls.createProject as (...a: unknown[]) => unknown);
     if (impls.selectProject) injectGlobal(ctx, 'selectProject', impls.selectProject as (...a: unknown[]) => unknown);

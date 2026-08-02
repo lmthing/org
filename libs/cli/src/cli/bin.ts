@@ -654,11 +654,13 @@ async function main(): Promise<void> {
             writeProjectEvent: projectAuthoring.writeProjectEvent,
             writeProjectFunction: projectAuthoring.writeProjectFunction,
             writeProjectTable: projectAuthoring.writeProjectTable,
+            writeProjectEntity: projectAuthoring.writeProjectEntity,
             writeProjectView: projectAuthoring.writeProjectView,
             writeProjectViewLayout: projectAuthoring.writeProjectViewLayout,
             writeProjectViewComponent: projectAuthoring.writeProjectViewComponent,
             writeProjectViewShell: projectAuthoring.writeProjectViewShell,
             writeProjectApi: projectAuthoring.writeProjectApi,
+            writeProjectQuery: projectAuthoring.writeProjectQuery,
             listProjectDir: projectAuthoring.listProjectDir,
             readProjectFile: projectAuthoring.readProjectFile,
             // NO `team:` resolver here, deliberately. The team globals resolve

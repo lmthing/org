@@ -219,12 +219,13 @@ describe('standalone capability fragments', () => {
     expect(CAPABILITY_DTS_FRAGMENTS['connections:use']).toBeUndefined();
   });
 
-  it('the live-project write helper (api:write) is a non-empty one-liner', () => {
+  it('the live-project write helpers (api:write): writeProjectApi + the declarative writeProjectQuery (W7)', () => {
     // The legacy pages:write TSX writers (writeProjectPage/writeProjectComponent) are gone
-    // entirely — writeProjectApi is the surviving one-liner shape in this family.
+    // entirely — writeProjectApi is the surviving hand-written-handler shape in this family,
+    // alongside the declarative writeProjectQuery (W7 §7) added beside it.
     expect(PROJECT_API_DTS.trim().length).toBeGreaterThan(0);
-    expect(PROJECT_API_DTS).not.toContain('\n');
-    expect(PROJECT_API_DTS).toContain('declare function');
+    expect(PROJECT_API_DTS).toContain('declare function writeProjectApi(route: string, src: string)');
+    expect(PROJECT_API_DTS).toContain('declare function writeProjectQuery(');
   });
 });
 
@@ -286,8 +287,9 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
     expect(PROJECT_MANAGE_DTS).toContain('selectProject(');
   });
 
-  it('PROJECT_TABLE_DTS declares the live-project table writer (db:schema twin)', () => {
+  it('PROJECT_TABLE_DTS declares the live-project table writer (db:schema twin) and the declarative writeProjectEntity (W7)', () => {
     expect(PROJECT_TABLE_DTS).toContain('writeProjectTable(');
+    expect(PROJECT_TABLE_DTS).toContain('writeProjectEntity(');
   });
 
   it('views:write / api:write earn the live-project writers (the catalog writers are gone)', () => {

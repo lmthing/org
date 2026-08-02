@@ -27,9 +27,11 @@ project the session is running in — with these synchronous writer globals (eac
 `{ ok, error? }`, and republishes so the change goes live with no restart):
 
 - `writeProjectTable(name, schema, rows?)` → a TABLE, optionally SEEDED with known rows at creation.
-  A project with no table has no database at all, so author the table FIRST.
+  A project with no table has no database at all, so author the table FIRST. **Prefer
+  `writeProjectEntity`** (facts, not columns; the table is COMPILED) — see `model` knowledge.
 - `writeProjectApi(route, src)` → `api/<path>/<METHOD>.ts` — a typed handler (the route encodes its
-  HTTP method last, e.g. `bookings-list/GET`).
+  HTTP method last, e.g. `bookings-list/GET`). **Prefer `writeProjectQuery`** for a plain list/get/
+  aggregate/create/update/toggle — its handler is GENERATED; keep `writeProjectApi` for the rest.
 - `writeProjectView(route, spec)` → `views/<route>.view.json` — a PAGE, as a spec object.
 - `writeProjectViewLayout(prefix, spec)` → a nested LAYOUT framing every route under `prefix`, with
   one `{ kind: 'outlet' }` where the child page draws.

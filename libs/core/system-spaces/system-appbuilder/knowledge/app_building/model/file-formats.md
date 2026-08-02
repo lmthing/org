@@ -35,7 +35,32 @@ The exact on-disk shapes each authoring global writes.
 - Relations: `belongsTo` (this table holds the FK, `via` = its column) or `hasMany` (target holds
   the FK back). Both need a `description`. Validation fails loud on any missing description.
 
-## API handler — `writeProjectApi('<name>/<METHOD>', src)` → `api/<name>/<METHOD>.ts`
+## Entity model (declarative — PREFER for a plain table) — `writeProjectEntity(name, entity)` → `model/<name>.entity.json` + `database/<name>.json`
+
+Author FACTS, not columns — the table is COMPILED, never hand-written:
+
+```json
+{
+  "entity": "job",
+  "title": "Job",
+  "identity": "id",
+  "fields": {
+    "id":     { "fact": "job.id", "type": "id" },
+    "status": { "fact": "job.status", "type": "enum", "values": ["quoted", "in-progress", "done"] },
+    "hours":  { "fact": "job.hours", "type": "number" }
+  },
+  "relations": { "parts": { "hasMany": "part", "via": "jobId", "description": "parts fitted" } }
+}
+```
+
+Field `type`: `id`|`string`|`text`|`number`|`decimal`|`money`|`boolean`|`date`|`json`|`enum`|`ref`.
+Exactly one field is `type: "id"` (the primary key). `type: "ref"` needs `to` (the target entity);
+`type: "enum"` needs `values` (a rebuild may only ADD values, never drop/rename — one vocabulary per
+fact, forever); `type: "money"` needs `currencyField` naming another string/enum field on the SAME
+entity. `fact` is a stable key — reusing it for a different column name on a rebuild is rejected.
+`writeProjectTable` still exists for a table not worth modeling as facts, but prefer this.
+
+## API handler (hand-written — use for the genuinely bespoke endpoint) — `writeProjectApi('<name>/<METHOD>', src)` → `api/<name>/<METHOD>.ts`
 
 The route's LAST segment is the HTTP method (`GET`|`POST`|`PUT`|`PATCH`|`DELETE`); the rest is the
 endpoint path. `src` is a full ESM handler module:
@@ -54,6 +79,30 @@ export default async function handler(input: Input, ctx: { db: any }): Promise<O
 `ctx.db` is the async data API: `await ctx.db.query/insert/update/remove/tables(...)`. `Input`/
 `Output` become the endpoint's JSON-Schema contract. `import { HttpError } from '@app/runtime'` to
 signal 4xx/5xx.
+
+## Declarative query (PREFER for a plain endpoint) — `writeProjectQuery(name, query)` → `api/<name>.query.json` + `api/<route>/<METHOD>.ts`
+
+For a plain filtered/sorted list, get-by-id, sum/count/avg aggregate, create, update, or toggle — no
+cross-table lookup, no grouped breakdown, no date pick, no classification label — author the query as
+DATA and the handler is GENERATED, so it cannot disagree with its own contract:
+
+```json
+{
+  "name": "jobs-list", "kind": "list", "entity": "job", "route": "jobs/list",
+  "where": [ { "field": "status", "op": "in", "input": "status", "default": ["quoted", "in-progress"] } ],
+  "order": [ { "field": "createdAt", "dir": "desc" } ],
+  "limit": 50
+}
+```
+
+`kind`: `list`|`get`|`aggregate`|`create`|`update`|`toggle`. `where[].op`: `= != in not-in gt gte lt
+lte contains is-null not-null`. `compute` (aggregates, and computed fields on a list/get) is a closed
+formula AST — `add sub mul div min max round coalesce` (arithmetic) and `sum count avg first`
+(reduce over an `include`d relation, or over the whole set inside an aggregate) — NOT TypeScript; a
+formula outside that set means this endpoint is NOT declarative, hand-write it above instead. `set`
+(create/update) maps a column to `{ "input": "<field>" }` or `{ "value": <literal> }`; `toggleField`
+(toggle) names the boolean column the handler flips. The exact IR shape is in your ambient DTS
+(`declare function writeProjectQuery`) — read it there, not from memory.
 
 ## Page — `writeProjectView(route, spec)` → `views/<route>.view.json`
 

@@ -10,8 +10,25 @@ capabilities:
 canDelegateTo: []
 ---
 
-You are handed a data-modeling slice (a table name + what it must store). Author the
-`database/<name>.json` schema with `writeProjectTable` and stop. Narrate with `// comments`.
+You are handed a data-modeling slice (a table name + what it must store).
+
+**Prefer `writeProjectEntity`** — author FACTS, not columns, and the table is COMPILED, never
+hand-written. Read the exact field shape (`fact`/`type`/`values`/`to`/`currencyField`) off your
+ambient DTS (`declare function writeProjectEntity`).
+
+```typescript
+const w = writeProjectEntity('item', {
+  entity: 'item', title: 'Items', identity: 'id',
+  fields: {
+    id: { fact: 'item.id', type: 'id' },
+    title: { fact: 'item.title', type: 'string', required: true },
+  },
+});
+display(w.ok ? 'wrote item entity' : ('entity error: ' + w.error));
+```
+
+Otherwise — a schema not worth modeling as facts — author `database/<name>.json` with
+`writeProjectTable` and stop. Narrate with `// comments`.
 
 ```typescript
 // A schema = { title, description, columns: { <col>: { type, description, ... } }, relations? }.

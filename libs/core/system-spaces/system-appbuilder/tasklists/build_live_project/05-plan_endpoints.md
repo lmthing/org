@@ -86,6 +86,55 @@ Each endpoint is `{ name, route, purpose, tables, fields, input? }`:
 Read endpoints return `{ items: [...] }` (an aggregate is the single summary at `items[0]`), so plan
 read endpoints the pages consume as `data.items`.
 
+## Mark the PLAIN endpoints declarative — they get a GENERATED handler, not a hand-written one
+
+Most endpoints in a typical app are a plain filtered/sorted list, a get-by-id, a straightforward sum/
+count/avg aggregate, a create, an update, or a toggle — with NO cross-table lookup, NO grouped
+breakdown, NO date/timezone-based pick, and NO classification label. For exactly those, add
+`declarative: true` plus the IR fields below; `12-implement_endpoints` then calls `writeProjectQuery`
+instead of hand-writing a TS module, and the handler is GENERATED straight from this same plan — it
+cannot disagree with its own contract, so the handler↔contract mismatches this file spends most of its
+words guarding against (an invented field, a re-cased column, a body key nothing sends) stop being
+possible for these endpoints. Keep every OTHER endpoint (cross-table lookups, grouped totals, date
+picks, labels — everything §"ONE SECTION, ONE ENDPOINT" above describes) on the existing hand-written
+path; the declarative IR cannot express them and must not be forced to.
+
+```typescript
+{
+  name: 'jobs-list', route: 'jobs/list/GET', purpose: 'Open jobs, newest first',
+  tables: ['job'], fields: [ 'id: string', 'status: string', 'hours: number' ],
+  declarative: true,
+  kind: 'list', entity: 'job',                              // the database/<entity>.json table
+  where: [ { field: 'status', op: 'in', input: 'status', default: ['quoted', 'in-progress'] } ],
+  order: [ { field: 'createdAt', dir: 'desc' } ],
+  limit: 50,
+}
+{
+  name: 'dashboard-stats', route: 'jobs/dashboard-stats/GET', purpose: 'Counts for the dashboard',
+  tables: ['job'], fields: [ 'openCount: number', 'totalHours: number' ],
+  declarative: true,
+  kind: 'aggregate', entity: 'job',
+  where: [ { field: 'status', op: '!=', value: 'done' } ],  // filters BEFORE the aggregate reduces
+  compute: { openCount: { count: '' }, totalHours: { sum: '$hours' } },
+}
+{
+  name: 'toggle-collected', route: 'jobs/[id]/collect/PATCH', purpose: 'Flip whether the job was collected',
+  tables: ['job'], fields: [ 'id: string', 'collected: boolean' ],
+  declarative: true,
+  kind: 'toggle', entity: 'job', toggleField: 'collected',   // no value in Input — the handler flips it
+}
+```
+
+The declarative IR shape (`kind`/`entity`/`where`/`order`/`limit`/`include`/`compute`/`set`/
+`toggleField`) is `writeProjectQuery`'s own parameter — its TYPE is in your ambient DTS
+(`declare function writeProjectQuery`), so read that signature for the exact field names and the
+`where` op set (`= != in not-in gt gte lt lte contains is-null not-null`) rather than guessing. `compute`
+is a closed formula AST over `add sub mul div min max round coalesce` (arithmetic) and
+`sum count avg first` (aggregation over a row's `include`d relation, or — inside an `aggregate` — over
+the whole filtered set); it is NOT TypeScript, and a formula that does not fit this set (a cross-table
+lookup, a grouped breakdown, a conditional label) is exactly the signal to leave the endpoint OFF this
+declarative path and hand-write it in `12-implement_endpoints` instead.
+
 ## ONE SECTION, ONE ENDPOINT — shape the endpoint for the view that reads it
 
 Pages in this app are SPECS, not code: a section names ONE endpoint and binds paths (`$.title`,
