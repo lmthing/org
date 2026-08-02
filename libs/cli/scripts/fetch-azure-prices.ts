@@ -108,6 +108,7 @@ const TARGETS: Target[] = [
   // `pro` and `longco` are DIFFERENT, far dearer models/tiers that share the `5.4` stem —
   // `5.4 pro opt Gl` is $180/1M against the base `5.4 opt Gl` at $15/1M. Exclude them all.
   { model: 'gpt-5.5', product: 'Azure OpenAI GPT5', meter: /^5\.5 ShortCo (?!PP)/i },
+  { model: 'gpt-5.6-luna', product: 'Azure OpenAI GPT5', meter: /^5\.6 luna ShortCo (?!PP)/i },
   { model: 'gpt-5.4', product: 'Azure OpenAI GPT5', meter: /^5\.4 (?!nano|mini|pro|longco|shortco)/i },
   { model: 'gpt-5.4-mini', product: 'Azure OpenAI GPT5', meter: /^5\.4 mini (?!pp)/i },
   { model: 'gpt-5.4-nano', product: 'Azure OpenAI GPT5', meter: /^5\.4 nano /i },

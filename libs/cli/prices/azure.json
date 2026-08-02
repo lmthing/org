@@ -37,6 +37,11 @@
     "outputPer1K": 0.03,
     "cachedInputPer1K": 0.0005
   },
+  "gpt-5.6-luna": {
+    "inputPer1K": 0.001,
+    "outputPer1K": 0.006,
+    "cachedInputPer1K": 0.0001
+  },
   "DeepSeek-R1-0528": {
     "inputPer1K": 0.00135,
     "outputPer1K": 0.0054
