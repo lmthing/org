@@ -1,17 +1,26 @@
 import * as Prim from '@lmthing/ui/elements/primitives';
 import { useEffect, useRef, useState } from 'react'
 import { useAuth, isPodEmbedded, isLocalRun } from '@lmthing/auth'
-import { LoginScreen } from '@lmthing/ui/components/auth/login-screen'
 import { CLOUD_BASE_URL } from '@/lib/config'
 import { WakingScreen } from '@/lib/waking-screen'
 
 export const centerStyles = { display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "var(--muted-foreground)", flexDirection: "column", gap: 12 } as const
 
-/** Block rendering until auth has resolved; show login when not authenticated. */
+/**
+ * Block rendering until auth has resolved. An unauthenticated web user is sent to
+ * lmthing.com to sign in (the SSO bridge) and returns here authenticated — there is
+ * no embedded login form on the web product surfaces.
+ *
+ * `login()` keeps the iframe-embed case working unchanged: when this surface is
+ * embedded (e.g. computer inside chat) it asks the parent for its session rather
+ * than navigating away.
+ */
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth()
-  if (isLoading) return null
-  if (!isAuthenticated) return <LoginScreen />
+  const { isAuthenticated, isLoading, login } = useAuth()
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) login()
+  }, [isLoading, isAuthenticated, login])
+  if (isLoading || !isAuthenticated) return <WakingScreen mode="signing-in" />
   return <>{children}</>
 }
 
