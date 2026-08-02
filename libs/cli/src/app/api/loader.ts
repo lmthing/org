@@ -166,6 +166,16 @@ export function apiEndpointContractError(source: string): string | null {
 /**
  * Match a concrete request `path` against a method's routes. Returns the matched
  * endpoint + extracted path params (`Record<string, string>`), or `null`.
+ *
+ * **A static segment always beats a `:param` one.** `/jobs/list` and `/jobs/:id`
+ * both match the request `/jobs/list`, but the static route is what the caller
+ * meant — matching `:id` there routes `list` to the detail handler as `id="list"`,
+ * which finds no record and silently returns an empty result. So rather than take
+ * the first pattern in table order (which made routing depend on filesystem walk
+ * order), every candidate is scored per segment — static match = 1, param = 0 —
+ * and the most specific match wins, compared left-to-right so an earlier static
+ * segment outranks a later one. Ties cannot occur: two patterns with the identical
+ * static/param shape and the same literals are the same route.
  */
 export function matchRoute(
   table: RouteTable,
@@ -173,23 +183,43 @@ export function matchRoute(
   path: string,
 ): { endpoint: Endpoint; params: Record<string, string> } | null {
   const reqSegs = splitPath(path);
+  let best: { endpoint: Endpoint; params: Record<string, string> } | null = null;
+  let bestScore: number[] | null = null;
   for (const ep of table.endpoints) {
     if (ep.method !== method) continue;
     const patSegs = splitPath(ep.pattern);
     if (patSegs.length !== reqSegs.length) continue;
     const params: Record<string, string> = {};
+    const score: number[] = [];
     let ok = true;
     for (let i = 0; i < patSegs.length; i++) {
       const p = patSegs[i];
-      if (p.startsWith(':')) params[p.slice(1)] = decodeURIComponent(reqSegs[i]);
-      else if (p !== reqSegs[i]) {
+      if (p.startsWith(':')) {
+        params[p.slice(1)] = decodeURIComponent(reqSegs[i]);
+        score.push(0);
+      } else if (p !== reqSegs[i]) {
         ok = false;
         break;
+      } else {
+        score.push(1);
       }
     }
-    if (ok) return { endpoint: ep, params };
+    if (!ok) continue;
+    if (bestScore === null || moreSpecific(score, bestScore)) {
+      best = { endpoint: ep, params };
+      bestScore = score;
+    }
   }
-  return null;
+  return best;
+}
+
+/** `true` when `a` is a more specific segment score than `b` — static (1) beats
+ *  param (0) at the earliest position where they differ (left-to-right). */
+function moreSpecific(a: number[], b: number[]): boolean {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return a[i] > b[i];
+  }
+  return false;
 }
 
 /** Split a `/`-path into non-empty segments (the root `/` → `[]`). */

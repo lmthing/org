@@ -80,6 +80,23 @@ describe('loadApiRoutes — discovery + patterns', () => {
     expect(matchRoute(table, 'POST', '/items/x')).toBeNull(); // wrong method
   });
 
+  it('a STATIC route beats a [id] sibling — /jobs/list is the list, not the detail with id="list"', async () => {
+    const root = await scratch();
+    // Register the dynamic route FIRST so a first-match-wins matcher would pick it. The static
+    // sibling must still win: routing /jobs/list to jobs-detail (id="list") is the empty-dashboard bug.
+    await writeHandler(root, 'jobs/[id]', 'GET', 'jobsDetail');
+    await writeHandler(root, 'jobs/list', 'GET', 'jobsList');
+    await writeHandler(root, 'jobs/dashboard-stats', 'GET', 'jobsDashboardStats');
+    const table = await loadApiRoutes(root);
+
+    expect(matchRoute(table, 'GET', '/jobs/list')?.endpoint.name).toBe('jobsList');
+    expect(matchRoute(table, 'GET', '/jobs/dashboard-stats')?.endpoint.name).toBe('jobsDashboardStats');
+    // A genuine id (no static sibling) still routes to the detail handler with the param bound.
+    const detail = matchRoute(table, 'GET', '/jobs/abc-123');
+    expect(detail?.endpoint.name).toBe('jobsDetail');
+    expect(detail?.params).toEqual({ id: 'abc-123' });
+  });
+
   it('returns an empty table when there is no api/ dir', async () => {
     const root = await scratch();
     const table = await loadApiRoutes(root);
