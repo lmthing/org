@@ -111,11 +111,13 @@ describe('system-appbuilder/automator — what must survive a skipped load', () 
    * writer call, advertised in the always-on body, so a build that loads nothing still knows the
    * app needs a way to ask for the next change from inside it.
    */
-  it('keeps the assistant dock attached to the shell writer in the body', () => {
+  it('says the shell writer is NAVIGATION, and that the dock is not the model’s to author', () => {
     const src = instruct();
-    expect(src).toMatch(/writeProjectViewShell\(shell\)[^\n]*navigation \+ assistant dock/i);
-    // The dock is no longer a hand-written `_layout.tsx` carrying a <Chat> element — asserting the
-    // old shape would be asserting a page this builder cannot write.
+    expect(src).toMatch(/writeProjectViewShell\(shell\)[^\n]*NAVIGATION/i);
+    // The dock is renderer chrome: present on every page of every app. A body that told the model
+    // to author one would be teaching it to remember something it cannot forget — and the measured
+    // failure of the old shape was exactly forgetting it.
+    expect(src).toMatch(/renderer chrome/i);
     expect(src).not.toMatch(/pages\/_layout/);
   });
 });

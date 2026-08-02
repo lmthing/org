@@ -42,7 +42,7 @@ import type { AppAdminManager } from './app-admin.js';
 import { generateProjectContracts } from '../../app/build/contracts.js';
 import type { EndpointContract } from '../../app/build/schema.js';
 import { loadProjectViews } from '../../app/view-spec/files.js';
-import type { ShellSpec, ViewComponentSpec, ViewSpec } from '../../app/view-spec/schema.js';
+import type { ShellSpec, ViewComponentSpec, ViewLayoutSpec, ViewSpec } from '../../app/view-spec/schema.js';
 
 type AppHandler = (
   req: IncomingMessage,
@@ -78,6 +78,8 @@ export interface AppViewsPayload {
   project: string;
   /** Every page spec, sorted by route. Empty ⇒ this is not a viewbuilder app. */
   views: ViewSpec[];
+  /** Every nested layout, so the native target can compose the same chain the web does. */
+  layouts: ViewLayoutSpec[];
   /** Every named component def, sorted by name. */
   components: ViewComponentSpec[];
   /** The app shell, or `null` when the renderer should predict one. */
@@ -97,6 +99,7 @@ export interface AppViewsPayload {
 /** What {@link readProjectViewSpecs} found on disk. */
 export interface ProjectViewSpecs {
   views: ViewSpec[];
+  layouts: ViewLayoutSpec[];
   components: ViewComponentSpec[];
   shell: ShellSpec | null;
   errors: AppViewReadError[];
@@ -130,6 +133,15 @@ export function readProjectViewSpecs(projectRoot: string): ProjectViewSpecs {
     views.push({ ...spec, route });
   }
 
+  const layouts: ViewLayoutSpec[] = [];
+  for (const { prefix, spec, path } of loaded.layouts) {
+    if (!spec || typeof spec !== 'object' || !Array.isArray(spec.sections)) {
+      errors.push({ file: path, message: 'not a layout (needs a `sections` array)' });
+      continue;
+    }
+    layouts.push({ ...spec, prefix });
+  }
+
   const components: ViewComponentSpec[] = [];
   for (const { name, def, path } of loaded.components) {
     if (!def || typeof def !== 'object' || def.node === undefined || def.node === null) {
@@ -139,7 +151,7 @@ export function readProjectViewSpecs(projectRoot: string): ProjectViewSpecs {
     components.push({ ...def, name });
   }
 
-  return { views, components, shell: loaded.shell ?? null, errors };
+  return { views, layouts, components, shell: loaded.shell ?? null, errors };
 }
 
 // ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -218,6 +230,7 @@ export function handleAppViews(
     const payload: AppViewsPayload = {
       project: projectId,
       views: specs.views,
+      layouts: specs.layouts,
       components: specs.components,
       shell: specs.shell,
       endpoints: api.endpoints,

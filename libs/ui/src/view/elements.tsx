@@ -37,6 +37,7 @@ import * as React from 'react'
 import * as Prim from '../elements/primitives/index'
 import { Markdown } from '../elements/content/markdown'
 import type {
+  Action,
   ActionItem,
   ElementNode,
   FlatItem,
@@ -59,13 +60,25 @@ import {
   lastSegment,
   type Scope,
 } from './bind'
-import { formatBound, resolveTone, stringify, toneTokens } from './format'
+import { formatBound, resolveTone, stringify, toDate, toneTokens } from './format'
 import { ViewIcon, StarGlyph } from './icons'
 import { HScroll } from './hscroll'
 import { ActionButton, ActionRow, useDispatch } from './actions'
 import { useViewMutation, useViewRuntime } from './runtime'
-import { RatingControl, SelectControl, StepperControl, TextControl, ToggleControl } from './controls'
+import {
+  DateControl,
+  MultiSelectControl,
+  RatingControl,
+  SelectControl,
+  SliderControl,
+  StepperControl,
+  TextControl,
+  ToggleControl,
+} from './controls'
 import { EmptyStateView } from './states'
+import { clampProps } from './clamp'
+import { ChartView } from './charts'
+import { CalendarGrid, type CalendarEntry } from './calendar'
 
 // ── slot dispatch ────────────────────────────────────────────────────────────
 
@@ -263,16 +276,6 @@ export function FlatItemView({ item, scope }: { item: FlatItem; scope: Scope }):
 }
 
 /** `maxLines` — clamp with an ellipsis. Both targets, two different prop names. */
-function clampProps(maxLines: number): Record<string, unknown> {
-  return {
-    // Web: the line-clamp trio. Native: RN's own prop, which Tamagui forwards.
-    numberOfLines: maxLines,
-    display: '-webkit-box',
-    overflow: 'hidden',
-    style: { WebkitLineClamp: maxLines, WebkitBoxOrient: 'vertical' },
-  }
-}
-
 /** The one pill drawing — `badge`, a flat `status`, a tag from `badges`. */
 function Pill({
   text,
@@ -516,6 +519,51 @@ export function renderElement(node: ElementNode, scope: Scope, key?: React.Key):
       // hand-built `MarkdownBody` components (1,435 LOC).
       return <Markdown key={key} source={stringify(r.value)} preset="prose" />
     }
+    case 'code': {
+      const r = resolveValue(node.text, scope)
+      if (!r.present) return null
+      // A monospace BOX, not a highlighter. Syntax highlighting is a web-only library on
+      // every implementation, and a code block that is coloured on the web and plain on a
+      // phone is the divergence this renderer exists to avoid.
+      return (
+        <Prim.Col key={key} gap="$1">
+          {node.language ? (
+            <Prim.Text fontSize="$xs" color="$muted-foreground">
+              {node.language}
+            </Prim.Text>
+          ) : null}
+          <Prim.Box
+            backgroundColor="$muted"
+            borderRadius="$radius"
+            borderWidth={1}
+            borderColor="$border"
+            paddingHorizontal="$3"
+            paddingVertical="$2"
+          >
+            <Prim.Text fontFamily="$mono" fontSize="$xs" color="$foreground">
+              {stringify(r.value)}
+            </Prim.Text>
+          </Prim.Box>
+        </Prim.Col>
+      )
+    }
+    case 'quote': {
+      const r = resolveValue(node.text, scope)
+      if (!r.present) return null
+      const cite = resolveValue(node.cite, scope)
+      return (
+        <Prim.Col key={key} gap="$1" borderLeftWidth={3} borderColor="$border" paddingLeft="$3">
+          <Prim.Text fontSize="$sm" fontStyle="italic" color="$foreground">
+            {stringify(r.value)}
+          </Prim.Text>
+          {cite.present ? (
+            <Prim.Text fontSize="$xs" color="$muted-foreground">
+              {stringify(cite.value)}
+            </Prim.Text>
+          ) : null}
+        </Prim.Col>
+      )
+    }
 
     // ── data display ──
     case 'badge': {
@@ -592,6 +640,90 @@ export function renderElement(node: ElementNode, scope: Scope, key?: React.Key):
       )
     }
 
+    case 'chart': {
+      const rows = resolveArray(node.data, scope)
+      const points = rows
+        .map((row) => {
+          const s = itemScope(scope, row)
+          const x = resolveValue(node.x, s)
+          const y = resolveValue(node.y, s)
+          const series = resolveOptional(node.series, s)
+          return {
+            x: x.present ? stringify(x.value) : '',
+            y: Number(y.value),
+            series: series === undefined || series === null ? undefined : stringify(series),
+          }
+        })
+        // A point with no number is not a zero — plotting it as one invents data. Drop it.
+        .filter((p) => Number.isFinite(p.y))
+      const tone = node.tone || node.toneMap ? resolveTone(node, undefined, scope) : undefined
+      return (
+        <ChartView
+          key={key}
+          kind={node.kind}
+          data={points}
+          height={node.height}
+          tone={tone}
+          label={resolveOptional(node.label, scope) as string | undefined}
+          formatValue={(n) => formatBound(n, node, scope, node.y)}
+        />
+      )
+    }
+    case 'calendar':
+      return <CalendarElement key={key} node={node} scope={scope} />
+    case 'steps': {
+      const current = resolveValue(node.current, scope)
+      // `current` is an index OR the label of the step we are on — a spec has no way to
+      // compute an index from a status string, so the renderer accepts either.
+      const raw = current.present ? current.value : undefined
+      const byLabel = node.items.findIndex((it) => {
+        const l = resolveValue(it.label, scope)
+        return l.present && stringify(l.value) === stringify(raw)
+      })
+      const index = byLabel >= 0 ? byLabel : Number.isFinite(Number(raw)) ? Number(raw) : -1
+      return (
+        <Prim.Row key={key} gap="$2" alignItems="flex-start" flexWrap="wrap">
+          {node.items.map((it, i) => {
+            const label = resolveValue(it.label, scope)
+            const caption = resolveValue(it.caption, scope)
+            const done = i < index
+            const here = i === index
+            const t = toneTokens(done || here ? 'success' : 'neutral')
+            return (
+              <Prim.Row key={i} gap="$1.5" alignItems="flex-start" flexGrow={1} flexShrink={1} flexBasis="0%">
+                <Prim.Box
+                  width={18}
+                  height={18}
+                  borderRadius="$radius-full"
+                  borderWidth={here ? 2 : 1}
+                  borderColor={done || here ? t.fg : '$border'}
+                  backgroundColor={done ? t.fg : 'transparent'}
+                  alignItems="center"
+                  justifyContent="center"
+                >
+                  <Prim.Text fontSize="$xs" color={done ? '$background' : '$muted-foreground'}>
+                    {String(i + 1)}
+                  </Prim.Text>
+                </Prim.Box>
+                <Prim.Col gap="$0.5" flexGrow={1} flexShrink={1} flexBasis="0%">
+                  {label.present ? (
+                    <Prim.Text fontSize="$xs" fontWeight={here ? '$semibold' : '$normal'} color="$foreground">
+                      {stringify(label.value)}
+                    </Prim.Text>
+                  ) : null}
+                  {caption.present ? (
+                    <Prim.Text fontSize="$xs" color="$muted-foreground">
+                      {stringify(caption.value)}
+                    </Prim.Text>
+                  ) : null}
+                </Prim.Col>
+              </Prim.Row>
+            )
+          })}
+        </Prim.Row>
+      )
+    }
+
     // ── media ──
     case 'image': {
       const r = resolveValue(node.src, scope)
@@ -615,6 +747,41 @@ export function renderElement(node: ElementNode, scope: Scope, key?: React.Key):
     }
     case 'icon':
       return <ViewIcon key={key} name={node.name} size={node.size ?? 'md'} tone={node.tone === 'auto' ? undefined : node.tone} />
+    case 'avatar': {
+      const src = resolveOptional(node.src, scope)
+      const name = resolveOptional(node.name, scope)
+      const px = node.size === 'lg' ? 48 : node.size === 'sm' ? 24 : 32
+      if (src !== undefined && src !== null && stringify(src) !== '') {
+        return (
+          <Prim.Image
+            key={key}
+            src={stringify(src)}
+            alt={name === undefined || name === null ? '' : stringify(name)}
+            width={px}
+            height={px}
+            borderRadius="$radius-full"
+            objectFit="cover"
+          />
+        )
+      }
+      // The initials fallback is the whole reason this element exists rather than an
+      // `image`: a row with no avatar URL still identifies its person.
+      return (
+        <Prim.Box
+          key={key}
+          width={px}
+          height={px}
+          borderRadius="$radius-full"
+          backgroundColor="$secondary"
+          alignItems="center"
+          justifyContent="center"
+        >
+          <Prim.Text fontSize="$xs" fontWeight="$semibold" color="$secondary-foreground">
+            {initials(name === undefined || name === null ? '' : stringify(name))}
+          </Prim.Text>
+        </Prim.Box>
+      )
+    }
 
     // ── feedback ──
     case 'banner': {
@@ -659,6 +826,10 @@ export function renderElement(node: ElementNode, scope: Scope, key?: React.Key):
       return <LinkElement key={key} node={node} scope={scope} />
     case 'field':
       return <FieldElement key={key} node={node} scope={scope} />
+    case 'tabs':
+      return <TabsElement key={key} node={node} scope={scope} />
+    case 'accordion':
+      return <AccordionElement key={key} node={node} scope={scope} />
 
     default: {
       // The union is closed. This makes an element added to the contract and not drawn
@@ -671,6 +842,133 @@ export function renderElement(node: ElementNode, scope: Scope, key?: React.Key):
 }
 
 // ── the elements that hold state or data ─────────────────────────────────────
+
+/**
+ * Up to two initials from a name.
+ *
+ * `Array.from` rather than `split('')`: a name beginning with an emoji or any astral
+ * character would otherwise contribute half a surrogate pair, which renders as a replacement
+ * glyph on both targets.
+ */
+function initials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return '?'
+  const first = Array.from(words[0])[0] ?? ''
+  const second = words.length > 1 ? (Array.from(words[words.length - 1])[0] ?? '') : ''
+  return (first + second).toUpperCase()
+}
+
+/** The `calendar` element — the grid, fed from a repeater binding. */
+function CalendarElement({ node, scope }: { node: Extract<ElementNode, { el: 'calendar' }>; scope: Scope }) {
+  const dispatch = useDispatch()
+  const items = resolveArray(node.items, scope)
+  const month = resolveOptional(node.month, scope)
+  const entries: CalendarEntry[] = items.map((item) => {
+    const s = itemScope(scope, item)
+    const date = resolveValue(node.date, s)
+    const title = resolveValue(node.title, s)
+    return {
+      date: toDate(date.present ? date.value : undefined),
+      label: title.present ? stringify(title.value) : '',
+      tone: node.tone || node.toneMap ? resolveTone(node, date.value, s) : undefined,
+      onPress: node.action ? () => dispatch(node.action as Action, s) : undefined,
+    }
+  })
+  return <CalendarGrid entries={entries} month={toDate(month)} />
+}
+
+/**
+ * `tabs` — the declarative replacement for `useState`, scoped to one element.
+ *
+ * Every panel's children are rendered only when its tab is selected, not hidden with a
+ * style: a hidden-but-mounted panel would fire the data hooks of every component inside it
+ * on every page load, which is the cost the spec language's no-client-state rule exists to
+ * avoid paying by accident.
+ */
+function TabsElement({ node, scope }: { node: Extract<ElementNode, { el: 'tabs' }>; scope: Scope }) {
+  const [active, setActive] = React.useState(Math.min(Math.max(0, node.initial ?? 0), node.items.length - 1))
+  const current = node.items[active]
+  return (
+    <Prim.Col gap="$3" width="100%">
+      <HScroll gap={4}>
+        {node.items.map((item, i) => {
+          const label = resolveValue(item.label, scope)
+          const on = i === active
+          return (
+            <Prim.Pressable
+              key={i}
+              onClick={() => setActive(i)}
+              display="flex"
+              flexDirection="row"
+              alignItems="center"
+              gap="$1.5"
+              paddingHorizontal="$3"
+              paddingVertical="$1.5"
+              borderRadius="$radius-full"
+              backgroundColor={on ? '$primary' : '$secondary'}
+            >
+              {item.icon ? <ViewIcon name={item.icon} size="sm" /> : null}
+              <Prim.Text
+                fontSize="$xs"
+                fontWeight="$medium"
+                color={on ? '$primary-foreground' : '$secondary-foreground'}
+              >
+                {label.present ? stringify(label.value) : `Tab ${i + 1}`}
+              </Prim.Text>
+            </Prim.Pressable>
+          )
+        })}
+      </HScroll>
+      <Prim.Col gap="$2">{current ? renderSlots(current.children, scope) : null}</Prim.Col>
+    </Prim.Col>
+  )
+}
+
+/** `accordion` — collapsible groups, single-open unless `multiple`. */
+function AccordionElement({ node, scope }: { node: Extract<ElementNode, { el: 'accordion' }>; scope: Scope }) {
+  const [open, setOpen] = React.useState<number[]>([])
+  const toggle = (i: number) =>
+    setOpen((prev) => (prev.includes(i) ? prev.filter((v) => v !== i) : node.multiple ? [...prev, i] : [i]))
+  return (
+    <Prim.Col gap="$1" width="100%">
+      {node.items.map((item, i) => {
+        const label = resolveValue(item.label, scope)
+        const caption = resolveValue(item.caption, scope)
+        const isOpen = open.includes(i)
+        return (
+          <Prim.Col key={i} borderWidth={1} borderColor="$border" borderRadius="$radius" backgroundColor="$card">
+            <Prim.Pressable
+              onClick={() => toggle(i)}
+              display="flex"
+              flexDirection="row"
+              alignItems="center"
+              gap="$2"
+              paddingHorizontal="$3"
+              paddingVertical="$2"
+            >
+              <ViewIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size="sm" />
+              <Prim.Col gap="$0.5" flexGrow={1} flexShrink={1} flexBasis="0%">
+                <Prim.Text fontSize="$sm" fontWeight="$medium" color="$foreground">
+                  {label.present ? stringify(label.value) : ''}
+                </Prim.Text>
+                {caption.present ? (
+                  <Prim.Text fontSize="$xs" color="$muted-foreground">
+                    {stringify(caption.value)}
+                  </Prim.Text>
+                ) : null}
+              </Prim.Col>
+            </Prim.Pressable>
+            {isOpen ? (
+              <Prim.Col gap="$2" paddingHorizontal="$3" paddingBottom="$3">
+                {renderSlots(item.children, scope)}
+              </Prim.Col>
+            ) : null}
+          </Prim.Col>
+        )
+      })}
+    </Prim.Col>
+  )
+}
 
 function SurfaceElement({ node, scope }: { node: Extract<ElementNode, { el: 'surface' }>; scope: Scope }) {
   const dispatch = useDispatch()
@@ -1053,10 +1351,50 @@ function FieldElement({ node, scope }: { node: Extract<ElementNode, { el: 'field
         />
       )
     }
+    case 'multiselect': {
+      const raw = Array.isArray(node.options) ? node.options : resolveArray(node.options, scope)
+      const options = raw.map((o) => ({ label: stringify(o), value: stringify(o) }))
+      const values = Array.isArray(current) ? current.map((v) => stringify(v)) : current ? [stringify(current)] : []
+      return (
+        <MultiSelectControl
+          values={values}
+          options={options}
+          onChange={(v) => void submit(v)}
+          placeholder={stringify(resolveOptional(node.placeholder, scope) ?? 'Select…')}
+          disabled={mutation.isPending}
+        />
+      )
+    }
+    case 'slider':
+      return (
+        <SliderControl
+          value={Number(current) || 0}
+          onChange={(v) => void submit(v)}
+          min={node.min ?? 0}
+          max={node.max ?? 100}
+          step={node.step ?? 1}
+          disabled={mutation.isPending}
+        />
+      )
+    case 'date': {
+      // Submits on change like every other picker: a date has no partially-typed state worth
+      // protecting the way a free-text note does.
+      const iso = stringify(current)
+      return (
+        <DateControl
+          value={iso.length >= 10 ? iso.slice(0, 10) : iso}
+          onChange={(v) => void submit(v)}
+          disabled={mutation.isPending}
+        />
+      )
+    }
+    case 'number':
+    case 'textarea':
     case 'text': {
-      // The one kind that does NOT submit on change: a reveal-then-submit note
+      // The three kinds that do NOT submit on change: a reveal-then-submit note
       // (`homes/ListingCard`, `NeedsYouNow`) would fire a mutation per keystroke.
       const value = dirty ? text : stringify(current)
+      const numeric = node.kind === 'number'
       return (
         <Prim.Col gap="$2">
           <TextControl
@@ -1066,7 +1404,8 @@ function FieldElement({ node, scope }: { node: Extract<ElementNode, { el: 'field
               setText(v)
             }}
             placeholder={stringify(resolveOptional(node.placeholder, scope) ?? '')}
-            multiline
+            multiline={node.kind !== 'number'}
+            numeric={numeric}
             disabled={mutation.isPending}
           />
           <ActionButton
@@ -1075,7 +1414,9 @@ function FieldElement({ node, scope }: { node: Extract<ElementNode, { el: 'field
             size="sm"
             disabled={!dirty}
             onPress={async () => {
-              await submit(text)
+              // A `number` field must submit a NUMBER: the endpoint's Input schema types it
+              // that way, and ajv rejects the string the text control produces.
+              await submit(numeric ? (Number(text) as unknown) : text)
               setDirty(false)
             }}
           />

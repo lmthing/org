@@ -107,7 +107,9 @@ export type ViewErrorCode =
   /** A binding that is contract-valid but null on every live row — usually an uncomputed Output field. */
   | 'null-binding'
   /** A page that mounted cleanly and produced nothing visible. */
-  | 'empty-render';
+  | 'empty-render'
+  /** An `outlet` on a page, or the wrong number of them in a layout. */
+  | 'bad-outlet';
 
 /** One structured finding. Never a free-form string: the fix loop routes on `code` and `path`. */
 export interface ViewError {
@@ -1031,6 +1033,42 @@ export function shapeErrorsToViewErrors(rawInput: readonly unknown[]): ViewError
   // Nothing survived the filter (a pure `oneOf` failure) — fall back rather than report clean.
   if (best.size === 0 && raw.length > 0) return [shapeErrorToViewError(raw[0])];
   return [...best.values()].map((b) => shapeErrorToViewError(b.error));
+}
+
+/**
+ * An `outlet` section on a PAGE.
+ *
+ * The two artifacts look identical apart from this one section, so the mistake is a filing
+ * mistake rather than a modelling one — and the message says where the spec belongs rather than
+ * telling the model to delete the section it correctly wanted.
+ */
+export function outletInPage(path: string): ViewError {
+  return err(
+    'bad-outlet',
+    path,
+    at(
+      path,
+      `an outlet is where a CHILD ROUTE renders, so it belongs to a layout, not a page. Write this ` +
+        `spec with writeProjectViewLayout('<prefix>', …) — it lands at views/<prefix>/_layout.view.json ` +
+        `and frames every route beneath it — or drop the outlet section to keep this a page.`,
+    ),
+  );
+}
+
+/** A layout with no outlet (it would swallow its children) or several (it would repeat them). */
+export function badOutletCount(path: string, found: number): ViewError {
+  return err(
+    'bad-outlet',
+    path,
+    at(
+      path,
+      found === 0
+        ? `a layout must contain exactly one { kind: 'outlet' } section — the position its child ` +
+            `routes render in. With none, every route under this prefix renders the frame and nothing else.`
+        : `a layout must contain exactly one { kind: 'outlet' } section; this one has ${found}, which ` +
+            `would render the child page ${found} times. Keep the one the child belongs in.`,
+    ),
+  );
 }
 
 export { err as viewError, warn as viewWarning };

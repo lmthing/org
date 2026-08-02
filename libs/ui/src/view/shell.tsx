@@ -40,7 +40,7 @@
 
 import * as React from 'react'
 import * as Prim from '../elements/primitives/index'
-import type { NavBadge, NavEntry, NavGroup, Route, ShellPlacement, ShellSpec, SubnavSpec } from './types'
+import type { NavBadge, NavEntry, NavGroup, Route, ShellPlacement, ShellSpec, SubnavSpec, Value } from './types'
 import { SHELL_DERIVE_MAX_ROUTES } from './types'
 import { fillRoute, resolveBinding, routeParams } from './bind'
 import { humanize, stringify } from './format'
@@ -352,6 +352,12 @@ function NavItem({
   )
 }
 
+/**
+ * The dock every app gets. `thing` is the project's OWN agent — the same one `<Chat agent="thing">`
+ * resolves in a hand-written page — so this needs no per-app configuration to work.
+ */
+const DEFAULT_ASSISTANT: { agent: string; space?: string; greeting?: Value } = { agent: 'thing' }
+
 export interface ViewShellProps {
   shell?: ShellSpec
   /** Every route the app has — the derivation input. */
@@ -377,6 +383,20 @@ export function ViewShell({ shell, routes = [], children }: ViewShellProps): Rea
     [shell, routePath, routeParams, routes],
   )
   const [assistantOpen, setAssistantOpen] = React.useState(false)
+
+  /**
+   * **The dock is renderer chrome, not a shell field.**
+   *
+   * Every app gets an assistant on every page, resolved to the project's own `thing` agent, and
+   * an app builder is never asked to author one. That is the only reliable way to stop it being
+   * forgotten: 4 of 5 catalogue apps hand-built a dock, and the shipped spec apps that omitted
+   * `assistant:` gave their users no way to reach an agent at all — a build that died before
+   * writing the shell shipped an app with neither navigation nor a way to ask for help.
+   *
+   * `shell.assistant` survives as an OVERRIDE (a different agent, a greeting) and `false` as the
+   * one honest opt-out: a kiosk or embedded surface where a chat box is wrong.
+   */
+  const assistant = shell?.assistant === false ? undefined : (shell?.assistant ?? DEFAULT_ASSISTANT)
 
   const placement: ShellPlacement = shell?.placement ?? 'auto'
   const wideAsSidebar = placement === 'sidebar' || (placement === 'auto' && nav.destinations.length > 4)
@@ -508,7 +528,7 @@ export function ViewShell({ shell, routes = [], children }: ViewShellProps): Rea
         </Prim.Col>
       </Prim.Row>
 
-      {shell?.assistant ? (
+      {assistant ? (
         <Prim.Col borderTopWidth={1} borderColor="$border" backgroundColor="$card">
           <Prim.Pressable
             onClick={() => setAssistantOpen((o) => !o)}
@@ -529,9 +549,9 @@ export function ViewShell({ shell, routes = [], children }: ViewShellProps): Rea
               <ChatSectionView
                 section={{
                   kind: 'chat',
-                  agent: shell.assistant.agent,
-                  space: shell.assistant.space,
-                  greeting: shell.assistant.greeting,
+                  agent: assistant.agent,
+                  space: assistant.space,
+                  greeting: assistant.greeting,
                   height: 'md',
                 }}
                 scope={{}}

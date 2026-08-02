@@ -501,10 +501,13 @@ describe('system-appbuilder live-project build action', () => {
     expect(read('15-implement_views.md')).toMatch(/plan_endpoints/);
     expect(read('15-implement_views.md')).toMatch(/verbatim/i);
 
-    // The assistant dock is part of the SHELL spec now, not a hand-written `_layout` page.
+    // The assistant dock is RENDERER CHROME as of v2 — on every page of every app, whether or not
+    // any spec mentions it. The shell step must therefore tell the model NOT to author one: a
+    // prompt that still asks for `assistant: { agent: 'thing' }` is asking it to remember a thing
+    // it can no longer forget, and the one measured failure of the old shape was forgetting it.
     expect(read('15b-implement_shell.md')).toMatch(/writeProjectViewShell\(/);
-    expect(read('15b-implement_shell.md')).toMatch(/assistant/);
-    expect(read('15b-implement_shell.md')).toMatch(/agent: 'thing'/);
+    expect(read('15b-implement_shell.md')).toMatch(/Do NOT author an assistant/);
+    expect(read('15b-implement_shell.md')).not.toMatch(/assistant: \{ agent: 'thing' \}/);
     // finalize carries an inexpressible surface through to the caller — with no second builder to
     // hand it to, saying so IS the deliverable.
     expect(read('18-finalize.md')).toMatch(/cannotExpress/);

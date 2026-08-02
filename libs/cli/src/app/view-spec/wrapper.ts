@@ -26,7 +26,7 @@
  * property of the artifact rather than a promise.
  */
 
-import type { ShellSpec, ViewComponentSpec, ViewSpec } from './schema.js';
+import type { ShellSpec, ViewComponentSpec, ViewLayoutSpec, ViewSpec } from './schema.js';
 
 /** What a wrapper needs to render its page. */
 export interface WrapperInputs {
@@ -35,6 +35,13 @@ export interface WrapperInputs {
   components: Record<string, ViewComponentSpec>;
   /** The app shell (nav/brand/assistant), when the app declares one. */
   shell?: ShellSpec;
+  /**
+   * Every route the app has. Without it the shell derives navigation from ONE route — this
+   * page's — so a generated app had a nav bar with a single destination on every page.
+   */
+  routes?: string[];
+  /** The app's nested layouts. The renderer picks the chain that frames this page's route. */
+  layouts?: ViewLayoutSpec[];
 }
 
 /** Inline a spec as a stable, readable object literal (2-space JSON — deterministic for the hash). */
@@ -48,7 +55,7 @@ function inline(value: unknown): string {
  * Deterministic for a given input: the pages build hashes this text, so a rewrite that produced
  * cosmetically different output would rebuild every app for nothing.
  */
-export function renderViewWrapper({ spec, components, shell }: WrapperInputs): string {
+export function renderViewWrapper({ spec, components, shell, routes, layouts }: WrapperInputs): string {
   return `/**
  * AUTO-GENERATED — do not edit.
  *
@@ -66,7 +73,14 @@ const spec = ${inline(spec)};
 
 const components = ${inline(components)};
 
-const shell = ${inline(shell ?? null)};
+// An app with no shell file still gets chrome: an empty shell derives its navigation from the
+// route list and carries the always-on assistant dock. \`null\` would render the page bare, which
+// is how a build that died before writing the shell shipped an app with no way to navigate it.
+const shell = ${inline(shell ?? {})};
+
+const routes = ${inline(routes ?? [spec.route])};
+
+const layouts = ${inline(layouts ?? [])};
 
 // The web target reaches endpoints by NAME through the manifest the generated entry injects
 // (\`window.__APP_ENDPOINTS__\`), on the app's own base path — the same two facts \`apiCall\` uses.
@@ -102,7 +116,15 @@ export default function View() {
   // page-level error boundary instead of the page.
   return (
     <ViewThemeProvider>
-      <ViewRenderer spec={spec} components={components} shell={shell} client={client} route={route} />
+      <ViewRenderer
+        spec={spec}
+        components={components}
+        shell={shell}
+        layouts={layouts}
+        routes={routes}
+        client={client}
+        route={route}
+      />
     </ViewThemeProvider>
   );
 }

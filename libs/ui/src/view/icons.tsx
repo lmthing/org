@@ -43,7 +43,7 @@ import { toneTokens } from './format'
  * A token that is not in the theme falls back to `currentColor` — valid on both targets — never to
  * the unresolved `$name`, which is the failure being fixed.
  */
-function useColorValue(color: string): string {
+export function useColorValue(color: string): string {
   const theme = useTheme()
   if (!color.startsWith('$')) return color
   const entry = (theme as unknown as Record<string, { get?: () => unknown } | undefined>)[color.slice(1)]

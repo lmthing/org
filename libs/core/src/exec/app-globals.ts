@@ -124,6 +124,7 @@ export interface AppGlobalImpls {
    *  (`app/authoring/globals.ts#createProjectAuthoringGlobals`), which validates each against the
    *  project's real endpoint contracts and rejects with a menu-shaped error. */
   writeProjectView?: (route: string, spec: unknown) => AuthoringResult;
+  writeProjectViewLayout?: (prefix: string, spec: unknown) => AuthoringResult;
   writeProjectViewComponent?: (name: string, def: unknown) => AuthoringResult;
   writeProjectViewShell?: (shell: unknown) => AuthoringResult;
   /** LIVE-project INTROSPECTION reads (the read-side twins of the `writeProject*` writers):
@@ -257,6 +258,8 @@ export function injectAppGlobals(
   // Note the absence of `|| app['pages:write']`: an OR would hand every appbuilder-shaped agent
   // both media and dissolve the separation from the other side.
   if (app['views:write'] && impls.writeProjectView) injectGlobal(ctx, 'writeProjectView', impls.writeProjectView as (...a: unknown[]) => unknown);
+  if (app['views:write'] && impls.writeProjectViewLayout)
+    injectGlobal(ctx, 'writeProjectViewLayout', impls.writeProjectViewLayout as (...a: unknown[]) => unknown);
   if (app['views:write'] && impls.writeProjectViewComponent) injectGlobal(ctx, 'writeProjectViewComponent', impls.writeProjectViewComponent as (...a: unknown[]) => unknown);
   if (app['views:write'] && impls.writeProjectViewShell) injectGlobal(ctx, 'writeProjectViewShell', impls.writeProjectViewShell as (...a: unknown[]) => unknown);
   if (app['api:write'] && impls.writeProjectApi) injectGlobal(ctx, 'writeProjectApi', impls.writeProjectApi as (...a: unknown[]) => unknown);

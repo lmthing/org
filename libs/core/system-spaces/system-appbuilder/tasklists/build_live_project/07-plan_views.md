@@ -28,9 +28,12 @@ kind and no escape hatch:**
 | `create` | any form / any write the user submits | one mutation endpoint (fields derive from its Input — you never list them) |
 | `stats` | a strip of figures | one GET endpoint returning the numbers |
 | `markdown` | prose an endpoint produced, or static text | optional endpoint |
-| `chat` | an assistant dock on the page | an agent name |
+| `chat` | an INLINE assistant, when the PAGE is a conversation | an agent name |
 | `toolbar` | buttons that reveal other sections, or fire an action | the ids it reveals |
 | `timeline` | a date-GROUPED, time-ordered stream | an array (usually `from`) plus the field to group by |
+| `board` | rows bucketed into COLUMNS by a status/stage field — a pipeline | one GET endpoint plus the field to group by |
+| `calendar` | rows placed on a MONTH GRID | one GET endpoint plus each row's date field |
+| `chart` | bar / line / area / donut plots over one endpoint's rows | one GET endpoint returning the points |
 
 Section ORDER is what the user sees, top to bottom. Put the thing the page exists for FIRST.
 

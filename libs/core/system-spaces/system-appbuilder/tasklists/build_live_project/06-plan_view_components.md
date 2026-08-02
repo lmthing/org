@@ -13,6 +13,12 @@ file the compiler sees. `query`, `plan_app` (`plan_app.components`, the binding 
 `plan_endpoints` (`plan_endpoints.endpoints` — the data these render), and `user_stories` are in
 scope. This is a THINKING step — no writers.
 
+**A shared FRAME is a layout, not a component.** If what repeats is a whole page header + sub-nav
+across a route family (`trips/[tripId]/*`), plan a LAYOUT instead — one `_layout.view.json` fetches
+the entity once and every child page reads it as `$data.<sectionId>.…`. A component is for a repeated
+ROW or CARD shape inside a section; a layout is for a repeated PAGE FRAME. Getting this the wrong way
+round produces N pages that each re-query the same record.
+
 **Plan FEW.** Most rows and cards need no component at all: a section's `item` accepts a flat form
 (`{ title: '$.name', caption: '$.note', badge: '$.status' }`) that covers an ordinary row completely.
 A component earns its place only when the SAME multi-part shape appears on **two or more pages** —

@@ -69,7 +69,7 @@ function sectionBranch(kind: string): JsonSchema {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe('the capped vocabularies', () => {
-  it('has all 8 section kinds pinned — timeline took the last slot', () => {
+  it('has all 12 section kinds pinned — the three arranged collections and the layout seam', () => {
     expect(SECTION_KINDS.length).toBe(MAX_SECTION_KINDS);
     expect(SECTION_KINDS).toEqual([
       'list',
@@ -80,6 +80,10 @@ describe('the capped vocabularies', () => {
       'chat',
       'toolbar',
       'timeline',
+      'board',
+      'calendar',
+      'chart',
+      'outlet',
     ]);
   });
 
@@ -101,12 +105,18 @@ describe('the capped vocabularies', () => {
     expect(ELEMENT_KINDS).toContain('empty');
   });
 
-  it('is the audited 24-element catalogue: 5 cut, 1 added', () => {
-    for (const cut of ['chip', 'avatar', 'code', 'quote', 'map']) {
-      expect(ELEMENT_KINDS as readonly string[]).not.toContain(cut);
+  it('is the v2 32-element catalogue — the audited 24 plus the 8 five apps hand-rolled', () => {
+    // `chip` and `map` stay CUT: `badge.shape` covers the first, and a static map is an
+    // `image` whose tile URL the endpoint computes. The other five audit cuts came back
+    // because the corpus kept hand-building them.
+    for (const stillCut of ['chip', 'map']) {
+      expect(ELEMENT_KINDS as readonly string[]).not.toContain(stillCut);
+    }
+    for (const added of ['tabs', 'accordion', 'avatar', 'code', 'quote', 'chart', 'calendar', 'steps']) {
+      expect(ELEMENT_KINDS).toContain(added);
     }
     expect(ELEMENT_KINDS).toContain('field');
-    expect(ELEMENT_KINDS.length).toBe(24);
+    expect(ELEMENT_KINDS.length).toBe(32);
     expect(new Set(ELEMENT_KINDS).size).toBe(ELEMENT_KINDS.length);
   });
 
@@ -128,8 +138,19 @@ describe('the capped vocabularies', () => {
     expect(new Set(ICON_NAMES).size).toBe(ICON_NAMES.length);
   });
 
-  it('has a finite field-control set', () => {
-    expect(FIELD_KINDS).toEqual(['toggle', 'rating', 'select', 'stepper', 'text']);
+  it('has a finite field-control set — 10, and every one of them submits', () => {
+    expect(FIELD_KINDS).toEqual([
+      'toggle',
+      'rating',
+      'select',
+      'stepper',
+      'text',
+      'date',
+      'number',
+      'textarea',
+      'multiselect',
+      'slider',
+    ]);
   });
 
   it('never lets pagination in — measured demand is zero', () => {
@@ -150,7 +171,7 @@ describe('the minimum valid spec — everything else has a renderer default', ()
     expect(validateViewSpecShape(spec)).toEqual({ ok: true, errors: [] });
   });
 
-  it('accepts a minimum section of every one of the 8 kinds', () => {
+  it('accepts a minimum section of every one of the 12 kinds', () => {
     const minimal: Record<string, unknown>[] = [
       { kind: 'list', query: 'listRecipes' },
       { kind: 'detail', query: 'getRecipe' },
@@ -160,6 +181,10 @@ describe('the minimum valid spec — everything else has a renderer default', ()
       { kind: 'chat', agent: 'sous' },
       { kind: 'toolbar' },
       { kind: 'timeline', from: '$.days' },
+      { kind: 'board', query: 'listJobs', group: '$.status' },
+      { kind: 'calendar', query: 'listJobs', date: '$.dueAt' },
+      { kind: 'chart', query: 'listJobs', charts: [{ kind: 'bar', x: '$.month', y: '$.total' }] },
+      { kind: 'outlet' },
     ];
     // Exhaustive by construction — a new kind without a minimum form fails here.
     expect(minimal.map((s) => s['kind'])).toEqual([...SECTION_KINDS]);
@@ -1098,7 +1123,7 @@ describe('malformed specs fail at the instance path a menu-shaped error needs', 
   });
 
   it('a CUT element is now an unknown element, not a silently ignored one', () => {
-    for (const cut of ['chip', 'avatar', 'code', 'quote', 'map']) {
+    for (const cut of ['chip', 'map']) {
       const res = validateViewSpecShape({
         route: 'index',
         sections: [{ kind: 'list', query: 'x', item: { el: cut, text: '$.x' } }],

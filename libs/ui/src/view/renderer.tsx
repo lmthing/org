@@ -34,7 +34,7 @@
 
 import * as React from 'react'
 import * as Prim from '../elements/primitives/index'
-import type { SectionSpec, ShellSpec, ViewComponentSpec, ViewSpec, Route } from './types'
+import type { SectionSpec, ShellSpec, ViewComponentSpec, ViewLayoutSpec, ViewSpec, Route } from './types'
 import type { ViewClient } from './client'
 import type { Scope } from './bind'
 import { ARCHETYPE_WIDTH, isGridCell, predictArchetype, revealTargetsOf } from './archetype'
@@ -65,6 +65,29 @@ export interface ViewRendererProps {
   routes?: Route[]
   /** The current route, when the host router owns it. */
   route?: ViewRoute
+  /**
+   * The app's nested layouts. The renderer picks the ones whose prefix contains this page's
+   * route and composes them outermost → innermost around it.
+   */
+  layouts?: ViewLayoutSpec[]
+}
+
+/**
+ * The layout chain for a route, outermost first.
+ *
+ * Duplicated from `libs/cli/src/app/view-spec/files.ts#layoutChainFor` rather than imported, for
+ * the same reason `types.ts` is a copy: `@lmthing/cli` depends on `@lmthing/ui`, and it is a node
+ * package that must never reach the Metro graph. Segment-wise matching, not string prefixing, so
+ * `trips/[tripId]` frames `trips/[tripId]/expenses` and never `trips/[tripId]-archive`.
+ */
+function chainFor(route: string, layouts: readonly ViewLayoutSpec[]): ViewLayoutSpec[] {
+  const segs = route.split('/')
+  return layouts
+    .filter((l) => {
+      const p = l.prefix.split('/')
+      return p.length < segs.length + 1 && p.every((seg, i) => segs[i] === seg)
+    })
+    .sort((a, b) => a.prefix.split('/').length - b.prefix.split('/').length)
 }
 
 function toComponentMap(
@@ -86,11 +109,38 @@ export function ViewRenderer({
   client,
   routes,
   route,
+  layouts,
 }: ViewRendererProps): React.ReactElement {
   const componentMap = React.useMemo(() => toComponentMap(components), [components])
-  const revealTargets = React.useMemo(() => revealTargetsOf(spec), [spec])
   const params = route?.params ?? {}
   const routePath = route?.path ?? spec.route
+  const chain = React.useMemo(() => chainFor(routePath, layouts ?? []), [routePath, layouts])
+
+  /**
+   * Reveal targets are computed over the WHOLE chain, not just the page.
+   *
+   * A layout's toolbar revealing a section of its own is the natural way to write an entity
+   * header's "edit" form, and a target set built from the page alone would leave that section
+   * permanently visible (nothing reveals it ⇒ it is always shown) — the exact opposite of what
+   * the author asked for.
+   */
+  const revealTargets = React.useMemo(() => {
+    const all = new Set<string>()
+    for (const layout of chain)
+      for (const id of revealTargetsOf({ route: layout.prefix, sections: layout.sections })) all.add(id)
+    for (const id of revealTargetsOf(spec)) all.add(id)
+    return all
+  }, [spec, chain])
+
+  // Innermost layout first, so each wraps the result of the one inside it.
+  let body: React.ReactElement = <ViewPage spec={spec} />
+  for (let i = chain.length - 1; i >= 0; i--) {
+    body = (
+      <ViewPage key={chain[i].prefix} spec={{ route: chain[i].prefix, title: chain[i].title, sections: chain[i].sections }}>
+        {body}
+      </ViewPage>
+    )
+  }
 
   return (
     <ViewRuntimeProvider
@@ -102,10 +152,10 @@ export function ViewRenderer({
     >
       {shell ? (
         <ViewShell shell={shell} routes={routes ?? [spec.route]}>
-          <ViewPage spec={spec} />
+          {body}
         </ViewShell>
       ) : (
-        <ViewPage spec={spec} />
+        body
       )}
     </ViewRuntimeProvider>
   )
@@ -119,7 +169,7 @@ export function ViewRenderer({
  * a dashboard — buries `kitchen/index`'s hero card, the single thing that page exists to
  * show. What the archetype governs is width, grid columns and responsive collapse.
  */
-export function ViewPage({ spec }: { spec: ViewSpec }): React.ReactElement {
+export function ViewPage({ spec, children }: { spec: ViewSpec; children?: React.ReactNode }): React.ReactElement {
   const { revealTargets, revealed, data, routeParams, client } = useViewRuntime()
   const decision = React.useMemo(() => predictArchetype(spec), [spec])
   const maxWidth = ARCHETYPE_WIDTH[decision.archetype]
@@ -170,6 +220,15 @@ export function ViewPage({ spec }: { spec: ViewSpec }): React.ReactElement {
         if (id && revealTargets.has(id) && !revealed.has(id)) return null
 
         const cell = usesGrid && isGridCell(decision.archetype, section)
+        // The outlet is a POSITION, not a rendering: it draws the child route this layout
+        // frames. On a page there is no child, and the validator already rejected it.
+        if (section.kind === 'outlet') {
+          return (
+            <Prim.Box key={id ?? `outlet-${index}`} width="100%">
+              {children ?? null}
+            </Prim.Box>
+          )
+        }
         return (
           <Prim.Box
             key={id ?? `${section.kind}-${index}`}

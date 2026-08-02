@@ -31,7 +31,7 @@ import { ViewIcon } from '../../src/view/icons'
 import { HScroll } from '../../src/view/hscroll'
 import { LoadingState, EmptyStateView, ErrorState } from '../../src/view/states'
 import { SelectControl, ToggleControl } from '../../src/view/controls'
-import type { ViewSpec } from '../../src/view/types'
+import { ELEMENT_KINDS, SECTION_KINDS, type ViewSpec } from '../../src/view/types'
 
 /** Reproduces React Native's own check: a string may only sit under a text host. */
 function looseStrings(tree: unknown): string[] {
@@ -62,6 +62,9 @@ const MANIFEST: EndpointManifest = {
     },
   },
   toggleDone: { method: 'POST', routePath: '/recipes/:id/done' },
+  listJobs: { method: 'GET', routePath: '/jobs' },
+  getTrip: { method: 'GET', routePath: '/trips/:tripId' },
+  setStatus: { method: 'PATCH', routePath: '/jobs/:id/status' },
 }
 
 /** A client that answers from a table instead of a pod. */
@@ -487,4 +490,196 @@ test('a tab stays highlighted on a parameterised family member, and still naviga
   press(tab ?? null)
   expect(routes.join(','), 'and opens the group home').toBe('shop')
   expect(looseStrings(tree).join('|'), 'no loose strings in the shell').toBe('')
+})
+
+
+// ── the v2 vocabulary, ON THE DEVICE ─────────────────────────────────────────
+//
+// Every kind added in v2 is exercised here, and the coverage assertion at the end of the file
+// is what keeps that true: a thirty-third element or a thirteenth section with no case below
+// turns this suite red rather than shipping a blank rectangle to a phone. The three assertions
+// each case makes are the three failures jsdom structurally cannot see — a bare string loose in
+// a View, a DOM `<svg>` where RNSVG was needed, and `overflow` standing in for a ScrollView.
+
+const V2_JOBS = [
+  { id: '1', title: 'Kittiwake hull', status: 'quoted', owner: 'Ana Ferreira', due: '2026-08-04', total: 120 },
+  { id: '2', title: 'Marisol shaft', status: 'in-progress', owner: 'Bo Lima', due: '2026-08-11', total: 340 },
+]
+
+test('every v2 ELEMENT mounts on native — no loose strings, no DOM svg', async () => {
+  const client = stub({ listJobs: V2_JOBS })
+  const { current } = render(
+    <ViewRenderer
+      spec={page([
+        {
+          kind: 'list',
+          id: 'rows',
+          query: 'listJobs',
+          limit: 1,
+          item: {
+            el: 'col',
+            children: [
+              { el: 'code', text: '$.id', language: 'id' },
+              { el: 'quote', text: '$.title', cite: '$.owner' },
+              { el: 'avatar', name: '$.owner' },
+              { el: 'steps', current: '$.status', items: [{ label: 'quoted' }, { label: 'in-progress' }] },
+              { el: 'chart', kind: 'bar', data: '$data.rows', x: '$.title', y: '$.total' },
+              { el: 'calendar', items: '$data.rows', date: '$.due', title: '$.title' },
+              { el: 'tabs', items: [{ label: 'One', children: [{ el: 'text', text: '$.title' }] }] },
+              { el: 'accordion', items: [{ label: 'More', children: [{ el: 'text', text: '$.owner' }] }] },
+            ],
+          },
+        },
+      ])}
+      client={client}
+    />,
+  )
+  await settle()
+  expect(looseStrings(current()).join('|'), 'every label sits under a text host').toBe('')
+  // The chart and the calendar both draw; the chart must be RNSVG, because a DOM <svg> mounts
+  // NOTHING on a device (the same fault that silently erased every toned icon).
+  expect(findAll(current() as never, (t) => /RNSVG/.test(String(t))).length > 0, 'chart drew RNSVG hosts').toBe(true)
+  expect(!!findByText(current(), 'AF'), 'the avatar fell back to initials').toBe(true)
+  expect(!!findByText(current(), 'August 2026'), 'the calendar drew its month').toBe(true)
+  expect(!!findByText(current(), 'One'), 'the tab bar drew its label').toBe(true)
+})
+
+test('the BOARD is a real horizontal ScrollView — a styled View clips its far columns', async () => {
+  const client = stub({ listJobs: V2_JOBS })
+  const { current } = render(
+    <ViewRenderer
+      spec={page([
+        {
+          kind: 'board',
+          query: 'listJobs',
+          group: '$.status',
+          columns: [
+            { value: 'quoted', label: 'Quoted' },
+            { value: 'in-progress', label: 'In progress' },
+          ],
+          item: { title: '$.title' },
+        },
+      ])}
+      client={client}
+    />,
+  )
+  await settle()
+  const scrollers = findAll(current() as never, (t) => String(t).includes('ScrollView'))
+  expect(scrollers.some((s) => s.props?.horizontal === true), 'the board scrolls horizontally for real').toBe(true)
+  expect(!!findByText(current(), 'Quoted'), 'a column header mounted').toBe(true)
+  expect(!!findByText(current(), 'Kittiwake hull'), 'a card mounted').toBe(true)
+  expect(looseStrings(current()).join('|'), 'no loose strings on the board').toBe('')
+})
+
+test('the CALENDAR and CHART sections mount on native', async () => {
+  const client = stub({ listJobs: V2_JOBS })
+  const { current } = render(
+    <ViewRenderer
+      spec={page([
+        { kind: 'calendar', query: 'listJobs', date: '$.due', item: { title: '$.title' } },
+        { kind: 'chart', query: 'listJobs', charts: [{ kind: 'line', x: '$.title', y: '$.total', label: 'Totals' }] },
+      ])}
+      client={client}
+    />,
+  )
+  await settle()
+  expect(!!findByText(current(), 'August 2026'), 'the calendar section drew its month').toBe(true)
+  expect(!!findByText(current(), 'Totals'), 'the chart section drew its label').toBe(true)
+  expect(findAll(current() as never, (t) => /RNSVG/.test(String(t))).length > 0, 'the plot is RNSVG').toBe(true)
+  expect(looseStrings(current()).join('|'), 'no loose strings').toBe('')
+})
+
+test('every v2 FIELD control mounts and is reachable by a finger', async () => {
+  const client = stub({ listJobs: [V2_JOBS[0]] })
+  for (const kind of ['date', 'number', 'textarea', 'multiselect', 'slider'] as const) {
+    const { current } = render(
+      <ViewRenderer
+        spec={page([
+          {
+            kind: 'list',
+            query: 'listJobs',
+            item: {
+              el: 'field',
+              kind,
+              value: '$.title',
+              mutation: 'setStatus',
+              input: { id: '$.id' },
+              options: ['a', 'b'],
+            },
+          },
+        ])}
+        client={client}
+      />,
+    )
+    await settle()
+    const typed = kind === 'date' || kind === 'number' || kind === 'textarea'
+    if (typed) {
+      expect(!!findTextInput(current()), `${kind} mounted a real TextInput`).toBe(true)
+    } else {
+      expect(!!findPressable(current()), `${kind} mounted something pressable`).toBe(true)
+    }
+    expect(looseStrings(current()).join('|'), `${kind}: no loose strings`).toBe('')
+  }
+})
+
+test('a nested LAYOUT frames its child route on native, sharing one scope', async () => {
+  const client = stub({ getTrip: { id: 't1', name: 'Tanzania 2026' }, listJobs: V2_JOBS })
+  const { current } = render(
+    <ViewRenderer
+      spec={{ route: 'trips/[tripId]/jobs', sections: [{ kind: 'list', query: 'listJobs', item: { title: '$.title' } }] }}
+      layouts={[
+        {
+          prefix: 'trips/[tripId]',
+          sections: [
+            { kind: 'detail', id: 'tripHeader', query: 'getTrip', header: { title: '$.name' } },
+            { kind: 'outlet' },
+          ],
+        },
+      ]}
+      route={{ path: 'trips/[tripId]/jobs', params: { tripId: 't1' } }}
+      client={client}
+    />,
+  )
+  await settle()
+  expect(!!findByText(current(), 'Tanzania 2026'), 'the layout frame mounted').toBe(true)
+  expect(!!findByText(current(), 'Kittiwake hull'), 'the child page mounted inside it').toBe(true)
+  expect(looseStrings(current()).join('|'), 'no loose strings across the chain').toBe('')
+})
+
+test('the assistant dock is on EVERY page, with nothing authored', async () => {
+  const client = stub({ listJobs: [] })
+  const { current } = render(
+    <ViewRenderer spec={page([{ kind: 'list', query: 'listJobs' }])} shell={{}} client={client} />,
+  )
+  await settle()
+  expect(!!findByText(current(), 'Assistant'), 'the dock mounted from an EMPTY shell').toBe(true)
+})
+
+/**
+ * **The coverage gate.**
+ *
+ * Every kind in the contract must appear in a case above. A new element or section that nobody
+ * mounted natively is the exact shape of the bug this whole suite exists for: it passes the web
+ * tests, it passes typecheck, and it draws nothing on a phone. Listing the kinds each case covers
+ * is deliberate manual bookkeeping — deriving it from the tree would make the gate pass for a kind
+ * that mounted an empty box.
+ */
+test('every element and section kind in the contract is mounted somewhere in this suite', () => {
+  const coveredElements = new Set([
+    // v1, across the cases above and in `render.test.tsx`'s native twin cases
+    'row', 'col', 'grid', 'spacer', 'divider', 'surface',
+    'heading', 'text', 'caption', 'markdown',
+    'badge', 'statcard', 'meter', 'keyvalue', 'table', 'timeline', 'rating',
+    'image', 'icon', 'banner', 'empty', 'button', 'link', 'field',
+    // v2
+    'code', 'quote', 'chart', 'calendar', 'steps', 'avatar', 'tabs', 'accordion',
+  ])
+  const coveredSections = new Set([
+    'list', 'detail', 'create', 'stats', 'markdown', 'chat', 'toolbar', 'timeline',
+    'board', 'calendar', 'chart', 'outlet',
+  ])
+  const missingEls = ELEMENT_KINDS.filter((k) => !coveredElements.has(k))
+  const missingSections = SECTION_KINDS.filter((k) => !coveredSections.has(k))
+  expect(missingEls.join(','), 'every element kind has a native case').toBe('')
+  expect(missingSections.join(','), 'every section kind has a native case').toBe('')
 })

@@ -9,7 +9,8 @@ role: general
 functions: []
 ---
 
-Write the app SHELL — the one spec that makes the app navigable and gives it its assistant dock. This
+Write the app SHELL — the one spec that makes the app navigable. (The assistant dock is not yours:
+it is on every page already.) This
 is the spec replacement for the hand-written `_layout.tsx`, and it runs HERE, before the verify gate,
 because the app-wide checks ask "is every route reachable from the nav?" — a shell written after them
 would be a shell nothing checked.
@@ -37,7 +38,10 @@ Rules the writer enforces:
   (`trips/[tripId]/expenses`, `trips/[tripId]/timeline`), declare it ONCE:
   `subnav: [{ match: 'trips/[tripId]', items: [{ route: 'trips/[tripId]/expenses', label: 'Expenses' }] }]`.
   Without it those pages cannot reach each other at all.
-- **`assistant: { agent: 'thing' }`** puts the persistent chat dock on every page. Always include it.
+- **Do NOT author an assistant.** The chat dock is renderer chrome: every page of every app has one,
+  wired to the project's own agent, whether or not this spec mentions it. `assistant:` exists only to
+  name a DIFFERENT agent or to set `false` on a surface where a chat box is wrong — neither applies
+  to a normal build, so leave the key out.
 - Icons come from a fixed set — `home search plus edit trash check close chevron-right chevron-down
   arrow-left filter more refresh calendar clock user users tag file map-pin alert info star bell chart
   list link external-link download upload mail settings`. `label` and `icon` are both optional.
@@ -60,7 +64,6 @@ const shell = {
   brand: plan_app.title,
   // ≤5 destinations: flat. More than that: replace `nav` with `groups` (see the rule above).
   nav: navRoutes.slice(0, 5).map((r: string) => ({ route: r, label: label(r) })),
-  assistant: { agent: 'thing' },
 };
 const w = writeProjectViewShell(shell);
 currentTask.resolve({ ok: w.ok, navCount: shell.nav.length, error: w.ok ? '' : (w.error ?? 'shell write failed') });

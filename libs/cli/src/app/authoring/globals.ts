@@ -40,6 +40,7 @@ import {
   SHELL_SPEC_PATH,
   loadProjectViews,
   viewComponentPath,
+  viewLayoutPath,
   viewSpecPath,
   viewWrapperPath,
 } from '../view-spec/files.js';
@@ -51,12 +52,19 @@ import {
   validateAppViews,
   validateShellSpec,
   validateViewComponent,
+  validateViewLayout,
   validateViewSpec,
   type ApiCaller,
   type RenderSmokeResult,
   type ViewValidationResult,
 } from '../view-spec/validate.js';
-import { ROUTE_RE, type ShellSpec, type ViewComponentSpec, type ViewSpec } from '../view-spec/schema.js';
+import {
+  ROUTE_RE,
+  type ShellSpec,
+  type ViewComponentSpec,
+  type ViewLayoutSpec,
+  type ViewSpec,
+} from '../view-spec/schema.js';
 
 /** Throw a {@link LintError} when a lint check returned a message, so it surfaces to the model as a
  *  retryable error (like a typecheck failure) instead of a `{ ok:false }` a node might ignore. Each
@@ -225,6 +233,8 @@ export interface ProjectAuthoringGlobals {
    *  `ViewRenderer` on both the web bundle and the native mobile app. The wrapper is what keeps
    *  the page build unchanged — see `view-spec/wrapper.ts`. */
   writeProjectView: (route: string, spec: unknown) => { ok: boolean; error?: string };
+  /** Write `views/<prefix>/_layout.view.json` — the frame every route under `prefix` renders in. */
+  writeProjectViewLayout: (prefix: string, spec: unknown) => { ok: boolean; error?: string };
   /** Write `<projectRoot>/pages/components/<Name>.view.json` (a reusable element composition with
    *  typed props). Validated exactly like a view; every reference to it is re-checked at the
    *  referencing view's own save. Writing one re-emits every wrapper, because wrappers inline the
@@ -682,7 +692,19 @@ export function createProjectAuthoringGlobals(opts: {
           };
         }
       }
-      const out = writeUnder(rel, renderViewWrapper({ spec, components, shell: loaded.shell }));
+      const out = writeUnder(
+        rel,
+        renderViewWrapper({
+          spec,
+          components,
+          shell: loaded.shell,
+          // The whole app's routes and layouts ride along, because a wrapper is a standalone
+          // page module: without the route list the shell derives navigation from ONE route,
+          // and without the layouts a child page renders with no frame.
+          routes: loaded.views.map((v) => v.route),
+          layouts: loaded.layouts.map((l) => l.spec),
+        }),
+      );
       if (!out.ok) return out;
     }
     return { ok: true };
@@ -753,6 +775,57 @@ export function createProjectAuthoringGlobals(opts: {
       onAppWrite?.('page', rel);
     } catch {
       /* best-effort — the spec and its wrapper already landed */
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Write a nested LAYOUT — the frame every route under `prefix` renders inside.
+   *
+   * Same four steps as {@link writeProjectView} over the same vocabulary, plus the one rule that
+   * makes a layout a layout: exactly one `outlet`. Writing it re-emits every wrapper, because a
+   * layout is inlined into each page it frames — the same reason a component write does.
+   */
+  function writeProjectViewLayout(prefix: string, spec: unknown): { ok: boolean; error?: string } {
+    let rel: string;
+    let normalized: ViewLayoutSpec;
+    try {
+      rel = assertPathSegments('layout prefix', prefix).replace(/\.(tsx|jsx|json)$/, '');
+      if (!ROUTE_RE.test(rel)) {
+        throw new Error(
+          `layout prefix "${prefix}" is not a valid route prefix. Prefixes are lowercase, ` +
+            `slash-separated, and may end a segment with a [param]: trips, trips/[tripId].`,
+        );
+      }
+      if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
+        throw new Error(
+          `writeProjectViewLayout("${prefix}", …) expects a layout OBJECT — got ${Array.isArray(spec) ? 'an array' : typeof spec}.`,
+        );
+      }
+      const declared = (spec as Record<string, unknown>)['prefix'];
+      if (typeof declared === 'string' && declared !== rel) {
+        throw new Error(
+          `writeProjectViewLayout("${prefix}", …): the layout declares prefix "${declared}". A layout ` +
+            `is written to the prefix you name in the first argument — drop \`prefix\` from the object, ` +
+            `or call writeProjectViewLayout('${declared}', …).`,
+        );
+      }
+      normalized = { ...(spec as object), prefix: rel } as ViewLayoutSpec;
+      const res = validateViewLayout(normalized, contractsFor({}));
+      throwLint(res.ok ? null : formatViewErrors(res.errors));
+    } catch (e) {
+      if (e instanceof LintError) throw e;
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+
+    const out = writeUnder(viewLayoutPath(rel), `${JSON.stringify(normalized, null, 2)}\n`);
+    if (!out.ok) return out;
+    const wrappers = emitViewWrappers();
+    if (!wrappers.ok) return wrappers;
+    try {
+      onAppWrite?.('page', rel);
+    } catch {
+      /* best-effort — the layout and the wrappers already landed */
     }
     return { ok: true };
   }
@@ -965,6 +1038,7 @@ export function createProjectAuthoringGlobals(opts: {
     writeProjectComponent,
     writeProjectApi,
     writeProjectView,
+    writeProjectViewLayout,
     writeProjectViewComponent,
     writeProjectViewShell,
     // Host-side gates, reachable from a tasklist CODE node (like `buildProjectApp`). `16-verify`

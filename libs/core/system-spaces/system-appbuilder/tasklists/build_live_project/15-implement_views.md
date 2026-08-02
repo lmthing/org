@@ -14,6 +14,12 @@ Write ONE page as a SPEC. Your page is in `item` = { route, purpose, endpoints, 
 Call `writeProjectView(item.route, spec)` with ONE object literal: `{ route, title?, sections: [...] }`.
 No strings of code, no TSX, no imports, no class names, no colors.
 
+The twelve kinds are `list detail create stats markdown chat toolbar timeline board calendar chart
+outlet`. Three carry one extra required field each: `board` needs `group` (the column key),
+`calendar` needs `date` (the row's date), `chart` needs `charts: [{ kind, x, y }]`. `outlet` is legal
+only in a layout — if the plan asks for a shared frame across a route family, write it with
+`writeProjectViewLayout(prefix, { sections })` instead of repeating a header on every page.
+
 Keep `item.sections` in order, and keep each section's `id` and `kind`. Per section:
 - `query` = a READ endpoint's name; `mutation` = a WRITE endpoint's name — verbatim from the plan.
   The writer resolves these against the endpoints **actually on disk**, not against the plan, and it

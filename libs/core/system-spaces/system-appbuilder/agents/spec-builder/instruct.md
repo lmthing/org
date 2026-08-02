@@ -31,9 +31,13 @@ order you write them. Pick each kind from the CLOSED menu:
 | `create` | any form / write | `mutation`, `input`, `submitLabel`, `invalidates`, `async`, `prefill`, `onSuccess` |
 | `stats` | a figures strip | `query`, `cards: [{ label, value, meter?, format?, tone? }]` |
 | `markdown` | prose | `source` (literal) or `query` + `value` |
-| `chat` | an assistant dock | `agent`, `space?`, `greeting?` |
+| `chat` | an INLINE assistant on the page (the always-on dock is chrome — never author it) | `agent`, `space?`, `greeting?` |
 | `toolbar` | reveal/act buttons | `reveals`, `actions` |
 | `timeline` | a date-GROUPED stream | `query`/`from`, `group`, `groupFormat`, `item`, `itemTime`, `itemNote` |
+| `board` | rows bucketed into COLUMNS — a pipeline, a status board | `query`/`from`, `group` (required), `columns`, `item`, `rowAction`, `rowActions`, `empty` |
+| `calendar` | rows on a MONTH GRID | `query`/`from`, `date` (required), `month`, `item`, `rowAction`, `empty` |
+| `chart` | plots over one endpoint's rows | `query`/`from`, `charts: [{ kind: bar\|line\|area\|donut, x, y, series?, label?, height? }]` |
+| `outlet` | *layouts only* — where the child route renders | — |
 
 **A `create` section never lists fields** — they derive from the mutation endpoint's `Input` schema
 (enums become selects, arrays of objects become repeating groups). There is no `fields` property to
@@ -48,9 +52,30 @@ you may write `{ use: '<ComponentName>', props: { … } }` or an element tree.
 
 `writeProjectViewComponent(name, { name, description?, props, node })`. `props` maps each prop to its
 type (`{ recipe: 'Recipe' }`), read inside `node` as `$props.<key>`. `node` is an element tree from
-the CLOSED 24-element vocabulary: `row col grid spacer divider surface heading text caption markdown
-badge statcard meter keyvalue table timeline rating image icon banner empty button link field`.
+the CLOSED 32-element vocabulary:
+
+| group | elements |
+|---|---|
+| layout | `row` `col` `grid` `spacer` `divider` `surface` |
+| typography | `heading` `text` `caption` `markdown` `code` `quote` |
+| data | `badge` `statcard` `meter` `keyvalue` `table` `timeline` `rating` `chart` `calendar` `steps` |
+| media | `image` `icon` `avatar` |
+| feedback | `banner` `empty` |
+| interaction | `button` `link` `field` `tabs` `accordion` |
+
+`field` is the inline-editable control; its `kind` is one of `toggle rating select stepper text date
+number textarea multiselect slider`. `tabs`/`accordion` are the declarative replacement for client
+state INSIDE an element tree, the way `toolbar.reveals` is for sections.
 Loading, error and empty states are the renderer's — there is no `skeleton`, `spinner` or `loading`.
+
+## A shared frame for a route family
+
+`writeProjectViewLayout(prefix, { sections })` writes `views/<prefix>/_layout.view.json`: the frame
+every route under `prefix` renders inside, with exactly one `{ kind: 'outlet' }` marking where the
+child page draws. Author one when several pages share an entity header or a sub-nav — the header is
+then fetched ONCE and every child reads it as `$data.<layoutSectionId>.…`, instead of each page
+repeating the same `detail` section. An `outlet` on a page is rejected, and a layout without one is
+too.
 
 Author a component only for a shape used on TWO OR MORE pages. One use is worse than none.
 

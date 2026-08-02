@@ -243,6 +243,151 @@ export function StepperControl({
   )
 }
 
+/**
+ * A date control.
+ *
+ * `type="date"` on web (the platform picker, free); a plain ISO text field on native, because
+ * RN has no date input and every date PICKER is a third-party native module — one more
+ * dependency in the Metro graph for a control whose keyboard entry is already usable. The
+ * value crossing the seam is an ISO `YYYY-MM-DD` string either way, so the endpoint receives
+ * one shape and neither target has to know which produced it.
+ */
+export function DateControl({
+  value,
+  onChange,
+  disabled,
+  id,
+}: {
+  value: string
+  onChange: (value: string) => void
+  disabled?: boolean
+  id?: string
+}): React.ReactElement {
+  const props = {
+    ...CONTROL,
+    id,
+    value,
+    disabled,
+    placeholder: 'YYYY-MM-DD',
+    type: 'date',
+    onChange: (e: { target: { value: string } }) => onChange(e.target.value),
+  } as unknown as React.ComponentProps<typeof Prim.TextField>
+  return <Prim.TextField {...props} />
+}
+
+/**
+ * A bounded slider, drawn as a track of pressable segments.
+ *
+ * Not a drag gesture: a real one needs `PanResponder` on native and pointer events on web —
+ * two implementations of one control, which is exactly the divergence this renderer refuses.
+ * Ten taps cover any range, and a tap target is also the accessible interaction.
+ */
+export function SliderControl({
+  value,
+  onChange,
+  min = 0,
+  max = 100,
+  step = 1,
+  disabled,
+}: {
+  value: number
+  onChange: (value: number) => void
+  min?: number
+  max?: number
+  step?: number
+  disabled?: boolean
+}): React.ReactElement {
+  const span = max - min || 1
+  const stops = Math.min(20, Math.max(2, Math.round(span / (step || 1)) + 1))
+  const at = Math.round(((value - min) / span) * (stops - 1))
+  return (
+    <Prim.Row gap="$2" alignItems="center">
+      <Prim.Row gap="$0.5" flexGrow={1} flexShrink={1} flexBasis="0%" alignItems="center">
+        {Array.from({ length: stops }, (_, i) => (
+          <Prim.Pressable
+            key={i}
+            onClick={() => !disabled && onChange(min + Math.round((i / (stops - 1)) * span))}
+            disabled={disabled}
+            flexGrow={1}
+            flexShrink={1}
+            flexBasis="0%"
+            height={i <= at ? 8 : 4}
+            borderRadius="$radius-full"
+            backgroundColor={i <= at ? '$primary' : '$secondary'}
+          />
+        ))}
+      </Prim.Row>
+      <Prim.Text fontSize="$sm" fontWeight="$medium" minWidth={36} textAlign="right">
+        {String(value)}
+      </Prim.Text>
+    </Prim.Row>
+  )
+}
+
+/**
+ * A multi-select — the same disclosure shape as {@link SelectControl}, with checkable rows
+ * and no "close on pick", because picking several is the point.
+ */
+export function MultiSelectControl({
+  values,
+  options,
+  onChange,
+  placeholder = 'Select…',
+  disabled,
+}: {
+  values: string[]
+  options: { label: string; value: string }[]
+  onChange: (values: string[]) => void
+  placeholder?: string
+  disabled?: boolean
+}): React.ReactElement {
+  const [open, setOpen] = React.useState(false)
+  const chosen = options.filter((o) => values.includes(o.value))
+  const toggle = (v: string) => onChange(values.includes(v) ? values.filter((x) => x !== v) : [...values, v])
+  return (
+    <Prim.Col gap="$1">
+      <Prim.Pressable
+        onClick={() => !disabled && setOpen((o) => !o)}
+        disabled={disabled}
+        display="flex"
+        flexDirection="row"
+        alignItems="center"
+        gap="$2"
+        {...CONTROL}
+      >
+        <Prim.Text fontSize="$sm" color={chosen.length ? '$foreground' : '$muted-foreground'} flexGrow={1}>
+          {chosen.length ? chosen.map((o) => o.label).join(', ') : placeholder}
+        </Prim.Text>
+        <ViewIcon name={open ? 'chevron-down' : 'chevron-right'} size="sm" />
+      </Prim.Pressable>
+      {open ? (
+        <Prim.Col borderWidth={1} borderColor="$border" borderRadius="$radius-md" backgroundColor="$card">
+          {options.map((o) => {
+            const on = values.includes(o.value)
+            return (
+              <Prim.Pressable
+                key={o.value}
+                onClick={() => toggle(o.value)}
+                display="flex"
+                flexDirection="row"
+                alignItems="center"
+                gap="$2"
+                paddingHorizontal="$3"
+                paddingVertical="$2"
+              >
+                <ViewIcon name={on ? 'check' : 'close'} size="sm" tone={on ? 'success' : 'neutral'} />
+                <Prim.Text fontSize="$sm" color="$foreground">
+                  {o.label}
+                </Prim.Text>
+              </Prim.Pressable>
+            )
+          })}
+        </Prim.Col>
+      ) : null}
+    </Prim.Col>
+  )
+}
+
 /** An editable star rating. The read-only twin is the `rating` element. */
 export function RatingControl({
   value,

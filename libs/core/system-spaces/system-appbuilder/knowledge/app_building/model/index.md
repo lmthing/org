@@ -12,15 +12,20 @@ LIVE project directory, each written by a synchronous, validated authoring globa
   Every table, column, and relation carries a required `description`.
 - **`api/<path>/<METHOD>.ts`** — typed HTTP handlers. `writeProjectApi('<name>/<METHOD>', src)`. Each
   exports `name`, `description`, `Input`, `Output`, and a default async handler using `ctx.db`.
-- **`pages/<route>.view.json`** — pages, as SPECS. `writeProjectView(route, spec)`. A page is an
-  ordered list of sections from a closed menu of eight kinds; values are bound by PATH (`$.field`)
-  into the ONE endpoint each section names. No TSX, no imports, no class names, no colours — the
+- **`views/<route>.view.json`** — pages, as SPECS. `writeProjectView(route, spec)`. A page is an
+  ordered list of sections from a closed menu of twelve kinds; values are bound by PATH (`$.field`)
+  into the ONE endpoint each section names.
+- **`views/<prefix>/_layout.view.json`** — a nested LAYOUT. `writeProjectViewLayout(prefix, spec)`.
+  The frame every route under `prefix` renders inside, with one `{ kind: 'outlet' }` for the child. No TSX, no imports, no class names, no colours — the
   writer host-generates the trivial React wrapper that renders the spec, and the SAME spec renders
   natively in the mobile app with no WebView.
-- **reusable view components** — `writeProjectViewComponent(name, def)`. A named composition of the
-  closed 24-element vocabulary with declared props, referenced from a section as `{ use: '<Name>' }`.
-- **the app shell** — `writeProjectViewShell(shell)`. Navigation (flat `nav` or grouped), per-entity
-  `subnav`, and the persistent `assistant` dock. The spec replacement for a hand-written `_layout`.
+- **`components/<Name>.view.json`** — reusable view components, `writeProjectViewComponent(name, def)`:
+  a named composition of the closed 32-element vocabulary with declared props,
+  referenced from a section as `{ use: '<Name>' }`.
+
+- **the app shell** — `writeProjectViewShell(shell)` → `shell.view.json`. Navigation (flat `nav` or
+  grouped) and per-entity `subnav`. The assistant dock is NOT here: it is renderer chrome, present on
+  every page of every app, and `assistant:` exists only to override the agent or suppress it.
 - **`hooks/<slug>.ts`** — automation. `writeProjectHook(slug, src)`. A cron trigger (time-based) or a
   database trigger (fires on a table write).
 - **`events/<name>.ts`** — emitter defs. `writeProjectEvent(name, src)`. A PRODUCER that emits events.

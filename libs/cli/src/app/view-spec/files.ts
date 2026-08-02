@@ -3,55 +3,91 @@
  * (`../authoring/globals.ts`), the app-wide validators (`./validate.ts`) and the pod's
  * spec-fetch route all agree without importing each other.
  *
- * ## The layout, and why every path is under `pages/`
+ * ## The v2 layout
  *
  * ```
- * pages/<route>.view.json              the page spec        (the artifact the model authors)
- * pages/<route>.tsx                    the wrapper          (HOST-GENERATED from the spec)
- * pages/components/<Name>.view.json    a view component def
- * pages/_shell.view.json               the app shell
+ * views/<route>.view.json              a page spec          (authored)
+ * views/<seg>/_layout.view.json        a NESTED LAYOUT      (authored, any depth)
+ * components/<Name>.view.json          a view component def (authored, TOP LEVEL)
+ * shell.view.json                      the app shell        (authored, TOP LEVEL)
+ * pages/<route>.tsx                    the wrapper          (GENERATED — never authored)
  * ```
  *
- * The **key move of the design**: the spec sits beside a trivial generated `.tsx` that renders
- * it. `walkPages` (`../build/pages.ts`) discovers the `.tsx`, hashes it, bundles it and caches it
- * exactly as it does a hand-written page — so the build pipeline never learns that view specs
- * exist and needs ZERO changes. The two non-route paths are equally deliberate:
- * `walkPages` already skips a `components/` dir under `pages/` and any `_`-prefixed basename,
- * and `.json` is not a page extension anyway, so neither the component defs nor the shell can
- * ever be mistaken for a route.
+ * Three moves, each removing an exception rather than adding one:
  *
- * Because the wrapper INLINES the spec (plus the components and the shell it renders with), a
- * component or shell write invalidates every wrapper — which is why {@link listViewRoutes} exists:
- * the writers re-emit all of them rather than trying to work out which pages used what.
+ *  - **`views/` holds JSON and nothing else.** The directory that used to hold both the specs and
+ *    their generated `.tsx` now holds only specs, so "is there hand-written React in this app?"
+ *    is answered by the format instead of by a lint. `pages/` survives as a purely generated
+ *    directory until the prebuilt app shell removes it entirely.
+ *  - **`components/` and `shell.view.json` are top level.** They were under `pages/` only because
+ *    the route walk was the only thing that read them, and both had to be hidden from it — the
+ *    `components/` directory by name and the shell by an `_` prefix. At the top level the route
+ *    tree has no exceptions to skip.
+ *  - **`_layout.view.json` nests.** A layout frames every route beneath its directory, which is
+ *    what lets an entity's header and sub-nav be authored once for a family instead of repeated
+ *    on every child page.
+ *
+ * ## v1 is still read
+ *
+ * Every reader below falls back to the v1 locations (`pages/*.view.json`,
+ * `pages/components/`, `pages/_shell.view.json`) so a project written before this change keeps
+ * serving. Only the WRITE paths are v2 — an app is migrated by being written to, never by a
+ * migration step that could half-finish.
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
-import type { ShellSpec, ViewComponentSpec, ViewSpec } from './schema.js';
+import type { ShellSpec, ViewComponentSpec, ViewLayoutSpec, ViewSpec } from './schema.js';
 
-/** The extension that marks a view artifact. Chosen so `<route>.view.json` sorts beside `<route>.tsx`. */
+/** The extension that marks a view artifact. */
 export const VIEW_EXT = '.view.json';
 
-/** The `pages/`-relative dir holding view component defs. Skipped by `walkPages` by name. */
+/** The v2 spec directory. */
+export const VIEWS_DIR = 'views';
+
+/** The v1 spec directory, still read. Also where generated wrappers live, in both versions. */
+export const PAGES_DIR = 'pages';
+
+/** The v2 component directory — top level. */
+export const COMPONENT_DIR = 'components';
+
+/** The v1 component directory, still read. */
 export const VIEW_COMPONENT_DIR = 'components';
 
-/** The project-relative path of the app shell spec. `_`-prefixed, so it is never a route. */
-export const SHELL_SPEC_PATH = `pages/_shell${VIEW_EXT}`;
+/** The v2 shell path. */
+export const SHELL_SPEC_PATH = `shell${VIEW_EXT}`;
 
-/** `recipes/[id]` → `pages/recipes/[id].view.json`. */
+/** The v1 shell path, still read. */
+export const LEGACY_SHELL_SPEC_PATH = `pages/_shell${VIEW_EXT}`;
+
+/** The basename that marks a nested layout. */
+export const LAYOUT_BASENAME = `_layout${VIEW_EXT}`;
+
+/** `recipes/[id]` → `views/recipes/[id].view.json`. The WRITE path. */
 export function viewSpecPath(route: string): string {
-  return join('pages', `${route}${VIEW_EXT}`);
+  return join(VIEWS_DIR, `${route}${VIEW_EXT}`);
 }
 
-/** `recipes/[id]` → `pages/recipes/[id].tsx` — the generated wrapper the pages build discovers. */
+/** `trips/[tripId]` → `views/trips/[tripId]/_layout.view.json`. The WRITE path. */
+export function viewLayoutPath(prefix: string): string {
+  return join(VIEWS_DIR, prefix, LAYOUT_BASENAME);
+}
+
+/**
+ * `recipes/[id]` → `pages/recipes/[id].tsx` — the generated wrapper the pages build discovers.
+ *
+ * Still under `pages/` in v2, and deliberately: the build walks that directory, and moving the
+ * wrappers would be a build change for no gain while the wrappers still exist at all. They stop
+ * existing when the prebuilt app shell lands, at which point `pages/` goes with them.
+ */
 export function viewWrapperPath(route: string): string {
-  return join('pages', `${route}.tsx`);
+  return join(PAGES_DIR, `${route}.tsx`);
 }
 
-/** `RecipeCard` → `pages/components/RecipeCard.view.json`. */
+/** `RecipeCard` → `components/RecipeCard.view.json`. The WRITE path. */
 export function viewComponentPath(name: string): string {
-  return join('pages', VIEW_COMPONENT_DIR, `${name}${VIEW_EXT}`);
+  return join(COMPONENT_DIR, `${name}${VIEW_EXT}`);
 }
 
 /** One artifact that is on disk but could not be read as JSON. Reported, never thrown. */
@@ -63,11 +99,13 @@ export interface MalformedArtifact {
 
 /** Everything a whole-app check (or the spec-fetch route) needs, read in one pass. */
 export interface LoadedViews {
-  /** Every `pages/**\/*.view.json`, keyed by its authoring route. */
+  /** Every page spec, keyed by its authoring route. */
   views: { route: string; spec: ViewSpec; path: string }[];
-  /** Every `pages/components/*.view.json`. */
+  /** Every nested layout, keyed by the route prefix it frames. */
+  layouts: { prefix: string; spec: ViewLayoutSpec; path: string }[];
+  /** Every view component def. */
   components: { name: string; def: ViewComponentSpec; path: string }[];
-  /** `pages/_shell.view.json`, when the app declares one. */
+  /** The app shell, when the app declares one. */
   shell?: ShellSpec;
   /** Files that exist but did not parse — a finding, not a crash. */
   malformed: MalformedArtifact[];
@@ -83,8 +121,14 @@ function readJson<T>(abs: string, rel: string, malformed: MalformedArtifact[]): 
   }
 }
 
-/** Collect every `*.view.json` under `pages/`, skipping the component dir and the shell. */
-function walkViewFiles(pagesDir: string, dir: string, out: string[]): void {
+/**
+ * Collect every `*.view.json` under a spec dir, separating pages from layouts.
+ *
+ * A `_`-prefixed basename is skipped as a page — that rule predates layouts and is what kept the
+ * v1 shell out of the route table — so `_layout.view.json` is picked up explicitly rather than by
+ * relaxing it. Relaxing it would make every future `_`-prefixed artifact a route by default.
+ */
+function walkViewFiles(dir: string, out: { pages: string[]; layouts: string[] }): void {
   let entries: string[];
   try {
     entries = readdirSync(dir);
@@ -101,62 +145,139 @@ function walkViewFiles(pagesDir: string, dir: string, out: string[]): void {
     }
     if (isDir) {
       if (entry === VIEW_COMPONENT_DIR || entry === 'lib' || entry.startsWith('_') || entry.startsWith('.')) continue;
-      walkViewFiles(pagesDir, abs, out);
+      walkViewFiles(abs, out);
       continue;
     }
-    if (!entry.endsWith(VIEW_EXT) || entry.startsWith('_')) continue;
-    out.push(abs);
+    if (!entry.endsWith(VIEW_EXT)) continue;
+    if (entry === LAYOUT_BASENAME) {
+      out.layouts.push(abs);
+      continue;
+    }
+    if (entry.startsWith('_')) continue;
+    out.pages.push(abs);
   }
 }
 
-/** A view file's path back to its authoring route (`pages/recipes/[id].view.json` → `recipes/[id]`). */
-export function routeOfViewFile(pagesDir: string, abs: string): string {
-  return relative(pagesDir, abs).slice(0, -VIEW_EXT.length).split(sep).join('/');
+/** A view file's path back to its authoring route (`views/recipes/[id].view.json` → `recipes/[id]`). */
+export function routeOfViewFile(specDir: string, abs: string): string {
+  return relative(specDir, abs).slice(0, -VIEW_EXT.length).split(sep).join('/');
+}
+
+/** A layout file's path back to the prefix it frames (`views/trips/[id]/_layout.view.json` → `trips/[id]`). */
+export function prefixOfLayoutFile(specDir: string, abs: string): string {
+  const rel = relative(specDir, abs).split(sep);
+  return rel.slice(0, -1).join('/');
+}
+
+/** Which spec directories this project actually has — v2 first, v1 as a fallback. */
+function specDirs(projectRoot: string): string[] {
+  const out: string[] = [];
+  for (const d of [VIEWS_DIR, PAGES_DIR]) {
+    const abs = join(projectRoot, d);
+    if (existsSync(abs)) out.push(abs);
+  }
+  return out;
 }
 
 /**
- * Load every view artifact a project has. Never throws: a missing `pages/` dir yields empty
- * lists, and an unparseable file lands in {@link LoadedViews.malformed} — an app-wide gate that
- * crashed on one bad file would report nothing at all about the other nineteen, which the
- * pipeline reads as "clean".
+ * Load every view artifact a project has. Never throws: a missing spec dir yields empty lists,
+ * and an unparseable file lands in {@link LoadedViews.malformed} — an app-wide gate that crashed
+ * on one bad file would report nothing at all about the other nineteen, which the pipeline reads
+ * as "clean".
+ *
+ * A route present in BOTH `views/` and `pages/` resolves to the v2 copy: a project mid-migration
+ * has the newer spec under `views/`, and serving the stale one would make the migration look
+ * broken.
  */
 export function loadProjectViews(projectRoot: string): LoadedViews {
   const malformed: MalformedArtifact[] = [];
-  const pagesDir = join(projectRoot, 'pages');
   const views: LoadedViews['views'] = [];
+  const layouts: LoadedViews['layouts'] = [];
   const components: LoadedViews['components'] = [];
+  const seenRoutes = new Set<string>();
+  const seenPrefixes = new Set<string>();
 
-  const files: string[] = [];
-  if (existsSync(pagesDir)) walkViewFiles(pagesDir, pagesDir, files);
-  for (const abs of files.sort()) {
-    const rel = relative(projectRoot, abs).split(sep).join('/');
-    const spec = readJson<ViewSpec>(abs, rel, malformed);
-    if (spec) views.push({ route: routeOfViewFile(pagesDir, abs), spec, path: rel });
+  for (const specDir of specDirs(projectRoot)) {
+    const found = { pages: [] as string[], layouts: [] as string[] };
+    walkViewFiles(specDir, found);
+
+    for (const abs of found.pages.sort()) {
+      const rel = relative(projectRoot, abs).split(sep).join('/');
+      const route = routeOfViewFile(specDir, abs);
+      if (seenRoutes.has(route)) continue;
+      const spec = readJson<ViewSpec>(abs, rel, malformed);
+      if (spec) {
+        seenRoutes.add(route);
+        views.push({ route, spec, path: rel });
+      }
+    }
+
+    for (const abs of found.layouts.sort()) {
+      const rel = relative(projectRoot, abs).split(sep).join('/');
+      const prefix = prefixOfLayoutFile(specDir, abs);
+      if (seenPrefixes.has(prefix)) continue;
+      const spec = readJson<ViewLayoutSpec>(abs, rel, malformed);
+      if (spec) {
+        seenPrefixes.add(prefix);
+        layouts.push({ prefix, spec, path: rel });
+      }
+    }
   }
 
-  const compDir = join(pagesDir, VIEW_COMPONENT_DIR);
-  if (existsSync(compDir)) {
-    for (const entry of readdirSync(compDir).sort()) {
+  const seenComponents = new Set<string>();
+  for (const dir of [join(projectRoot, COMPONENT_DIR), join(projectRoot, PAGES_DIR, VIEW_COMPONENT_DIR)]) {
+    if (!existsSync(dir)) continue;
+    for (const entry of readdirSync(dir).sort()) {
       if (!entry.endsWith(VIEW_EXT)) continue;
-      const abs = join(compDir, entry);
-      const rel = `pages/${VIEW_COMPONENT_DIR}/${entry}`;
+      const name = entry.slice(0, -VIEW_EXT.length);
+      if (seenComponents.has(name)) continue;
+      const abs = join(dir, entry);
+      const rel = relative(projectRoot, abs).split(sep).join('/');
       const def = readJson<ViewComponentSpec>(abs, rel, malformed);
-      if (def) components.push({ name: entry.slice(0, -VIEW_EXT.length), def, path: rel });
+      if (def) {
+        seenComponents.add(name);
+        components.push({ name, def, path: rel });
+      }
     }
   }
 
   let shell: ShellSpec | undefined;
-  const shellAbs = join(projectRoot, SHELL_SPEC_PATH);
-  if (existsSync(shellAbs)) shell = readJson<ShellSpec>(shellAbs, SHELL_SPEC_PATH, malformed);
+  for (const rel of [SHELL_SPEC_PATH, LEGACY_SHELL_SPEC_PATH]) {
+    const abs = join(projectRoot, rel);
+    if (!existsSync(abs)) continue;
+    shell = readJson<ShellSpec>(abs, rel, malformed);
+    if (shell) break;
+  }
 
-  return { views, components, shell, malformed };
+  return { views, layouts, components, shell, malformed };
 }
 
 /** Every authoring route that has a view spec — what the writers re-emit wrappers for. */
 export function listViewRoutes(projectRoot: string): string[] {
-  const pagesDir = join(projectRoot, 'pages');
-  if (!existsSync(pagesDir)) return [];
-  const files: string[] = [];
-  walkViewFiles(pagesDir, pagesDir, files);
-  return files.map((f) => routeOfViewFile(pagesDir, f)).sort();
+  const out = new Set<string>();
+  for (const specDir of specDirs(projectRoot)) {
+    const found = { pages: [] as string[], layouts: [] as string[] };
+    walkViewFiles(specDir, found);
+    for (const f of found.pages) out.add(routeOfViewFile(specDir, f));
+  }
+  return [...out].sort();
+}
+
+/**
+ * The layout chain for a route, OUTERMOST first.
+ *
+ * A layout frames a route when the route is inside its directory — `trips/[tripId]` frames
+ * `trips/[tripId]/expenses` but not `trips/[tripId]` itself... except that it does: a layout's
+ * own index page is the commonest child there is (`views/trips/[tripId]/index.view.json`), and it
+ * arrives here as the route `trips/[tripId]/index`. Matching on the segment path rather than on a
+ * string prefix is what keeps `trips/[tripId]` from also framing `trips/[tripId]-archive`.
+ */
+export function layoutChainFor(route: string, prefixes: readonly string[]): string[] {
+  const segs = route.split('/');
+  return prefixes
+    .filter((prefix) => {
+      const p = prefix.split('/');
+      return p.length < segs.length + 1 && p.every((seg, i) => segs[i] === seg);
+    })
+    .sort((a, b) => a.split('/').length - b.split('/').length);
 }

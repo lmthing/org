@@ -27,7 +27,7 @@
 
 // ── the closed vocabularies ──────────────────────────────────────────────────
 
-/** The 8 section kinds. The union is FULL — a ninth is a plan change, not a patch. */
+/** The 12 section kinds. The union is FULL — a thirteenth is a plan change, not a patch. */
 export const SECTION_KINDS = [
   'list',
   'detail',
@@ -37,10 +37,14 @@ export const SECTION_KINDS = [
   'chat',
   'toolbar',
   'timeline',
+  'board',
+  'calendar',
+  'chart',
+  'outlet',
 ] as const
 export type SectionKind = (typeof SECTION_KINDS)[number]
 
-/** The 24 elements. */
+/** The 32 elements. */
 export const ELEMENT_KINDS = [
   'row',
   'col',
@@ -52,6 +56,8 @@ export const ELEMENT_KINDS = [
   'text',
   'caption',
   'markdown',
+  'code',
+  'quote',
   'badge',
   'statcard',
   'meter',
@@ -59,13 +65,19 @@ export const ELEMENT_KINDS = [
   'table',
   'timeline',
   'rating',
+  'chart',
+  'calendar',
+  'steps',
   'image',
   'icon',
+  'avatar',
   'banner',
   'empty',
   'button',
   'link',
   'field',
+  'tabs',
+  'accordion',
 ] as const
 export type ElementKind = (typeof ELEMENT_KINDS)[number]
 
@@ -148,7 +160,18 @@ export type ShellPlacement = (typeof SHELL_PLACEMENTS)[number]
 export const SHELL_DERIVE_MAX_ROUTES = 5
 
 /** The interactive control kinds of the `field` element. */
-export const FIELD_KINDS = ['toggle', 'rating', 'select', 'stepper', 'text'] as const
+export const FIELD_KINDS = [
+  'toggle',
+  'rating',
+  'select',
+  'stepper',
+  'text',
+  'date',
+  'number',
+  'textarea',
+  'multiselect',
+  'slider',
+] as const
 export type FieldKind = (typeof FIELD_KINDS)[number]
 
 // ── scalars ──────────────────────────────────────────────────────────────────
@@ -431,6 +454,64 @@ export interface FieldEl {
   invalidates?: string[]
 }
 
+/** A monospace block — an id, a snippet, an agent's raw output. */
+export interface CodeEl {
+  el: 'code'
+  text: Value
+  language?: string
+}
+/** A pulled quote. */
+export interface QuoteEl {
+  el: 'quote'
+  text: Value
+  cite?: Value
+}
+/** A plot, drawn from SVG primitives so it exists on a phone too. */
+export interface ChartEl extends Formatted, Toned {
+  el: 'chart'
+  kind: 'bar' | 'line' | 'area' | 'donut'
+  data: Binding
+  x: Value
+  y: Value
+  series?: Value
+  height?: number
+  label?: Value
+}
+/** A month grid — `timeline`'s date-as-GRID sibling. */
+export interface CalendarEl extends Toned {
+  el: 'calendar'
+  items: Binding
+  date: Value
+  title: Value
+  month?: Value
+  action?: Action
+}
+/** Progress through a KNOWN pipeline. */
+export interface StepsEl {
+  el: 'steps'
+  items: { label: Value; caption?: Value }[]
+  current: Value
+}
+/** A person — `name` is the initials fallback when there is no image. */
+export interface AvatarEl {
+  el: 'avatar'
+  src?: Value
+  name?: Value
+  size?: 'sm' | 'md' | 'lg'
+}
+/** In-page switching — `toolbar.reveals` for content rather than sections. */
+export interface TabsEl {
+  el: 'tabs'
+  items: { label: Value; icon?: IconName; children?: Slot[] }[]
+  initial?: number
+}
+/** Collapsible groups. */
+export interface AccordionEl {
+  el: 'accordion'
+  items: { label: Value; caption?: Value; children?: Slot[] }[]
+  multiple?: boolean
+}
+
 export type ElementNode =
   | RowEl
   | ColEl
@@ -442,6 +523,8 @@ export type ElementNode =
   | TextEl
   | CaptionEl
   | MarkdownEl
+  | CodeEl
+  | QuoteEl
   | BadgeEl
   | StatcardEl
   | MeterEl
@@ -449,13 +532,19 @@ export type ElementNode =
   | TableEl
   | TimelineEl
   | RatingEl
+  | ChartEl
+  | CalendarEl
+  | StepsEl
   | ImageEl
   | IconEl
+  | AvatarEl
   | BannerEl
   | EmptyEl
   | ButtonEl
   | LinkEl
   | FieldEl
+  | TabsEl
+  | AccordionEl
 
 /** A reference to a named view component — usable anywhere an element node is. */
 export interface ComponentRef {
@@ -497,6 +586,19 @@ export interface FlatItem {
 export type Slot = ElementNode | ComponentRef | FlatItem
 
 /** A named, parameterised composition of elements — a spec fragment, never React. */
+/**
+ * A nested LAYOUT — the frame every route under `prefix` renders inside.
+ *
+ * An ordinary view spec with two extra rules: it lives at `views/<prefix>/_layout.view.json`, and
+ * exactly one of its sections is an `outlet`. The whole chain shares one runtime scope, so a
+ * child page reads the layout's own fetched data as `$data.<layoutSectionId>.…`.
+ */
+export interface ViewLayoutSpec {
+  prefix: Route
+  title?: string
+  sections: SectionSpec[]
+}
+
 export interface ViewComponentSpec {
   name: string
   props?: Record<string, TypeRef>
@@ -639,6 +741,65 @@ export interface TimelineSection extends SectionBase {
   empty?: Value | EmptyState
 }
 
+/** Rows bucketed into columns by one field — the pipeline surface. */
+export interface BoardSection extends SectionBase {
+  kind: 'board'
+  query?: string
+  from?: From
+  input?: Record<string, Arg>
+  param?: Binding
+  group: Binding
+  columns?: { value: string; label?: Value; tone?: Tone }[]
+  limit?: number
+  item?: Slot
+  rowAction?: Action
+  rowActions?: ActionItem[]
+  poll?: Poll
+  empty?: Value | EmptyState
+}
+
+/** Rows on a month grid. */
+export interface CalendarSection extends SectionBase {
+  kind: 'calendar'
+  query?: string
+  from?: From
+  input?: Record<string, Arg>
+  param?: Binding
+  date: Binding
+  month?: Binding
+  limit?: number
+  item?: Slot
+  rowAction?: Action
+  rowActions?: ActionItem[]
+  poll?: Poll
+  empty?: Value | EmptyState
+}
+
+/** Plots over one endpoint's rows. */
+export interface ChartSection extends SectionBase {
+  kind: 'chart'
+  query?: string
+  from?: From
+  input?: Record<string, Arg>
+  param?: Binding
+  charts: ({
+    kind: 'bar' | 'line' | 'area' | 'donut'
+    x: Value
+    y: Value
+    series?: Value
+    label?: Value
+    height?: number
+  } & Formatted &
+    Toned)[]
+  poll?: Poll
+  empty?: Value | EmptyState
+}
+
+/** Where a child route renders. Layouts only, exactly once. */
+export interface OutletSection extends SectionBase {
+  kind: 'outlet'
+}
+
 export type SectionSpec =
   | ListSection
   | DetailSection
@@ -648,6 +809,10 @@ export type SectionSpec =
   | ChatSection
   | ToolbarSection
   | TimelineSection
+  | BoardSection
+  | CalendarSection
+  | ChartSection
+  | OutletSection
 
 // ── page + shell ─────────────────────────────────────────────────────────────
 
@@ -703,7 +868,11 @@ export interface ShellSpec {
   subnav?: SubnavSpec[]
   placement?: ShellPlacement
   /** The concierge dock — the `chat` section hoisted to the shell. */
-  assistant?: { agent: string; space?: string; greeting?: Value }
+  /**
+   * An OVERRIDE of renderer chrome, not a switch: `ViewShell` renders a dock on every page
+   * whether or not this key exists. `false` suppresses it.
+   */
+  assistant?: { agent: string; space?: string; greeting?: Value } | false
 }
 
 /** `x-options` — a foreign-key form field's option source, read off the Input schema. */

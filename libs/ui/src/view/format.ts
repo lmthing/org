@@ -70,7 +70,7 @@ function toDateValue(value: unknown): DateValue | null {
 }
 
 /** Parse anything date-ish. Returns `null` rather than an Invalid Date. */
-function toDate(value: unknown): Date | null {
+export function toDate(value: unknown): Date | null {
   return toDateValue(value)?.date ?? null
 }
 

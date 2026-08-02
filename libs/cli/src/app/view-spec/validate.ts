@@ -40,7 +40,7 @@ import { pathToFileURL } from 'node:url';
 
 import type { EndpointContract } from '../build/schema.js';
 import { braceBody } from '../authoring/lint.js';
-import { loadProjectViews, viewSpecPath } from './files.js';
+import { SHELL_SPEC_PATH, loadProjectViews, viewSpecPath } from './files.js';
 import {
   alwaysNullBinding,
   badBindingRoot,
@@ -73,6 +73,8 @@ import {
   viewError,
   wrongArity,
   wrongMethod,
+  outletInPage,
+  badOutletCount,
   type ViewError,
   type ViewValidationResult,
 } from './messages.js';
@@ -81,11 +83,13 @@ import {
   looksLikeExpression,
   validateShellShape,
   validateViewComponentShape,
+  validateViewLayoutShape,
   validateViewSpecShape,
   type JsonSchema,
   type SectionSpec,
   type ShellSpec,
   type ViewComponentSpec,
+  type ViewLayoutSpec,
   type ViewSpec,
 } from './schema.js';
 
@@ -827,7 +831,7 @@ function checkSectionArity(
   if (!ep?.outputShape || typeof section['from'] === 'string' || typeof section['query'] !== 'string') return;
   const kind = String(section['kind']);
   const where = childPath(path, 'query');
-  if ((kind === 'list' || kind === 'timeline') && ep.outputShape === 'record') {
+  if (ROW_KINDS.has(kind) && ep.outputShape === 'record') {
     ctx.errors.push(wrongArity(where, kind, ep.name, 'rows', ctx.rowQueries));
   } else if ((kind === 'detail' || kind === 'stats') && ep.outputShape === 'array') {
     ctx.errors.push(wrongArity(where, kind, ep.name, 'record', ctx.recordQueries));
@@ -1156,8 +1160,52 @@ export function validateViewSpec(spec: unknown, contracts: ContractsLike | ViewC
   if (!shape.ok) return resultOf(shapeErrorsToViewErrors(shape.errors), 1);
 
   const view = spec as ViewSpec;
+  // `outlet` is a LAYOUT position. On a page it would render nothing and quietly swallow the
+  // author's intent, so it is named here rather than ignored.
+  const stray = view.sections.findIndex((s) => s.kind === 'outlet');
+  if (stray >= 0) return resultOf([outletInPage(`sections[${stray}]`)], 1);
+  return walkSpec(view.route, view.sections, contracts);
+}
+
+/**
+ * **Save-time validation of ONE nested layout** (`views/<prefix>/_layout.view.json`).
+ *
+ * Identical to a page's walk — a layout IS a page that renders around its children — plus the one
+ * rule that makes it a layout: exactly one `outlet`. Zero outlets swallows every route beneath the
+ * prefix; two would render the child twice.
+ */
+export function validateViewLayout(
+  layout: unknown,
+  contracts: ContractsLike | ViewContracts,
+): ViewValidationResult {
+  const shape = validateViewLayoutShape(layout);
+  if (!shape.ok) return resultOf(shapeErrorsToViewErrors(shape.errors), 1);
+
+  const spec = layout as ViewLayoutSpec;
+  const outlets = spec.sections.filter((s) => s.kind === 'outlet').length;
+  if (outlets !== 1) return resultOf([badOutletCount('sections', outlets)], 1);
+  return walkSpec(spec.prefix, spec.sections, contracts, 'layout');
+}
+
+/** The shared page/layout walk. One body, so a rule can never apply to only one of them. */
+function walkSpec(
+  route: string,
+  sections: SectionSpec[],
+  contracts: ContractsLike | ViewContracts,
+  kind: 'page' | 'layout' = 'page',
+): ViewValidationResult {
+  const view = { route, sections } as ViewSpec;
   const ctx = makeCtx(contracts);
-  ctx.pageRoute = view.route;
+  /**
+   * A LAYOUT has no `pageRoute`, and that is not an omission.
+   *
+   * `pageRoute` exists for one check — "this control navigates to the page it is already on", a
+   * real dead control. A layout renders on every route beneath its prefix, so it is never "on"
+   * one of them, and a toolbar linking to the family's landing page (`trips/[tripId]` from
+   * `trips/[tripId]/expenses`) is the commonest thing a layout does. Keeping the check would make
+   * the single most useful layout unwritable.
+   */
+  ctx.pageRoute = kind === 'layout' ? undefined : view.route;
   ctx.routeParams = new Set([...view.route.matchAll(/\[([A-Za-z][A-Za-z0-9]*)\]/g)].map((m) => m[1]));
   for (const s of view.sections) if (s.id) ctx.sectionIds.add(s.id);
 
@@ -1272,7 +1320,9 @@ export function validateShellSpec(
     for (const [j, r] of (group.routes ?? []).entries()) checkRoute(r, `groups[${i}].routes[${j}]`, ctx);
     if (group.badge) checkEndpoint(group.badge.query, `groups[${i}].badge.query`, 'query', ctx);
   }
-  if (s.assistant?.agent) checkAgent(s.assistant.agent, s.assistant.space, 'assistant', ctx);
+  // `assistant: false` suppresses renderer chrome and names no agent — only the object form
+  // has anything to resolve.
+  if (s.assistant && s.assistant.agent) checkAgent(s.assistant.agent, s.assistant.space, 'assistant', ctx);
   for (const [i, sub] of (s.subnav ?? []).entries()) {
     for (const [j, item] of (sub.items ?? []).entries()) checkRoute(item.route, `subnav[${i}].items[${j}].route`, ctx);
     for (const [j, g] of (sub.groups ?? []).entries()) {
@@ -1363,7 +1413,7 @@ function findComponentCycle(
 // ──────────────────────────────────────────────────────────────────────────────
 
 /** The section kinds that actually read or write data. A page of only the others shows chrome. */
-const DATA_KINDS = new Set(['list', 'detail', 'create', 'stats', 'timeline']);
+const DATA_KINDS = new Set(['list', 'detail', 'create', 'stats', 'timeline', 'board', 'calendar', 'chart']);
 
 /** Every route a spec navigates to, from anywhere inside it. */
 function navigateTargets(node: unknown, out: Set<string> = new Set()): Set<string> {
@@ -1406,8 +1456,8 @@ export async function validateAppViews(
       viewError(
         'no-data',
         '',
-        `this project has no view specs (pages/*${'.view.json'}). If the app was built with ` +
-          `writeProjectView, nothing landed; if it is a TSX app, it is not this gate's business.`,
+        `this project has no view specs (views/*${'.view.json'}). If the app was built with ` +
+          `writeProjectView, nothing landed.`,
       ),
     );
     return resultOf(errors, 0);
@@ -1438,11 +1488,14 @@ export async function validateAppViews(
     for (const e of validateViewSpec(spec, base).errors) errors.push({ ...e, file: path });
     void route;
   }
+  for (const { spec, path } of loaded.layouts) {
+    for (const e of validateViewLayout(spec, base).errors) errors.push({ ...e, file: path });
+  }
   for (const { def, path } of loaded.components) {
     for (const e of validateViewComponent(def, base).errors) errors.push({ ...e, file: path });
   }
   if (loaded.shell) {
-    for (const e of validateShellSpec(loaded.shell, base).errors) errors.push({ ...e, file: 'pages/_shell.view.json' });
+    for (const e of validateShellSpec(loaded.shell, base).errors) errors.push({ ...e, file: SHELL_SPEC_PATH });
   }
 
   // ── reachability ───────────────────────────────────────────────────────────
@@ -1460,6 +1513,14 @@ export async function validateAppViews(
     for (const g of sub.groups ?? []) for (const item of g.items) reachable.add(item.route);
   }
   for (const { spec } of loaded.views) for (const t of navigateTargets(spec)) reachable.add(t);
+  // A layout's own toolbar IS the sub-nav for its family — the routes it links are reached, and
+  // every route under a layout prefix is reached THROUGH the layout, which is the whole point of
+  // authoring one. Without this the nested pages a layout exists to frame all report as orphans.
+  const layoutPrefixes: string[] = [];
+  for (const { prefix, spec } of loaded.layouts) {
+    layoutPrefixes.push(prefix);
+    for (const t of navigateTargets(spec)) reachable.add(t);
+  }
 
   // No shell on disk ⇒ the renderer derives one from the top-level static routes. Mirror that here
   // rather than reporting every page as an orphan of a shell the model was never asked to write.
@@ -1472,12 +1533,14 @@ export async function validateAppViews(
     if (route === 'index') continue; // the app's own entry point is reachable by definition
     if (reachable.has(route)) continue;
     if (subnavPrefixes.some((p) => underPrefix(route, p))) continue;
+    if (layoutPrefixes.some((p) => underPrefix(route, p))) continue;
     errors.push(orphanRoute(route, path, [...reachable].sort()));
   }
 
   // ── dead components (warning) ──────────────────────────────────────────────
   const used = new Set<string>();
   for (const { spec } of loaded.views) for (const n of componentRefs(spec)) used.add(n);
+  for (const { spec } of loaded.layouts) for (const n of componentRefs(spec)) used.add(n);
   for (const { def } of loaded.components) for (const n of componentRefs(def.node)) used.add(n);
   for (const { def, path } of loaded.components) {
     if (!used.has(def.name)) errors.push(deadComponent(def.name, path));
@@ -1567,7 +1630,7 @@ export type ApiCaller = (name: string, input?: unknown) => Promise<{ status: num
  * here because a smoke run that guesses differently checks the page's bindings against the wrong
  * objects — see {@link sectionRows}.
  */
-const ROW_KINDS = new Set(['list', 'timeline']);
+const ROW_KINDS = new Set(['list', 'timeline', 'board', 'calendar', 'chart']);
 
 /**
  * The array inside an Output — `sections/common.tsx#extractRows`, kept in step.

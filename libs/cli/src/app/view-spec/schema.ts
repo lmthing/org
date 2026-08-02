@@ -173,11 +173,18 @@ export const SECTION_KINDS = [
   'chat',
   'toolbar',
   'timeline',
+  // v2 (APPFORMAT_IMPROVE §4.1). The three surfaces every tracker hand-rolled, plus the
+  // layout seam. `board`/`calendar`/`chart` are collection sections: they reuse `listLike`'s
+  // sourcing, polling and empty-state facts rather than restating them.
+  'board',
+  'calendar',
+  'chart',
+  'outlet',
 ] as const;
 export type SectionKind = (typeof SECTION_KINDS)[number];
 
-/** The v1 cap. A ninth kind is a plan change, not a patch. */
-export const MAX_SECTION_KINDS = 8;
+/** The v2 cap. A thirteenth kind is a plan change, not a patch. */
+export const MAX_SECTION_KINDS = 12;
 
 /**
  * **THE ELEMENT UNION — the other capped vocabulary.**
@@ -213,6 +220,8 @@ export const ELEMENT_KINDS = [
   'text',
   'caption',
   'markdown',
+  'code',
+  'quote',
   // data display
   'badge',
   'statcard',
@@ -221,9 +230,13 @@ export const ELEMENT_KINDS = [
   'table',
   'timeline',
   'rating',
+  'chart',
+  'calendar',
+  'steps',
   // media
   'image',
   'icon',
+  'avatar',
   // feedback
   'banner',
   'empty',
@@ -231,6 +244,8 @@ export const ELEMENT_KINDS = [
   'button',
   'link',
   'field',
+  'tabs',
+  'accordion',
 ] as const;
 export type ElementKind = (typeof ELEMENT_KINDS)[number];
 
@@ -357,7 +372,19 @@ export type ShellPlacement = (typeof SHELL_PLACEMENTS)[number];
 export const SHELL_DERIVE_MAX_ROUTES = 5;
 
 /** The interactive control kinds of the `field` element (audit A2). */
-export const FIELD_KINDS = ['toggle', 'rating', 'select', 'stepper', 'text'] as const;
+export const FIELD_KINDS = [
+  'toggle',
+  'rating',
+  'select',
+  'stepper',
+  'text',
+  // v2 — what a row needs to be editable in place without a modal.
+  'date',
+  'number',
+  'textarea',
+  'multiselect',
+  'slider',
+] as const;
 export type FieldKind = (typeof FIELD_KINDS)[number];
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -782,6 +809,22 @@ export interface MarkdownEl {
   el: 'markdown';
   text: Value;
 }
+/**
+ * A monospace block — an id, a snippet, an agent's raw output. `language` is a HINT the
+ * renderer may label with; there is no syntax highlighting on the native target and
+ * pretending otherwise would be a web-only element.
+ */
+export interface CodeEl {
+  el: 'code';
+  text: Value;
+  language?: string;
+}
+/** A pulled quote — a testimonial, an extracted passage, a model's stated rationale. */
+export interface QuoteEl {
+  el: 'quote';
+  text: Value;
+  cite?: Value;
+}
 
 /**
  * A status pill. Absorbs `chip` (audit §5.2 — 0 demand distinct from `badge`;
@@ -844,6 +887,62 @@ export interface RatingEl {
   max?: number;
 }
 
+/**
+ * A plot. **The one dashboard surface that cannot be faked** with the rest of the
+ * vocabulary — five catalogue apps drew their own, all of them web-only `<svg>` by hand.
+ *
+ * Drawn from SVG PRIMITIVES (`Prim.Svg`), never a charting library: every web chart
+ * library is DOM-bound, so a `<canvas>` or a `recharts` import would mean a spec app has a
+ * dashboard on the web and a hole on a phone. `data` is a repeater binding (see the
+ * repeater convention); `x`/`y` resolve per entry.
+ */
+export interface ChartEl extends Formatted, Toned {
+  el: 'chart';
+  kind: 'bar' | 'line' | 'area' | 'donut';
+  /** The array to plot. */
+  data: Binding;
+  /** The category / time axis value, per entry. */
+  x: Value;
+  /** The numeric value, per entry. */
+  y: Value;
+  /** Optional grouping key — one line/band per distinct value. */
+  series?: Value;
+  height?: number;
+  /** Axis + legend labels. Absent ⇒ the renderer labels from the bindings' last segments. */
+  label?: Value;
+}
+
+/**
+ * A month grid. The date-as-GRID sibling of `timeline`'s date-as-STREAM — the same rows,
+ * the arrangement a user reaches for when the question is "what does this month look
+ * like" rather than "what happened next".
+ */
+export interface CalendarEl extends Toned {
+  el: 'calendar';
+  /** The array of dated entries. */
+  items: Binding;
+  /** Each entry's date. An entry whose date does not resolve is dropped, not guessed. */
+  date: Value;
+  /** Each entry's label. */
+  title: Value;
+  /** Which month to show — a bound ISO date or a literal. Absent ⇒ the month of the first entry. */
+  month?: Value;
+  /** What tapping an entry does. */
+  action?: Action;
+}
+
+/**
+ * Progress through a KNOWN pipeline — the steps are declared, `current` says where we are.
+ * Not a progress bar (`meter`) and not a history (`timeline`): the value here is that the
+ * remaining steps are visible before they happen.
+ */
+export interface StepsEl {
+  el: 'steps';
+  items: { label: Value; caption?: Value }[];
+  /** The current step — an index, or a value matching one of the labels. */
+  current: Value;
+}
+
 /** An image. Also the home of static maps — the tile URL is an endpoint Output field. */
 export interface ImageEl {
   el: 'image';
@@ -858,6 +957,18 @@ export interface IconEl {
   name: IconName;
   size?: 'sm' | 'md' | 'lg';
   tone?: Tone;
+}
+
+/**
+ * A person. Cut from v1 at "0 measured demand" — and then hand-rolled by five apps, because
+ * a tracker without people in it is not a tracker. `name` is the initials fallback, so a row
+ * with no avatar URL still renders something identifying rather than a broken image.
+ */
+export interface AvatarEl {
+  el: 'avatar';
+  src?: Value;
+  name?: Value;
+  size?: 'sm' | 'md' | 'lg';
 }
 
 /** An inline notice. */
@@ -968,6 +1079,26 @@ export interface FieldEl {
   invalidates?: string[];
 }
 
+/**
+ * In-page switching. **The declarative replacement for `useState`, scoped to one element** —
+ * the same job `toolbar.reveals` does for sections, for the case where the alternatives are
+ * content rather than sections. Cross-PAGE tabs are nested routes (a layout with a toolbar),
+ * not this.
+ */
+export interface TabsEl {
+  el: 'tabs';
+  items: { label: Value; icon?: IconName; children?: Slot[] }[];
+  /** Which tab opens. Defaults to the first. */
+  initial?: number;
+}
+/** Collapsible groups — a long form, an FAQ, a stack of detail panels on a phone. */
+export interface AccordionEl {
+  el: 'accordion';
+  items: { label: Value; caption?: Value; children?: Slot[] }[];
+  /** Allow more than one open at a time. Defaults to single-open. */
+  multiple?: boolean;
+}
+
 /** Every `{ el: … }` node. Kept as one union so the catalogue has exactly one home. */
 export type ElementNode =
   | RowEl
@@ -980,6 +1111,8 @@ export type ElementNode =
   | TextEl
   | CaptionEl
   | MarkdownEl
+  | CodeEl
+  | QuoteEl
   | BadgeEl
   | StatcardEl
   | MeterEl
@@ -987,13 +1120,19 @@ export type ElementNode =
   | TableEl
   | TimelineEl
   | RatingEl
+  | ChartEl
+  | CalendarEl
+  | StepsEl
   | ImageEl
   | IconEl
+  | AvatarEl
   | BannerEl
   | EmptyEl
   | ButtonEl
   | LinkEl
-  | FieldEl;
+  | FieldEl
+  | TabsEl
+  | AccordionEl;
 
 /**
  * A reference to a named view component — usable **anywhere an element node is**.
@@ -1335,7 +1474,82 @@ export interface TimelineSection extends SectionBase {
   empty?: Value | EmptyState;
 }
 
-/** Every section. One union, one place. All 8 slots are pinned. */
+/**
+ * **A board** — rows bucketed into columns by one field. The pipeline surface: a job board,
+ * a deal stage, a shopping list by aisle.
+ *
+ * It is `list` with a `group` that arranges ACROSS rather than DOWN, which is why it shares
+ * every sourcing fact with it. Moving a card is an ordinary `rowActions` mutation — there is
+ * no drag-and-drop, because a drag has no representation in a language with no client state
+ * and no honest one on a phone either.
+ */
+export interface BoardSection extends SectionBase {
+  kind: 'board';
+  query?: string;
+  from?: From;
+  input?: Record<string, Arg>;
+  param?: Binding;
+  /** The column key, per row (`$.status`). */
+  group: Binding;
+  /** Explicit column order + labels. Absent ⇒ the distinct values in first-seen order. */
+  columns?: { value: string; label?: Value; tone?: Tone }[];
+  limit?: number;
+  item?: Slot;
+  rowAction?: Action;
+  rowActions?: ActionItem[];
+  poll?: Poll;
+  empty?: Value | EmptyState;
+}
+
+/** **A month grid** of rows. `timeline`'s sibling for "what does this month look like". */
+export interface CalendarSection extends SectionBase {
+  kind: 'calendar';
+  query?: string;
+  from?: From;
+  input?: Record<string, Arg>;
+  param?: Binding;
+  /** Each row's date. A row whose date does not resolve is listed as undated, never guessed. */
+  date: Binding;
+  /** Which month to show. Absent ⇒ the month of the earliest row. */
+  month?: Binding;
+  limit?: number;
+  item?: Slot;
+  rowAction?: Action;
+  rowActions?: ActionItem[];
+  poll?: Poll;
+  empty?: Value | EmptyState;
+}
+
+/** **Plots** over one endpoint's rows — the analytics strip, as data. */
+export interface ChartSection extends SectionBase {
+  kind: 'chart';
+  query?: string;
+  from?: From;
+  input?: Record<string, Arg>;
+  param?: Binding;
+  charts: ({
+    kind: 'bar' | 'line' | 'area' | 'donut';
+    x: Value;
+    y: Value;
+    series?: Value;
+    label?: Value;
+    height?: number;
+  } & Formatted &
+    Toned)[];
+  poll?: Poll;
+  empty?: Value | EmptyState;
+}
+
+/**
+ * **Where the child route renders.** Legal ONLY in a layout (`views/**\/_layout.view.json`),
+ * exactly once. A page containing one is rejected, and a layout without one would swallow
+ * every route beneath it.
+ */
+export interface OutletSection extends SectionBase {
+  kind: 'outlet';
+}
+
+/** Every section. One union, one place. All 12 slots are pinned. */
 export type SectionSpec =
   | ListSection
   | DetailSection
@@ -1344,7 +1558,11 @@ export type SectionSpec =
   | MarkdownSection
   | ChatSection
   | ToolbarSection
-  | TimelineSection;
+  | TimelineSection
+  | BoardSection
+  | CalendarSection
+  | ChartSection
+  | OutletSection;
 
 // ── page + shell ─────────────────────────────────────────────────────────────
 
@@ -1455,11 +1673,35 @@ export interface ShellSpec {
   subnav?: SubnavSpec[];
   placement?: ShellPlacement;
   /**
-   * A persistent assistant dock (audit A9 / T0 §5a finding 5 — present in 4/5 apps as a
-   * hand-built `ConciergeDock`/`CopilotDock`/`AssistantDock`). The `chat` section, hoisted
-   * to the shell so it does not have to be repeated on every page.
+   * The persistent assistant dock — **an OVERRIDE, not a switch.**
+   *
+   * The dock is renderer chrome as of v2: every app has one, on every page, resolved by
+   * `ViewShell` to the project's own `thing` agent. An app builder is never asked to author
+   * it, which is the only reliable way to stop it being forgotten (4/5 catalogue apps
+   * hand-built one; the shipped spec apps that omitted `assistant:` had no way to reach an
+   * agent at all).
+   *
+   * Present ⇒ name a different agent, or add a greeting. `false` ⇒ suppress it, for the one
+   * honest case: a kiosk or embedded surface where a chat box is wrong.
    */
-  assistant?: { agent: string; space?: string; greeting?: Value };
+  assistant?: { agent: string; space?: string; greeting?: Value } | false;
+}
+
+/**
+ * **A nested layout** — the frame every route under `prefix` renders inside.
+ *
+ * It is an ordinary view spec with two extra rules: it lives at
+ * `views/<prefix>/_layout.view.json`, and exactly one of its sections is an `outlet`. The
+ * renderer composes the chain outermost → innermost, so a `trips/[tripId]` layout's header
+ * and sub-nav are authored ONCE for the whole family instead of being repeated on every
+ * child page — and because the whole chain shares one runtime scope, a child page reads the
+ * layout's own fetched data as `$data.<layoutSectionId>.…`.
+ */
+export interface ViewLayoutSpec {
+  /** The route prefix this frame owns (`trips/[tripId]`). Its own directory path. */
+  prefix: Route;
+  title?: string;
+  sections: SectionSpec[];
 }
 
 // ── the endpoint-side contract for form-field options ────────────────────────
@@ -1644,7 +1886,7 @@ function section(
  * `{ kind: 'list', query: 'X' }` remains the minimum valid section, and
  * `{ kind: 'list' }` alone is still an error naming the section.
  */
-function listLike(kind: SectionKind, props: Record<string, JsonSchema>): JsonSchema {
+function listLike(kind: SectionKind, props: Record<string, JsonSchema>, required: string[] = []): JsonSchema {
   return section(
     kind,
     {
@@ -1660,7 +1902,21 @@ function listLike(kind: SectionKind, props: Record<string, JsonSchema>): JsonSch
       empty: ref('emptyState'),
       ...props,
     },
-    [],
+    required,
+    { anyOf: [{ required: ['query'] }, { required: ['from'] }] },
+  );
+}
+
+/**
+ * A section that SOURCES rows but has no per-row slot — `chart` today. It gets `listLike`'s
+ * sourcing facts and none of its row machinery, because an `item`/`rowAction` on a plot is a
+ * property that would validate and then mean nothing.
+ */
+function sourced(kind: SectionKind, props: Record<string, JsonSchema>, required: string[] = []): JsonSchema {
+  return section(
+    kind,
+    { query: ENDPOINT, from: B, param: B, input: ARG_MAP, poll: ref('poll'), empty: ref('emptyState'), ...props },
+    required,
     { anyOf: [{ required: ['query'] }, { required: ['from'] }] },
   );
 }
@@ -1715,6 +1971,8 @@ const ELEMENT_DEFS: JsonSchema[] = [
   ),
   element('caption', { text: V, maxLines: { type: 'integer', minimum: 1 }, ...FMT, ...TONED }, ['text']),
   element('markdown', { text: V }, ['text']),
+  element('code', { text: V, language: { type: 'string' } }, ['text']),
+  element('quote', { text: V, cite: V }, ['text']),
 
   // data display
   element('badge', { text: V, shape: { enum: ['badge', 'pill', 'tag'] }, icon: ICON, ...TONED }, ['text']),
@@ -1768,12 +2026,49 @@ const ELEMENT_DEFS: JsonSchema[] = [
   ),
   element('timeline', { items: B, title: V, time: V, detail: V, icon: ICON, ...FMT }, ['items', 'title']),
   element('rating', { value: V, max: { type: 'number' } }, ['value']),
+  element(
+    'chart',
+    {
+      kind: { enum: ['bar', 'line', 'area', 'donut'] },
+      data: B,
+      x: V,
+      y: V,
+      series: V,
+      label: V,
+      height: { type: 'integer', minimum: 40 },
+      ...FMT,
+      ...TONED,
+    },
+    ['kind', 'data', 'x', 'y'],
+  ),
+  element('calendar', { items: B, date: V, title: V, month: V, action: ACTION, ...TONED }, ['items', 'date', 'title']),
+  element(
+    'steps',
+    {
+      items: {
+        type: 'array',
+        minItems: 1,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['label'],
+          properties: { label: V, caption: V },
+        },
+      },
+      current: V,
+    },
+    ['items', 'current'],
+  ),
 
   // media
   element('image', { src: V, alt: V, fit: { enum: ['contain', 'cover'] }, ratio: { enum: ['square', 'wide', 'tall'] } }, [
     'src',
   ]),
   element('icon', { name: ICON, size: { enum: ['sm', 'md', 'lg'] }, tone: TONE }, ['name']),
+  element('avatar', { src: V, name: V, size: { enum: ['sm', 'md', 'lg'] } }, [], {
+    // An avatar with neither a source nor a name renders a grey circle that means nothing.
+    anyOf: [{ required: ['src'] }, { required: ['name'] }],
+  }),
 
   // feedback
   element('banner', { text: V, title: V, icon: ICON, ...TONED }, ['text']),
@@ -1817,6 +2112,40 @@ const ELEMENT_DEFS: JsonSchema[] = [
       invalidates: INVALIDATES,
     },
     ['kind', 'value', 'mutation'],
+  ),
+  element(
+    'tabs',
+    {
+      items: {
+        type: 'array',
+        minItems: 1,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['label'],
+          properties: { label: V, icon: ICON, children: NODES },
+        },
+      },
+      initial: { type: 'integer', minimum: 0 },
+    },
+    ['items'],
+  ),
+  element(
+    'accordion',
+    {
+      items: {
+        type: 'array',
+        minItems: 1,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['label'],
+          properties: { label: V, caption: V, children: NODES },
+        },
+      },
+      multiple: { type: 'boolean' },
+    },
+    ['items'],
   ),
 ];
 
@@ -1979,6 +2308,56 @@ const SECTION_DEFS: JsonSchema[] = [
     itemEndTime: B,
     itemNote: B,
   }),
+
+  // ── v2 collection siblings ─────────────────────────────────────────────────
+  // Each is `list` with a different ARRANGEMENT, so each is built by `listLike` and
+  // inherits sourcing, polling, row actions and the empty state by construction.
+  listLike(
+    'board',
+    {
+      group: B,
+      columns: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['value'],
+          properties: { value: { type: 'string' }, label: V, tone: TONE },
+        },
+      },
+    },
+    ['group'],
+  ),
+  listLike('calendar', { date: B, month: B }, ['date']),
+  sourced(
+    'chart',
+    {
+      charts: {
+        type: 'array',
+        minItems: 1,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['kind', 'x', 'y'],
+          properties: {
+            kind: { enum: ['bar', 'line', 'area', 'donut'] },
+            x: V,
+            y: V,
+            series: V,
+            label: V,
+            height: { type: 'integer', minimum: 40 },
+            ...FMT,
+            ...TONED,
+          },
+        },
+      },
+    },
+    ['charts'],
+  ),
+
+  // The layout seam. No props at all: an outlet is a POSITION, and anything else it could
+  // carry would be a second way to say what the layout's own sections already say.
+  section('outlet', {}),
 ];
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -2306,13 +2685,46 @@ export const SHELL_SPEC_SCHEMA: JsonSchema = {
       },
     },
     placement: { enum: [...SHELL_PLACEMENTS] },
+    // An OVERRIDE of renderer chrome, not a switch: the dock exists on every page whether
+    // or not this key does. `false` is the opt-out; an object names a different agent.
     assistant: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['agent'],
-      // Same slug rule as `chat.agent` — one spelling of "an agent" in the whole contract.
-      properties: { agent: { type: 'string', pattern: AGENT_NAME_PATTERN }, space: { type: 'string' }, greeting: V },
+      oneOf: [
+        { const: false },
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['agent'],
+          // Same slug rule as `chat.agent` — one spelling of "an agent" in the whole contract.
+          properties: {
+            agent: { type: 'string', pattern: AGENT_NAME_PATTERN },
+            space: { type: 'string' },
+            greeting: V,
+          },
+        },
+      ],
     },
+  },
+  $defs: DEFS,
+};
+
+/**
+ * JSON Schema for one nested LAYOUT — what `writeProjectViewLayout` validates.
+ *
+ * Deliberately the page schema minus `route`/`layout` and plus `prefix`: a layout IS a page
+ * that renders around its children, so a second section vocabulary here would be two ways to
+ * say one thing. The exactly-one-`outlet` rule is semantic (`validate.ts`), not structural —
+ * JSON Schema can count occurrences but cannot say *which* section is missing in a message a
+ * model can act on.
+ */
+export const VIEW_LAYOUT_SCHEMA: JsonSchema = {
+  $id: 'lmthing://view-spec/layout',
+  type: 'object',
+  additionalProperties: false,
+  required: ['prefix', 'sections'],
+  properties: {
+    prefix: ref('route'),
+    title: { type: 'string' },
+    sections: { type: 'array', minItems: 1, items: ref('section') },
   },
   $defs: DEFS,
 };
@@ -2355,6 +2767,7 @@ const ajv = new AjvCtor({ allErrors: true, discriminator: true, strict: false, v
 const compiledPage: ValidateFunction = ajv.compile(VIEW_SPEC_SCHEMA);
 const compiledComponent: ValidateFunction = ajv.compile(VIEW_COMPONENT_SCHEMA);
 const compiledShell: ValidateFunction = ajv.compile(SHELL_SPEC_SCHEMA);
+const compiledLayout: ValidateFunction = ajv.compile(VIEW_LAYOUT_SCHEMA);
 
 /** The result of a shape check. `errors` carries ajv's `instancePath` for menu-shaping. */
 export interface ShapeResult {
@@ -2381,4 +2794,10 @@ export function validateViewComponentShape(def: unknown): ShapeResult {
 export function validateShellShape(shell: unknown): ShapeResult {
   const ok = compiledShell(shell) as boolean;
   return { ok, errors: ok ? [] : (compiledShell.errors ?? []) };
+}
+
+/** Validate a nested layout's SHAPE. The one-outlet rule is `validate.ts`'s. */
+export function validateViewLayoutShape(layout: unknown): ShapeResult {
+  const ok = compiledLayout(layout) as boolean;
+  return { ok, errors: ok ? [] : (compiledLayout.errors ?? []) };
 }

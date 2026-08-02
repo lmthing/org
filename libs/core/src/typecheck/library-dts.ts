@@ -362,6 +362,8 @@ export const PROJECT_VIEW_DTS = `/** Write a page as a validated VIEW SPEC (page
 declare function writeProjectView(route: string, spec: unknown): { ok: boolean; error?: string };
 /** Write a reusable element composition with typed props, referenced from any view as { use: '<Name>' }. PascalCase. */
 declare function writeProjectViewComponent(name: string, def: unknown): { ok: boolean; error?: string };
+/** Write a nested LAYOUT (views/<prefix>/_layout.view.json) — the frame every route under <prefix> renders inside. Exactly one section is { kind: 'outlet' }, where the child route draws. */
+declare function writeProjectViewLayout(prefix: string, spec: unknown): { ok: boolean; error?: string };
 /** Write the app shell — nav entries/groups, per-entity subnav, brand, assistant dock. Every target must be a real static route. */
 declare function writeProjectViewShell(shell: unknown): { ok: boolean; error?: string };`;
 
