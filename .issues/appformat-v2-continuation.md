@@ -18,8 +18,8 @@ the single pick-up point; read `APPFORMAT_IMPROVE.md` §7/§8/§10/§11a for the
   generated handlers against a real db through the real worker runtime). `05-plan_endpoints.md`/
   `12-implement_endpoints.md` branch on `declarative: true` — a plain list/get/aggregate/create/update/
   toggle goes through `writeProjectQuery`; a genuinely bespoke endpoint keeps the hand-written path.
-  **Not yet measured:** the ≥85%-declarative ratio against a REAL scenario build (this issue's live-verify
-  step is where that number first gets produced).
+  **Live-verified end-to-end (three runs)** — see "What the live runs found" below for the two real bugs
+  this surfaced (both fixed, both regression-tested) and what's still open.
 - **W9 (partial)** — `09b-plan_slices.ts`: a tested, deterministic slice-grouping algorithm (topological
   table-FK order → endpoint/page depth bucketing → self-contained per-slice payloads). Three
   `checkpoint: true` barriers wired into the EXISTING linear `build_live_project` DAG for real
@@ -29,7 +29,66 @@ the single pick-up point; read `APPFORMAT_IMPROVE.md` §7/§8/§10/§11a for the
   `params: {}` (now extracts real param names + a placeholder value).
 
 Commits (all on `main`, `sdk/org` submodule): W7 IR `1220e734`; W7 wiring+prose `f7e6de3f`; W9 partial
-`cecb8f7a`; W10 partial `0215ce76`.
+`cecb8f7a`; W10 partial `0215ce76`; plan_endpoints template + toggle companion fix `5a87af9b`;
+**critical `writeProjectQuery` fix `470ac8dc`**.
+
+---
+
+## What the live runs found (30-bike-workshop, three consecutive runs) — READ before touching W7 again
+
+**Run 1** (pre-fix): the model's own planning-turn reasoning correctly worked out which endpoints
+should be declarative (it even said so in comments), but the ACTUAL `currentTask.resolve({endpoints})`
+object never carried `declarative`/`kind`/etc. Zero `.query.json` files landed. Root cause:
+`05-plan_endpoints.md`'s FINAL code block — the one a model anchors its output shape on — showed only
+the pre-W7 shape. **Fixed** (`5a87af9b`): rewrote that template to show a declarative AND a bespoke
+endpoint side by side, with an explicit "the fields ride on THIS SAME object" line above it. Also found:
+the model recognized a real toggle-with-timestamp pattern (`collected`, stamp `collected_date` on
+collect) as a case my Tier-1 toggle IR was too narrow to express, and correctly fell back to
+hand-writing it (which then failed for unrelated reasons — see below). **Fixed** (`5a87af9b`): extended
+`kind:'toggle'` with an optional `set` of `{ whenTrue, whenFalse }` companion sources (`'now'` = current
+timestamp) — exactly this pattern, now declarative, with an end-to-end test proving the date is stamped
+on collect and cleared on un-collect.
+
+**Run 2** (template fix applied, toggle fix not yet applied to prompting): `declarative: true` now
+appeared correctly on resolved endpoints. But the model's OWN session log shows it called
+`writeProjectQuery` repeatedly and got rejected **every single time** with "an inline or invented
+Output", concluded the declarative path "is not working", and abandoned it — hand-writing every
+endpoint instead, which then cascaded into dozens of invented-import/type-error repair rounds (worse
+than run 1, 13.7 min vs 8.5 min, two artifacts never repaired by the fix loop). **Root cause — a real
+bug in W7's own wiring, not a prompting issue:** `writeProjectQuery` reused `apiHandlerTypingError`
+(`lint.ts`, the SAME check `writeProjectApi` uses), whose rule requires a hand-written handler's return
+type to reference `emit_types`'s GLOBAL ambient `<Pascal>Output` — but a GENERATED handler deliberately
+declares its own LOCAL `Output` interface (the whole self-containment point). `emit_types` ALWAYS runs
+before `implement_endpoints` in the real pipeline, so this check rejected **100% of real
+`writeProjectQuery` calls**, every time, silently (my own tests never had a `types/contract.d.ts`
+present, so this never surfaced before a live run). **Fixed** (`470ac8dc`): `writeProjectQuery` no
+longer runs `apiHandlerTypingError` (kept `lintApiHandler` + `saveTypecheckError`, still real
+defense-in-depth). A regression test with a real `types/contract.d.ts` fixture reproduces the exact
+live error message and is confirmed to fail on the old code, pass on the fix.
+
+**Run 3** (both fixes applied): `api/customers-list.query.json` landed and its GENERATED handler served
+real data — confirmed in a real browser: `/app/bike-workshop/customers` shows three real seeded
+customers, zero console errors, zero failed network requests. `/app/bike-workshop/` (the dashboard)
+also renders correctly (real computed `Bikes in shop: 3`, `£378.19`) via a hand-written endpoint that
+happened to succeed this run.
+
+**Still open, found by run 3 — NOT a regression, pre-existing:** the collect-toggle checkbox on the
+dashboard does not fire a network request when clicked (its endpoint never landed — the SAME class of
+invented-import errors: `../../types/contract`, `@app/types`, `any`-typed input, missing `export const
+name`, across ALL THREE runs, on the harder cross-table-lookup endpoints (`job-detail`, `dashboard`)
+that Tier-1's IR does not cover and must hand-write). This exact flakiness is the ORIGINAL evidence
+that motivated building W7 in the first place (quoted in APPFORMAT_IMPROVE.md §11a from the pre-W7
+runs) — it has not gotten worse, W7 just doesn't reach it, because these specific endpoints need a
+cross-table join / multi-table aggregate that the closed Tier-1 formula set cannot express.
+
+**The single highest-leverage next step this evidence points at:** widen coverage past Tier 1.
+Run 3's actual declarative ratio was 1-of-7 endpoints — everything else was exactly the
+cross-table-lookup/grouped-aggregate class §7 already scoped as **Tier 2** ("a declarative pipeline
+with a code stage" — `stages: [{ fetch }, { code: '<fn>' }, { compute }]`, where the `code` stage is a
+PURE `(rows, ctx) => rows` function whose types are generated from the IR, so it cannot invent a field
+even though it can do a real join). Tier 2 is specified in APPFORMAT_IMPROVE.md §7 but was NOT built
+this session (only Tier 1: list/get/aggregate/create/update/toggle). Building it is the concrete way to
+shrink how much of a real app still needs the fragile hand-written escape hatch.
 
 ---
 
@@ -91,24 +150,38 @@ tests already use for the API side, extended through the renderer.
 
 ## What is LEFT — ordered
 
-### 1. Take on ONE of the two gaps above, live-verify it against `30-bike-workshop`
+### 1. W7 Tier 2 — a declarative pipeline with a code stage (**highest priority, per live evidence**)
+
+Run 3's actual declarative ratio was 1-of-7 endpoints. Every hand-written endpoint in that run was a
+cross-table lookup or a multi-table aggregate — exactly what §7 scopes as Tier 2: `stages: [{ fetch:
+{where} }, { code: '<fn-name>' }, { compute: {...} }]`, where `{ code: '<name>' }` names a
+`functions/<name>.ts` PURE `(rows, ctx) => rows` whose input/output types are GENERATED from the IR, so
+it can do a real join/lookup but cannot invent a field the Output doesn't declare. This is net-new work
+in `libs/cli/src/app/ir/query.ts` (a new `stages` field on `QueryIr`, alongside today's flat
+`where`/`compute` shape) — building it is the concrete way to shrink how much of a real app still needs
+the fragile hand-written escape hatch, which is where ALL of run 3's flakiness lived.
+
+### 2. Take on ONE of the two engine/architecture gaps above, live-verify it against `30-bike-workshop`
 
 Whichever you tackle first, the acceptance is empirical: run the live scenario (below), and for W9
 confirm a killed-mid-build resume actually skips completed phases; for W10 confirm the new probe would
 have caught (in a deliberately-reintroduced red fixture) the route-precedence and envelope-unwrap
 classes specifically.
 
-### 2. L2 grounding (W10)
+### 3. L2 grounding (W10)
 
 `EntityField.source` exists in the W7 IR (§2.1) but nothing enforces "no source ⇒ fail" yet. This is a
 natural, LOW-RISK extension of `validateEntityIr` (`libs/cli/src/app/ir/entity.ts`) — straightforward to
 add without touching anything else.
 
-### 3. L10/L11 (interaction probes, round-trip) and L12 (promotion)
+### 4. L10/L11 (interaction probes, round-trip) and L12 (promotion)
 
 L12 is blocked on whichever W9 direction you take (promotion needs a real "staged → validated → atomic
 move" unit, which only makes sense once slices actually execute in some real order). L10/L11 are
-independent and can be picked up any time — see §10 in APPFORMAT_IMPROVE.md for their exact shape.
+independent and can be picked up any time — see §10 in APPFORMAT_IMPROVE.md for their exact shape. An
+L10 interaction probe (does every mutation reachable from a view actually fire?) would ALSO have caught
+run 3's dead collect-toggle checkbox mechanically, without needing a browser — worth prioritizing
+alongside Tier 2.
 
 ---
 

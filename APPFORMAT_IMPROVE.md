@@ -534,9 +534,34 @@ and the `api-author`/`automator`/`data-modeler` instructs document both writers.
 
 **Acceptance met (structurally):** 150+ new tests, including full END-TO-END execution of generated
 handlers (list/get/aggregate/create/update/toggle) against a real project db through the actual worker
-runtime (`api/runtime.ts`) — proven correct against real rows, not just well-typed. **Not yet measured:**
-the ≥85%-declarative ratio on a real scenario build (needs a live run through the updated appbuilder,
-next up).
+runtime (`api/runtime.ts`) — proven correct against real rows, not just well-typed.
+
+**Live-verified (Aug 2026, `30-bike-workshop`, three consecutive runs) — including a critical bug
+`writeProjectQuery` shipped with and its fix.** Run 1 (pre-fix): the model never marked any endpoint
+`declarative: true` on the actual resolved plan object — traced to `05-plan_endpoints.md`'s FINAL
+`currentTask.resolve` template (the one a model anchors its output shape on) never showing the
+declarative fields; fixed by rewriting that template to show both shapes side by side. Run 2 (template
+fix applied): `declarative: true` now appeared correctly, but the model's own log shows it called
+`writeProjectQuery` repeatedly and got rejected EVERY time with "an inline or invented Output", then
+gave up on the whole declarative path and hand-wrote everything instead — worse than run 1. Root cause:
+`writeProjectQuery` reused `apiHandlerTypingError` (the hand-written-handler check requiring the return
+type to reference `emit_types`'s GLOBAL ambient `<Pascal>Output`), which is incompatible with a
+GENERATED handler's deliberately self-contained local `Output` — and `emit_types` always runs before
+implementation in the real pipeline, so this rejected 100% of real calls. Fixed by dropping that one
+check from `writeProjectQuery` (kept `lintApiHandler` + `saveTypecheckError`); a regression test with a
+real `types/contract.d.ts` fixture reproduces the exact live error and is confirmed fixed. Run 3
+(both fixes applied): `api/customers-list.query.json` landed and its generated handler served real
+seeded rows — confirmed in a real browser (`/app/bike-workshop/customers`, `/app/bike-workshop/`),
+zero console errors, real computed dashboard stats (`Bikes in shop 3`, `£378.19`). The collect-toggle
+and two cross-table endpoints (job-detail, dashboard) still hand-write and are still flaky under this
+run's model (DeepSeek) — the SAME class of invented-import/type errors across all three runs,
+present since before any of this session's changes (it is the ORIGINAL motivating evidence for W7 in
+the first place) — an orthogonal, pre-existing tier-3 reliability gap, not a regression.
+
+**Not yet measured:** the ≥85%-declarative ratio (this run's actual ratio was 1 declarative / 7 total
+endpoints — most of this app's endpoints are exactly the cross-table-lookup/aggregate class the
+Tier-1 IR does not cover, which is itself informative: widening Tier 2 — a declarative pipeline with a
+named `code` stage, §7 — is probably the highest-leverage next step to raise this ratio for real apps).
 
 ### W8 — Tasklist engine features  ✅ **DONE**
 
