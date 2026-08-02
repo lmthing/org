@@ -1,0 +1,33 @@
+{
+  "extends": "@lmthing/config/tsconfig/react-lib",
+  "compilerOptions": {
+    // Shared `@lmthing/ui` source ships with no build step, so every consumer typechecks
+    // it inside its OWN program (see apps/desktop's tsconfig for the same rationale).
+    // `strict: false` matches every other consumer of that source (libs/ui's own tsconfig,
+    // apps/web, apps/mobile, apps/desktop); `libs/ui`'s own `pnpm typecheck` is the gate on
+    // the libraries. Diverging here would re-report libs/ui's pre-existing findings under
+    // this package's name — noise, not a gate.
+    "strict": false,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@lmthing/ui": ["../../libs/ui/src"],
+      "@lmthing/ui/*": ["../../libs/ui/src/*"],
+      "@lmthing/css/*": ["../../libs/css/src/*"]
+    }
+  },
+  // `vite.config.ts` is deliberately out of the program: it imports `@lmthing/utils/vite`,
+  // which is a `.mjs` with no declarations (every other app leaves it out for that reason).
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", "dist"]
+}

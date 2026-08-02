@@ -1,0 +1,33 @@
+/*
+ * AppHost's stylesheet. Two concerns only:
+ *
+ *  1. Pull in the shared theme (`--lm-*` design tokens, `data-theme`, fonts) and the
+ *     keyframe layer. AppHost renders the shared ViewRenderer, whose `Prim.*` primitives
+ *     are real Tamagui components — Tamagui injects its own CSS, but the COLOUR variables
+ *     it reads are the ones `theme.css` defines. Without this, every token resolves to its
+ *     fallback and the app reads unstyled. Mirrors `apps/web/src/index.css`.
+ *
+ *  2. A base layer so the host page fills the viewport (the renderer's columns are
+ *     `height: 100%`-based). No Tailwind, no utility classes — AppHost's vocabulary is
+ *     closed Tamagui.
+ */
+@import '@lmthing/css/theme.css';
+@import '@lmthing/css/animations.css';
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  * {
+    border-color: var(--border);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans, system-ui, sans-serif);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}

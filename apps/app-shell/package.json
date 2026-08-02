@@ -1,0 +1,32 @@
+{
+  "name": "@lmthing/app-shell",
+  "private": true,
+  "version": "0.0.1",
+  "description": "AppHost — the single prebuilt Vite shell that fetches a project's view-spec payload (GET /api/apps/:id/views) and renders it via the shared ViewRenderer. The project id is a RUNTIME route param (/app/:projectId/...), so ONE build serves every project.",
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev",
+    "build": "vp build",
+    "preview": "vp preview",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@lmthing/css": "workspace:*",
+    "@lmthing/ui": "workspace:*",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@lmthing/config": "workspace:*",
+    "@lmthing/utils": "workspace:*",
+    "@tamagui/web": "2.5.1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.0",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.0",
+    "vite-plus": "latest"
+  }
+}
