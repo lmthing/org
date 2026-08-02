@@ -4,7 +4,7 @@ output:
   route: string
   name: string
   ok: boolean
-dependsOn: [plan_endpoints, plan_tables, emit_types, reconcile_tables]
+dependsOn: [plan_endpoints, plan_tables, emit_types, reconcile_tables, checkpoint_tables]
 forEach: plan_endpoints.endpoints
 role: general
 functions: []

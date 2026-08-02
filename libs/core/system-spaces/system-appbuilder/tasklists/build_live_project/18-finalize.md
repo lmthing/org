@@ -12,7 +12,8 @@ output:
   missing: array
   cannotExpress: array
   errors: array
-dependsOn: [implement_tables, implement_endpoints, smoke_endpoints, check_acceptance, implement_view_components, implement_views, implement_shell, implement_automations, verify, fix, plan_views]
+  sliceCount: number
+dependsOn: [implement_tables, implement_endpoints, smoke_endpoints, check_acceptance, implement_view_components, implement_views, implement_shell, implement_automations, verify, fix, plan_views, checkpoint_ui, plan_slices]
 goal: true
 role: general
 functions: []
@@ -56,7 +57,11 @@ Resolve `ok` ONLY when: the shell wrote, `verify.ok` is true with `built` for al
 gates ran (`viewsValidated && renderSmoked`), at least one table and one page landed, and nothing
 planned is missing. Otherwise resolve `ok: false` and CARRY the residual errors and `missing` so the
 failure is surfaced LOUDLY — a build that finishes with a broken page is a FAIL, not a pass. Nothing
-is ever excluded or stubbed to make it pass. Emit one statement:
+is ever excluded or stubbed to make it pass.
+
+`plan_slices` (in scope) is the ordered vertical-slice grouping (W9, §8) this design WOULD promote in
+— report `plan_slices.sliceCount` as `sliceCount`, purely informational (it never gates `ok`). Emit one
+statement:
 
 ```typescript
 const v = verify as { ok: boolean; built: boolean; routes: string[]; viewsValidated: boolean; renderSmoked: boolean; unavailable: string[]; offending: Array<{ path: string; errors: Array<{ phase: string; message: string }> }> };
@@ -105,5 +110,6 @@ currentTask.resolve({
   missing,
   cannotExpress,
   errors: allErrors,
+  sliceCount: (plan_slices as { sliceCount?: number })?.sliceCount ?? 0,
 });
 ```

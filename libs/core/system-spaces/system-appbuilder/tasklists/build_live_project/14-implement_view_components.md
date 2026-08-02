@@ -3,7 +3,7 @@ id: implement_view_components
 output:
   name: string
   ok: boolean
-dependsOn: [plan_view_components, plan_endpoints, implement_endpoints, emit_types]
+dependsOn: [plan_view_components, plan_endpoints, implement_endpoints, emit_types, checkpoint_endpoints]
 forEach: plan_view_components.components
 role: general
 functions: []
