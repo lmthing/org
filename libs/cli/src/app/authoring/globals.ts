@@ -33,6 +33,9 @@ import {
   topLevelKeys,
 } from './lint.js';
 import { saveTypecheckError } from './save-typecheck.js';
+import { validateEntityIr, compileEntity, type EntityIr, type FactRecord } from '../ir/entity.js';
+import { validateQueryIr, generateQueryHandler, type QueryIr } from '../ir/query.js';
+import { serializeTableSchema } from '../ir/check.js';
 import { SHELL_SPEC_PATH, viewComponentPath, viewLayoutPath, viewSpecPath } from '../view-spec/files.js';
 import {
   formatViewErrors,
@@ -173,6 +176,16 @@ export interface ProjectAuthoringGlobals {
    *  injected until a table already exists, so an agent could not otherwise insert into a
    *  table it just created. */
   writeProjectTable: (name: string, schema: unknown, rows?: unknown[]) => { ok: boolean; error?: string };
+  /** Write `<projectRoot>/model/<name>.entity.json` (W7 — facts, not columns) and COMPILE it straight
+   *  to `<projectRoot>/database/<name>.json` — the declarative counterpart of `writeProjectTable`.
+   *
+   *  You author FACTS (`{ fact, type, values?, to?, currencyField? }`), not a column schema: the
+   *  compiled table is generated, never hand-edited (enforced by `checkGeneratedIr`). Validated
+   *  against every OTHER entity model in the project (a fact key names exactly one column; an enum
+   *  fact's `values` may only ever grow, never drop/rename — "one vocabulary per fact, forever").
+   *  Optional seed `rows`, exactly like `writeProjectTable` (the same reason: `db` is not injected
+   *  until the table exists, so an agent cannot insert into a table it just created). */
+  writeProjectEntity: (name: string, entity: unknown, rows?: unknown[]) => { ok: boolean; error?: string };
   /** Write `<projectRoot>/views/<route>.view.json` (a VIEW SPEC), the one UI-authoring
    *  surface (`system-appbuilder`).
    *
@@ -205,6 +218,15 @@ export interface ProjectAuthoringGlobals {
   /** Write `<projectRoot>/api/<path>/<METHOD>.ts` (a typed API handler) — the
    *  LIVE-project counterpart of the catalog's `writeApi`. */
   writeProjectApi: (route: string, src: string) => { ok: boolean; error?: string };
+  /** Write `<projectRoot>/api/<name>.query.json` (W7 — declarative endpoint) and GENERATE its handler
+   *  straight to `<projectRoot>/api/<route>/<METHOD>.ts` — the declarative counterpart of
+   *  `writeProjectApi`. Most endpoints are projections (`list` `get` `aggregate` `create` `update`
+   *  `toggle`), not programs: the handler is generated FROM this same IR, so it cannot disagree with
+   *  its own contract (no invented field, no `ctx.params`, no import that doesn't exist) — the whole
+   *  class of build-burning repair rounds a hand-written handler risked stops existing. The generated
+   *  handler still passes every gate a hand-written one does (lint, typing, project typecheck); a
+   *  genuinely bespoke endpoint keeps `writeProjectApi`/`api/<name>.handler.ts` as its escape hatch. */
+  writeProjectQuery: (name: string, query: unknown) => { ok: boolean; error?: string };
   /** List the files under `<projectRoot>/<dir>` (e.g. 'database', 'hooks', 'events') — the
    *  read-side twin of the writers. Project-rooted (NOT the space dir), so a delegated
    *  system-space agent can see the PROJECT's contents. Returns `entries: []` for a missing dir. */
@@ -350,6 +372,29 @@ export function createProjectAuthoringGlobals(opts: {
       return { ok: false, error: String(e instanceof Error ? e.message : e) };
     }
     return writeUnder(join('functions', `${name}.ts`), src);
+  }
+
+  /** The full parsed schema of every table the project has (`database/*.json`) — what
+   *  {@link validateQueryIr}/{@link generateQueryHandler} need (column types, enums, relations), read
+   *  SYNCHRONOUSLY like every other check in this module (every writer here is a sync host call, no
+   *  `await`, so an async loader like `loader.ts#loadProjectApp` cannot be used from inside one). */
+  function loadTableSchemas(): Map<string, TableSchema> {
+    const out = new Map<string, TableSchema>();
+    try {
+      const dir = safeResolve(projectRoot, 'database');
+      if (!existsSync(dir)) return out;
+      for (const f of readdirSync(dir)) {
+        if (!f.endsWith('.json')) continue;
+        try {
+          out.set(f.replace(/\.json$/, ''), JSON.parse(readFileSync(join(dir, f), 'utf8')) as TableSchema);
+        } catch {
+          /* a corrupt schema file is not this check's business */
+        }
+      }
+    } catch {
+      /* no database dir — nothing to check against */
+    }
+    return out;
   }
 
   /** The declared columns of every table the project has (`database/*.json`). */
@@ -540,6 +585,96 @@ export function createProjectAuthoringGlobals(opts: {
       }
     }
     return out;
+  }
+
+  /** Read every `model/*.entity.json` in the project — INCLUDING `name`'s own current (pre-write)
+   *  version, when it already exists — into a fact registry (`fact key → { entity, field, type,
+   *  values? }`) plus the set of known entity names. The cross-entity context
+   *  {@link validateEntityIr} needs for its two registry rules: "a fact key names exactly one column"
+   *  (fires when a fact's prior entity/field differs from the one being written — same entity+field is
+   *  NOT a collision, it's a rebuild) and "one vocabulary per fact forever" (fires whenever a prior
+   *  enum's values shrink, INCLUDING a rebuild of the entity's own prior version — which is why this
+   *  does NOT exclude `name`). Malformed/unreadable siblings are skipped (their own write already
+   *  validated them; a stale file here is not this write's problem). */
+  function entityRegistry(name: string): { existingFacts: Map<string, FactRecord>; knownEntities: Set<string> } {
+    const existingFacts = new Map<string, FactRecord>();
+    const knownEntities = new Set<string>([name]);
+    try {
+      const dir = safeResolve(projectRoot, 'model');
+      if (!existsSync(dir)) return { existingFacts, knownEntities };
+      for (const f of readdirSync(dir)) {
+        if (!f.endsWith('.entity.json')) continue;
+        const entityName = f.slice(0, -'.entity.json'.length);
+        knownEntities.add(entityName);
+        try {
+          const ir = JSON.parse(readFileSync(join(dir, f), 'utf8')) as EntityIr;
+          if (!ir?.fields || typeof ir.fields !== 'object') continue;
+          for (const [field, def] of Object.entries(ir.fields)) {
+            if (def && typeof def.fact === 'string') {
+              existingFacts.set(def.fact, { entity: ir.entity ?? entityName, field, type: def.type, values: def.values });
+            }
+          }
+        } catch {
+          /* a corrupt sibling entity file is not this write's business */
+        }
+      }
+    } catch {
+      /* no model dir — nothing to check against */
+    }
+    return { existingFacts, knownEntities };
+  }
+
+  /**
+   * Write an ENTITY MODEL (`model/<name>.entity.json`) and COMPILE it straight to the generated
+   * `database/<name>.json` — the live twin of `writeProjectTable`, but authored as facts instead of a
+   * column schema (W7, §2.1). The compiled table OVERWRITES `database/<name>.json` (never merged —
+   * unlike `writeProjectTable`'s union-merge for hand-authored schemas): the entity model is now the
+   * single source of truth for this table, so a rebuild is a real migration of the same source, not a
+   * second opinion needing reconciliation with what happened to land before. Live column ADDITIONS
+   * still land non-destructively — `onSchemaWrite`'s host-side reconcile diffs declared vs. live
+   * columns and only ever ALTERs in new ones, exactly as it does for `writeProjectTable`.
+   */
+  function writeProjectEntity(
+    name: string,
+    entity: unknown,
+    rows?: unknown[],
+  ): { ok: boolean; error?: string } {
+    try {
+      assertTableName(name);
+      if (!entity || typeof entity !== 'object' || Array.isArray(entity)) {
+        throw new Error(`writeProjectEntity("${name}", …) expects an entity OBJECT — got ${Array.isArray(entity) ? 'an array' : typeof entity}.`);
+      }
+      const declared = (entity as Record<string, unknown>)['entity'];
+      if (typeof declared === 'string' && declared !== name) {
+        throw new Error(
+          `writeProjectEntity("${name}", …): the entity model declares entity "${declared}". Use one ` +
+            `name — drop \`entity\` from the object, or call writeProjectEntity('${declared}', …).`,
+        );
+      }
+      const normalized = { ...(entity as object), entity: name } as EntityIr;
+      const { existingFacts, knownEntities } = entityRegistry(name);
+      const validation = validateEntityIr(normalized, { existingFacts, knownEntities });
+      throwLint(validation.ok ? null : validation.errors.join(' | '));
+
+      if (rows !== undefined && !Array.isArray(rows)) {
+        return { ok: false, error: 'rows must be an array of row objects' };
+      }
+
+      const { schema } = compileEntity(normalized);
+      const entityOut = writeUnder(join('model', `${name}.entity.json`), JSON.stringify(normalized, null, 2) + '\n');
+      if (!entityOut.ok) return entityOut;
+      const tableOut = writeUnder(join('database', `${name}.json`), serializeTableSchema(schema));
+      if (!tableOut.ok) return tableOut;
+      try {
+        onSchemaWrite?.(name, rows && rows.length ? rows : undefined);
+      } catch {
+        /* best-effort — both files already landed */
+      }
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof LintError) throw e;
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
   }
 
   // ── view specs (system-appbuilder) ────────────────────────────────────────
@@ -772,6 +907,69 @@ export function createProjectAuthoringGlobals(opts: {
     return out;
   }
 
+  /**
+   * Write a DECLARATIVE QUERY (`api/<name>.query.json`) and GENERATE its handler straight to
+   * `api/<route>/<METHOD>.ts` — the live twin of `writeProjectApi` for the tier-1 kinds (W7, §7): a
+   * generated handler is written through the SAME lint/typing/typecheck gates a hand-written one faces
+   * (`lintApiHandler`/`apiHandlerTypingError`/`saveTypecheckError`), so a bug in the COMPILER is caught
+   * here exactly like a bug in a hand-written handler would be — this writer is not a trusted bypass.
+   */
+  function writeProjectQuery(name: string, query: unknown): { ok: boolean; error?: string } {
+    let generated: ReturnType<typeof generateQueryHandler>;
+    let target: string;
+    try {
+      if (!SLUG_RE.test(name)) {
+        throw new Error(`query name "${name}" is not a valid kebab-case id (expected /${SLUG_RE.source}/)`);
+      }
+      if (!query || typeof query !== 'object' || Array.isArray(query)) {
+        throw new Error(`writeProjectQuery("${name}", …) expects a query OBJECT — got ${Array.isArray(query) ? 'an array' : typeof query}.`);
+      }
+      const declared = (query as Record<string, unknown>)['name'];
+      if (typeof declared === 'string' && declared !== name) {
+        throw new Error(
+          `writeProjectQuery("${name}", …): the query declares name "${declared}". Use one name — drop ` +
+            `\`name\` from the object, or call writeProjectQuery('${declared}', …).`,
+        );
+      }
+      const normalized = { ...(query as object), name } as QueryIr;
+
+      const tables = loadTableSchemas();
+      const validation = validateQueryIr(normalized, tables);
+      throwLint(validation.ok ? null : validation.errors.join(' | '));
+
+      generated = generateQueryHandler(normalized, tables);
+      target = join('api', ...generated.apiRoute.split('/').slice(0, -1), `${generated.method}.ts`);
+
+      const cols = unknownColumnsIn(generated.source);
+      if (cols) return { ok: false, error: cols };
+      throwLint(lintApiHandler(generated.source, { existingNames: existingApiNames(projectRoot, safeResolve(projectRoot, target)) }));
+      throwLint(apiHandlerTypingError(generated.source, { projectRoot }));
+      throwLint(
+        saveTypecheckError({
+          projectRoot,
+          relPath: `api/${generated.apiRoute}.ts`,
+          src: generated.source,
+          kind: 'api endpoint',
+        }),
+      );
+    } catch (e) {
+      if (e instanceof LintError) throw e;
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+
+    const queryOut = writeUnder(join('api', `${name}.query.json`), JSON.stringify(query, null, 2) + '\n');
+    if (!queryOut.ok) return queryOut;
+    const handlerOut = writeUnder(target, generated.source);
+    if (handlerOut.ok) {
+      try {
+        onAppWrite?.('api', generated.apiRoute);
+      } catch {
+        /* best-effort — both files already landed */
+      }
+    }
+    return handlerOut;
+  }
+
   /** List `<projectRoot>/<dir>` — project-rooted introspection (the read twin of the writers).
    *  A missing dir returns `entries: []` (not an error) so an agent can safely check "what tables
    *  exist?" on a fresh project. `safeResolve` keeps it inside the project (no traversal). */
@@ -834,7 +1032,9 @@ export function createProjectAuthoringGlobals(opts: {
     writeProjectEvent,
     writeProjectFunction,
     writeProjectTable,
+    writeProjectEntity,
     writeProjectApi,
+    writeProjectQuery,
     writeProjectView,
     writeProjectViewLayout,
     writeProjectViewComponent,

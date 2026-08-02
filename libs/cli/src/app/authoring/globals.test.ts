@@ -670,3 +670,123 @@ describe('writeProjectFile — the narrowly-scoped escape hatch', () => {
     expect(g.writeProjectFile('/types/contract.d.ts', 'export type A = 1;').ok).toBe(true); // leading / is stripped, not absolute
   });
 });
+
+// ── W7 declarative IR writers (writeProjectEntity / writeProjectQuery) ────────
+//
+// The live twins of writeProjectTable/writeProjectApi: author FACTS/a QUERY, get a generated
+// database/<name>.json or api/<route>/<METHOD>.ts. Proven through the SAME gates a hand-written
+// artifact faces (lint, typing, project typecheck) — these writers are not a trusted bypass.
+describe('createProjectAuthoringGlobals — writeProjectEntity / writeProjectQuery (W7)', () => {
+  function mkTmp(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'lm-live-project-ir-'));
+    return dir;
+  }
+
+  const JOB_ENTITY = {
+    entity: 'job',
+    title: 'Job',
+    identity: 'id',
+    fields: {
+      id: { fact: 'job.id', type: 'id' },
+      status: { fact: 'job.status', type: 'enum', values: ['quoted', 'in-progress', 'done'] },
+      hours: { fact: 'job.hours', type: 'number' },
+    },
+  };
+
+  it('writeProjectEntity compiles model/<name>.entity.json straight to database/<name>.json and fires onSchemaWrite', () => {
+    const root = mkTmp();
+    const schemaWrites: string[] = [];
+    const g = createProjectAuthoringGlobals({ projectRoot: root, onSchemaWrite: (t) => schemaWrites.push(t) });
+
+    const res = g.writeProjectEntity('job', JOB_ENTITY);
+    expect(res).toEqual({ ok: true });
+    expect(existsSync(join(root, 'model', 'job.entity.json'))).toBe(true);
+    const table = JSON.parse(readFileSync(join(root, 'database', 'job.json'), 'utf8'));
+    expect(table.columns.id).toEqual(expect.objectContaining({ primaryKey: true, generated: 'uuid' }));
+    expect(table.columns.status.enum).toEqual(['quoted', 'in-progress', 'done']);
+    expect(schemaWrites).toEqual(['job']);
+  });
+
+  it('writeProjectEntity rejects an enum rebuild that drops a previously-declared value', () => {
+    const root = mkTmp();
+    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    expect(g.writeProjectEntity('job', JOB_ENTITY).ok).toBe(true);
+
+    const shrunk = { ...JOB_ENTITY, fields: { ...JOB_ENTITY.fields, status: { fact: 'job.status', type: 'enum', values: ['quoted'] } } };
+    expect(() => g.writeProjectEntity('job', shrunk)).toThrow(/DROPPED value/);
+  });
+
+  it('writeProjectEntity rejects a fact key reused on a different entity', () => {
+    const root = mkTmp();
+    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    expect(g.writeProjectEntity('job', JOB_ENTITY).ok).toBe(true);
+
+    const invoice = { entity: 'invoice', title: 'Invoice', identity: 'id', fields: { id: { fact: 'invoice.id', type: 'id' }, state: { fact: 'job.status', type: 'enum', values: ['x'] } } };
+    expect(() => g.writeProjectEntity('invoice', invoice)).toThrow(/previously declared on job\.status/);
+  });
+
+  it('writeProjectQuery generates api/<route>/<METHOD>.ts from a list query.json, and the endpoint actually WORKS end-to-end', async () => {
+    const root = mkTmp();
+    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    expect(g.writeProjectEntity('job', JOB_ENTITY).ok).toBe(true);
+
+    const res = g.writeProjectQuery('jobs-list', {
+      name: 'jobs-list',
+      kind: 'list',
+      entity: 'job',
+      route: 'jobs/list',
+      where: [{ field: 'status', op: '!=', value: 'done' }],
+    });
+    expect(res).toEqual({ ok: true });
+    expect(existsSync(join(root, 'api', 'jobs-list.query.json'))).toBe(true);
+    const handlerPath = join(root, 'api', 'jobs', 'list', 'GET.ts');
+    expect(existsSync(handlerPath)).toBe(true);
+    const source = readFileSync(handlerPath, 'utf8');
+    expect(source).toContain('@generated from api/jobs-list.query.json');
+
+    // End-to-end: this generated handler ACTUALLY RUNS against the real table it was compiled for.
+    const { openProjectDb, schemaToCreateTableSql } = await import('../store.js');
+    const { createApiRuntime } = await import('../api/runtime.js');
+    const schema = JSON.parse(readFileSync(join(root, 'database', 'job.json'), 'utf8'));
+    const project = openProjectDb(join(root, '.data', 'app.db'), { schemas: [{ name: 'job', schema }] });
+    try {
+      project.raw.exec(schemaToCreateTableSql('job', schema));
+      project.db.insert('job', { status: 'quoted', hours: 2 });
+      project.db.insert('job', { status: 'done', hours: 5 });
+      const runtime = createApiRuntime({ projectRoot: root, db: project.async, spawnRunner: () => ({ runId: 'x' }), logError: () => {} });
+      const result = await runtime.handle('GET', '/jobs/list');
+      expect(result.status).toBe(200);
+      const items = (result.body as { items: Array<{ status: string }> }).items;
+      expect(items).toHaveLength(1); // "done" filtered out
+      expect(items[0].status).toBe('quoted');
+    } finally {
+      project.close();
+    }
+  });
+
+  it('writeProjectQuery rejects a where clause on a column the entity does not have', () => {
+    const root = mkTmp();
+    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    expect(g.writeProjectEntity('job', JOB_ENTITY).ok).toBe(true);
+
+    expect(() =>
+      g.writeProjectQuery('jobs-list', {
+        kind: 'list',
+        entity: 'job',
+        route: 'jobs/list',
+        where: [{ field: 'stat', op: '=', value: 'x' }],
+      }),
+    ).toThrow(/no column "stat" on "job"/);
+    expect(existsSync(join(root, 'api', 'jobs-list.query.json'))).toBe(false); // nothing written on a rejected query
+  });
+
+  it('writeProjectQuery rejects an unknown entity, naming the tables that exist', () => {
+    const root = mkTmp();
+    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    expect(g.writeProjectEntity('job', JOB_ENTITY).ok).toBe(true);
+
+    expect(() =>
+      g.writeProjectQuery('bogus-list', { kind: 'list', entity: 'nope', route: 'bogus/list' }),
+    ).toThrow(/no table "nope"/);
+  });
+});
