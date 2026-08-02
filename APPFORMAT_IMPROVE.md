@@ -447,12 +447,40 @@ and the full suite (**3360 passed**) are green; the surviving `views:write` path
 (capability, DTS-fragment, and cross-target render tests). The `org/docs` source-of-truth pass follows in
 the same change.
 
-### W6 — One renderer, zero project build
+### W6 — One renderer, zero project build  *(planned — grounded)*
 
-`AppHost` (renderer + router + client + theme + boundary) prebuilt into `libs/cli/dist/app-shell/`;
-spec apps stop calling `buildProjectPages`; wrapper generation deleted; the pod serves shell + payload.
-**Acceptance:** a spec app has zero build steps; first paint is server-injected; `BUILDER_VERSION`
-no longer gates app UI.
+A new `apps/app-shell` (`@lmthing/app-shell`) Vite SPA — `AppHost` = `ViewRenderer` + the shared
+route matcher + `createViewClient` + theme + `PageErrorBoundary` — built **once** (the project id is a
+runtime route param, so one build serves every project). It fetches the view-spec payload from the
+existing `GET /api/apps/:id/views` and renders it — i.e. web converges onto the **exact transport the
+native app already uses** (`apps/mobile/src/{app-views,AppScreen}.ts`), which is the unification win.
+Because the element vocabulary is closed Tamagui, AppHost needs **no per-project Tailwind compile** —
+only the global `@lmthing/css` theme + the Tamagui config, compiled once in its own build. That is why
+the §11a failure (per-project `tailwindcss/theme` resolution when `LMTHING_ROOT` is outside the
+workspace) disappears: the whole mechanism is gone from the spec-app path.
+
+**Correction to the original sketch, forced by the code:** hand-authored **legacy TSX apps still exist
+on disk** (`.lmthing/tanzania-egypt-trip-2026`, `simple-todo-app`, …). `buildProjectPages`/`pages-serve.ts`
+therefore **cannot be deleted** — W6 is a **branch**, not a removal: `serve.ts` serves the prebuilt shell
+when `readProjectViewSpecs(root).views.length > 0` and the legacy esbuild bundle otherwise (the same
+discriminator native uses), with a per-request fallback + an `LM_APP_SHELL` dark-launch flag so no single
+commit can dark an app.
+
+Ordered, each independently shippable: **(0)** extract the DOM-free route matcher out of
+`app/runtime/router.tsx` into one shared module both `@app/runtime` and AppHost import; **(1)** build
+`apps/app-shell`; **(2)** the `serve.ts` branch (deletion-free, dark-launched); **(3)** live-verify a
+spec app renders with `LMTHING_ROOT` outside the workspace and **no** `.data/pages-*` artifact appears,
+and a legacy app still serves; **(4)** stop emitting wrappers for spec apps, then delete
+`emitViewWrappers`/`renderViewWrapper`; **(5)** branch every remaining `buildProjectPages` caller;
+**(6, blocking)** replace the check pipeline's esbuild "build" phase for spec apps with a
+`renderSpecAppSmoke` (mount every view+layout chain in jsdom against a stub client, assert nothing hits
+`PageErrorBoundary`) — a real new capability, not a dropped guarantee; **(7)** `BUILDER_VERSION` becomes
+moot for spec apps (no per-project cache; the browser always gets the pod's current shell + a fresh
+payload); **(8)** package `apps/app-shell/dist` into the SEA payload following the `apps/web/dist`
+precedent. Full file-by-file plan lives with the implementer.
+**Acceptance:** a spec app serves with zero per-project build artifacts even with `LMTHING_ROOT` outside
+the workspace; a legacy TSX app still serves; the render smoke replaces the build phase's "does it
+actually mount" guarantee; `BUILDER_VERSION` no longer gates spec-app UI.
 
 ### W7 — App IR + declarative API
 
