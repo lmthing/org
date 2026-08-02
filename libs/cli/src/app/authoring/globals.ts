@@ -909,10 +909,19 @@ export function createProjectAuthoringGlobals(opts: {
 
   /**
    * Write a DECLARATIVE QUERY (`api/<name>.query.json`) and GENERATE its handler straight to
-   * `api/<route>/<METHOD>.ts` — the live twin of `writeProjectApi` for the tier-1 kinds (W7, §7): a
-   * generated handler is written through the SAME lint/typing/typecheck gates a hand-written one faces
-   * (`lintApiHandler`/`apiHandlerTypingError`/`saveTypecheckError`), so a bug in the COMPILER is caught
-   * here exactly like a bug in a hand-written handler would be — this writer is not a trusted bypass.
+   * `api/<route>/<METHOD>.ts` — the live twin of `writeProjectApi` for the tier-1 kinds (W7, §7).
+   *
+   * Runs `lintApiHandler` (name/shape existence) and `saveTypecheckError` (the real project
+   * typecheck) — the same defense-in-depth a hand-written handler faces, so a bug in the COMPILER
+   * itself is still caught. Deliberately does NOT run `apiHandlerTypingError`: that check's rule
+   * "the return must reference the contract's GLOBAL AMBIENT `<Pascal>Output`" is written for a
+   * hand-written handler that could otherwise invent a competing shape — exactly the class of bug
+   * that cannot happen here, because the generated `Output` interface and the handler body come
+   * from the SAME IR in the SAME call. Enforcing it anyway made every declarative endpoint reject
+   * outright the moment `emit_types` had already run (which it always has, in the real pipeline) —
+   * found live, 30-bike-workshop: `writeProjectQuery` failed 100% of the time with "an inline or
+   * invented Output", and the model, seeing every declarative attempt bounce, abandoned the whole
+   * path and fell back to hand-writing every endpoint.
    */
   function writeProjectQuery(name: string, query: unknown): { ok: boolean; error?: string } {
     let generated: ReturnType<typeof generateQueryHandler>;
@@ -943,7 +952,6 @@ export function createProjectAuthoringGlobals(opts: {
       const cols = unknownColumnsIn(generated.source);
       if (cols) return { ok: false, error: cols };
       throwLint(lintApiHandler(generated.source, { existingNames: existingApiNames(projectRoot, safeResolve(projectRoot, target)) }));
-      throwLint(apiHandlerTypingError(generated.source, { projectRoot }));
       throwLint(
         saveTypecheckError({
           projectRoot,

@@ -789,4 +789,34 @@ describe('createProjectAuthoringGlobals — writeProjectEntity / writeProjectQue
       g.writeProjectQuery('bogus-list', { kind: 'list', entity: 'nope', route: 'bogus/list' }),
     ).toThrow(/no table "nope"/);
   });
+
+  // Found live (30-bike-workshop, run 207): `emit_types` ALWAYS writes `types/contract.d.ts` with a
+  // GLOBAL AMBIENT `<Pascal>Output` for every planned endpoint before `implement_endpoints` runs — so
+  // in every real appbuilder build, this file exists by the time `writeProjectQuery` is called.
+  // `apiHandlerTypingError` (reused from `writeProjectApi`'s pipeline) rejected the generated handler's
+  // own LOCAL `Output` interface as "an inline or invented Output" every single time, because that
+  // check's rule — the return must reference the AMBIENT `<Pascal>Output` — was written for a
+  // hand-written handler that could invent a competing shape. A generated handler cannot: its `Output`
+  // and its body come from the SAME IR call. The model saw every declarative attempt bounce and
+  // abandoned the whole path. This is the regression test: an ambient contract present, and a
+  // declarative write must still succeed.
+  it('writeProjectQuery succeeds even when types/contract.d.ts already declares this endpoint\'s global Output (the real-pipeline case)', () => {
+    const root = mkTmp();
+    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    expect(g.writeProjectEntity('job', JOB_ENTITY).ok).toBe(true);
+
+    // Mirrors what `09-emit_types.ts` actually writes: a GLOBAL (no export) ambient declaring
+    // `<Pascal>Output`/`<Pascal>Input` for the endpoint BEFORE it is implemented.
+    const contractDts = `
+declare interface JobsListItem { id: string; status: string; hours: number }
+declare interface JobsListOutput { items: JobsListItem[] }
+declare interface JobsListInput { [k: string]: unknown }
+`;
+    mkdirSync(join(root, 'types'), { recursive: true });
+    writeFileSync(join(root, 'types', 'contract.d.ts'), contractDts, 'utf8');
+
+    const res = g.writeProjectQuery('jobs-list', { kind: 'list', entity: 'job', route: 'jobs/list' });
+    expect(res).toEqual({ ok: true });
+    expect(existsSync(join(root, 'api', 'jobs', 'list', 'GET.ts'))).toBe(true);
+  });
 });
