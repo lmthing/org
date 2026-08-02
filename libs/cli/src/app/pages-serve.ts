@@ -142,7 +142,7 @@ export function createPageServeHandler(
         data = await readFile(abs);
       } catch {
         // In-manifest but missing on disk (stale build) — degrade to SPA fallback.
-        await serveIndex(res, outDir, appBase);
+        await serveIndex(res, outDir, appBase, projectId);
         return;
       }
       // Hashed assets are content-addressed → immutable & far-future cacheable.
@@ -169,7 +169,7 @@ export function createPageServeHandler(
     }
 
     // Asset-manifest SPA fallback: not a known asset → the client router owns it.
-    await serveIndex(res, outDir, appBase);
+    await serveIndex(res, outDir, appBase, projectId);
   };
 }
 
@@ -191,9 +191,14 @@ function isAssetRequest(rest: string): boolean {
  *    `/app/` segment to match, so without this override the router sees the full
  *    pathname and renders "No page for /<project>/". Injecting it makes both mounts
  *    work (on `/app` it is the same value the path regex would derive).
+ *  - `window.__APP_PROJECT_ID__` — the project id, the twin escape hatch. On the
+ *    ROOT mount the segment after `/app/` that `projectIdFromLocation` regex-matches
+ *    is absent too, so without this override the host renders "No project id in this
+ *    URL" and the app never loads at its clean URL. Injected on BOTH mounts (harmless
+ *    on `/app`, where it equals the value the path regex would recover).
  * Idempotent — never doubles an existing `<base>`.
  */
-async function serveIndex(res: ServerResponse, outDir: string, appBase: string): Promise<void> {
+async function serveIndex(res: ServerResponse, outDir: string, appBase: string, projectId: string): Promise<void> {
   let html: Buffer;
   try {
     html = await readFile(resolve(outDir, 'index.html'));
@@ -213,7 +218,7 @@ async function serveIndex(res: ServerResponse, outDir: string, appBase: string):
     const appBaseNoSlash = appBase.replace(/\/+$/, '') || '/';
     text = text.replace(
       /<head>/i,
-      `<head>\n    <base href="${appBase}">\n    <script nonce="${nonce}">window.__APP_BASE__ = ${JSON.stringify(appBaseNoSlash)};</script>`,
+      `<head>\n    <base href="${appBase}">\n    <script nonce="${nonce}">window.__APP_BASE__ = ${JSON.stringify(appBaseNoSlash)};window.__APP_PROJECT_ID__ = ${JSON.stringify(projectId)};</script>`,
     );
   }
   res.writeHead(200, {
