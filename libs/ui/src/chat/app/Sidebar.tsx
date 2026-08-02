@@ -4,7 +4,8 @@ import { cn } from '../lib/cn';
 import { useStore } from '../store/store';
 import type { Project, ModelPricing } from '../store/store';
 import { apiGet, apiPost, apiDelete } from './api';
-import { closeActiveSession, resumeSession as resumeLiveSession, startSession } from './session-control';
+import { closeActiveSession, startSession } from './session-control';
+import { useChatNav } from './chat-nav';
 import { AppSidebar, type AppSidebarPage } from '../../elements/nav/app-sidebar';
 import { SurfaceSwitcher, type Surface } from '../../elements/nav/surface-switcher';
 import { crossAppOrigin, projectAppUrl } from '../../lib/app-urls';
@@ -82,9 +83,12 @@ export function Sidebar({ onProjectSettings, className, width, height, collapsib
   const activeSessionId = useStore(s => s.activeSessionId);
   const sessionTitle = useStore(s => s.sessionTitle);
   const setProjects = useStore(s => s.setProjects);
-  const setActiveProjectId = useStore(s => s.setActiveProjectId);
   const sessionCostUsd = useStore(s => s.sessionCostUsd);
   const setPrices = useStore(s => s.setPrices);
+  // Selecting a project or a chat is a NAVIGATION, not a state write — see `chat-nav.tsx`. The
+  // shell turns the new location back into `activeProjectId`/`activeSessionId`, which is why this
+  // component still reads those two above but no longer sets either.
+  const nav = useChatNav();
 
   const [sessions, setSessions] = React.useState<PersistedSessionMeta[]>([]);
   const [spaces, setSpaces] = React.useState<SpaceMeta[]>([]);
@@ -106,18 +110,13 @@ export function Sidebar({ onProjectSettings, className, width, height, collapsib
   }, []);
 
   React.useEffect(() => {
+    // Refresh the list only. Picking a default when none is named is the SHELL's job now
+    // (`ChatShell`, as a replacing redirect to `/chat/<project>`): a sidebar that quietly selected
+    // one here would leave the URL saying `/chat` while the app showed a project.
     apiGet<{ projects: Project[] }>('/api/projects')
-      .then(r => {
-        setProjects(r.projects);
-        // Auto-select a default project if none is active yet (fallback for when
-        // the main.tsx boot fetch fails or runs before the store is ready).
-        if (!useStore.getState().activeProjectId && r.projects.length > 0) {
-          const defaultProject = r.projects.find(p => p.id === 'user') ?? r.projects[0];
-          setActiveProjectId(defaultProject.id);
-        }
-      })
+      .then(r => setProjects(r.projects))
       .catch(() => {});
-  }, [setProjects, setActiveProjectId]);
+  }, [setProjects]);
 
   React.useEffect(() => {
     apiGet<Record<string, ModelPricing>>('/api/prices/azure')
@@ -152,38 +151,50 @@ export function Sidebar({ onProjectSettings, className, width, height, collapsib
     const r = await apiGet<{ projects: Project[] }>('/api/projects');
     setProjects(r.projects);
     const created = r.projects.find(p => p.name === name);
-    if (created) setActiveProjectId(created.id);
+    if (created) nav.openProject(created.id);
   };
 
   const deleteProject = async (id: string) => {
+    // Leave BEFORE deleting, not after. The location is the source of truth for what is on screen,
+    // so a list that no longer contains the project we are still pointed at renders "that project
+    // isn't here" for as long as it takes the navigation to land — a flash of an error for
+    // something the user did on purpose and that worked.
+    if (activeProjectId === id) {
+      const next = projects.find(p => p.id !== id);
+      nav.redirect({ projectId: next?.id ?? null, sessionId: null });
+    }
     await apiDelete(`/api/projects/${id}`);
     const r = await apiGet<{ projects: Project[] }>('/api/projects');
     setProjects(r.projects);
-    if (activeProjectId === id) setActiveProjectId(r.projects[0]?.id ?? null);
   };
 
   const createSession = async () => {
     if (!activeProjectId) return;
     setCreatingSession(true);
     try {
-      await startSession(activeProjectId);
+      const sessionId = await startSession(activeProjectId);
+      nav.openSession(activeProjectId, sessionId);
       loadSessions(activeProjectId);
     } finally { setCreatingSession(false); }
   };
 
-  const resumeSession = async (sessionId: string) => {
+  // Opening a listed chat is a plain navigation — no fetching here. The shell's location effect
+  // resumes it pod-side and attaches the socket, the same way it does for a link someone pasted.
+  const openSession = (sessionId: string) => {
     if (!activeProjectId) return;
-    await resumeLiveSession(activeProjectId, sessionId);
-    loadSessions(activeProjectId);
+    nav.openSession(activeProjectId, sessionId);
   };
 
   const deleteSession = async (sessionId: string) => {
+    // Same ordering as `deleteProject`, plus: drop the socket before the DELETE so nothing is
+    // still driving a conversation the pod is tearing down.
+    if (activeSessionId === sessionId) {
+      closeActiveSession();
+      useStore.getState().setActiveSessionId(null);
+      nav.closeSession();
+    }
     await apiDelete(`/api/sessions/${sessionId}`);
     if (activeProjectId) loadSessions(activeProjectId);
-    if (activeSessionId === sessionId) {
-      useStore.getState().setActiveSessionId(null);
-      closeActiveSession();
-    }
   };
 
   // Clicking a space in chat opens its studio view. Local → relative route on
@@ -224,7 +235,7 @@ export function Sidebar({ onProjectSettings, className, width, height, collapsib
             return (
               <Prim.Row key={s.sessionId} {...({ group: true } as Record<string, unknown>)} gap="$1" alignItems="center">
                 <Prim.Pressable
-                  onClick={() => void resumeSession(s.sessionId)}
+                  onClick={() => openSession(s.sessionId)}
                   overflow="hidden"
                   textOverflow="ellipsis"
                   whiteSpace="nowrap"
@@ -270,7 +281,7 @@ export function Sidebar({ onProjectSettings, className, width, height, collapsib
       spacesDefaultExpanded={false}
       projects={projects}
       activeProjectId={activeProjectId}
-      onSelectProject={setActiveProjectId}
+      onSelectProject={id => nav.openProject(id)}
       onCreateProject={createProject}
       onDeleteProject={deleteProject}
       onProjectSettings={

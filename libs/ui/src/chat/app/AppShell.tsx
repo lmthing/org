@@ -14,6 +14,7 @@ import { getWindowSize, subscribeWindowSize } from '../../platform/dimensions';
 import { setAppTitle } from '../../platform/navigation';
 import { onKeyDown } from '../../platform/keyboard';
 import { startSession } from './session-control';
+import { useChatNav } from './chat-nav';
 import type { Surface } from '../../elements/nav/surface-switcher';
 
 /** Is `target` already an editable element? Guards the bare `/` shortcut below from hijacking a
@@ -31,16 +32,25 @@ interface AppShellProps {
   onSwitchSurface?: (surface: Surface) => void;
   /** Forwarded to `Sidebar` → its `SurfaceSwitcher` footer. */
   surfaceBadges?: Partial<Record<Surface, number>>;
+  /**
+   * Replaces the transcript pane. `ChatShell` passes one when the location names a conversation it
+   * is still opening, or one that does not exist — see `RoutePanes.tsx`. It goes HERE rather than
+   * over the whole shell so the sidebar stays on screen: every one of those states needs the
+   * conversation list to be recoverable.
+   */
+  mainPane?: React.ReactNode;
 }
 
-export function AppShell({ singleSession, onSwitchSurface, surfaceBadges }: AppShellProps) {
+export function AppShell({ singleSession, onSwitchSurface, surfaceBadges, mainPane }: AppShellProps) {
   const devPanelOpen = useStore(s => s.devPanelOpen);
   const sidebarOpen = useStore(s => s.sidebarOpen);
   const setDevPanelOpen = useStore(s => s.setDevPanelOpen);
   const setSidebarOpen = useStore(s => s.setSidebarOpen);
   const activeProjectId = useStore(s => s.activeProjectId);
   const activeSessionId = useStore(s => s.activeSessionId);
+  const sessionTitle = useStore(s => s.sessionTitle);
   const mode = useStore(s => s.mode);
+  const nav = useChatNav();
   const running = useStore(s => Object.values(s.model.nodes).filter(n => n.status === 'running').length);
   const done = useStore(s => s.done);
   const noteUser = useStore(s => s.noteUserMessage);
@@ -75,16 +85,19 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges }: AppS
     return subscribeWindowSize(check);
   }, []);
 
-  // Document title
+  // Document title. Now that a conversation has a URL it also gets its own title: a tab, a
+  // bookmark and a history entry are all labelled by this, and "THING" on every one of them makes
+  // the browser's own history — the thing the back button walks — unreadable.
   React.useEffect(() => {
+    const name = sessionTitle ? `${sessionTitle} · THING` : 'THING';
     setAppTitle(mode === 'replay'
-      ? '⏵ replay · THING'
+      ? `⏵ replay · ${name}`
       : running > 0
-      ? `⟳ ${running} running · THING`
+      ? `⟳ ${running} running · ${name}`
       : done
-      ? '✓ done · THING'
-      : 'THING');
-  }, [running, done, mode]);
+      ? `✓ done · ${name}`
+      : name);
+  }, [running, done, mode, sessionTitle]);
 
   // Alt+I shortcut — developer-only (toggles DevTools), left as-is.
   React.useEffect(() => {
@@ -107,7 +120,8 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges }: AppS
       if (e.altKey && e.key.toLowerCase() === 'n') {
         if (!singleSession && activeProjectId) {
           e.preventDefault();
-          void startSession(activeProjectId);
+          // Navigate to it as well as create it — a new chat is a place you can come Back from.
+          void startSession(activeProjectId).then(id => nav.openSession(activeProjectId, id));
         }
         return;
       }
@@ -120,7 +134,7 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges }: AppS
       }
     };
     return onKeyDown(onKey);
-  }, [singleSession, activeProjectId]);
+  }, [singleSession, activeProjectId, nav]);
 
   const showSidebar = !singleSession;
   const showDevPanel = devPanelOpen;
@@ -193,8 +207,11 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges }: AppS
           </Prim.Pressable>
         )}
 
-        {/* No session selected in project mode */}
-        {showSidebar && !activeSessionId ? (
+        {/* A routed state with no transcript to draw (opening / not found), then the ordinary
+            "nothing open yet" pane, then the conversation itself. */}
+        {mainPane ? (
+          mainPane
+        ) : showSidebar && !activeSessionId ? (
           <NoSessionPane activeProjectId={activeProjectId} sidebarIsDrawer={sidebarAsDrawer} />
         ) : (
           <ChatView

@@ -2,6 +2,7 @@ import React from 'react';
 import * as Prim from '../../elements/primitives/index';
 import { useStore } from '../store/store';
 import { startSession } from './session-control';
+import { useChatNav } from './chat-nav';
 
 interface NoSessionPaneProps {
   /** The project a new chat would be created in; `null` when none is selected yet. */
@@ -29,6 +30,7 @@ interface NoSessionPaneProps {
  */
 export function NoSessionPane({ activeProjectId, sidebarIsDrawer }: NoSessionPaneProps) {
   const setSidebarOpen = useStore(s => s.setSidebarOpen);
+  const nav = useChatNav();
   const [busy, setBusy] = React.useState(false);
   const [failed, setFailed] = React.useState<string | null>(null);
 
@@ -46,7 +48,9 @@ export function NoSessionPane({ activeProjectId, sidebarIsDrawer }: NoSessionPan
     setBusy(true);
     setFailed(null);
     try {
-      await startSession(activeProjectId);
+      const sessionId = await startSession(activeProjectId);
+      // The new chat gets its own history entry, so Back returns here rather than leaving chat.
+      nav.openSession(activeProjectId, sessionId);
     } catch (err) {
       setFailed(err instanceof Error ? err.message : String(err));
     } finally {

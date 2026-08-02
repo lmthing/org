@@ -33,10 +33,12 @@ import { Route as TeamTeamIdIndexRouteImport } from './routes/team/$teamId/index
 import { Route as StudioThingIndexRouteImport } from './routes/studio/thing/index'
 import { Route as StudioProjectIdIndexRouteImport } from './routes/studio/$projectId/index'
 import { Route as ComputerSpacesIndexRouteImport } from './routes/computer/spaces/index'
+import { Route as ChatProjectIdIndexRouteImport } from './routes/chat/$projectId/index'
 import { Route as TeamTeamIdSettingsRouteImport } from './routes/team/$teamId/settings'
 import { Route as TeamTeamIdProjectsRouteImport } from './routes/team/$teamId/projects'
 import { Route as TeamTeamIdMembersRouteImport } from './routes/team/$teamId/members'
 import { Route as TeamTeamIdChannelsRouteImport } from './routes/team/$teamId/channels'
+import { Route as ChatProjectIdSessionIdRouteImport } from './routes/chat/$projectId/$sessionId'
 import { Route as StudioProjectIdAppRouteRouteImport } from './routes/studio/$projectId/app/route'
 import { Route as StudioProjectIdSpaceIdRouteRouteImport } from './routes/studio/$projectId/$spaceId/route'
 import { Route as StudioProjectIdSettingsIndexRouteImport } from './routes/studio/$projectId/settings/index'
@@ -189,6 +191,11 @@ const ComputerSpacesIndexRoute = ComputerSpacesIndexRouteImport.update({
   path: '/spaces/',
   getParentRoute: () => ComputerRouteRoute,
 } as any)
+const ChatProjectIdIndexRoute = ChatProjectIdIndexRouteImport.update({
+  id: '/$projectId/',
+  path: '/$projectId/',
+  getParentRoute: () => ChatRouteRoute,
+} as any)
 const TeamTeamIdSettingsRoute = TeamTeamIdSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -208,6 +215,11 @@ const TeamTeamIdChannelsRoute = TeamTeamIdChannelsRouteImport.update({
   id: '/channels',
   path: '/channels',
   getParentRoute: () => TeamTeamIdRouteRoute,
+} as any)
+const ChatProjectIdSessionIdRoute = ChatProjectIdSessionIdRouteImport.update({
+  id: '/$projectId/$sessionId',
+  path: '/$projectId/$sessionId',
+  getParentRoute: () => ChatRouteRoute,
 } as any)
 const StudioProjectIdAppRouteRoute = StudioProjectIdAppRouteRouteImport.update({
   id: '/app',
@@ -419,10 +431,12 @@ export interface FileRoutesByFullPath {
   '/team/': typeof TeamIndexRoute
   '/studio/$projectId/$spaceId': typeof StudioProjectIdSpaceIdRouteRouteWithChildren
   '/studio/$projectId/app': typeof StudioProjectIdAppRouteRouteWithChildren
+  '/chat/$projectId/$sessionId': typeof ChatProjectIdSessionIdRoute
   '/team/$teamId/channels': typeof TeamTeamIdChannelsRoute
   '/team/$teamId/members': typeof TeamTeamIdMembersRoute
   '/team/$teamId/projects': typeof TeamTeamIdProjectsRoute
   '/team/$teamId/settings': typeof TeamTeamIdSettingsRoute
+  '/chat/$projectId/': typeof ChatProjectIdIndexRoute
   '/computer/spaces/': typeof ComputerSpacesIndexRoute
   '/studio/$projectId/': typeof StudioProjectIdIndexRoute
   '/studio/thing/': typeof StudioThingIndexRoute
@@ -470,10 +484,12 @@ export interface FileRoutesByTo {
   '/home': typeof HomeIndexRoute
   '/studio': typeof StudioIndexRoute
   '/team': typeof TeamIndexRoute
+  '/chat/$projectId/$sessionId': typeof ChatProjectIdSessionIdRoute
   '/team/$teamId/channels': typeof TeamTeamIdChannelsRoute
   '/team/$teamId/members': typeof TeamTeamIdMembersRoute
   '/team/$teamId/projects': typeof TeamTeamIdProjectsRoute
   '/team/$teamId/settings': typeof TeamTeamIdSettingsRoute
+  '/chat/$projectId': typeof ChatProjectIdIndexRoute
   '/computer/spaces': typeof ComputerSpacesIndexRoute
   '/studio/$projectId': typeof StudioProjectIdIndexRoute
   '/studio/thing': typeof StudioThingIndexRoute
@@ -532,10 +548,12 @@ export interface FileRoutesById {
   '/team/': typeof TeamIndexRoute
   '/studio/$projectId/$spaceId': typeof StudioProjectIdSpaceIdRouteRouteWithChildren
   '/studio/$projectId/app': typeof StudioProjectIdAppRouteRouteWithChildren
+  '/chat/$projectId/$sessionId': typeof ChatProjectIdSessionIdRoute
   '/team/$teamId/channels': typeof TeamTeamIdChannelsRoute
   '/team/$teamId/members': typeof TeamTeamIdMembersRoute
   '/team/$teamId/projects': typeof TeamTeamIdProjectsRoute
   '/team/$teamId/settings': typeof TeamTeamIdSettingsRoute
+  '/chat/$projectId/': typeof ChatProjectIdIndexRoute
   '/computer/spaces/': typeof ComputerSpacesIndexRoute
   '/studio/$projectId/': typeof StudioProjectIdIndexRoute
   '/studio/thing/': typeof StudioThingIndexRoute
@@ -595,10 +613,12 @@ export interface FileRouteTypes {
     | '/team/'
     | '/studio/$projectId/$spaceId'
     | '/studio/$projectId/app'
+    | '/chat/$projectId/$sessionId'
     | '/team/$teamId/channels'
     | '/team/$teamId/members'
     | '/team/$teamId/projects'
     | '/team/$teamId/settings'
+    | '/chat/$projectId/'
     | '/computer/spaces/'
     | '/studio/$projectId/'
     | '/studio/thing/'
@@ -646,10 +666,12 @@ export interface FileRouteTypes {
     | '/home'
     | '/studio'
     | '/team'
+    | '/chat/$projectId/$sessionId'
     | '/team/$teamId/channels'
     | '/team/$teamId/members'
     | '/team/$teamId/projects'
     | '/team/$teamId/settings'
+    | '/chat/$projectId'
     | '/computer/spaces'
     | '/studio/$projectId'
     | '/studio/thing'
@@ -707,10 +729,12 @@ export interface FileRouteTypes {
     | '/team/'
     | '/studio/$projectId/$spaceId'
     | '/studio/$projectId/app'
+    | '/chat/$projectId/$sessionId'
     | '/team/$teamId/channels'
     | '/team/$teamId/members'
     | '/team/$teamId/projects'
     | '/team/$teamId/settings'
+    | '/chat/$projectId/'
     | '/computer/spaces/'
     | '/studio/$projectId/'
     | '/studio/thing/'
@@ -927,6 +951,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ComputerSpacesIndexRouteImport
       parentRoute: typeof ComputerRouteRoute
     }
+    '/chat/$projectId/': {
+      id: '/chat/$projectId/'
+      path: '/$projectId'
+      fullPath: '/chat/$projectId/'
+      preLoaderRoute: typeof ChatProjectIdIndexRouteImport
+      parentRoute: typeof ChatRouteRoute
+    }
     '/team/$teamId/settings': {
       id: '/team/$teamId/settings'
       path: '/settings'
@@ -954,6 +985,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/team/$teamId/channels'
       preLoaderRoute: typeof TeamTeamIdChannelsRouteImport
       parentRoute: typeof TeamTeamIdRouteRoute
+    }
+    '/chat/$projectId/$sessionId': {
+      id: '/chat/$projectId/$sessionId'
+      path: '/$projectId/$sessionId'
+      fullPath: '/chat/$projectId/$sessionId'
+      preLoaderRoute: typeof ChatProjectIdSessionIdRouteImport
+      parentRoute: typeof ChatRouteRoute
     }
     '/studio/$projectId/app': {
       id: '/studio/$projectId/app'
@@ -1189,10 +1227,14 @@ const AppsRouteRouteWithChildren = AppsRouteRoute._addFileChildren(
 
 interface ChatRouteRouteChildren {
   ChatIndexRoute: typeof ChatIndexRoute
+  ChatProjectIdSessionIdRoute: typeof ChatProjectIdSessionIdRoute
+  ChatProjectIdIndexRoute: typeof ChatProjectIdIndexRoute
 }
 
 const ChatRouteRouteChildren: ChatRouteRouteChildren = {
   ChatIndexRoute: ChatIndexRoute,
+  ChatProjectIdSessionIdRoute: ChatProjectIdSessionIdRoute,
+  ChatProjectIdIndexRoute: ChatProjectIdIndexRoute,
 }
 
 const ChatRouteRouteWithChildren = ChatRouteRoute._addFileChildren(

@@ -1,11 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { ChatShell } from '@lmthing/ui/chat'
-import '@lmthing/ui/chat/css'
+import { ChatRouteShell } from './-shell'
 
-function ChatPage() {
-  return <ChatShell />
-}
-
+/** `/chat` — no project named yet. The shell resolves the default one and REPLACES this entry. */
 export const Route = createFileRoute('/chat/')({
-  component: ChatPage,
+  component: () => <ChatRouteShell />,
 })
