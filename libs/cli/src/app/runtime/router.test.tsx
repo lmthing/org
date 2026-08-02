@@ -19,7 +19,6 @@ import {
   linkDest,
   clientPath,
   matchRoutes,
-  stripPagesPrefix,
   PageErrorBoundary,
   type RouteEntry,
 } from './router.js';
@@ -138,89 +137,13 @@ describe('navigate → clientPath round-trip', () => {
   });
 });
 
-// ── /pages/ prefix tolerance ──────────────────────────────────────────────────
-// Routes are derived RELATIVE to the project's `pages/` dir, so no real route is
-// ever mounted under `/pages/…`. But the folder is literally `pages/`, so an
-// LLM-authored page routinely links to a sibling as `/pages/park-fees` instead of
-// the route `/park-fees` (live: scenario 06 index page → "No page for
-// /pages/park-fees"). The router tolerates the stray prefix as a fallback.
-describe('stripPagesPrefix', () => {
-  it('drops a leading /pages segment', () => {
-    expect(stripPagesPrefix('/pages/park-fees')).toBe('/park-fees');
-    expect(stripPagesPrefix('/pages/items/abc')).toBe('/items/abc');
-  });
-  it('collapses a bare /pages to /', () => {
-    expect(stripPagesPrefix('/pages')).toBe('/');
-  });
-  it('leaves non-/pages paths untouched', () => {
-    expect(stripPagesPrefix('/park-fees')).toBe('/park-fees');
-    expect(stripPagesPrefix('/')).toBe('/');
-    expect(stripPagesPrefix('/pagesx/y')).toBe('/pagesx/y'); // not the `pages` segment
-  });
-});
-
-describe('matchRoutes /pages/ tolerance', () => {
-  const routes: RouteEntry[] = [
-    { routePath: '/', Component: (() => null) as unknown as RouteEntry['Component'] },
-    { routePath: '/park-fees', Component: (() => null) as unknown as RouteEntry['Component'] },
-    { routePath: '/items/:id', Component: (() => null) as unknown as RouteEntry['Component'] },
-  ];
-
-  it('resolves a stray /pages/ prefix to the real route', () => {
-    expect(matchRoutes(routes, '/pages/park-fees')?.entry.routePath).toBe('/park-fees');
-  });
-  it('resolves a stray /pages/ prefix on a dynamic route (params intact)', () => {
-    const m = matchRoutes(routes, '/pages/items/abc');
-    expect(m?.entry.routePath).toBe('/items/:id');
-    expect(m?.params).toEqual({ id: 'abc' });
-  });
-  it('a literal route still wins over the fallback', () => {
-    expect(matchRoutes(routes, '/park-fees')?.entry.routePath).toBe('/park-fees');
-  });
-  it('still returns null for a genuinely unknown path', () => {
-    expect(matchRoutes(routes, '/pages/nope')).toBeNull();
-    expect(matchRoutes(routes, '/nope')).toBeNull();
-  });
-});
-
-describe('matchRoutes — a static segment beats a parameter, whatever the order', () => {
-  /** The order the `pages/` walk actually produces: `[id]` before `new`. */
-  const routes: RouteEntry[] = [
-    { routePath: '/', Component: (() => null) as unknown as RouteEntry['Component'] },
-    { routePath: '/plants', Component: (() => null) as unknown as RouteEntry['Component'] },
-    { routePath: '/plants/:id', Component: (() => null) as unknown as RouteEntry['Component'] },
-    { routePath: '/plants/new', Component: (() => null) as unknown as RouteEntry['Component'] },
-  ];
-
-  it('does not let /plants/:id swallow /plants/new — the create page was UNREACHABLE', () => {
-    // Found by the render rig: `/plants/new` rendered the DETAIL page, byte-identical screenshot,
-    // even though `plants/new.view.json` is a correct `create` section.
-    const m = matchRoutes(routes, '/plants/new');
-    expect(m?.entry.routePath).toBe('/plants/new');
-    expect(m?.params).toEqual({});
-  });
-
-  it('still matches a real id through the parameter', () => {
-    const m = matchRoutes(routes, '/plants/p1');
-    expect(m?.entry.routePath).toBe('/plants/:id');
-    expect(m?.params).toEqual({ id: 'p1' });
-  });
-
-  it('holds when the static route is declared FIRST too — order must not matter either way', () => {
-    const flipped: RouteEntry[] = [routes[3]!, routes[2]!];
-    expect(matchRoutes(flipped, '/plants/new')?.entry.routePath).toBe('/plants/new');
-    expect(matchRoutes(flipped, '/plants/p1')?.entry.routePath).toBe('/plants/:id');
-  });
-
-  it('prefers the FEWER-parameter route when several match', () => {
-    const table: RouteEntry[] = [
-      { routePath: '/a/:x/:y', Component: (() => null) as unknown as RouteEntry['Component'] },
-      { routePath: '/a/:x/fixed', Component: (() => null) as unknown as RouteEntry['Component'] },
-    ];
-    expect(matchRoutes(table, '/a/1/fixed')?.entry.routePath).toBe('/a/:x/fixed');
-    expect(matchRoutes(table, '/a/1/2')?.entry.routePath).toBe('/a/:x/:y');
-  });
-});
+// ── /pages/ prefix tolerance + static-beats-param ranking ─────────────────────
+// The matcher's pure unit cases (stripPagesPrefix, matchRoutes /pages/ fallback,
+// and the static-segment-beats-parameter ranking) moved to the shared module's
+// own test at `libs/ui/src/view/router.test.ts` when the matcher was extracted
+// out of here — see `libs/ui/src/view/router.ts`. The round-trip case below still
+// exercises matchRoutes through this package's clientPath/toHref, proving the
+// re-export glues together correctly.
 
 // ── Page error boundary ───────────────────────────────────────────────────────
 // Pages are LLM-authored and bound to a live, drifting database, so one will eventually hit a null
