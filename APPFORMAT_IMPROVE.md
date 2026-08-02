@@ -447,7 +447,7 @@ and the full suite (**3360 passed**) are green; the surviving `views:write` path
 (capability, DTS-fragment, and cross-target render tests). The `org/docs` source-of-truth pass follows in
 the same change.
 
-### W6 — One renderer, zero project build  *(planned — grounded)*
+### W6 — One renderer, zero project build  ✅ **DONE**
 
 A new `apps/app-shell` (`@lmthing/app-shell`) Vite SPA — `AppHost` = `ViewRenderer` + the shared
 route matcher + `createViewClient` + theme + `PageErrorBoundary` — built **once** (the project id is a
@@ -466,28 +466,63 @@ when `readProjectViewSpecs(root).views.length > 0` and the legacy esbuild bundle
 discriminator native uses), with a per-request fallback + an `LM_APP_SHELL` dark-launch flag so no single
 commit can dark an app.
 
-Ordered, each independently shippable: **(0)** extract the DOM-free route matcher out of
-`app/runtime/router.tsx` into one shared module both `@app/runtime` and AppHost import; **(1)** build
-`apps/app-shell`; **(2)** the `serve.ts` branch (deletion-free, dark-launched); **(3)** live-verify a
-spec app renders with `LMTHING_ROOT` outside the workspace and **no** `.data/pages-*` artifact appears,
-and a legacy app still serves; **(4)** stop emitting wrappers for spec apps, then delete
-`emitViewWrappers`/`renderViewWrapper`; **(5)** branch every remaining `buildProjectPages` caller;
-**(6, blocking)** replace the check pipeline's esbuild "build" phase for spec apps with a
-`renderSpecAppSmoke` (mount every view+layout chain in jsdom against a stub client, assert nothing hits
-`PageErrorBoundary`) — a real new capability, not a dropped guarantee; **(7)** `BUILDER_VERSION` becomes
-moot for spec apps (no per-project cache; the browser always gets the pod's current shell + a fresh
-payload); **(8)** package `apps/app-shell/dist` into the SEA payload following the `apps/web/dist`
-precedent. Full file-by-file plan lives with the implementer.
-**Acceptance:** a spec app serves with zero per-project build artifacts even with `LMTHING_ROOT` outside
-the workspace; a legacy TSX app still serves; the render smoke replaces the build phase's "does it
-actually mount" guarantee; `BUILDER_VERSION` no longer gates spec-app UI.
+All steps landed: **(0)** the shared route matcher (`@lmthing/ui/view/router`); **(1)** `apps/app-shell`
+(`AppHost`); **(2)** the dark-launched `serve.ts` branch (`serve.ts#branchAppShell`, `LM_APP_SHELL`,
+`resolveAppShellDist`/`scanDistManifest`); **(4)** wrappers deleted — `writeProjectView*` persist ONLY
+the spec JSON; `wrapper.ts`/`emitViewWrappers`/`viewWrapperPath`/`listViewRoutes` removed; **(5)** every
+`buildProjectPages` caller branches on `readProjectViewSpecs(root).views.length`; **(6)**
+`renderSpecAppSmoke` (`view-spec/validate.ts`) replaces the esbuild "build" phase for a spec app in
+`runProjectAppCheck`, mounting every view + layout chain through the real renderer (with the
+all-pages-threw host-failure guard its sibling documents); **(7)** `BUILDER_VERSION` is moot for spec
+apps (the shell branch never touches the per-project cache; legacy apps still use it); **(8)** the
+compute image now `vp build`s `apps/app-shell` and COPYs its dist into the runtime stage
+(`devops/argocd/compute/Dockerfile`) — without this the shell was dark in prod and every app fell back
+to the legacy bundle.
 
-### W7 — App IR + declarative API
+**Acceptance met — live-verified end-to-end (Aug 2026).** The REAL `system-appbuilder` built the
+`30-bike-workshop` app (fresh, from the scenario request); it is served by the prebuilt AppHost with
+**zero per-project build artifacts** (no `.data/pages-dist`), and opens in a real browser rendering
+real data on every route — dashboard stats + waiting list, jobs list, the nested-layout detail page
+with its parts breakdown, correct computed totals (Allez **£182.99**), and the collect toggle
+(server-side flip + cross-query invalidation live-updating the dashboard). Served asset is the single
+app-shell bundle; `handAuthoredPages: []`.
+
+**Two HOST/renderer bugs the live run surfaced — the "blank page over real data" class (§L7/§L9), both
+now fixed with regression tests.** Every build gate passed and the browser still showed empty data,
+because the gates call endpoints **by name** and mount views **without firing effects**, while the
+browser calls **by path** and fetches — so only a live end-to-end run hits them:
+
+1. **Route precedence** (`libs/cli/src/app/api/loader.ts#matchRoute`) — a dynamic `/jobs/:id` shadowed
+   the static `/jobs/list`, routing every list/dashboard request to the detail handler (`id="list"`) →
+   empty. Fixed: static-over-param specificity, most-specific match wins. Affected essentially every
+   generated app (`<entity>/list` always sits beside `<entity>/[id]`).
+2. **`from`-into-own-query envelope unwrap** (`libs/ui/src/view/sections/common.tsx#useSectionSource`)
+   — a list sourced with `from` off a single-record dashboard endpoint (`{ items: [record] }`) resolved
+   `$` against the raw envelope instead of the record, so `from: '$.longest_waiting'` found nothing and
+   the list rendered empty beside a correct stats strip. Fixed: `from` resolves against
+   `extractRecord(query.data)`, the same unwrap `stats`/`detail` use.
+
+These belong in the ladder as a lesson: **L7/L9 only catch what the RENDERER-AGAINST-LIVE-DATA path
+catches, and that path must mirror the browser's by-path routing + effect-firing fetch.** The render
+smoke (`renderSpecAppSmoke`, `renderSmokeViews`) mounts without effects and routes by name, so it is
+blind to both classes; closing that gap (a real by-path, data-fetching render probe) is folded into
+W10.
+
+### W7 — App IR + declarative API  ⬜ **NOT STARTED**
 
 `compile()` / `generate()` / `check()`; `model/*.entity.json`; `api/*.query.json` tiers 1–3; generated
 handlers; derived `invalidates`, `x-options`, `param`; `generate --check`.
 **Acceptance:** ≥85% of endpoints on the scenario corpus are declarative; a hand-edited generated file
 is a hard error.
+
+> **Why this is the next priority.** The live `30-bike-workshop` runs showed a weaker model (DeepSeek)
+> burning most of its retries on exactly the failures W7 makes *unrepresentable*: a handler returning
+> `uncollected_job_count` its own `FrontPageOutput` never declared (many repair rounds on one endpoint);
+> `import ../../types/contract`, `import { query } from '@app/runtime'`, `readProjectTable`, `Request` as
+> a handler param — all invented, all rejected-and-retried. The format already caught them (the app still
+> shipped correct), but at 18–28 min / ~1.7M tokens. A declarative endpoint (`api/<name>.query.json`)
+> with a generated handler cannot disagree with its own contract, so this whole class stops *existing*.
+> Nothing here is blocked; `model/` and the query IR are net-new files beside the existing writers.
 
 ### W8 — Tasklist engine features  ✅ **DONE**
 
@@ -499,22 +534,29 @@ validation, resume pre-population and the two dispatch branches in `libs/core/sr
 snapshot round-trips through `resume` so the pre-checkpoint step does not re-run. Host JSONL journal
 deferred to W9 (its only consumer).
 
-### W9 — The planning + slice pipeline
+### W9 — The planning + slice pipeline  ⬜ **NOT STARTED**
 
 Rewrite `build_live_project` as P1–P5 + per-slice subgraph + transactional promotion + owner-routed
-repair; context budgets per node.
+repair; context budgets per node. The engine features it needs (W8: `subgraph`/`checkpoint`/dynamic
+`forEach`) are done and unused — nothing consumes them yet. `build_live_project` is still the original
+23-node CONTRACT→BUILD→PROVE DAG (`01-read_sources … 18-finalize`).
 **Acceptance:** slice 0 promotes in ≤3 min; killing the run mid-build leaves an openable green app.
 
-### W10 — Gate ladder completion
+### W10 — Gate ladder completion  ⬜ **NOT STARTED**
 
-L2 grounding, L10 interaction probes, L11 round-trip, L12 promotion; G1–G4 from §6.
+L2 grounding, L10 interaction probes, L11 round-trip, L12 promotion; G1–G4 from §6. Of G1–G4, only
+**G2** (native-coverage gate) exists today (from W1). **Add here:** a real **by-path, effect-firing
+render probe** — the two host bugs above (route precedence, `from`-envelope) both passed every existing
+gate because L7/L9 route by name and mount without fetching; a probe that drives the app the way the
+browser does (match by path, fire the query) is the gate that would have caught them.
 **Acceptance:** each gate has a red fixture and a green fixture.
 
 ---
 
 ## 11a. What is built, and what it was proven against
 
-W1–W4 are implemented and on `main`. The evidence, in the order it was produced:
+**Status: W1–W6 and W8 are implemented and on `main`. W7, W9, W10 are not started** (W10 has only G2).
+The evidence, in the order it was produced:
 
 | gate | result |
 |---|---|
@@ -546,6 +588,21 @@ The one thing the live run exposed that is worth recording: with `LMTHING_ROOT` 
 workspace the per-project page build fails to resolve `tailwindcss/theme`. That is the per-project
 esbuild machinery W6 deletes — the spec transport (`/api/apps/:id/views`) served the whole app
 correctly in the same run, which is exactly the argument for W6.
+
+**The W6 live run (Aug 2026) — a full fresh build through the REAL space agent.** The `30-bike-workshop`
+scenario was driven end-to-end against a pod serving the prebuilt AppHost: `system-appbuilder` built the
+app from the request (4 tables, ~8–9 endpoints, 6 views incl. a nested `jobs/[id]` layout), and it was
+opened in a real browser. After the two host/renderer fixes (§W6), every route renders real data —
+dashboard stats (`Bikes in shop 3`, `£378.19`), the waiting list, the full jobs list, the detail page
+with parts, correct computed totals, and a working collect toggle (server flip + invalidation). Served
+with **zero `.data/pages-dist`**; the single app-shell bundle is the served asset.
+
+Two things this run leaves as follow-ups (tracked in `.issues/appformat-v2-continuation.md`):
+- **Assistant-dock WebSocket.** The chat dock opens `ws://…/app/<id>/api/ws?sessionId=…` and it fails to
+  handshake in a bare test pod (`Connection closed before receiving a handshake response`) — the one
+  console error on the page. It is chat-dock realtime chrome, orthogonal to the app's data rendering, and
+  behaves differently behind the gateway; still, "no console errors" is a stated goal, so it needs a look.
+- **The by-path render gate** (folded into W10 above) — the gate that would have caught the two host bugs.
 
 ## 12. Ratchets
 
