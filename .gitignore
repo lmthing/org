@@ -41,3 +41,4 @@ apps/web/.tanstack/
 # Stray tamagui compiler cache written at the workspace root by a tamagui CLI run
 # (the per-app one under apps/desktop/.tamagui IS committed — it is the desktop build input).
 /.tamagui/
+.lmthing*
