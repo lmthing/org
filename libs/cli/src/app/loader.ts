@@ -33,11 +33,13 @@ export interface ProjectApp {
   tables: LoadedTable[];
   /** Whether `<projectRoot>/pages/` exists. */
   hasPages: boolean;
+  /** Whether `<projectRoot>/views/` exists — the spec (viewbuilder) app's pages. */
+  hasViews: boolean;
   /** Whether `<projectRoot>/api/` exists. */
   hasApi: boolean;
   /** Whether `<projectRoot>/hooks/` exists. */
   hasHooks: boolean;
-  /** Whether the project has any app layer at all (`database`|`pages`|`api`|`hooks`). */
+  /** Whether the project has any app layer at all (`database`|`pages`|`views`|`api`|`hooks`). */
   hasApp: boolean;
 }
 
@@ -49,7 +51,7 @@ const JSON_EXT = '.json';
  * Reads every `<projectRoot>/database/<table>.json` into a {@link LoadedTable}
  * (table name = file basename) and runs `validateSchemaSet` (**fail-loud** on a
  * missing description, dup/absent PK, or a dangling FK/relation). Detects the
- * presence of `pages/`/`api/`/`hooks/`. A project with **no `database/`** yields
+ * presence of `pages/`/`views/`/`api/`/`hooks/`. A project with **no `database/`** yields
  * `tables: []` and — combined with no other app dir — `hasApp: false`; it never
  * throws (this is how the spaces-only `system` project loads).
  */
@@ -58,14 +60,15 @@ export async function loadProjectApp(projectRoot: string): Promise<ProjectApp> {
   const tables = loaded ?? [];
   const hasDatabase = loaded !== null;
 
-  const [hasPages, hasApi, hasHooks] = await Promise.all([
+  const [hasPages, hasViews, hasApi, hasHooks] = await Promise.all([
     dirExists(join(projectRoot, 'pages')),
+    dirExists(join(projectRoot, 'views')),
     dirExists(join(projectRoot, 'api')),
     dirExists(join(projectRoot, 'hooks')),
   ]);
 
-  const hasApp = hasDatabase || hasPages || hasApi || hasHooks;
-  return { tables, hasPages, hasApi, hasHooks, hasApp };
+  const hasApp = hasDatabase || hasPages || hasViews || hasApi || hasHooks;
+  return { tables, hasPages, hasViews, hasApi, hasHooks, hasApp };
 }
 
 /**

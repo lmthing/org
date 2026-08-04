@@ -62,6 +62,7 @@ function mockRes(): { res: ServerResponse; captured: Captured } {
 let root: string;
 const APP = 'appA';
 const SPACES_ONLY = 'spacesOnly';
+const SPEC_APP = 'specApp';
 
 const ENDPOINTS: EndpointContract[] = [
   {
@@ -142,6 +143,19 @@ beforeAll(async () => {
 
   // A spaces-only project (no app dirs).
   await mkdir(join(root, SPACES_ONLY, 'spaces'), { recursive: true });
+
+  // A SPEC (viewbuilder) app: pages are `views/*.view.json`, NOT `pages/*.tsx`, and the generated
+  // wrappers are gone — so `hasPages` is false and the routes come from `views/` alone.
+  const specRoot = join(root, SPEC_APP);
+  await mkdir(join(specRoot, 'views', 'trips'), { recursive: true });
+  await mkdir(join(specRoot, 'views', 'settings'), { recursive: true });
+  const view = (title: string) => JSON.stringify({ title, sections: [] });
+  await writeFile(join(specRoot, 'views', 'index.view.json'), view('Home'), 'utf8');
+  await writeFile(join(specRoot, 'views', 'trips.view.json'), view('Trips'), 'utf8');
+  await writeFile(join(specRoot, 'views', 'settings', 'profile.view.json'), view('Profile'), 'utf8');
+  // A DYNAMIC page — served as `/trips/:tripId`, still listed in the manifest (the sidebar is
+  // what filters non-linkable routes, not the pod).
+  await writeFile(join(specRoot, 'views', 'trips', '[tripId].view.json'), view('Trip'), 'utf8');
 });
 
 afterAll(async () => {
@@ -223,6 +237,26 @@ describe('handleAppManifest', () => {
     expect(m.pages).toEqual([]);
     expect(m.endpoints).toEqual([]);
     expect(m.hooks).toEqual([]);
+  });
+
+  // A spec (viewbuilder) app has NO `pages/` dir (its pages are `views/*.view.json`, and the
+  // generated wrappers were dropped). Its pages must still reach the manifest — otherwise the
+  // chat sidebar's APP section is empty for exactly the apps the native renderer can draw.
+  it('lists a spec app’s views/ pages at their served routes (hasApp true, no pages/ dir)', async () => {
+    const { res, captured } = mockRes();
+    await handleAppManifest(manager, root)(mockReq(), res, { projectId: SPEC_APP });
+
+    expect(captured.status).toBe(200);
+    const m = captured.body as { hasApp: boolean; pages: Array<{ routePath: string; file: string }> };
+    expect(m.hasApp).toBe(true);
+    // `index` collapses to `/`, `[tripId]` becomes `:tripId` — the same `viewRoutePath` mapping a
+    // legacy `.tsx` page goes through. Sorted by route.
+    expect(m.pages).toEqual([
+      { routePath: '/', file: 'views/index.view.json' },
+      { routePath: '/settings/profile', file: 'views/settings/profile.view.json' },
+      { routePath: '/trips', file: 'views/trips.view.json' },
+      { routePath: '/trips/:tripId', file: 'views/trips/[tripId].view.json' },
+    ]);
   });
 });
 

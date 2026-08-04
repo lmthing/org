@@ -65,6 +65,13 @@ interface SidebarProps {
   onSwitchSurface?: (surface: Surface) => void;
   /** Forwarded to the footer's `SurfaceSwitcher`. */
   surfaceBadges?: Partial<Record<Surface, number>>;
+  /**
+   * How the host opens an app page from the `APP` section. When provided (the mobile host), a page
+   * row calls this with the active project and the tapped route so the host can render it NATIVELY
+   * (via `@lmthing/ui/view`) instead of opening the pod's `/app/<project>/…` mount in a new tab.
+   * Absent on web, where the rows stay real anchors — see `AppSidebar`'s `onOpenAppPage`.
+   */
+  onOpenAppPage?: (project: { id: string; name: string }, routePath: string) => void;
 }
 
 /** `.bg-muted text-foreground font-medium` / the idle row's hover pair, as prop bags. */
@@ -77,7 +84,7 @@ const SESSION_IDLE = {
   },
 } as const;
 
-export function Sidebar({ onProjectSettings, className, width, height, collapsible = true, onSwitchSurface, surfaceBadges }: SidebarProps) {
+export function Sidebar({ onProjectSettings, className, width, height, collapsible = true, onSwitchSurface, surfaceBadges, onOpenAppPage }: SidebarProps) {
   const projects = useStore(s => s.projects);
   const activeProjectId = useStore(s => s.activeProjectId);
   const activeSessionId = useStore(s => s.activeSessionId);
@@ -293,6 +300,11 @@ export function Sidebar({ onProjectSettings, className, width, height, collapsib
       onSelectSpace={openSpaceInStudio}
       spacesLoading={spacesLoading}
       appPages={appPages}
+      onOpenAppPage={
+        activeProject && onOpenAppPage
+          ? (routePath) => onOpenAppPage({ id: activeProject.id, name: activeProject.name }, routePath)
+          : undefined
+      }
       onNewChat={() => void createSession()}
       newChatBusy={creatingSession}
       conversations={conversations}

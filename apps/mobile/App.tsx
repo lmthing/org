@@ -275,9 +275,10 @@ function HomeShell() {
   // hidden, so it keeps hearing the channel socket — without surfacing the count here, a member on
   // Home had no way at all to learn that somebody had named them.
   const [teamMentions, setTeamMentions] = React.useState(0)
-  // Which project's app is open, if any. State here rather than a route because native has no URL —
-  // the same reason `TeamScreen` owns its rail.
-  const [openApp, setOpenApp] = React.useState<{ id: string; name: string } | null>(null)
+  // Which project's app is open, if any — and, when it was opened from a chat sidebar page, WHICH
+  // page (a served route like `/settings/profile`). State here rather than a route because native
+  // has no URL — the same reason `TeamScreen` owns its rail.
+  const [openApp, setOpenApp] = React.useState<{ id: string; name: string; route?: string } | null>(null)
   const [navOpen, setNavOpen] = React.useState(false)
   // A request to focus a specific team (+ optionally a channel in it) inside `TeamScreen` — a tap
   // on Home's TEAMS/INVITATIONS rows, or a tapped push notification. `TeamScreen` decides whether
@@ -365,6 +366,7 @@ function HomeShell() {
         name={openApp.name}
         onClose={() => setOpenApp(null)}
         getToken={getAccessToken}
+        route={openApp.route}
       />
     )
   }
@@ -421,8 +423,15 @@ function HomeShell() {
         />
       </Prim.Box>
       <Prim.Box flex={1} flexDirection="column" display={tab === 'chat' ? 'flex' : 'none'}>
-        {/* Chat's own drawer carries the switcher in its footer — see the note above. */}
-        <ChatShell onSwitchSurface={switchTo} {...(badges ? { surfaceBadges: badges } : {})} />
+        {/* Chat's own drawer carries the switcher in its footer — see the note above.
+            `onOpenAppPage` is what makes a tap on the sidebar's APP section render the page NATIVELY:
+            the shared sidebar hands back the project + the served route, and this covers the tabs
+            with `AppScreen` on that page — no WebView, and the chat socket behind it stays live. */}
+        <ChatShell
+          onSwitchSurface={switchTo}
+          {...(badges ? { surfaceBadges: badges } : {})}
+          onOpenAppPage={(project, routePath) => setOpenApp({ id: project.id, name: project.name, route: routePath })}
+        />
       </Prim.Box>
       <Prim.Box flex={1} flexDirection="column" display={tab === 'teams' ? 'flex' : 'none'}>
         <TeamScreen

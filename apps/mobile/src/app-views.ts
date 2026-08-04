@@ -137,6 +137,36 @@ export function resolveRoute(views: readonly ViewSpec[], path: string): Resolved
 }
 
 /**
+ * The SERVED route pattern of an authoring route — `index` collapses to `/`, a `[param]` segment
+ * becomes `:param` (`recipes/[id]` → `/recipes/:id`).
+ *
+ * This mirrors `viewRoutePath` in `sdk/org/libs/cli/src/app/view-spec/files.ts`, which is the pod's
+ * single source of truth for that mapping and the grammar the chat sidebar's manifest
+ * (`GET /api/projects/:id/app`) speaks. The native path holds the AUTHORING routes (`ViewSpec.route`,
+ * from `GET /api/apps/:id/views`), so to open the page a sidebar row names we translate each view to
+ * its served pattern and match. Kept tiny and pure so `app-views.test.ts` can pin it against the
+ * server's mapping without a pod.
+ */
+export function servedRoutePath(route: string): string {
+  const segs = route.split('/').filter((s) => s.length > 0)
+  if (segs[segs.length - 1] === 'index') segs.pop()
+  return '/' + segs.map((s) => s.replace(/^\[(.+)\]$/, ':$1')).join('/')
+}
+
+/**
+ * The AUTHORING route whose SERVED pattern equals `servedPath`, or `null` when no view owns it.
+ *
+ * The chat sidebar hands the host a served path (`/`, `/recipes`, `/settings/profile` — always
+ * static, since it drops the dynamic ones). The host's route state is an authoring path, so this is
+ * the one translation between the two grammars. A `null` means the tapped page is not in THIS app's
+ * specs (a stale manifest, a legacy page), and the caller falls back to the app's landing page.
+ */
+export function routeForServedPath(views: readonly ViewSpec[], servedPath: string): string | null {
+  const match = views.find((v) => servedRoutePath(v.route) === servedPath)
+  return match ? match.route : null
+}
+
+/**
  * The page a freshly opened app lands on.
  *
  * The shell's first destination if it declares one (the model said what the app is

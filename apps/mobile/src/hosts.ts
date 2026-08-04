@@ -36,7 +36,11 @@ export const CLOUD_BASE_URL = host(process.env.EXPO_PUBLIC_CLOUD_BASE, 'https://
  * The same reserved `/app/` prefix the team pod uses — the difference is only which pod answers,
  * and that is the whole reason the two bases are separate constants rather than one. `apiBase()`
  * rather than a fourth literal, because the personal pod is the pod this app already talks to.
+ *
+ * `routePath` (a served pattern like `/` or `/settings/profile`) deep-links a specific page. It is
+ * only meaningful on the WebView path — a legacy `appbuilder` app the native renderer cannot draw —
+ * where the reader tapped a specific page in the sidebar and would otherwise land on the index.
  */
-export function appUrl(projectId: string): string {
-  return `${apiBase()}/app/${projectId}/`
+export function appUrl(projectId: string, routePath = '/'): string {
+  return `${apiBase()}/app/${projectId}/${routePath.replace(/^\//, '')}`
 }

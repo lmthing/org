@@ -32,6 +32,9 @@ interface AppShellProps {
   onSwitchSurface?: (surface: Surface) => void;
   /** Forwarded to `Sidebar` → its `SurfaceSwitcher` footer. */
   surfaceBadges?: Partial<Record<Surface, number>>;
+  /** Forwarded to `Sidebar` → its `AppSidebar` — the mobile host that renders app pages natively.
+   *  See `Sidebar`'s `onOpenAppPage` doc comment. */
+  onOpenAppPage?: (project: { id: string; name: string }, routePath: string) => void;
   /**
    * Replaces the transcript pane. `ChatShell` passes one when the location names a conversation it
    * is still opening, or one that does not exist — see `RoutePanes.tsx`. It goes HERE rather than
@@ -41,7 +44,7 @@ interface AppShellProps {
   mainPane?: React.ReactNode;
 }
 
-export function AppShell({ singleSession, onSwitchSurface, surfaceBadges, mainPane }: AppShellProps) {
+export function AppShell({ singleSession, onSwitchSurface, surfaceBadges, onOpenAppPage, mainPane }: AppShellProps) {
   const devPanelOpen = useStore(s => s.devPanelOpen);
   const sidebarOpen = useStore(s => s.sidebarOpen);
   const setDevPanelOpen = useStore(s => s.setDevPanelOpen);
@@ -151,6 +154,7 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges, mainPa
       onProjectSettings={(id, name) => setProjectSettings({ id, name })}
       onSwitchSurface={onSwitchSurface}
       surfaceBadges={surfaceBadges}
+      onOpenAppPage={onOpenAppPage}
       height="100%"
     />
   );
@@ -160,6 +164,7 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges, mainPa
       onProjectSettings={(id, name) => setProjectSettings({ id, name })}
       onSwitchSurface={onSwitchSurface}
       surfaceBadges={surfaceBadges}
+      onOpenAppPage={onOpenAppPage}
       width="100%"
       height="100%"
       collapsible={false}

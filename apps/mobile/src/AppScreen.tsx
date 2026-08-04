@@ -11,6 +11,7 @@ import {
   fetchAppTarget,
   initialRoute,
   resolveRoute,
+  routeForServedPath,
   type AppTarget,
   type AppViews,
 } from './app-views'
@@ -52,6 +53,7 @@ export function AppScreen({
   baseUrl = apiBase(),
   appUrl = personalAppUrl,
   target: decided,
+  route,
 }: {
   projectId: string
   name: string
@@ -61,13 +63,20 @@ export function AppScreen({
   /** The pod's ROOT (not the app base). Defaults to this device's own pod. */
   baseUrl?: string
   /** Where the app's page BUNDLE is served — the WebView path only. */
-  appUrl?: (projectId: string) => string
+  appUrl?: (projectId: string, routePath?: string) => string
   /**
    * A decision this host already made. The team surface has to probe before it opens
    * anything, because it chooses between a rail and this screen; passing the answer in
    * saves a second round trip for the same question.
    */
   target?: AppTarget
+  /**
+   * The page to open ON, as a SERVED route pattern (`/`, `/settings/profile`) — what the chat
+   * sidebar hands over. Omitted when the app is opened from Home (there is no page in mind, so it
+   * lands on its own index). On the native path it selects the initial view; on the WebView path it
+   * deep-links the served URL so a tapped page is not lost to the app's index.
+   */
+  route?: string
 }) {
   const [target, setTarget] = React.useState<AppTarget | null>(decided ?? null)
 
@@ -133,9 +142,11 @@ export function AppScreen({
       {target === null ? (
         <Centered>Opening {name}…</Centered>
       ) : target.kind === 'native' ? (
-        <NativeApp app={target.app} projectId={projectId} baseUrl={baseUrl} getToken={getToken} />
+        <NativeApp app={target.app} projectId={projectId} baseUrl={baseUrl} getToken={getToken} route={route} />
       ) : (
-        <AppView url={appUrl(projectId)} title={name} />
+        // A legacy (appbuilder) app the renderer cannot draw — deep-link the tapped page if one was
+        // named, otherwise the app's index.
+        <AppView url={appUrl(projectId, route)} title={name} />
       )}
     </Prim.Col>
   )
@@ -161,13 +172,22 @@ function NativeApp({
   projectId,
   baseUrl,
   getToken,
+  route,
 }: {
   app: AppViews
   projectId: string
   baseUrl: string
   getToken: () => Promise<string>
+  /** The served route to land on (from the chat sidebar), or undefined to land on the app's own
+   *  landing page. Translated back to an authoring route here — the one grammar seam. */
+  route?: string
 }) {
-  const [path, setPath] = React.useState<string | null>(() => initialRoute(app.views, app.shell))
+  // The page to open on: the sidebar's served route when it names one THIS app owns, else the app's
+  // own landing page. `route` is read once for the initial state — a later in-app `navigate` owns
+  // `path` from then on, so a changing prop must not yank the reader off the page they walked to.
+  const [path, setPath] = React.useState<string | null>(
+    () => (route ? routeForServedPath(app.views, route) : null) ?? initialRoute(app.views, app.shell),
+  )
 
   const client = React.useMemo(
     () =>
