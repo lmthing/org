@@ -329,6 +329,19 @@ export interface AppSidebarProps {
    */
   appPages?: AppSidebarPage[]
 
+  /**
+   * How to open one of `appPages` — the seam that lets the SAME section behave differently per host.
+   *
+   * Absent (the web/default): each row is a real anchor to the pod's `/app/<project>/<route>` mount,
+   * opened in a new tab (`target="_blank"` / `Linking.openURL`), because the app is another mount and
+   * opening it must not take the reader's live chat with it.
+   *
+   * Present (the mobile host): the row calls this instead, and the host renders the page NATIVELY
+   * through `@lmthing/ui/view` — no WebView, no lost chat socket. The host owns the screen because
+   * native has no URL to hold the open page in.
+   */
+  onOpenAppPage?: (routePath: string) => void
+
   /** Chat-only `+ New chat` button (rendered under the dropdown when provided). */
   onNewChat?: () => void
   newChatBusy?: boolean
@@ -540,6 +553,7 @@ export function AppSidebar({
   spacesLoading,
   spacesDefaultExpanded = true,
   appPages,
+  onOpenAppPage,
   onNewChat,
   newChatBusy,
   conversations,
@@ -652,23 +666,37 @@ export function AppSidebar({
             />
             {appExpanded && (
               <Prim.Box {...SECTION_BODY}>
-                {appPages.map((p) => (
-                  // A real anchor, not a `Pressable` + navigate: the app is served from another
-                  // mount (`/app/<project>/…`) and opening it must not take the reader's chat
-                  // with it — `target="_blank"` on web, `Linking.openURL` on native (the `Link`
-                  // primitive's own fork).
-                  <Prim.Link
-                    key={p.routePath}
-                    href={p.href}
-                    target="_blank"
-                    rel="noreferrer"
-                    data-route={p.routePath}
-                    {...ITEM_LINK}
-                    title={`Open ${p.routePath}`}
-                  >
-                    <Prim.Text {...ITEM_LINK_LABEL}>{p.label}</Prim.Text>
-                  </Prim.Link>
-                ))}
+                {appPages.map((p) =>
+                  onOpenAppPage ? (
+                    // A host that can render the page NATIVELY (mobile) takes the route and owns the
+                    // screen — no anchor, no WebView, and the live chat stays mounted underneath.
+                    // A `Pressable`, not a `Link`, so nothing navigates the surface away.
+                    <Prim.Pressable
+                      key={p.routePath}
+                      onClick={() => onOpenAppPage(p.routePath)}
+                      data-route={p.routePath}
+                      {...ITEM_LINK}
+                      title={`Open ${p.routePath}`}
+                    >
+                      <Prim.Text {...ITEM_LINK_LABEL}>{p.label}</Prim.Text>
+                    </Prim.Pressable>
+                  ) : (
+                    // The default: a real anchor, not a `Pressable` + navigate. The app is served
+                    // from another mount (`/app/<project>/…`) and opening it must not take the
+                    // reader's chat with it — `target="_blank"` on web.
+                    <Prim.Link
+                      key={p.routePath}
+                      href={p.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      data-route={p.routePath}
+                      {...ITEM_LINK}
+                      title={`Open ${p.routePath}`}
+                    >
+                      <Prim.Text {...ITEM_LINK_LABEL}>{p.label}</Prim.Text>
+                    </Prim.Link>
+                  ),
+                )}
               </Prim.Box>
             )}
           </Prim.Box>

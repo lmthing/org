@@ -14,7 +14,7 @@
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, waitFor } from '../../test-utils/index';
+import { render, waitFor, fireEvent } from '../../test-utils/index';
 import { useStore } from '../store/store';
 import { pageLabel } from './use-app-pages';
 
@@ -88,6 +88,24 @@ describe('Sidebar — the app pages section', () => {
     const { container, findByText } = render(<Sidebar />);
     await findByText('Spaces');
     await waitFor(() => expect(container.querySelector(SECTION)).toBeNull());
+  });
+
+  // The mobile host passes `onOpenAppPage` so a page renders NATIVELY. The rows are then NOT anchors
+  // (nothing must navigate the surface away from the live chat) — they call the host with the active
+  // project and the tapped route, and the host owns the screen.
+  it('calls onOpenAppPage with the active project and route instead of linking, when the host renders natively', async () => {
+    manifest.current = { hasApp: true, pages: [{ routePath: '/' }, { routePath: '/trips' }] };
+    const onOpenAppPage = vi.fn();
+    const { container, findByText } = render(<Sidebar onOpenAppPage={onOpenAppPage} />);
+
+    await findByText('Home');
+    // No anchors on this path — the app is rendered in-host, not opened as another mount.
+    expect(container.querySelectorAll(`${SECTION} a`).length).toBe(0);
+
+    const trips = container.querySelector(`${SECTION} [data-route="/trips"]`);
+    expect(trips).not.toBeNull();
+    fireEvent.click(trips!);
+    expect(onOpenAppPage).toHaveBeenCalledWith({ id: 'trips', name: 'Trips' }, '/trips');
   });
 });
 

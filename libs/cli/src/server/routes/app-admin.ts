@@ -156,7 +156,7 @@ export function handleAppManifest(manager: AppAdminManager, lmthingRoot: string 
       return;
     }
 
-    const [pages, api, hooks, build] = await Promise.all([
+    const [legacyPages, api, hooks, build] = await Promise.all([
       app.hasPages ? discoverPageRoutes(projectRoot) : Promise.resolve([]),
       app.hasApi
         ? loadEndpoints(manager, lmthingRoot, projectId, projectRoot)
@@ -164,6 +164,15 @@ export function handleAppManifest(manager: AppAdminManager, lmthingRoot: string 
       app.hasHooks ? loadHookSummaries(projectRoot) : Promise.resolve([]),
       pagesBuildInfo(projectRoot),
     ]);
+
+    // A spec (viewbuilder) app's pages live under `views/` as `.view.json`, not `pages/` as `.tsx`
+    // — and since generated page wrappers were dropped (they are served from the prebuilt AppHost),
+    // `hasPages` is false for such an app and `discoverPageRoutes` sees nothing. List them here too,
+    // through the SAME `viewRoutePath` served-route mapping the legacy walk uses, so a spec app's
+    // pages appear in the manifest (and therefore the chat sidebar) exactly as a `pages/` app's do.
+    // The two kinds never coexist, so this concatenation cannot double-count a route.
+    const specPages = app.hasViews ? discoverSpecRoutes(projectRoot) : [];
+    const pages = [...legacyPages, ...specPages].sort((a, b) => a.routePath.localeCompare(b.routePath));
 
     sendJson(res, 200, {
       project: projectId,
@@ -550,6 +559,17 @@ async function discoverPageRoutes(projectRoot: string): Promise<Array<{ routePat
   await walkPages(pagesDir, pagesDir, out, projectRoot);
   out.sort((a, b) => a.routePath.localeCompare(b.routePath));
   return out;
+}
+
+/** The served page routes of a SPEC (viewbuilder) app — every `views/*.view.json` mapped to its
+ *  served pattern via the shared {@link viewRoutePath}, the same mapping `discoverPageRoutes` uses
+ *  for legacy `.tsx` pages, so both kinds of app describe their routes identically. `file` is the
+ *  project-relative spec path (`loadProjectViews` already returns it that way). Read-only. */
+function discoverSpecRoutes(projectRoot: string): Array<{ routePath: string; file: string }> {
+  return loadProjectViews(projectRoot).views.map((view) => ({
+    routePath: viewRoutePath(view.route),
+    file: view.path,
+  }));
 }
 
 async function walkPages(

@@ -10,7 +10,13 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import type { ShellSpec, ViewSpec } from '@lmthing/ui/view'
 
-import { fetchAppTarget, initialRoute, resolveRoute } from './app-views'
+import {
+  fetchAppTarget,
+  initialRoute,
+  resolveRoute,
+  routeForServedPath,
+  servedRoutePath,
+} from './app-views'
 
 const VIEWS = [
   { route: 'index', sections: [] },
@@ -125,6 +131,34 @@ describe('initialRoute', () => {
   it('ignores a nav entry pointing at a page that does not exist', () => {
     const bad = { nav: [{ route: 'ghost' }] } as unknown as ShellSpec
     expect(initialRoute(VIEWS, bad)).toBe('index')
+  })
+})
+
+describe('servedRoutePath', () => {
+  // The mapping MUST agree with the pod's `viewRoutePath` — the sidebar's routes come from there.
+  it('collapses `index` to `/` and brackets to `:param`', () => {
+    expect(servedRoutePath('index')).toBe('/')
+    expect(servedRoutePath('recipes/new')).toBe('/recipes/new')
+    expect(servedRoutePath('recipes/[id]')).toBe('/recipes/:id')
+    expect(servedRoutePath('trips/[tripId]/expenses')).toBe('/trips/:tripId/expenses')
+    expect(servedRoutePath('recipes/index')).toBe('/recipes')
+  })
+})
+
+describe('routeForServedPath', () => {
+  it('maps a served sidebar route back to the authoring route that owns it', () => {
+    expect(routeForServedPath(VIEWS, '/')).toBe('index')
+    expect(routeForServedPath(VIEWS, '/recipes/new')).toBe('recipes/new')
+  })
+
+  it('resolves a dynamic served pattern to its bracketed authoring route', () => {
+    // The sidebar drops dynamic pages, so this is not the live path — but the mapping must still be
+    // the inverse of `servedRoutePath` for every route, not only the static ones.
+    expect(routeForServedPath(VIEWS, '/recipes/:id')).toBe('recipes/[id]')
+  })
+
+  it('returns null when no view owns the route (a stale manifest, a legacy page)', () => {
+    expect(routeForServedPath(VIEWS, '/ghost')).toBeNull()
   })
 })
 
