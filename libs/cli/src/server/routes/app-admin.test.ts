@@ -63,6 +63,7 @@ let root: string;
 const APP = 'appA';
 const SPACES_ONLY = 'spacesOnly';
 const SPEC_APP = 'specApp';
+const MIGRATED_APP = 'migratedApp';
 
 const ENDPOINTS: EndpointContract[] = [
   {
@@ -156,6 +157,17 @@ beforeAll(async () => {
   // A DYNAMIC page — served as `/trips/:tripId`, still listed in the manifest (the sidebar is
   // what filters non-linkable routes, not the pod).
   await writeFile(join(specRoot, 'views', 'trips', '[tripId].view.json'), view('Trip'), 'utf8');
+
+  // A MIGRATED app: a `views/` spec app that ALSO kept its generated `pages/` wrappers (one per
+  // view) from before the builder became spec-only. Both describe the SAME routes.
+  const migratedRoot = join(root, MIGRATED_APP);
+  await mkdir(join(migratedRoot, 'views'), { recursive: true });
+  await mkdir(join(migratedRoot, 'pages'), { recursive: true });
+  await writeFile(join(migratedRoot, 'views', 'index.view.json'), view('Home'), 'utf8');
+  await writeFile(join(migratedRoot, 'views', 'contacts.view.json'), view('Contacts'), 'utf8');
+  // The generated wrappers for the same two routes.
+  await writeFile(join(migratedRoot, 'pages', 'index.tsx'), 'export default () => null;\n', 'utf8');
+  await writeFile(join(migratedRoot, 'pages', 'contacts.tsx'), 'export default () => null;\n', 'utf8');
 });
 
 afterAll(async () => {
@@ -256,6 +268,23 @@ describe('handleAppManifest', () => {
       { routePath: '/settings/profile', file: 'views/settings/profile.view.json' },
       { routePath: '/trips', file: 'views/trips.view.json' },
       { routePath: '/trips/:tripId', file: 'views/trips/[tripId].view.json' },
+    ]);
+  });
+
+  // A migrated app carries a `pages/` wrapper AND a `views/` spec for the same route. Listing both
+  // showed every page twice in the chat sidebar (10 rows for 5 pages, on a device). Each route must
+  // appear exactly once, and the spec (`views/…`) is the entry that survives — the wrapper is a
+  // leftover.
+  it('lists a route ONCE when a migrated app has both a pages/ wrapper and a views/ spec', async () => {
+    const { res, captured } = mockRes();
+    await handleAppManifest(manager, root)(mockReq(), res, { projectId: MIGRATED_APP });
+
+    expect(captured.status).toBe(200);
+    const m = captured.body as { hasApp: boolean; pages: Array<{ routePath: string; file: string }> };
+    expect(m.hasApp).toBe(true);
+    expect(m.pages).toEqual([
+      { routePath: '/', file: 'views/index.view.json' },
+      { routePath: '/contacts', file: 'views/contacts.view.json' },
     ]);
   });
 });

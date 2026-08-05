@@ -72,9 +72,17 @@ export function useAppPages(projectId: string | null): string[] {
         if (cancelled) return;
         setPages(
           manifest?.hasApp
-            ? (manifest.pages ?? [])
-                .map((p) => p.routePath)
-                .filter((routePath) => !DYNAMIC_SEGMENT.test(routePath))
+            ? // Deduped by routePath: a MIGRATED app can carry both a generated `pages/` wrapper and
+              // the `views/` spec for the SAME route, and an older pod that lists both would otherwise
+              // render every page twice in the sidebar. The pod dedupes at the source now, but the
+              // sidebar must not depend on a pod redeploy to stop showing doubles.
+              [
+                ...new Set(
+                  (manifest.pages ?? [])
+                    .map((p) => p.routePath)
+                    .filter((routePath) => !DYNAMIC_SEGMENT.test(routePath)),
+                ),
+              ]
             : [],
         );
       })

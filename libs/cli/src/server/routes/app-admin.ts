@@ -165,14 +165,22 @@ export function handleAppManifest(manager: AppAdminManager, lmthingRoot: string 
       pagesBuildInfo(projectRoot),
     ]);
 
-    // A spec (viewbuilder) app's pages live under `views/` as `.view.json`, not `pages/` as `.tsx`
-    // — and since generated page wrappers were dropped (they are served from the prebuilt AppHost),
-    // `hasPages` is false for such an app and `discoverPageRoutes` sees nothing. List them here too,
-    // through the SAME `viewRoutePath` served-route mapping the legacy walk uses, so a spec app's
-    // pages appear in the manifest (and therefore the chat sidebar) exactly as a `pages/` app's do.
-    // The two kinds never coexist, so this concatenation cannot double-count a route.
+    // A spec (viewbuilder) app's pages live under `views/` as `.view.json`, not `pages/` as `.tsx`,
+    // and are listed through the SAME `viewRoutePath` served-route mapping the legacy walk uses, so a
+    // spec app's pages appear in the manifest (and therefore the chat sidebar) exactly as a `pages/`
+    // app's do.
+    //
+    // A MIGRATED app can have BOTH: a project that predates the spec-only builder keeps its generated
+    // `pages/` wrappers (one per view — the AppHost renders the `views/` spec either way) alongside
+    // the `views/` it now authors. Those describe the SAME route, so a naive concatenation lists every
+    // page twice — which is what the chat sidebar showed. Dedupe by served `routePath`; the spec entry
+    // wins, because a `pages/` entry for a route a view also owns is a leftover generated wrapper, and
+    // `file` should point at the authored spec.
     const specPages = app.hasViews ? discoverSpecRoutes(projectRoot) : [];
-    const pages = [...legacyPages, ...specPages].sort((a, b) => a.routePath.localeCompare(b.routePath));
+    const byRoute = new Map<string, { routePath: string; file: string }>();
+    for (const p of legacyPages) byRoute.set(p.routePath, p);
+    for (const p of specPages) byRoute.set(p.routePath, p);
+    const pages = [...byRoute.values()].sort((a, b) => a.routePath.localeCompare(b.routePath));
 
     sendJson(res, 200, {
       project: projectId,
