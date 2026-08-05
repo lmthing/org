@@ -4,9 +4,9 @@ import * as Clipboard from 'expo-clipboard'
 import * as Prim from '@lmthing/ui/elements/primitives'
 import { AppView } from '@lmthing/ui/elements/content/app-view'
 import { ViewNotFound, ViewRenderer, createViewClient } from '@lmthing/ui/view'
-import { apiBase, onDismiss } from '@lmthing/ui/platform'
+import { onDismiss } from '@lmthing/ui/platform'
 
-import { appUrl as personalAppUrl } from './hosts'
+import { appBase, appUrl as personalAppUrl } from './hosts'
 import {
   fetchAppTarget,
   initialRoute,
@@ -50,7 +50,7 @@ export function AppScreen({
   name,
   onClose,
   getToken,
-  baseUrl = apiBase(),
+  baseUrl = appBase(),
   appUrl = personalAppUrl,
   target: decided,
   route,
@@ -60,7 +60,13 @@ export function AppScreen({
   onClose: () => void
   /** The pod token. Absolute-URL calls, no cookie or same-origin assumption. */
   getToken: () => Promise<string>
-  /** The pod's ROOT (not the app base). Defaults to this device's own pod. */
+  /**
+   * The host that serves this project's app — the base for both the `GET /api/apps/:id/views` probe
+   * and the app's `/app/<project>/api/*` data calls. Defaults to a PERSONAL project's app host
+   * (`appBase()` = `lmthing.app`), the one host whose edge routes `/app/*` into the pod; the team
+   * surface passes its own (`teamBase()`). It is NOT the chat host — `lmthing.chat` routes only
+   * `/api/*` to the pod, so app data calls there hit the static SPA and fail.
+   */
   baseUrl?: string
   /** Where the app's page BUNDLE is served — the WebView path only. */
   appUrl?: (projectId: string, routePath?: string) => string
