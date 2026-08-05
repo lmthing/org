@@ -83,6 +83,24 @@ describe('Sidebar — the app pages section', () => {
     expect(links.map((a) => a.textContent)).toEqual(['Home', 'Trips', 'Settings / Profile']);
   });
 
+  // A migrated app's pod can return the same route twice (a generated `pages/` wrapper AND the
+  // `views/` spec). The sidebar must not render a page twice — a device showed 10 rows for 5 pages.
+  it('renders each route once when the manifest lists a duplicate routePath', async () => {
+    manifest.current = {
+      hasApp: true,
+      pages: [
+        { routePath: '/' },
+        { routePath: '/' },
+        { routePath: '/contacts' },
+        { routePath: '/contacts' },
+      ],
+    };
+    const { container, findByText } = render(<Sidebar />);
+    await findByText('Home');
+    const links = Array.from(container.querySelectorAll(`${SECTION} a`));
+    expect(links.map((a) => a.getAttribute('data-route'))).toEqual(['/', '/contacts']);
+  });
+
   it('renders no section when the app has pages but none is linkable', async () => {
     manifest.current = { hasApp: true, pages: [{ routePath: '/trips/:tripId' }] };
     const { container, findByText } = render(<Sidebar />);
