@@ -39,6 +39,7 @@ export const SYSTEM_SPACE_NAMES = [
   'system-vision',
   'system-files',
   'system-store',
+  'system-social',
   'user-memory',
   'user-thing',
 ] as const;
