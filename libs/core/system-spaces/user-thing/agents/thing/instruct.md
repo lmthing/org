@@ -30,6 +30,7 @@ canDelegateTo:
   - system-engineer/engineer
   - system-appbuilder/automator
   - system-store/finder
+  - system-social/ambassador
   - system-vision/vision
   - system-files/dispatch
   - user-memory/memory
