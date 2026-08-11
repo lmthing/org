@@ -806,9 +806,16 @@ describe('harness — system spaces (todo)', () => {
       systemSpaceDirs: [todoSpace, fsSpace],
     });
     expect(r.error).toBeUndefined();
-    // todoWrite display()s a markdown checklist.
-    expect(r.displays.some((d) => String(d).includes('[x] step one'))).toBe(true);
-    expect(r.displays.some((d) => String(d).includes('[~] step two'))).toBe(true);
+    // todoWrite display()s a structured `checklist` descriptor (rendered with real checkboxes).
+    const checklist = r.displays.find(
+      (d): d is { type: string; props: { items: Array<{ content: string; status: string }> } } =>
+        !!d && typeof d === 'object' && (d as { type?: unknown }).type === 'checklist',
+    );
+    expect(checklist).toBeDefined();
+    expect(checklist!.props.items).toEqual([
+      { content: 'step one', status: 'completed' },
+      { content: 'step two', status: 'in_progress' },
+    ]);
     expect(r.displays).toContain('count=2 first=completed');
   });
 });

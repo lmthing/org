@@ -20,7 +20,7 @@ describe('isRenderableType — the allowlist', () => {
   });
 
   it('accepts the renderer aliases the model cannot write but the host emits', () => {
-    for (const alias of ['fragment', 'h1', 'p', 'span', 'img', 'audio']) {
+    for (const alias of ['fragment', 'h1', 'p', 'span', 'img', 'audio', 'checklist', 'plan', 'tasklist']) {
       expect(isRenderableType(alias)).toBe(true);
     }
   });
@@ -93,6 +93,19 @@ describe('descriptorToText — the plain-text fallback', () => {
     expect(descriptorToText(d('Card', { title: 'Totals' }, ['body']))).toBe('Totals\nbody');
     expect(descriptorToText(d('List', { items: ['a', 'b'] }))).toBe('a\nb');
     expect(descriptorToText(d('KeyValue', { pairs: { Status: 'active' } }))).toBe('Status: active');
+  });
+
+  it('renders a checklist plan as marked lines, not empty', () => {
+    const plan = d('checklist', {
+      title: 'Plan',
+      items: [
+        { content: 'done step', status: 'completed' },
+        { content: 'active step', status: 'in_progress' },
+        { content: 'todo step', status: 'pending' },
+        { content: 'broke step', status: 'failed' },
+      ],
+    });
+    expect(descriptorToText(plan)).toBe('Plan\n[x] done step\n[~] active step\n[ ] todo step\n[✗] broke step');
   });
 
   it('flattens a table to readable rows', () => {

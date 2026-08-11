@@ -228,6 +228,41 @@ export function renderDescriptor(d: unknown, key?: React.Key): React.ReactNode {
         : <Prim.List key={key} color="var(--foreground)" marginLeft="1.25rem" marginVertical="0.25rem" style={{ listStyleType: 'disc' }}>{lis}</Prim.List>;
     }
     case 'listitem': return <Prim.ListItem key={key}>{inView(body)}</Prim.ListItem>;
+    // ── the dynamic plan / checklist (host-emitted by the `todoWrite` system function) ──
+    // Real checkboxes + per-task state so the reader can watch the agent work the plan on
+    // both personal and team pods (this renderer feeds /chat AND the embedded AgentChatPanel).
+    // A Row/View drops text styling on native, so every glyph and label restates its own colour.
+    case 'checklist': case 'plan': case 'tasklist': {
+      const items = (props['items'] as { content?: unknown; status?: unknown }[] | undefined) ?? [];
+      const title = typeof props['title'] === 'string' ? (props['title'] as string) : 'Plan';
+      const done = items.filter((it) => it && it.status === 'completed').length;
+      // pending ☐, in_progress ◐ (spins), completed ☑, failed ✗ — mirrors the ExecutionTree glyphs.
+      const glyph = (s: unknown): string =>
+        s === 'completed' ? '☑' : s === 'in_progress' ? '◐' : s === 'failed' ? '✗' : '☐';
+      const glyphColor = (s: unknown): string =>
+        s === 'completed' ? 'var(--success)'
+          : s === 'in_progress' ? 'var(--agent)'
+          : s === 'failed' ? 'var(--destructive)'
+          : 'var(--muted-foreground)';
+      const textColor = (s: unknown): string =>
+        s === 'completed' ? 'var(--muted-foreground)' : s === 'failed' ? 'var(--destructive)' : 'var(--foreground)';
+      return (
+        <Prim.Box key={key} borderColor="var(--border)" backgroundColor="var(--accent)" borderWidth={1} borderRadius="$radius" padding="$2" marginVertical="0.25rem">
+          <Prim.Row justifyContent="space-between" alignItems="center" marginBottom="0.25rem">
+            <Prim.Text color="var(--foreground)" fontSize="$sm" fontWeight="$semibold">{title}</Prim.Text>
+            <Prim.Text color="var(--muted-foreground)" fontSize="10px">{done}/{items.length}</Prim.Text>
+          </Prim.Row>
+          <Prim.Col gap="$1">
+            {items.map((it, i) => (
+              <Prim.Row key={i} gap="$2" alignItems="flex-start">
+                <Prim.Text className={it && it.status === 'in_progress' ? 'lm-spin' : undefined} color={glyphColor(it?.status)} fontFamily="$mono" fontSize="12px">{glyph(it?.status)}</Prim.Text>
+                <Prim.Text color={textColor(it?.status)} fontSize="12px" {...(it && it.status === 'completed' ? { textDecorationLine: 'line-through' as const } : {})}>{String(it?.content ?? '')}</Prim.Text>
+              </Prim.Row>
+            ))}
+          </Prim.Col>
+        </Prim.Box>
+      );
+    }
     case 'table': {
       const columns = (props['columns'] as string[]) ?? [];
       const rows = (props['rows'] as (string | number)[][]) ?? [];
