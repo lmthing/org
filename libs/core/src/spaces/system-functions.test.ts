@@ -582,13 +582,31 @@ describe('system/todo functions', () => {
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
-  it('todoWrite renders a checklist and todoRead returns it', () => {
+  it('todoWrite renders a checklist descriptor and todoRead returns it', () => {
     const w = evalDump(vm, `todoWrite([{ content: "step one", status: "in_progress" }, { content: "step two", status: "pending" }])`) as { ok: boolean; count: number };
     expect(w.count).toBe(2);
-    // display() was called with a rendered checklist
-    expect(logs.some((l) => l.startsWith('display:') && l.includes('[~] step one'))).toBe(true);
+    // display() was called with a structured `checklist` descriptor (rendered with real
+    // checkboxes by the web/native renderer) — not a markdown string.
+    const shown = logs.find((l) => l.startsWith('display:') && l.includes('"type":"checklist"'));
+    expect(shown).toBeDefined();
+    const descriptor = JSON.parse(shown!.slice('display:'.length)) as {
+      type: string;
+      props: { title: string; items: Array<{ content: string; status: string }> };
+    };
+    expect(descriptor.type).toBe('checklist');
+    expect(descriptor.props.items).toEqual([
+      { content: 'step one', status: 'in_progress' },
+      { content: 'step two', status: 'pending' },
+    ]);
     const r = evalDump(vm, `todoRead()`) as { items: Array<{ content: string; status: string }> };
     expect(r.items.length).toBe(2);
     expect(r.items[0]!.status).toBe('in_progress');
+  });
+
+  it('todoWrite accepts a failed status and coerces an unknown status to pending', () => {
+    evalDump(vm, `todoWrite([{ content: "broke", status: "failed" }, { content: "weird", status: "banana" }])`);
+    const r = evalDump(vm, `todoRead()`) as { items: Array<{ content: string; status: string }> };
+    expect(r.items[0]!.status).toBe('failed');
+    expect(r.items[1]!.status).toBe('pending');
   });
 });

@@ -61,12 +61,51 @@ describe('renderDescriptor — no --lm-* aliases reach a rendered colour', () =>
     ['spinner', { type: 'spinner', props: { label: 'working' } }],
     ['statcard', { type: 'statcard', props: { label: 'L', value: 'V', delta: '+1' } }],
     ['details', { type: 'details', props: { summary: 'more' }, children: ['hidden'] }],
+    ['checklist', { type: 'checklist', props: { title: 'Plan', items: [{ content: 'a', status: 'in_progress' }, { content: 'b', status: 'completed' }, { content: 'c', status: 'failed' }, { content: 'd', status: 'pending' }] } }],
     ['not-a-descriptor fallback', { some: 'raw', object: true }],
   ];
 
   it.each(cases)('%s carries no --lm-* / lm- alias in its rendered output', (_label, descriptor) => {
     const out = html(renderDescriptor(descriptor));
     expect(out).not.toMatch(/lm-(text|muted|accent|green|red|amber|purple|cyan|bg|panel)\b/);
+  });
+});
+
+describe('renderDescriptor - checklist (the dynamic plan)', () => {
+  const plan = {
+    type: 'checklist',
+    props: {
+      title: 'My plan',
+      items: [
+        { content: 'gather sources', status: 'completed' },
+        { content: 'draft the report', status: 'in_progress' },
+        { content: 'publish', status: 'pending' },
+        { content: 'notify team', status: 'failed' },
+      ],
+    },
+  };
+
+  it('renders the title, a done/total count, and every task label', () => {
+    const out = html(renderDescriptor(plan));
+    expect(out).toContain('My plan');
+    expect(out).toContain('1/4'); // one completed of four
+    expect(out).toContain('gather sources');
+    expect(out).toContain('draft the report');
+    expect(out).toContain('publish');
+    expect(out).toContain('notify team');
+  });
+
+  it('renders a checkbox glyph per status', () => {
+    const out = html(renderDescriptor(plan));
+    expect(out).toContain('☑'); // completed
+    expect(out).toContain('◐'); // in_progress
+    expect(out).toContain('☐'); // pending
+    expect(out).toContain('✗'); // failed
+  });
+
+  it('accepts the `plan` and `tasklist` spellings', () => {
+    expect(html(renderDescriptor({ type: 'plan', props: { items: [{ content: 'x', status: 'pending' }] } }))).toContain('x');
+    expect(html(renderDescriptor({ type: 'tasklist', props: { items: [{ content: 'y', status: 'pending' }] } }))).toContain('y');
   });
 });
 

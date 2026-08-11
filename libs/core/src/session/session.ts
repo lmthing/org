@@ -7,6 +7,7 @@ import type { YieldRequest } from '../eval/yield.js';
 import type { VM } from '../sandbox/quickjs.js';
 import { MessageHistory } from '../context/history.js';
 import { ReminderRegistry } from '../context/reminders.js';
+import { openPlanReminder } from './plan-reminders.js';
 import type { MediaPart } from '../eval/stream-types.js';
 import { summarizeHistory } from '../context/summarize.js';
 import { buildSystemBlock, resolvePreloadedKnowledge } from '../context/system-block.js';
@@ -1136,28 +1137,21 @@ export class Session {
   }
 
   /**
-   * Soft per-turn reminder of OPEN todos (status pending/in_progress) from the
-   * model-maintained `.lmthing/todos.json` (written by the todoWrite system function).
-   * Re-surfaced every turn so the agent never loses track — but never blocks termination
-   * (soft). Top-level session only; forks/delegates do not get this. Returns undefined
-   * when there is no list or nothing open.
+   * Soft per-turn reminder of the open plan (any task not `completed`, incl. `failed`) from the
+   * model-maintained `.lmthing/todos.json` (written by the todoWrite system function). Re-surfaced
+   * every turn so the agent keeps the plan's statuses current — but never blocks termination (soft).
+   * Top-level session only; forks/delegates do not get this. The wording/decision logic lives in
+   * `plan-reminders.ts#openPlanReminder` (unit-tested there); this just reads the file. Returns
+   * undefined when there is no list or nothing open.
    */
   private readTodoReminder(): string | undefined {
+    let raw: string | undefined;
     try {
-      const raw = readFileSync(this.opts.spaceDir + '/.lmthing/todos.json', 'utf8');
-      const items = JSON.parse(raw) as Array<{ content?: unknown; status?: unknown }>;
-      const open = (Array.isArray(items) ? items : []).filter(
-        (i) => i && typeof i.content === 'string' && i.status !== 'completed',
-      );
-      if (open.length === 0) return undefined;
-      const lines = open.map((i) => `- [${i.status === 'in_progress' ? '~' : ' '}] ${String(i.content)}`);
-      return [
-        '## Open todos (you added these — keep working through them; mark each done with todoWrite when complete)',
-        ...lines,
-      ].join('\n');
+      raw = readFileSync(this.opts.spaceDir + '/.lmthing/todos.json', 'utf8');
     } catch {
-      return undefined; // no file / unreadable / bad JSON → nothing to remind
+      return undefined; // no file / unreadable → nothing to remind
     }
+    return openPlanReminder(raw);
   }
 
   /**

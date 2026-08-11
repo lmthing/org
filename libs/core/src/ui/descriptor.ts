@@ -44,6 +44,13 @@ export const RENDER_ALIASES: Readonly<Record<string, string>> = {
   img: 'Image',
   image: 'Image',
   audio: 'Audio',
+  // The live plan/checklist a renderer draws with real checkboxes. Host-emitted by the
+  // `todoWrite` system function (`display({ type: 'checklist', props: { items } })`); the
+  // model never hand-writes it, so it has no catalog entry or DTS stub. `plan`/`tasklist`
+  // are accepted spellings of the same thing.
+  checklist: 'Checklist',
+  plan: 'Checklist',
+  tasklist: 'Checklist',
 };
 
 /**
@@ -150,8 +157,13 @@ const BLOCK_TYPES = new Set([
   'heading', 'h1', 'h2', 'h3', 'h4', 'paragraph', 'p', 'stack', 'card', 'panel',
   'callout', 'alert', 'banner', 'quote', 'codeblock', 'markdown', 'list',
   'orderedlist', 'listitem', 'table', 'keyvalue', 'timeline', 'details',
-  'divider', 'statcard', 'progressbar', 'columns',
+  'divider', 'statcard', 'progressbar', 'columns', 'checklist', 'plan', 'tasklist',
 ]);
+
+/** `[ ] `/`[~] `/`[x] `/`[✗] ` prefix for a checklist item's status, in a plain-text fallback. */
+function checklistMark(status: unknown): string {
+  return status === 'completed' ? '[x] ' : status === 'in_progress' ? '[~] ' : status === 'failed' ? '[✗] ' : '[ ] ';
+}
 
 function collectText(value: unknown): string {
   if (value === null || value === undefined || typeof value === 'boolean') return '';
@@ -166,7 +178,26 @@ function collectText(value: unknown): string {
     const v = props[key];
     if (typeof v === 'string' && v) parts.push(v);
   }
-  if (Array.isArray(props['items'])) parts.push(props['items'].map(collectText).join('\n'));
+  if (Array.isArray(props['items'])) {
+    // A checklist item is a plain `{ content, status }` object, not a descriptor, so
+    // `collectText` alone would drop it — render each as a marked line instead.
+    const items = props['items'] as unknown[];
+    const asChecklist = items.every(
+      (it) => it && typeof it === 'object' && typeof (it as { content?: unknown }).content === 'string',
+    );
+    if (items.length > 0 && asChecklist) {
+      parts.push(
+        items
+          .map((it) => {
+            const i = it as { content: string; status?: unknown };
+            return `${checklistMark(i.status)}${i.content}`;
+          })
+          .join('\n'),
+      );
+    } else {
+      parts.push(items.map(collectText).join('\n'));
+    }
+  }
   if (Array.isArray(props['columns'])) parts.push((props['columns'] as unknown[]).map(collectText).join(' | '));
   if (Array.isArray(props['rows'])) {
     parts.push(
