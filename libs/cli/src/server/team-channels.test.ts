@@ -1598,3 +1598,45 @@ describe('THING answering with JSX — content that survives an unwrap', () => {
     expect(reply.text).toBe('just some words');
   });
 });
+
+describe('THING access mode — who may invoke THING in a channel', () => {
+  const EDITOR = { ...VIEWER, 'x-user-id': 'u9', 'x-user-email': 'ed@example.com', 'x-lmthing-role': 'editor' };
+
+  it('lets a viewer invoke THING when the channel has no access mode (the default)', async () => {
+    const { manager, runs } = mkManager('hi');
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing hello' }, VIEWER),
+      mkRes(), { channelId: 'general' }, {} as any,
+    );
+    await settle();
+    expect(runs).toHaveLength(1);
+  });
+
+  it("declines a viewer's invocation in an editors-only channel, with a system notice, and does NOT run THING", async () => {
+    await patchChannel(root, 'general', { thingAccess: 'editors' });
+    const { manager, runs } = mkManager('hi');
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing hello' }, VIEWER),
+      mkRes(), { channelId: 'general' }, {} as any,
+    );
+    await settle();
+
+    // THING never ran for the viewer.
+    expect(runs).toHaveLength(0);
+    // The viewer's message still stands, and a system notice explains the silence.
+    const { messages } = await readMessages(root, 'general');
+    expect(messages.map((m) => m.kind)).toEqual(['user', 'system']);
+    expect(messages[1]!.text).toBe('Only editors can ask THING in this channel.');
+  });
+
+  it('still lets an editor invoke THING in an editors-only channel', async () => {
+    await patchChannel(root, 'general', { thingAccess: 'editors' });
+    const { manager, runs } = mkManager('hi');
+    await handlePostMessage(manager, root)(
+      mkReq('POST', '/api/team/channels/general/messages', { text: '@thing hello' }, EDITOR),
+      mkRes(), { channelId: 'general' }, {} as any,
+    );
+    await settle();
+    expect(runs).toHaveLength(1);
+  });
+});

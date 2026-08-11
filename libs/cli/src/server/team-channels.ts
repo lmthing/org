@@ -65,6 +65,15 @@ export interface Channel {
    * and a channel only records that it is worth having open here.
    */
   apps?: string[];
+  /**
+   * Who may invoke THING in this channel. Absent ⇒ `'all'` (every channel written
+   * before access modes existed reads this way): any member can tag `@thing`.
+   * `'editors'` restricts invocation to editors — a viewer's `@thing` is declined
+   * with a system notice while they can still talk here. This gates INVOCATION
+   * only; it never changes who can read or post ordinary messages. The decision
+   * is {@link import('./team-guard.js').canInvokeThing}.
+   */
+  thingAccess?: 'all' | 'editors';
 }
 
 /** A collapsible group of channels in the sidebar. */
@@ -357,7 +366,12 @@ export async function createChannel(
 export async function patchChannel(
   root: string,
   channelId: string,
-  patch: { name?: string; categoryId?: string | null; apps?: string[] },
+  patch: {
+    name?: string;
+    categoryId?: string | null;
+    apps?: string[];
+    thingAccess?: 'all' | 'editors';
+  },
 ): Promise<Channel> {
   const channels = await ensureDefaultChannel(root);
   const channel = channels.find((c) => c.id === channelId);
@@ -379,6 +393,12 @@ export async function patchChannel(
     const apps = patch.apps.filter((id) => typeof id === 'string' && id && !seen.has(id) && seen.add(id));
     if (apps.length) channel.apps = apps;
     else delete channel.apps;
+  }
+  if (patch.thingAccess !== undefined) {
+    // 'all' is the default, stored as ABSENCE so a record stays clean and a
+    // channel opened up again is indistinguishable from one that never restricted.
+    if (patch.thingAccess === 'editors') channel.thingAccess = 'editors';
+    else delete channel.thingAccess;
   }
   await saveChannels(root, channels);
   return channel;

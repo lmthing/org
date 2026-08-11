@@ -27,7 +27,7 @@ import {
 import type { RouteHandler } from '../router.js';
 import type { HeadlessRunResult, SessionManager } from '../session-manager.js';
 import { readBody, sendJson } from './utils.js';
-import { readCaller, type TeamCaller } from '../team-guard.js';
+import { canInvokeThing, readCaller, type TeamCaller } from '../team-guard.js';
 import { uploadUrl } from '../uploads.js';
 import { listProjects } from '../projects.js';
 import { getOrCreateThreadSession, getThreadSession } from '../webhook-threads.js';
@@ -366,6 +366,7 @@ export function handlePatchChannel(root: string | undefined): RouteHandler {
       name?: unknown;
       categoryId?: unknown;
       apps?: unknown;
+      thingAccess?: unknown;
     }>(req, res);
     if (!parsed) return;
 
@@ -382,6 +383,9 @@ export function handlePatchChannel(root: string | undefined): RouteHandler {
           : {}),
         ...(Array.isArray(parsed.apps)
           ? { apps: parsed.apps.filter((a): a is string => typeof a === 'string') }
+          : {}),
+        ...(parsed.thingAccess === 'all' || parsed.thingAccess === 'editors'
+          ? { thingAccess: parsed.thingAccess }
           : {}),
       });
       broadcastChannelEvent({ type: 'channel', channel }, audienceFor(channel));
@@ -751,6 +755,15 @@ export function handlePostMessage(
     }
 
     if (await addressesThing(root, message)) {
+      // Access mode. A channel set to `editors` declines a viewer's invocation with
+      // a visible notice — their message still stands (talking is a viewer's right),
+      // only THING running for them is gated. `caller` is null solely off the edge /
+      // on a personal pod, where there is no team access mode to apply, so THING
+      // answers exactly as before.
+      if (caller && !canInvokeThing(channel.thingAccess, caller.role)) {
+        track(postThingAccessDenied(root, channel, message));
+        return;
+      }
       // The caller travels with the turn as a VALUE. This is the only place it is
       // trustworthy — the request is here and its identity headers came from Envoy —
       // and the turn it starts runs headless, long after this handler returns, so
@@ -1428,6 +1441,26 @@ async function postAsk(
  * "brb", and those words are submitted to the agent with nothing anywhere
  * admitting it. A client that named the ask in its POST is not told twice.
  */
+/**
+ * A viewer tagged THING in a channel whose `thingAccess` is `editors`. Their
+ * message still stands — talking is a viewer's right — but THING does not run.
+ * Say so in the same thread, for the same reason {@link postAskReceipt} exists:
+ * a request that silently vanishes reads as THING being broken, not as a policy.
+ */
+async function postThingAccessDenied(
+  root: string,
+  channel: Channel,
+  message: ChannelMessage,
+): Promise<void> {
+  const notice = await appendMessage(root, {
+    channelId: channel.id,
+    kind: 'system',
+    text: 'Only editors can ask THING in this channel.',
+    ...(message.threadId ? { threadId: message.threadId } : {}),
+  });
+  broadcastChannelEvent({ type: 'message', message: notice }, audienceFor(channel));
+}
+
 async function postAskReceipt(
   root: string,
   channel: Channel,

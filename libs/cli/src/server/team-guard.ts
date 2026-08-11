@@ -37,6 +37,27 @@ export function isTeamMode(): boolean {
   return process.env['LMTHING_TEAM_MODE'] === '1';
 }
 
+/**
+ * Who may invoke THING in a channel — the channel's `thingAccess`
+ * ({@link import('./team-channels.js').Channel.thingAccess}).
+ */
+export type ThingAccess = 'all' | 'editors';
+
+/**
+ * Whether a member of role `role` may invoke THING in a channel whose access
+ * mode is `access`. Absent access ⇒ `'all'` (backward-compatible: every channel
+ * that predates access modes admits everyone). Kept pure — no request, no fs — so
+ * the decision is unit-tested without booting a pod, the same split that makes
+ * `plan-reminders.ts` testable.
+ *
+ * This gates INVOCATION only. A viewer stays free to read and post in the
+ * channel (see `VIEWER_ALLOWED`); `'editors'` merely stops THING from *running*
+ * for them, which is a different power from talking.
+ */
+export function canInvokeThing(access: ThingAccess | undefined, role: TeamRole): boolean {
+  return (access ?? 'all') === 'all' || role === 'editor';
+}
+
 function headerOf(req: IncomingMessage, name: string): string {
   const v = req.headers[name];
   return typeof v === 'string' ? v : Array.isArray(v) ? (v[0] ?? '') : '';

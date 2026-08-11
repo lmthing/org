@@ -11,7 +11,13 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { IncomingMessage } from 'node:http';
-import { guardRequest, guardWebSocket, readCaller, isTeamMode } from './team-guard.js';
+import {
+  canInvokeThing,
+  guardRequest,
+  guardWebSocket,
+  readCaller,
+  isTeamMode,
+} from './team-guard.js';
 
 function req(
   method: string,
@@ -219,5 +225,24 @@ describe('team mode on', () => {
         status: 401,
       });
     });
+  });
+});
+
+describe('canInvokeThing — who may invoke THING in a channel', () => {
+  it('admits everyone when the access mode is absent (the default)', () => {
+    // Backward compatibility: every channel written before access modes existed
+    // has no `thingAccess`, and must behave exactly as it did — open to all.
+    expect(canInvokeThing(undefined, 'viewer')).toBe(true);
+    expect(canInvokeThing(undefined, 'editor')).toBe(true);
+  });
+
+  it("admits everyone when the access mode is 'all'", () => {
+    expect(canInvokeThing('all', 'viewer')).toBe(true);
+    expect(canInvokeThing('all', 'editor')).toBe(true);
+  });
+
+  it("admits only editors when the access mode is 'editors'", () => {
+    expect(canInvokeThing('editors', 'editor')).toBe(true);
+    expect(canInvokeThing('editors', 'viewer')).toBe(false);
   });
 });
