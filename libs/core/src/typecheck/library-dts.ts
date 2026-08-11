@@ -473,7 +473,9 @@ declare function teamMembers(): Promise<Array<{ userId: string; label: string; h
 /** The channels the CALLER can see (a direct message they are not in is never listed). */
 declare function teamChannels(): Promise<Array<{ id: string; name: string; kind: 'channel' | 'dm'; categoryId?: string; apps?: string[] }>>;
 /** A page of a channel's history, newest last — how you answer "what did we decide about X". Rejects for a channel the caller cannot see. At most 100 messages (default 30); \`returned\`/\`channelName\` are there so you can SAY what you read. */
-declare function teamHistory(channelId: string, opts?: { limit?: number; before?: string }): Promise<{ messages: Array<{ id: string; ts: string; channelId: string; kind: 'user' | 'thing' | 'system'; text: string; author: string; userId?: string; threadId?: string }>; hasMore: boolean; channelId: string; channelName: string; returned: number; limit: number }>;`;
+declare function teamHistory(channelId: string, opts?: { limit?: number; before?: string }): Promise<{ messages: Array<{ id: string; ts: string; channelId: string; kind: 'user' | 'thing' | 'system'; text: string; author: string; userId?: string; threadId?: string }>; hasMore: boolean; channelId: string; channelName: string; returned: number; limit: number }>;
+/** What you durably remember about THIS channel — short notes kept across turns, so you don't re-ask what the team already told you here. Read it at the start of a turn to recall context; keep it current with \`teamRemember\`. */
+declare function teamMemory(): Promise<{ facts: string[] }>;`;
 
 // `team:post` earns the three WRITERS. Deliberately a separate id from `team:read`:
 // these leave records in a shared log and raise other people's badges, and they are the
@@ -500,7 +502,9 @@ declare function teamPost(channelId: string, text: string, opts?: { threadId?: s
 /** Pin a project's app beside a channel so it can be opened next to the conversation. Editor callers only. */
 declare function teamPinApp(channelId: string, projectId: string): Promise<{ ok: boolean; channelId: string; apps: string[] }>;
 /** Give a subject a channel of its own, visible to the whole team (there is no members list — a private conversation is a DM). Editor callers only. Get-or-create on the name: \`created: false\` means one already existed and you were handed THAT one, so say so rather than announcing a new one. Use the returned \`channelId\` to \`teamPost\` the first message in there — a channel nobody was told about is a room nobody opens. */
-declare function teamCreateChannel(name: string, opts?: { categoryId?: string }): Promise<{ ok: boolean; channelId: string; name: string; created: boolean }>;`;
+declare function teamCreateChannel(name: string, opts?: { categoryId?: string }): Promise<{ ok: boolean; channelId: string; name: string; created: boolean }>;
+/** Replace THIS channel's durable memory with \`facts\` (a whole-list rewrite — read \`teamMemory\` first, then add/remove/reword and write the full list). Keep it to a few short, durable notes; it is capped. Editor callers only. */
+declare function teamRemember(facts: string[]): Promise<{ ok: boolean; count: number }>;`;
 
 /**
  * Registry of the STANDALONE app-capability fragments, keyed by capability id, for

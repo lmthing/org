@@ -53,6 +53,8 @@ import type {
   TeamPostResult,
   TeamResolver,
   TeamTurnInfo,
+  TeamChannelMemory,
+  TeamRememberResult,
 } from '@lmthing/core';
 import {
   appendMessage,
@@ -68,6 +70,7 @@ import {
 } from './team-channels.js';
 import { listMembers, memberLabel, resolveMentions } from './team-members.js';
 import type { TeamCaller } from './team-guard.js';
+import { readChannelMemory, writeChannelMemory } from './team-memory.js';
 
 /**
  * Everything about the turn that the message which started it decided: who asked,
@@ -384,6 +387,34 @@ export function createTeamResolver(
       // second ask would redraw everyone's sidebar for nothing.
       if (created) hooks.onChannelChanged?.(channel);
       return { ok: true, channelId: channel.id, name: channel.name, created };
+    },
+
+    /**
+     * This channel's durable memory. Scoped to the turn's OWN channel — there is
+     * no channelId parameter, so a turn cannot read another channel's notes, and
+     * a DM's memory stays as private as the DM. Empty until the first
+     * {@link remember}.
+     */
+    async memory(): Promise<TeamChannelMemory> {
+      const mem = await readChannelMemory(root, turn.channel.id);
+      return { facts: mem.facts };
+    },
+
+    /**
+     * Replace this channel's memory. A write to the shared workspace, so it sits
+     * behind `team:post` and refuses a viewer exactly like {@link post} — the
+     * same reason: a viewer must not reach through THING to change shared state.
+     * Whole-list rewrite; the stored count (after cap/dedup) is returned.
+     */
+    async remember(facts): Promise<TeamRememberResult> {
+      if (caller.role !== 'editor') refuseViewer('updating channel memory');
+      const stored = await writeChannelMemory(
+        root,
+        turn.channel.id,
+        facts,
+        new Date().toISOString(),
+      );
+      return { ok: true, count: stored.facts.length };
     },
   };
 }

@@ -73,6 +73,8 @@ export type {
   TeamPostResult,
   TeamPinResult,
   TeamCreateChannelResult,
+  TeamChannelMemory,
+  TeamRememberResult,
 } from './globals/team.js';
 export {
   CONSENT_MARKED_YIELD_KINDS,

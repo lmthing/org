@@ -172,14 +172,26 @@ export interface TeamCreateChannelResult {
   created: boolean;
 }
 
+/** What THING durably remembers about the channel this turn is running in. */
+export interface TeamChannelMemory {
+  /** Short notes THING kept from earlier turns in this channel, oldest first. */
+  facts: string[];
+}
+
+/** The outcome of a memory write — `count` is what was actually stored after capping. */
+export interface TeamRememberResult {
+  ok: boolean;
+  count: number;
+}
+
 /**
  * Host resolver for the team globals — supplied by libs/cli
  * (`server/team-globals.ts#createTeamResolver`) on `AppGlobalImpls.team`,
  * bound to one turn's verified caller and channel. Absent ⇒ team yields reject.
  *
  * Every method enforces the caller's own reach: a DM the caller is not in is
- * invisible (not "forbidden" — indistinguishable from absent), and both write
- * methods refuse a viewer. The sandbox has no way to widen any of it.
+ * invisible (not "forbidden" — indistinguishable from absent), and every write
+ * method refuses a viewer. The sandbox has no way to widen any of it.
  */
 export interface TeamResolver {
   context(): Promise<TeamTurnInfo>;
@@ -189,6 +201,10 @@ export interface TeamResolver {
   post(channelId: string, text: string, opts?: { threadId?: string }): Promise<TeamPostResult>;
   pinApp(channelId: string, projectId: string): Promise<TeamPinResult>;
   createChannel(name: string, opts?: { categoryId?: string }): Promise<TeamCreateChannelResult>;
+  /** This channel's durable memory (the turn's own channel — no id to widen). */
+  memory(): Promise<TeamChannelMemory>;
+  /** Replace this channel's memory with `facts`. Editor callers only. */
+  remember(facts: string[]): Promise<TeamRememberResult>;
 }
 
 /** Every yield kind these globals push, so the router and the injector agree. */
@@ -199,7 +215,9 @@ export type TeamYieldKind =
   | 'teamHistory'
   | 'teamPost'
   | 'teamPinApp'
-  | 'teamCreateChannel';
+  | 'teamCreateChannel'
+  | 'teamMemory'
+  | 'teamRemember';
 
 /** One value-yield of `kind` carrying `args` — the shared body of all six globals. */
 function teamYield<T>(
@@ -296,5 +314,23 @@ export function createTeamCreateChannelGlobal(
     opts?: { categoryId?: string },
   ): Promise<TeamCreateChannelResult> {
     return teamYield<TeamCreateChannelResult>(pushYield, 'teamCreateChannel', [name, opts]);
+  };
+}
+
+/** `teamMemory()` — what THING durably knows about this channel. Gated on `team:read`. */
+export function createTeamMemoryGlobal(
+  pushYield: (req: YieldRequest) => void,
+): () => Promise<TeamChannelMemory> {
+  return function teamMemory(): Promise<TeamChannelMemory> {
+    return teamYield<TeamChannelMemory>(pushYield, 'teamMemory', []);
+  };
+}
+
+/** `teamRemember(facts)` — replace this channel's durable memory. Gated on `team:post`. */
+export function createTeamRememberGlobal(
+  pushYield: (req: YieldRequest) => void,
+): (facts: string[]) => Promise<TeamRememberResult> {
+  return function teamRemember(facts: string[]): Promise<TeamRememberResult> {
+    return teamYield<TeamRememberResult>(pushYield, 'teamRemember', [facts]);
   };
 }

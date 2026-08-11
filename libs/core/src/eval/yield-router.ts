@@ -386,7 +386,9 @@ export async function routeCommonYield(
     case 'teamHistory':
     case 'teamPost':
     case 'teamPinApp':
-    case 'teamCreateChannel': {
+    case 'teamCreateChannel':
+    case 'teamMemory':
+    case 'teamRemember': {
       // The team workspace globals (`team:read` / `team:post`). One arm for all
       // seven: the resolver is bound HOST-side to this turn's verified caller and
       // channel, so the only thing routed from the sandbox is the arguments — never
@@ -421,6 +423,12 @@ export async function routeCommonYield(
         case 'teamCreateChannel': {
           const [name, opts] = req.args as [string, { categoryId?: string } | undefined];
           return { handled: true, value: await team.createChannel(name, opts) };
+        }
+        case 'teamMemory':
+          return { handled: true, value: await team.memory() };
+        case 'teamRemember': {
+          const [facts] = req.args as [string[]];
+          return { handled: true, value: await team.remember(facts) };
         }
         default: {
           const [channelId, projectId] = req.args as [string, string];

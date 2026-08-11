@@ -582,3 +582,49 @@ describe('teamCreateChannel — giving a subject its own room', () => {
     }
   });
 });
+
+describe('teamMemory / teamRemember — durable channel memory', () => {
+  it('is empty before anything is remembered', async () => {
+    const general = (await ensureDefaultChannel(root))[0]!;
+    const { team } = resolverFor(ANA, general);
+    expect(await team.memory()).toEqual({ facts: [] });
+  });
+
+  it('remembers a fact so a LATER turn recalls it', async () => {
+    const general = (await ensureDefaultChannel(root))[0]!;
+    const first = resolverFor(ANA, general);
+    const r = await first.team.remember(['releases go out on Fridays']);
+    expect(r).toEqual({ ok: true, count: 1 });
+
+    // A brand-new resolver, as a different member, in the same channel — memory is
+    // the channel's, not the session's or the person's.
+    const later = resolverFor(BO, general);
+    expect((await later.team.memory()).facts).toEqual(['releases go out on Fridays']);
+  });
+
+  it('is a whole-list rewrite, and is sanitized + deduped on the way in', async () => {
+    const general = (await ensureDefaultChannel(root))[0]!;
+    const { team } = resolverFor(ANA, general);
+    await team.remember(['a', 'b']);
+    const r = await team.remember(['b', '  b  ', 'c', 42 as unknown as string]);
+    expect(r.count).toBe(2);
+    expect((await team.memory()).facts).toEqual(['b', 'c']);
+  });
+
+  it('scopes memory per channel', async () => {
+    const general = (await ensureDefaultChannel(root))[0]!;
+    const design = await channelNamed('design');
+    await resolverFor(ANA, general).team.remember(['general note']);
+    await resolverFor(ANA, design).team.remember(['design note']);
+    expect((await resolverFor(BO, general).team.memory()).facts).toEqual(['general note']);
+    expect((await resolverFor(BO, design).team.memory()).facts).toEqual(['design note']);
+  });
+
+  it('refuses a viewer the WRITE (read stays open) — same split as posting', async () => {
+    const general = (await ensureDefaultChannel(root))[0]!;
+    const { team } = resolverFor(VIC, general);
+    await expect(team.remember(['sneaky'])).rejects.toThrow(/viewer/);
+    // The read half is a reader — a viewer keeps it.
+    expect(await team.memory()).toEqual({ facts: [] });
+  });
+});
