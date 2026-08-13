@@ -1171,6 +1171,29 @@ describe('THING answering with JSX', () => {
     expect(reply.text).toBe('the actual answer');
   });
 
+  it('keeps a dynamic-plan checklist so THING can be watched working the plan in a channel', async () => {
+    // The `checklist` descriptor `todoWrite` emits is a RENDER_ALIAS, not a catalog
+    // component — this pins that it survives renderResult into the channel blocks
+    // (so the team UI draws real checkboxes) rather than being unwrapped like an
+    // unknown component. The plain-text fallback carries the tasks for older clients.
+    const plan = {
+      type: 'checklist',
+      props: {
+        title: 'Plan',
+        items: [
+          { content: 'gather requirements', status: 'completed' },
+          { content: 'draft schema', status: 'in_progress' },
+          { content: 'write migration', status: 'pending' },
+        ],
+      },
+      children: [],
+    };
+    const reply = await askThing(mkJsxManager([plan]));
+    expect(reply.blocks).toEqual([plan]);
+    expect(reply.text).toContain('draft schema');
+    expect(reply.text).not.toContain('"type"');
+  });
+
   it('recovers a descriptor that reached it already serialized', async () => {
     // An older writer, or a resumed snapshot, hands back the JSON string. It is
     // still a descriptor and must not be posted as prose.
