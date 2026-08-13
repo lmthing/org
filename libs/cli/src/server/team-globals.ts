@@ -71,6 +71,7 @@ import {
 import { listMembers, memberLabel, resolveMentions } from './team-members.js';
 import type { TeamCaller } from './team-guard.js';
 import { readChannelMemory, writeChannelMemory } from './team-memory.js';
+import { appendAudit } from './team-audit.js';
 
 /**
  * Everything about the turn that the message which started it decided: who asked,
@@ -210,6 +211,26 @@ export function createTeamResolver(
   };
 
   /**
+   * Record one action THING took, attributed to the caller who drove the turn.
+   * Best-effort: an audit-log failure must never fail the action it records — a
+   * post that succeeded and then could not be logged is still a post.
+   */
+  const audit = async (action: string, channelId: string, detail?: string): Promise<void> => {
+    try {
+      await appendAudit(root, {
+        ts: new Date().toISOString(),
+        actor: caller.userId,
+        actorLabel: await callerLabel(),
+        channelId,
+        action,
+        ...(detail ? { detail } : {}),
+      });
+    } catch {
+      // swallow — see the doc comment above
+    }
+  };
+
+  /**
    * Append a `thing` message, attributed, and run the route's broadcast/delivery
    * hook — which is what applies `audienceFor` (so a post into a DM reaches only
    * its participants) and `deliver` (badges + push). A write that skipped those
@@ -252,6 +273,7 @@ export function createTeamResolver(
       hooks.onPost?.(note, turn.channel);
       receipt = true;
     }
+    await audit('post', channel.id, receipt ? `to #${channel.name}` : undefined);
     return { ok: true, channelId: channel.id, messageId: message.id, ...(receipt ? { receipt } : {}) };
   };
 
@@ -340,6 +362,7 @@ export function createTeamResolver(
         apps: [...(channel.apps ?? []), projectId],
       });
       hooks.onChannelChanged?.(updated);
+      await audit('pinApp', channelId, projectId);
       return { ok: true, channelId, apps: [...(updated.apps ?? [])] };
     },
 
@@ -386,6 +409,7 @@ export function createTeamResolver(
       // Announce it exactly as the REST route does — and only when it is NEW, or a
       // second ask would redraw everyone's sidebar for nothing.
       if (created) hooks.onChannelChanged?.(channel);
+      await audit('createChannel', channel.id, created ? `#${channel.name}` : `#${channel.name} (existed)`);
       return { ok: true, channelId: channel.id, name: channel.name, created };
     },
 
@@ -414,6 +438,7 @@ export function createTeamResolver(
         facts,
         new Date().toISOString(),
       );
+      await audit('remember', turn.channel.id, `${stored.facts.length} facts`);
       return { ok: true, count: stored.facts.length };
     },
   };

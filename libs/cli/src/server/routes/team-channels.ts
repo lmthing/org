@@ -41,6 +41,7 @@ import {
   unreadFor,
 } from '../team-reads.js';
 import { pushPayload, sendPushRequest } from '../team-push.js';
+import { readAudit } from '../team-audit.js';
 import {
   appendMessage,
   appendMessageOnce,
@@ -347,6 +348,33 @@ export function handleCreateChannel(root: string | undefined): RouteHandler {
  * or change which apps are pinned beside it. Editor-only, by team-guard's
  * default-deny.
  */
+/**
+ * `GET /api/team/audit` — the attributed log of what THING did in the team
+ * (posts, pins, channels it created, memory it rewrote), newest first. Optional
+ * `?channel=&actor=&action=&limit=` filters. Editor-only: it is not in
+ * `VIEWER_ALLOWED`, so team-guard's default-deny already refuses a viewer at the
+ * edge; the explicit re-check here keeps the handler safe if ever called directly.
+ */
+export function handleTeamAudit(root: string | undefined): RouteHandler {
+  return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+    if (!requireRoot(root, res)) return;
+    const caller = readCaller(req);
+    if (caller && caller.role !== 'editor') {
+      sendJson(res, 403, { error: 'auditing the team is an editor action' });
+      return;
+    }
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    const limitRaw = Number(url.searchParams.get('limit'));
+    const entries = await readAudit(root, {
+      ...(url.searchParams.get('channel') ? { channelId: url.searchParams.get('channel')! } : {}),
+      ...(url.searchParams.get('actor') ? { actor: url.searchParams.get('actor')! } : {}),
+      ...(url.searchParams.get('action') ? { action: url.searchParams.get('action')! } : {}),
+      ...(Number.isFinite(limitRaw) && limitRaw > 0 ? { limit: limitRaw } : {}),
+    });
+    sendJson(res, 200, { entries });
+  };
+}
+
 export function handlePatchChannel(root: string | undefined): RouteHandler {
   return async (
     req: IncomingMessage,

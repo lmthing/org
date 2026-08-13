@@ -34,6 +34,7 @@ import {
 } from './team-channels.js';
 import { setProfile, touchMember } from './team-members.js';
 import { createTeamResolver } from './team-globals.js';
+import { readAudit } from './team-audit.js';
 import type { TeamCaller } from './team-guard.js';
 
 let root: string;
@@ -626,5 +627,33 @@ describe('teamMemory / teamRemember — durable channel memory', () => {
     await expect(team.remember(['sneaky'])).rejects.toThrow(/viewer/);
     // The read half is a reader — a viewer keeps it.
     expect(await team.memory()).toEqual({ facts: [] });
+  });
+});
+
+describe('audit — every write is recorded, attributed to the caller', () => {
+  it('records a post with the caller and channel', async () => {
+    const general = (await ensureDefaultChannel(root))[0]!;
+    await resolverFor(ANA, general).team.post('general', 'shipping today');
+    const rows = await readAudit(root, { action: 'post' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ actor: ANA.userId, channelId: 'general', action: 'post' });
+    expect(rows[0]!.actorLabel).toBeTruthy();
+  });
+
+  it('records a memory rewrite and a channel creation, attributed', async () => {
+    const general = (await ensureDefaultChannel(root))[0]!;
+    await resolverFor(ANA, general).team.remember(['a', 'b']);
+    await resolverFor(BO, general).team.createChannel('planning');
+
+    const remember = await readAudit(root, { action: 'remember' });
+    expect(remember[0]).toMatchObject({ actor: ANA.userId, action: 'remember', detail: '2 facts' });
+    const created = await readAudit(root, { action: 'createChannel' });
+    expect(created[0]).toMatchObject({ actor: BO.userId, action: 'createChannel' });
+  });
+
+  it('does not record an action THING was refused (a viewer write never happened)', async () => {
+    const general = (await ensureDefaultChannel(root))[0]!;
+    await expect(resolverFor(VIC, general).team.remember(['x'])).rejects.toThrow(/viewer/);
+    expect(await readAudit(root)).toEqual([]);
   });
 });
