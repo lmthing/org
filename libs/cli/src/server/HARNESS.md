@@ -32,18 +32,41 @@ hard-wired into `Session`. This module lets a project choose between engines:
 Selection is per-project + a pod default; there is no UI yet (set via the project create API,
 `setProjectHarness`, or `LMTHING_HARNESS`).
 
-## Adding the dsh provider (Stages 2+ — not yet implemented)
+## The dsh runtime (`./dsh/`) — Stage 2, embed proven
 
-The seam above is complete and tested. What remains is the actual `dsh` provider and the
-plugins that give dsh parity with lmthing's product surface. This is a multi-stage build; the
-`dsh` path currently returns `HarnessUnavailableError` until a provider is registered.
+The `dsh` provider embeds a DeepSeek Harness (Cordis) runtime **in-process** and renders it
+through lmthing's existing surface. Implemented and covered:
 
-**Stage 2 — embed dsh + provider skeleton.** Add DeepSeek Harness to the workspace (vendored or
-as `@deepseek-ai/dsh-*` deps), boot a Cordis app per session, and register a `HarnessProvider`
-whose `buildSession` returns a `Session`-compatible handle backed by dsh's agent loop. Bridge
-the pod's `streamFn`/model to a `ctx.llm` adapter and dsh's session-event stream to the pod's
-`RenderHost`/`TraceHub`. Select dsh Code Mode (`tools.mode: 'code'`) so the model still writes
-TypeScript.
+- **`dsh/modules.ts`** — soft loader. dsh is NOT a dependency of `@lmthing/cli`; the modules are
+  dynamically imported from a built checkout at `LMTHING_DSH_HOME` (each dsh package by its own
+  `lib/` entry, the `@deepseek-ai/cordis` peer resolved from a dsh package's `node_modules`). So
+  `@lmthing/cli` builds and runs with no dsh present; `dshRuntimeAvailable()` gates registration.
+- **`dsh/event-bridge.ts`** — pure translation of dsh `SessionEvent`s → lmthing `TraceEvent`s
+  (assistant text → `display`+`llm_response`, `run_code` → `statement`, tool + code-dispatch →
+  `yield`/`yield_resolved`, `turn/end` → `turn_end`). This is why a dsh turn renders in the
+  existing chat/trace UI with no client change. Fully unit-tested (`event-bridge.test.ts`).
+- **`dsh/session.ts`** — `DshSession implements SessionLike`: boots the Context (llm, session,
+  system-prompt, tools, code-runtime, agent, agent-loop), creates the agent with the lmthing
+  persona in `setup`, subscribes the bridge to `session/event`, drives turns via
+  `followup` + `whenIdle`. Code Mode is on by default (`tools.mode: 'code'`), keeping "the model
+  writes TypeScript".
+- **`dsh/provider.ts`** — `createDshHarnessProvider({ createAdapter, codeMode? })` →
+  `HarnessProvider`; loads a best-effort persona from the agent's `charter.md`/`instruct.md`.
+
+**Proven end-to-end** by `dsh/session.live.test.ts`: with `LMTHING_DSH_HOME` set, it boots a real
+dsh Context in-process, drives one turn with a keyless mock adapter, and asserts the bridged
+`display`/`turn_end` land on the `SessionLike` tracer. The test self-skips when dsh is absent
+(so CI is unaffected).
+
+### Remaining to make `dsh` live on a pod (Stage 2b)
+
+- **Production LLM adapter.** `DshSession` takes an injected `createAdapter` because dsh Code Mode
+  needs a native tool-calling provider — lmthing's `streamFn` is text-only and cannot emit
+  `run_code` tool-call blocks. Wire a dsh adapter over the pod's model endpoint/key (dsh's own
+  `llm-deepseek`, or a custom adapter against LiteLLM with tool-calling), then register the
+  provider in `serve.ts` when `dshRuntimeAvailable()`.
+- **History/resume.** `getHistory()` returns `[]` and `resume()` starts fresh; dsh keeps its own
+  session log, so snapshot/summarize/resume need mapping to it.
 
 **Stage 3 — space-format plugin.** A dsh plugin bundle that loads a project's spaces
 (`agents/ functions/ components/ tasklists/ knowledge/`) and maps them to dsh: agents →
