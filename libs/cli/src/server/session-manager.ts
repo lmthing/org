@@ -92,7 +92,7 @@ export interface SpaceMeta {
  *  events never cross sessions. */
 export interface SessionEntry {
   sessionId: string;
-  session: Session;
+  session: SessionLike;
   renderHost: WebRenderHost;
   hub: TraceHub;
   spaceDir: string;
@@ -205,10 +205,32 @@ export interface BuildSessionArgs {
   initialBuildTargetProjectId?: string;
 }
 
-/** Encapsulates the bin.ts wiring: construct a Session bound to the chosen
+/**
+ * The session surface the pod actually drives — the contract a harness provider
+ * must return. The built-in QuickJS {@link Session} satisfies it structurally; a
+ * `dsh`-backed adapter implements the same members over the DeepSeek Harness
+ * runtime. Keeping it to exactly what the manager and routes call (verified by
+ * usage) is what lets a non-`Session` engine plug in without pretending to be
+ * one. `getRootNodeId`/`getLastTurnOutcome` are optional because callers already
+ * feature-detect them; a provider that cannot supply them simply omits them.
+ */
+export interface SessionLike {
+  start(message: UserInput): Promise<void>;
+  continue(message: UserInput): Promise<void>;
+  resume(snapshotDir: string, message: UserInput): Promise<void>;
+  dispose(): void;
+  /** The event stream the pod subscribes to and forwards to the session's hub. */
+  getTracer(): Tracer;
+  getHistory(): ReturnType<Session['getHistory']>;
+  getRootNodeId?(): string;
+  getLastTurnOutcome?(): 'done' | 'error' | null;
+}
+
+/** Encapsulates the bin.ts wiring: construct a session bound to the chosen
  *  streamFn. The manager owns the entry's hub and subscribes it to the returned
- *  session's tracer, so each session's events stay scoped to its own hub. */
-export type BuildSession = (args: BuildSessionArgs) => Session;
+ *  session's tracer, so each session's events stay scoped to its own hub. Returns
+ *  a {@link SessionLike} so a non-QuickJS harness can supply its own adapter. */
+export type BuildSession = (args: BuildSessionArgs) => SessionLike;
 
 /**
  * One execution engine, seen from the session manager. A provider turns the
@@ -428,7 +450,7 @@ export class SessionManager {
   }
 
   /** Subscribe a session's tracer to its hub AND cost accumulation. */
-  private wireTracer(session: Session, entry: SessionEntry): void {
+  private wireTracer(session: SessionLike, entry: SessionEntry): void {
     if (typeof session.getTracer !== 'function') return;
     // Record this chat session + its delegates in the pod-global ledger.
     this.sessionLedger.trackTracer(session.getTracer(), {
@@ -594,7 +616,7 @@ export class SessionManager {
    * resolved harness has no provider, so a project pinned to an uninstalled engine
    * fails loud at start rather than silently running on another one.
    */
-  private dispatchBuildSession(args: BuildSessionArgs): Session {
+  private dispatchBuildSession(args: BuildSessionArgs): SessionLike {
     const harness = this.resolveHarnessForArgs(args);
     const provider = this.harnessProviders.get(harness);
     if (!provider) throw new HarnessUnavailableError(harness);
@@ -2040,7 +2062,7 @@ export class SessionManager {
     origin?: { source: string };
   }): Promise<HeadlessRunResult> {
     const sessionId = randomUUID();
-    let session: Session | undefined;
+    let session: SessionLike | undefined;
     const displays: unknown[] = [];
     // S8 instrumentation: headless run lifecycle (hooks/triggers/spawns/delegates
     // all enter here) — guarded fire-and-forget lines, never throw/slow the run.
@@ -2277,7 +2299,7 @@ export class SessionManager {
     readOnly?: boolean;
   }): Promise<HeadlessRunResult> {
     return this.runExclusive(opts.sessionId, async () => {
-      let session: Session | undefined;
+      let session: SessionLike | undefined;
       const displays: unknown[] = [];
       // S8 instrumentation: threaded headless turn lifecycle (mirrors runHeadless).
       const threadedStartedAt = Date.now();
