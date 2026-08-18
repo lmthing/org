@@ -15,13 +15,14 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { HarnessProvider, BuildSessionArgs } from '../session-manager.js';
-import { DshSession, type DshAdapterFactory } from './session.js';
-import { resolveDshHome } from './modules.js';
+import { DshSession } from './session.js';
+import { resolveDshHome, dshRuntimeAvailable, type DshLlmSetup } from './modules.js';
+import { createLiteLlmSetup } from './litellm.js';
 
 export interface DshProviderConfig {
-  /** Supplies the dsh LLM adapter (a pod wraps its model/key; a native dsh
-   *  provider adapter can also be returned here). Required — see DshSession. */
-  createAdapter: DshAdapterFactory;
+  /** Wires the LLM provider onto each session's dsh Context (e.g.
+   *  {@link createLiteLlmSetup}). Required — see DshSession. */
+  llm: DshLlmSetup;
   /** Run agents in dsh Code Mode (default true — keeps "the model writes
    *  TypeScript"). */
   codeMode?: boolean;
@@ -57,6 +58,35 @@ function stripFrontmatter(text: string): string {
   return after === -1 ? '' : text.slice(after + 1);
 }
 
+/** The LiteLLM model name the dsh harness runs on: `LMTHING_DSH_MODEL`, else the
+ *  pod's default model spec with any `provider:` prefix stripped (LiteLLM keys on
+ *  the bare model name), else a sane default. */
+export function resolveDshModel(defaultModelSpec: string | undefined, env: NodeJS.ProcessEnv = process.env): string {
+  const explicit = env['LMTHING_DSH_MODEL'];
+  if (explicit && explicit.trim().length > 0) return explicit;
+  if (defaultModelSpec) {
+    const bare = defaultModelSpec.includes(':') ? defaultModelSpec.slice(defaultModelSpec.indexOf(':') + 1) : defaultModelSpec;
+    if (bare.length > 0) return bare;
+  }
+  return 'DeepSeek-V4-Flash';
+}
+
+/**
+ * Register the `dsh` harness on a manager when this pod can run it — a built dsh
+ * checkout is present (`LMTHING_DSH_HOME`) — wiring its LLM through the LiteLLM
+ * gateway. No-op (returns false) otherwise, so a project pinned to `dsh` on a pod
+ * without dsh fails loud via `HarnessUnavailableError` rather than mis-running.
+ */
+export function maybeRegisterDshHarness(
+  manager: { registerHarness(p: HarnessProvider): void },
+  opts: { defaultModelSpec?: string } = {},
+): boolean {
+  if (!dshRuntimeAvailable()) return false;
+  const model = resolveDshModel(opts.defaultModelSpec);
+  manager.registerHarness(createDshHarnessProvider({ llm: createLiteLlmSetup({ model }) }));
+  return true;
+}
+
 /** Construct the `dsh` harness provider. */
 export function createDshHarnessProvider(config: DshProviderConfig): HarnessProvider {
   const dshHome = config.dshHome ?? resolveDshHome();
@@ -71,7 +101,7 @@ export function createDshHarnessProvider(config: DshProviderConfig): HarnessProv
         codeMode: config.codeMode ?? true,
         cwd: args.projectRoot ?? args.spaceDir,
         ...(dshHome !== undefined ? { dshHome } : {}),
-        createAdapter: config.createAdapter,
+        llm: config.llm,
       }),
   };
 }

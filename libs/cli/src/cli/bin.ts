@@ -431,6 +431,9 @@ async function main(): Promise<void> {
       ...(args.maxSessions !== undefined ? { maxSessions: args.maxSessions } : {}),
       ...(args.snapshotsDir !== undefined ? { snapshotsDir: args.snapshotsDir } : {}),
     });
+    // Register the dsh harness when this pod has a built dsh checkout
+    // (LMTHING_DSH_HOME); a project pinned to `harness: 'dsh'` then runs on it.
+    (await import('../server/dsh/provider.js')).maybeRegisterDshHarness(manager, { defaultModelSpec: modelSpec });
     manager.startReaper();
     process.on('SIGINT', () => { manager.stopReaper(); process.exit(0); });
     // __dirname is dist/cli/ at runtime; app.tsx is at dist/web/app.tsx
@@ -487,6 +490,7 @@ async function main(): Promise<void> {
       ...(args.maxSessions !== undefined ? { maxSessions: args.maxSessions } : {}),
       ...(args.snapshotsDir !== undefined ? { snapshotsDir: args.snapshotsDir } : {}),
     });
+    (await import('../server/dsh/provider.js')).maybeRegisterDshHarness(manager, { defaultModelSpec: modelSpec });
     manager.startReaper();
     process.on('SIGINT', () => { manager.stopReaper(); process.exit(0); });
     const appTsxPath = join(__dirname, '..', 'web', 'app.tsx');

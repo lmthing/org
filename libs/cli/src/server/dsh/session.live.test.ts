@@ -12,7 +12,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { TraceEvent } from '@lmthing/core';
-import { DshSession, mockAnswerAdapter } from './session.js';
+import { DshSession, mockAnswerSetup } from './session.js';
 import { dshRuntimeAvailable } from './modules.js';
 
 const enabled = dshRuntimeAvailable();
@@ -23,7 +23,7 @@ describe.skipIf(!enabled)('dsh harness — live in-process turn', () => {
       sessionId: 'live-1',
       persona: 'You are a test agent.',
       codeMode: false, // native tool mode — the mock adapter just answers with text
-      createAdapter: mockAnswerAdapter('Hello from dsh'),
+      llm: mockAnswerSetup('Hello from dsh'),
     });
 
     const events: TraceEvent[] = [];

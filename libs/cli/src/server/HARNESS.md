@@ -58,15 +58,26 @@ dsh Context in-process, drives one turn with a keyless mock adapter, and asserts
 `display`/`turn_end` land on the `SessionLike` tracer. The test self-skips when dsh is absent
 (so CI is unaffected).
 
-### Remaining to make `dsh` live on a pod (Stage 2b)
+### LLM via the LiteLLM gateway — Stage 2b, done
 
-- **Production LLM adapter.** `DshSession` takes an injected `createAdapter` because dsh Code Mode
-  needs a native tool-calling provider — lmthing's `streamFn` is text-only and cannot emit
-  `run_code` tool-call blocks. Wire a dsh adapter over the pod's model endpoint/key (dsh's own
-  `llm-deepseek`, or a custom adapter against LiteLLM with tool-calling), then register the
-  provider in `serve.ts` when `dshRuntimeAvailable()`.
+- **`dsh/litellm.ts`** — `createLiteLlmSetup({ model })` points dsh's own OpenAI-compatible
+  `llm-deepseek` adapter (which POSTs `/chat/completions` with `Bearer` auth) at the LiteLLM
+  gateway lmthing already uses: `LMTHINGCLOUD_BASE_URL` (default `https://lmthing.cloud/v1`) +
+  `LMTHINGCLOUD_API_KEY`, provider route `deepseek-official`. Reuses dsh's tested adapter rather
+  than hand-rolling an OpenAI client. The config builder is pure + unit-tested.
+- **`DshSession.llm`** is a `DshLlmSetup` seam (`configure(ctx)` mounts a provider and names the
+  route/model) — the keyless mock and the LiteLLM path both plug in here.
+- **Registration:** `maybeRegisterDshHarness(manager, { defaultModelSpec })` (called from both pod
+  branches in `cli/bin.ts`) registers the `dsh` provider when `dshRuntimeAvailable()`, resolving
+  the LiteLLM model from `LMTHING_DSH_MODEL` or the pod's default model spec.
+
+Remaining before dsh is a full peer of the lmthing runtime:
+
 - **History/resume.** `getHistory()` returns `[]` and `resume()` starts fresh; dsh keeps its own
   session log, so snapshot/summarize/resume need mapping to it.
+- **Stage 3 — space parity** (in progress): agent `functions:` → dsh tools, `fork`/`delegate`/
+  `tasklist` → subagents + workflow, components. See `dsh/space-loader.ts`.
+- **Stage 4 — app serving:** mount lmthing's SQLite/API/ViewRenderer stack on dsh's `ctx.webServer`.
 
 **Stage 3 — space-format plugin.** A dsh plugin bundle that loads a project's spaces
 (`agents/ functions/ components/ tasklists/ knowledge/`) and maps them to dsh: agents →

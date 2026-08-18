@@ -34,6 +34,21 @@ export interface DshModules {
   SessionId: (id: string) => unknown;
   /** Base class for a custom LLM adapter; extend + implement `stream`. */
   LlmAdapter: abstract new () => unknown;
+  /** The `@deepseek-ai/dsh-llm-deepseek` plugin namespace (a function plugin) —
+   *  an OpenAI-compatible `/chat/completions` provider, mountable against any
+   *  such endpoint (the LiteLLM gateway) via its `baseURL`/`apiKeyEnv` config. */
+  LlmDeepseek: unknown;
+}
+
+/**
+ * How a session's LLM provider is wired onto the freshly-booted dsh Context.
+ * `configure` mounts a provider (a mock adapter, or a provider plugin like
+ * llm-deepseek pointed at LiteLLM) and returns the provider route + model the
+ * agent should run on. Kept as a seam so the runtime is provider-agnostic and
+ * tests can inject a keyless mock.
+ */
+export interface DshLlmSetup {
+  configure(ctx: DshContext, dsh: DshModules): Promise<{ provider: string; model: string }>;
 }
 
 /** The bits of a dsh `Context` we use. */
@@ -85,6 +100,7 @@ function libEntry(dshHome: string, group: string, pkg: string): string {
 
 const DSH_LIBS = {
   llm: ['llm', 'llm'],
+  llmDeepseek: ['llm', 'llm-deepseek'],
   session: ['core', 'session'],
   systemPrompt: ['core', 'system-prompt'],
   tools: ['core', 'tools'],
@@ -123,9 +139,10 @@ export async function loadDshModules(dshHome: string | undefined = resolveDshHom
     return import(pathToFileURL(req.resolve('@deepseek-ai/cordis')).href) as Promise<Record<string, unknown>>;
   };
 
-  const [cordis, llm, session, systemPrompt, tools, agent, agentLoop, codeWorker] = await Promise.all([
+  const [cordis, llm, llmDeepseek, session, systemPrompt, tools, agent, agentLoop, codeWorker] = await Promise.all([
     loadCordis(),
     load('llm'),
+    load('llmDeepseek'),
     load('session'),
     load('systemPrompt'),
     load('tools'),
@@ -146,5 +163,7 @@ export async function loadDshModules(dshHome: string | undefined = resolveDshHom
     createUserMessage: llm['createUserMessage'] as DshModules['createUserMessage'],
     SessionId: (session['SessionId'] ?? ((id: string) => id)) as DshModules['SessionId'],
     LlmAdapter: llm['LlmAdapter'] as DshModules['LlmAdapter'],
+    // A function plugin is its module namespace (name/inject/Config/apply), not a default export.
+    LlmDeepseek: llmDeepseek,
   };
 }

@@ -22,6 +22,7 @@ import {
   type DshModules,
   type DshContext,
   type DshAgentHandle,
+  type DshLlmSetup,
 } from './modules.js';
 
 /** Turn an lmthing {@link UserInput} into the plain text dsh receives. */
@@ -31,28 +32,20 @@ function inputText(message: UserInput): string {
   return typeof m?.text === 'string' ? m.text : '';
 }
 
-/** Factory for a dsh LLM adapter, given the loaded dsh modules (which expose the
- *  `LlmAdapter` base class). Returned object must be a dsh `LlmAdapter`. */
-export type DshAdapterFactory = (dsh: DshModules) => unknown;
-
 export interface DshSessionOpts {
   sessionId: string;
   /** System prompt for the agent (from the lmthing agent's charter+instruct). */
   persona?: string;
-  /** dsh provider/model names passed to `agents.create`. */
-  provider?: string;
-  model?: string;
   /** Turn on dsh Code Mode (mounts the worker-thread code runtime). */
   codeMode?: boolean;
   cwd?: string;
   /** Where the built dsh checkout lives (defaults to `LMTHING_DSH_HOME`). */
   dshHome?: string;
-  /** Supplies the dsh LLM adapter. Required — dsh needs a native-tool-calling
-   *  provider; pods wrap their model/key, tests pass a mock. */
-  createAdapter: DshAdapterFactory;
+  /** Wires the LLM provider onto the booted Context and names the route/model to
+   *  run on. Required — dsh needs a native-tool-calling provider; pods point
+   *  llm-deepseek at LiteLLM, tests inject a keyless mock. */
+  llm: DshLlmSetup;
 }
-
-const PROVIDER = 'lmthing-host';
 
 export class DshSession implements SessionLike {
   private readonly tracer = new Tracer(null);
@@ -134,7 +127,7 @@ export class DshSession implements SessionLike {
     if (this.opts.codeMode) await ctx.plugin(dsh.CodeRuntimeWorker, {});
     await ctx.plugin(dsh.AgentRegistry);
     await ctx.plugin(dsh.AgentLoop, { agents: [] });
-    ctx.llm.registerAdapter([PROVIDER], this.opts.createAdapter(dsh));
+    const { provider, model } = await this.opts.llm.configure(ctx, dsh);
 
     // Bridge this session's dsh events onto our Tracer for the lmthing UI.
     const bridge = createDshTraceBridge(this.tracer, { context: 'session', nodeId: this.opts.sessionId });
@@ -147,7 +140,7 @@ export class DshSession implements SessionLike {
     this.handle = await ctx.agents.create({
       sessionId: dsh.SessionId(this.opts.sessionId),
       meta: { cwd: this.opts.cwd ?? process.cwd() },
-      agentOptions: { provider: PROVIDER, model: this.opts.model ?? 'lmthing-host' },
+      agentOptions: { provider, model },
       setup: (agentCtx) => {
         if (persona && persona.trim().length > 0) {
           agentCtx.systemPrompt.section({ name: 'deployment:persona', order: 0, text: persona, complete: true });
@@ -169,22 +162,25 @@ export class DshSession implements SessionLike {
 }
 
 /**
- * A keyless mock LLM adapter factory that answers every turn with `answer` as a
- * single text block. Used by the live integration test to drive a real dsh turn
- * end-to-end without a provider key.
+ * A keyless {@link DshLlmSetup} that answers every turn with `answer` as one text
+ * block. Registers a mock adapter under the `mock` provider route. Used by the
+ * live integration test to drive a real dsh turn end-to-end without a key.
  */
-export function mockAnswerAdapter(answer: string): DshAdapterFactory {
-  return (dsh: DshModules) => {
-    const Base = dsh.LlmAdapter as unknown as new () => Record<string, unknown>;
-    class MockAdapter extends Base {
-      async *stream(): AsyncIterable<Record<string, unknown>> {
-        yield { type: 'block-start', index: 0, blockType: 'text' };
-        yield { type: 'text-delta', index: 0, text: answer };
-        yield { type: 'block-end', index: 0, block: { type: 'text', text: answer } };
-        yield { type: 'usage', usage: { inputTokens: 1, outputTokens: 1 } };
-        yield { type: 'finish', reason: { kind: 'stop' } };
+export function mockAnswerSetup(answer: string): DshLlmSetup {
+  return {
+    configure: async (ctx, dsh) => {
+      const Base = dsh.LlmAdapter as unknown as new () => Record<string, unknown>;
+      class MockAdapter extends Base {
+        async *stream(): AsyncIterable<Record<string, unknown>> {
+          yield { type: 'block-start', index: 0, blockType: 'text' };
+          yield { type: 'text-delta', index: 0, text: answer };
+          yield { type: 'block-end', index: 0, block: { type: 'text', text: answer } };
+          yield { type: 'usage', usage: { inputTokens: 1, outputTokens: 1 } };
+          yield { type: 'finish', reason: { kind: 'stop' } };
+        }
       }
-    }
-    return new MockAdapter();
+      ctx.llm.registerAdapter(['mock'], new MockAdapter());
+      return { provider: 'mock', model: 'mock' };
+    },
   };
 }
