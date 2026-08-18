@@ -17,6 +17,7 @@ import { Tracer } from '@lmthing/core';
 import type { UserInput } from '@lmthing/core';
 import type { SessionLike } from '../session-manager.js';
 import { createDshTraceBridge, type DshSessionEvent } from './event-bridge.js';
+import { loadDshAgent, compileFunction } from './space-loader.js';
 import {
   loadDshModules,
   type DshModules,
@@ -34,8 +35,10 @@ function inputText(message: UserInput): string {
 
 export interface DshSessionOpts {
   sessionId: string;
-  /** System prompt for the agent (from the lmthing agent's charter+instruct). */
-  persona?: string;
+  /** The space + agent to load as the dsh agent's persona and function-tools.
+   *  Omitted (or missing on disk) → a bare agent with no persona/tools. */
+  spaceDir?: string;
+  agentSlug?: string;
   /** Turn on dsh Code Mode (mounts the worker-thread code runtime). */
   codeMode?: boolean;
   cwd?: string;
@@ -136,14 +139,42 @@ export class DshSession implements SessionLike {
       if (event && typeof event.type === 'string') bridge(event);
     });
 
-    const persona = this.opts.persona;
+    // Load the lmthing agent (persona + functions) and pre-compile each function
+    // to a callable, so the setup hook registers everything synchronously.
+    const spec = this.opts.spaceDir && this.opts.agentSlug
+      ? await loadDshAgent(this.opts.spaceDir, this.opts.agentSlug)
+      : { persona: '', functions: [] };
+    const compiled = new Map<string, (args: unknown) => unknown>();
+    for (const fn of spec.functions) {
+      try {
+        compiled.set(fn.name, await compileFunction(fn.source));
+      } catch {
+        // a function that fails to compile is skipped rather than sinking the session
+      }
+    }
+
     this.handle = await ctx.agents.create({
       sessionId: dsh.SessionId(this.opts.sessionId),
       meta: { cwd: this.opts.cwd ?? process.cwd() },
       agentOptions: { provider, model },
       setup: (agentCtx) => {
-        if (persona && persona.trim().length > 0) {
-          agentCtx.systemPrompt.section({ name: 'deployment:persona', order: 0, text: persona, complete: true });
+        if (spec.persona.trim().length > 0) {
+          agentCtx.systemPrompt.section({ name: 'deployment:persona', order: 0, text: spec.persona, complete: true });
+        }
+        for (const fn of spec.functions) {
+          const call = compiled.get(fn.name);
+          if (!call) continue;
+          agentCtx.tools.register(dsh.defineTool({
+            name: fn.name,
+            description: fn.description,
+            parameters: {},
+            output: {
+              // `json` is dsh's catch-all value schema — a function returns arbitrary JSON.
+              schema: { type: 'json' },
+              render: (_args, value) => [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
+            },
+            execute: async (args) => await call(args),
+          }));
         }
       },
     });

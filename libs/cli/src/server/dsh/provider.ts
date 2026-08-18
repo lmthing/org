@@ -12,8 +12,6 @@
  * build on.
  */
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { HarnessProvider, BuildSessionArgs } from '../session-manager.js';
 import { DshSession } from './session.js';
 import { resolveDshHome, dshRuntimeAvailable, type DshLlmSetup } from './modules.js';
@@ -28,34 +26,6 @@ export interface DshProviderConfig {
   codeMode?: boolean;
   /** Built dsh checkout dir; defaults to `LMTHING_DSH_HOME`. */
   dshHome?: string;
-}
-
-/** Best-effort agent persona: `charter.md` then `instruct.md` (frontmatter
- *  stripped), concatenated. Returns '' when neither is present — a project may
- *  point at a space that has not been authored for dsh yet. */
-export function loadAgentPersona(spaceDir: string, agentSlug: string): string {
-  const base = join(spaceDir, 'agents', agentSlug);
-  const parts: string[] = [];
-  try {
-    parts.push(readFileSync(join(base, 'charter.md'), 'utf8').trim());
-  } catch {
-    /* no charter */
-  }
-  try {
-    parts.push(stripFrontmatter(readFileSync(join(base, 'instruct.md'), 'utf8')).trim());
-  } catch {
-    /* no instruct */
-  }
-  return parts.filter((p) => p.length > 0).join('\n\n');
-}
-
-/** Drop a leading `---\n…\n---` YAML frontmatter block if present. */
-function stripFrontmatter(text: string): string {
-  if (!text.startsWith('---')) return text;
-  const end = text.indexOf('\n---', 3);
-  if (end === -1) return text;
-  const after = text.indexOf('\n', end + 1);
-  return after === -1 ? '' : text.slice(after + 1);
 }
 
 /** The LiteLLM model name the dsh harness runs on: `LMTHING_DSH_MODEL`, else the
@@ -96,8 +66,8 @@ export function createDshHarnessProvider(config: DshProviderConfig): HarnessProv
     buildSession: (args: BuildSessionArgs) =>
       new DshSession({
         sessionId: args.sessionId ?? `dsh-${args.agentSlug}-${args.projectId ?? 'np'}`,
-        persona: loadAgentPersona(args.spaceDir, args.agentSlug),
-        ...(args.model !== undefined ? { model: args.model } : {}),
+        spaceDir: args.spaceDir,
+        agentSlug: args.agentSlug,
         codeMode: config.codeMode ?? true,
         cwd: args.projectRoot ?? args.spaceDir,
         ...(dshHome !== undefined ? { dshHome } : {}),

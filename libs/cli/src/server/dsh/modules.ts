@@ -38,6 +38,16 @@ export interface DshModules {
    *  an OpenAI-compatible `/chat/completions` provider, mountable against any
    *  such endpoint (the LiteLLM gateway) via its `baseURL`/`apiKeyEnv` config. */
   LlmDeepseek: unknown;
+  /** `defineTool` from `@deepseek-ai/dsh-tools` — builds a tool definition for
+   *  `ctx.tools.register`. Used to expose an lmthing space's `functions:` as dsh
+   *  tools. */
+  defineTool: (opts: {
+    name: string;
+    description: string;
+    parameters?: Record<string, unknown>;
+    output?: { schema?: unknown; render?: (args: unknown, value: unknown) => unknown };
+    execute: (args: unknown, exec: unknown) => Promise<unknown> | unknown;
+  }) => unknown;
 }
 
 /**
@@ -165,5 +175,6 @@ export async function loadDshModules(dshHome: string | undefined = resolveDshHom
     LlmAdapter: llm['LlmAdapter'] as DshModules['LlmAdapter'],
     // A function plugin is its module namespace (name/inject/Config/apply), not a default export.
     LlmDeepseek: llmDeepseek,
+    defineTool: tools['defineTool'] as DshModules['defineTool'],
   };
 }

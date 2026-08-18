@@ -75,9 +75,25 @@ Remaining before dsh is a full peer of the lmthing runtime:
 
 - **History/resume.** `getHistory()` returns `[]` and `resume()` starts fresh; dsh keeps its own
   session log, so snapshot/summarize/resume need mapping to it.
-- **Stage 3 — space parity** (in progress): agent `functions:` → dsh tools, `fork`/`delegate`/
-  `tasklist` → subagents + workflow, components. See `dsh/space-loader.ts`.
-- **Stage 4 — app serving:** mount lmthing's SQLite/API/ViewRenderer stack on dsh's `ctx.webServer`.
+### Stage 3 — space parity (persona + functions→tools, done)
+
+- **`dsh/space-loader.ts`** — `loadDshAgent(spaceDir, agentSlug)` loads a space via
+  `@lmthing/core`'s `loadSpace` and returns the agent's persona (charter + instruct body) plus a
+  tool spec per declared `functions:` entry. `compileFunction(source)` esbuild-strips a function's
+  `export default` and imports it as a callable.
+- **`DshSession`** takes `spaceDir`/`agentSlug`, loads the agent in `boot()`, and in the agent
+  `setup` hook installs the persona (`systemPrompt.section`) and registers each function as a dsh
+  tool (`defineTool` + `ctx.tools.register`) whose `execute` runs the compiled function. The live
+  test loads a real space (persona + a `double` function) and asserts the agent boots and renders,
+  proving the registration path.
+
+Remaining for Stage 3:
+- **Argument mapping.** A function is called with the tool's whole JSON args object (`fn(args)`);
+  positional-parameter functions need a param-schema derived from the source signature.
+- **`fork`/`delegate`/`tasklist` → `ctx.subagents` + `ctx.workflowEngine`**, and **components →
+  conversation nodes** (the `display()`/`ask()` component catalog).
+
+**Stage 4 — app serving:** mount lmthing's SQLite/API/ViewRenderer stack on dsh's `ctx.webServer`.
 
 **Stage 3 — space-format plugin.** A dsh plugin bundle that loads a project's spaces
 (`agents/ functions/ components/ tasklists/ knowledge/`) and maps them to dsh: agents →
