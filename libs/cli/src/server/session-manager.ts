@@ -66,8 +66,10 @@ import {
   writeSpaceFiles,
   writeProjectSpaceFile as writeSpaceFile,
   deleteProjectSpaceFile as deleteSpaceFile,
+  readProjectHarnessSync,
 } from './projects.js';
 import type { ProjectMeta, PersistedSessionMeta } from './projects.js';
+import { type HarnessId, DEFAULT_HARNESS } from './harness.js';
 
 export type SessionStatus = 'idle' | 'running' | 'error';
 
@@ -208,6 +210,47 @@ export interface BuildSessionArgs {
  *  session's tracer, so each session's events stay scoped to its own hub. */
 export type BuildSession = (args: BuildSessionArgs) => Session;
 
+/**
+ * One execution engine, seen from the session manager. A provider turns the
+ * manager's already-assembled {@link BuildSessionArgs} into a live {@link Session}.
+ *
+ * The built-in `'lmthing'` provider wraps the existing {@link SessionManager.defaultBuildSession}
+ * (or an injected `buildSession`), so its behaviour is unchanged. A `'dsh'`
+ * provider — registered by the DeepSeek Harness integration once it lands — boots
+ * an embedded Cordis runtime with the lmthing-compat plugin bundle. Providers are
+ * dispatched at one choke point ({@link SessionManager.buildSessionFn}), keyed by
+ * the harness resolved for the session's project, so every creation path (chat,
+ * resume, headless, delegate) selects the engine identically.
+ */
+export interface HarnessProvider {
+  readonly id: HarnessId;
+  /** Human-readable label for logs and the "not available" error. */
+  readonly label: string;
+  /** Build a live session for this engine from the manager-assembled args. */
+  buildSession: BuildSession;
+}
+
+/**
+ * Thrown at session creation when a project selects a harness that has no
+ * registered provider — e.g. `'dsh'` on a pod that has not mounted the DeepSeek
+ * Harness integration. Surfaced to the client as a clear session-start failure
+ * rather than silently falling back to another engine, which would run the
+ * project on an engine the user did not choose.
+ */
+export class HarnessUnavailableError extends Error {
+  readonly harness: HarnessId;
+  constructor(harness: HarnessId) {
+    super(
+      `Harness "${harness}" is selected for this project but no provider is registered on this pod. ` +
+        (harness === 'dsh'
+          ? 'The DeepSeek Harness integration is not installed here.'
+          : 'Install or enable the corresponding harness provider.'),
+    );
+    this.name = 'HarnessUnavailableError';
+    this.harness = harness;
+  }
+}
+
 export interface SessionManagerOpts {
   streamFn: (opts: StreamOpts) => Promise<StreamSession>;
   defaultSpaceDir?: string;
@@ -216,8 +259,14 @@ export interface SessionManagerOpts {
   idleTtlMs?: number;
   /** Encapsulates the bin.ts wiring (construct Session bound to a streamFn). The
    *  manager pairs each session with its OWN WebRenderHost + TraceHub. When
-   *  omitted, a default builder using `streamFn` is used. */
+   *  omitted, a default builder using `streamFn` is used. This is the `'lmthing'`
+   *  harness provider's builder. */
   buildSession?: BuildSession;
+  /** Extra harness providers to register beyond the built-in `'lmthing'` one —
+   *  e.g. the DeepSeek Harness (`'dsh'`) integration. A provider whose `id` is
+   *  `'lmthing'` replaces the built-in one. Also registerable later via
+   *  {@link SessionManager.registerHarness}. */
+  harnessProviders?: HarnessProvider[];
   /** Absolute path to `<cwd>/.lmthing`. When set, the manager resolves project
    *  directories from this root and exposes project CRUD methods. */
   lmthingRoot?: string;
@@ -315,6 +364,9 @@ export class SessionManager {
   readonly snapshotsDir: string;
   readonly idleTtlMs: number;
   private buildSessionFn: BuildSession;
+  /** Registered harness providers, keyed by id. Always contains `'lmthing'`.
+   *  A `'dsh'` entry appears once the DeepSeek Harness integration is mounted. */
+  private harnessProviders = new Map<HarnessId, HarnessProvider>();
   /** Pod-side resolvers for the agent `callConnection` global, cached per project
    *  root. Built-in providers (slack/github/google) work in every project; a
    *  provider contributed by an INSTALLED integration space is discovered by
@@ -355,7 +407,14 @@ export class SessionManager {
     this.maxSessions = opts.maxSessions ?? (Number(process.env['MAX_SESSIONS']) || 24);
     this.snapshotsDir = opts.snapshotsDir ?? process.env['SNAPSHOTS_DIR'] ?? '/data/snapshots';
     this.idleTtlMs = opts.idleTtlMs ?? Number(process.env['IDLE_TTL_MINUTES'] ?? 15) * 60000;
-    this.buildSessionFn = opts.buildSession ?? this.defaultBuildSession.bind(this);
+    // The `'lmthing'` provider is the existing builder (injected or default). Every
+    // creation path calls `this.buildSessionFn`, which dispatches to the provider
+    // for the session's resolved harness — so `buildSessionFn` stays the single
+    // choke point and selection is uniform across chat/resume/headless/delegate.
+    const lmthingBuilder = opts.buildSession ?? this.defaultBuildSession.bind(this);
+    this.registerHarness({ id: DEFAULT_HARNESS, label: 'lmthing (QuickJS runtime)', buildSession: lmthingBuilder });
+    for (const p of opts.harnessProviders ?? []) this.registerHarness(p);
+    this.buildSessionFn = (args) => this.dispatchBuildSession(args);
     this.lmthingRoot = opts.lmthingRoot;
     this.sessionLedger = new SessionLedger(
       this.lmthingRoot ? join(this.lmthingRoot, 'sessions-ledger.jsonl') : null,
@@ -500,6 +559,46 @@ export class SessionManager {
         appGlobals?.emitEvent ??
         createEmitEventResolver({ root, projectId, manager: this, depth: this.manualEmitDepth }),
     };
+  }
+
+  /**
+   * Register (or replace) a harness provider. Idempotent per id — re-registering
+   * an id replaces the previous provider. The DeepSeek Harness integration calls
+   * this at boot to add the `'dsh'` provider; tests use it to inject a fake.
+   */
+  registerHarness(provider: HarnessProvider): void {
+    this.harnessProviders.set(provider.id, provider);
+  }
+
+  /** The harness ids that have a registered provider on this pod. */
+  availableHarnesses(): HarnessId[] {
+    return [...this.harnessProviders.keys()];
+  }
+
+  /**
+   * Resolve the harness a set of build args should run on. Project-rooted args
+   * read the project's stored preference (falling back to the pod default and
+   * then {@link DEFAULT_HARNESS}); args with no project always use the default —
+   * a legacy/headless session has no project.json to carry a choice.
+   */
+  private resolveHarnessForArgs(args: BuildSessionArgs): HarnessId {
+    if (this.lmthingRoot && args.projectId) {
+      return readProjectHarnessSync(this.lmthingRoot, args.projectId);
+    }
+    return DEFAULT_HARNESS;
+  }
+
+  /**
+   * The single session-build choke point: resolve the harness for these args and
+   * hand off to its provider. Throws {@link HarnessUnavailableError} when the
+   * resolved harness has no provider, so a project pinned to an uninstalled engine
+   * fails loud at start rather than silently running on another one.
+   */
+  private dispatchBuildSession(args: BuildSessionArgs): Session {
+    const harness = this.resolveHarnessForArgs(args);
+    const provider = this.harnessProviders.get(harness);
+    if (!provider) throw new HarnessUnavailableError(harness);
+    return provider.buildSession(args);
   }
 
   /** Default session builder — constructs a Session bound to `streamFn`. */

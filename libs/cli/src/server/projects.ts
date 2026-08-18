@@ -17,8 +17,9 @@
  */
 
 import { mkdir, writeFile, readFile, readdir, rm, stat } from 'node:fs/promises';
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
+import { type HarnessId, coerceHarnessId, resolveHarness, harnessEnvDefault } from './harness.js';
 
 export const DEFAULT_PROJECT_ID = 'user';
 
@@ -48,6 +49,12 @@ export interface ProjectMeta {
   id: string;
   name: string;
   createdAt: number;
+  /**
+   * The execution engine this project's agent sessions run on. Absent means "no
+   * per-project preference" — the pod default (`LMTHING_HARNESS`) then
+   * {@link DEFAULT_HARNESS} decide. See `resolveHarness` in `./harness.ts`.
+   */
+  harness?: HarnessId;
 }
 
 // ─── Path safety ──────────────────────────────────────────────────────────────
@@ -310,12 +317,12 @@ export function uniqueProjectIdSync(root: string, name: string): string {
  * replaces) — the handful of mkdir/writeFile calls are trivially fast and let
  * `createProject` stay non-Promise in the DTS.
  */
-export function scaffoldProjectSync(root: string, id: string, name: string): ProjectMeta {
+export function scaffoldProjectSync(root: string, id: string, name: string, harness?: HarnessId): ProjectMeta {
   const dir = projectDir(root, id);
   assertUnder(root, id);
   mkdirSync(join(dir, 'spaces'), { recursive: true });
   mkdirSync(join(dir, 'documents'), { recursive: true });
-  const meta: ProjectMeta = { id, name, createdAt: Date.now() };
+  const meta: ProjectMeta = { id, name, createdAt: Date.now(), ...(harness ? { harness } : {}) };
   writeFileSync(projectJsonPath(root, id), JSON.stringify(meta, null, 2), 'utf8');
   writeFileSync(instructionsPath(root, id), '', 'utf8');
   return meta;
@@ -328,12 +335,12 @@ export function scaffoldProjectSync(root: string, id: string, name: string): Pro
  * is created identically however it is triggered. `project.created` is NOT
  * emitted here (this module has no signal bus) — the caller emits it.
  */
-export function createProjectSync(root: string, name: string): ProjectMeta {
+export function createProjectSync(root: string, name: string, harness?: HarnessId): ProjectMeta {
   if (typeof name !== 'string' || name.trim().length === 0) {
     throw new Error('project name must be a non-empty string');
   }
   const id = uniqueProjectIdSync(root, name);
-  return scaffoldProjectSync(root, id, name.trim());
+  return scaffoldProjectSync(root, id, name.trim(), harness);
 }
 
 /** Scaffold a new project directory, writing project.json + empty files. */
@@ -349,6 +356,47 @@ export async function scaffoldProject(root: string, id: string, name: string): P
   await writeFile(projectJsonPath(root, id), JSON.stringify(meta, null, 2), 'utf8');
   await writeFile(instructionsPath(root, id), '', 'utf8');
   return meta;
+}
+
+/**
+ * Read a project's resolved harness SYNCHRONOUSLY and best-effort. Used by the
+ * session-build choke point, which is synchronous ({@link BuildSession}) and on
+ * the hot path — project.json is tiny, and `scaffoldProjectSync` already uses
+ * sync fs here, so a sync read is consistent. Never throws: a missing file,
+ * unreadable JSON, or absent/invalid field all fall through to the pod default
+ * (`LMTHING_HARNESS`) and then {@link DEFAULT_HARNESS}, so a session is never
+ * blocked from starting by a malformed project.json.
+ */
+export function readProjectHarnessSync(root: string, id: string): HarnessId {
+  const envDefault = harnessEnvDefault();
+  if (safeProjectId(id) === null) return resolveHarness(undefined, envDefault);
+  try {
+    const raw = readFileSync(projectJsonPath(root, id), 'utf8');
+    const parsed = JSON.parse(raw) as { harness?: unknown };
+    return resolveHarness(parsed.harness, envDefault);
+  } catch {
+    return resolveHarness(undefined, envDefault);
+  }
+}
+
+/**
+ * Set (or clear) a project's harness, preserving every other field of its
+ * project.json. Passing `undefined` removes the field, returning the project to
+ * "no per-project preference". Throws if the project has no project.json.
+ */
+export async function setProjectHarness(
+  root: string,
+  id: string,
+  harness: HarnessId | undefined,
+): Promise<ProjectMeta> {
+  assertUnder(root, id);
+  const path = projectJsonPath(root, id);
+  const raw = await readFile(path, 'utf8');
+  const parsed = JSON.parse(raw) as Record<string, unknown>;
+  if (harness) parsed['harness'] = harness;
+  else delete parsed['harness'];
+  await writeFile(path, JSON.stringify(parsed, null, 2), 'utf8');
+  return readProjectMeta(root, id);
 }
 
 /**
@@ -372,10 +420,16 @@ export async function readProjectMeta(root: string, id: string): Promise<Project
       .then((s) => s.mtimeMs)
       .catch(() => 0);
   }
+  const harness = coerceHarnessId(parsed.harness);
   return {
     id: parsed.id ?? id,
     name: parsed.name || parsed.title || id,
     createdAt,
+    // Only carry the field when a valid value is stored: an absent `harness`
+    // means "no per-project preference", which resolution fills from the pod
+    // default. Reconstructing the object (rather than spreading `parsed`) means
+    // an invalid on-disk value is dropped to that same "no preference" state.
+    ...(harness ? { harness } : {}),
   };
 }
 
