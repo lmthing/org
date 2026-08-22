@@ -98,7 +98,10 @@ interface Target {
 const TARGETS: Target[] = [
   // First-party DeepSeek (Global), NOT the Fireworks-hosted Data-Zone variant.
   { model: 'DeepSeek-V4-Pro', product: 'Azure Deepseek Models', meter: /^V4 Pro / },
-  { model: 'DeepSeek-V4-Flash', product: 'Azure Deepseek Models', meter: /^V4 Flash / },
+  // DeepSeek-V4-Flash-0731 has no target yet: the deployment isn't provisioned in Azure
+  // AI Foundry, so there's no retail meter to match against. prices/azure.json carries a
+  // manually-set placeholder (same price as the retired DeepSeek-V4-Flash) — add a target
+  // here once the deployment exists and its meter name is known.
   { model: 'DeepSeek-R1-0528', product: 'Azure Deepseek Models', meter: /^R1 / },
   // Kimi is Fireworks-only: no Global meter exists, so this resolves to Data Zone.
   { model: 'Kimi-K2.6', product: 'Azure Fireworks Models', meter: /^FW Kimi K2\.6 / },
