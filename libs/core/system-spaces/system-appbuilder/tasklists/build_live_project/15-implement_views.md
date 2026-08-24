@@ -14,6 +14,10 @@ Write ONE page as a SPEC. Your page is in `item` = { route, purpose, endpoints, 
 Call `writeProjectView(item.route, spec)` with ONE object literal: `{ route, title?, sections: [...] }`.
 No strings of code, no TSX, no imports, no class names, no colors.
 
+Writing the `index` route REPLACES the project's newborn placeholder chat page with a real landing —
+that is intended. Do not re-add a `chat` section to reproduce it: the assistant dock is on every page
+already, so the conversation stays one tap away as a floating modal.
+
 The twelve kinds are `list detail create stats markdown chat toolbar timeline board calendar chart
 outlet`. Three carry one extra required field each: `board` needs `group` (the column key),
 `calendar` needs `date` (the row's date), `chart` needs `charts: [{ kind, x, y }]`. `outlet` is legal

@@ -29,6 +29,14 @@ has tables/pages, this is NOT a from-scratch build: name every table/page for an
 its REAL, existing name — never invent a parallel one — and only add a table/page for a concept nothing
 existing covers yet.
 
+**Every project is born as a CHAT PAGE — your build replaces it.** A fresh project ships one
+placeholder page, `views/index.view.json`, whose only section is a full-height `chat`. That is the
+starting app, not a page to preserve: plan a real `index` home (a dashboard/overview or the primary
+collection) and it OVERWRITES the placeholder when `implement_views` writes `index`. The chat is not
+lost — the assistant dock is on every page automatically, so the conversation relocates into a
+floating modal. Do not plan a `chat`-only landing, and do not treat the placeholder as existing work
+to converge with; `listProjectDir('database')` being empty is the real signal this is a first build.
+
 **And an INCREMENTAL request BOUNDS your membership.** When the project already has tables/pages and the
 request names a specific addition or change, plan ONLY the artifacts the request names plus what those
 artifacts structurally require to work (the table a requested view must read, the endpoint a requested
