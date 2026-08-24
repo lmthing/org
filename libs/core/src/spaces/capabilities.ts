@@ -32,6 +32,7 @@ export type CapabilityId =
   | 'api:call'
   | 'connections:use'
   | 'knowledge:write'
+  | 'self:author'
   | 'project:manage'
   | 'store:read'
   | 'store:install'
@@ -54,6 +55,7 @@ export const CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId>([
   'api:call',
   'connections:use',
   'knowledge:write',
+  'self:author',
   'project:manage',
   'store:read',
   'store:install',
@@ -156,6 +158,7 @@ const BARE_ONLY_CAPABILITY_IDS: ReadonlySet<CapabilityId> = new Set<CapabilityId
   'views:write',
   'api:write',
   'hooks:write',
+  'self:author',
   'project:manage',
   'store:read',
   'store:install',
@@ -217,6 +220,15 @@ export interface AppCapabilities {
   'api:call'?: { allow: string[] };
   'connections:use'?: { providers: string[] };
   'knowledge:write'?: { spaces?: string[] };
+  /**
+   * SELF-AUTHORING — the per-project THING rewriting its OWN space. Grants
+   * `appendSelfInstruct` (append a section to `agents/thing/instruct.md`), `writeSelfKnowledge`
+   * and `readSelf`, all bound host-side to the session's project copy of `user-thing`
+   * (`<project>/spaces/user-thing/`). Additive by construction: the instruct writer only APPENDS,
+   * so a self-edit accumulates learned project context and can never strip the base persona.
+   * Absent ⇒ the writers are neither injected nor declared (a stray call is a typecheck error).
+   */
+  'self:author'?: true;
   'project:manage'?: true;
   'store:read'?: true;
   'store:install'?: true;

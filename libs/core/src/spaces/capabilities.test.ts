@@ -134,6 +134,12 @@ describe('parseCapabilities', () => {
       /more than once/,
     );
   });
+
+  it('parses bare `self:author` and rejects config on it (bare-only)', () => {
+    expect(parseCapabilities(['self:author'], ctx())).toEqual({ 'self:author': true });
+    expect(CAPABILITY_IDS.has('self:author')).toBe(true);
+    expect(() => parseCapabilities([{ 'self:author': { any: 1 } }], ctx())).toThrow();
+  });
 });
 
 describe('system-space smoke: the new frontmatter allow-list gate breaks nothing', () => {

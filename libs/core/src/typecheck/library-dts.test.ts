@@ -19,6 +19,7 @@ import {
   STORE_INSTALL_DTS,
   EVENTS_EMIT_DTS,
   KNOWLEDGE_WRITE_DTS,
+  SELF_AUTHOR_DTS,
   CAPABILITY_DTS_FRAGMENTS,
   composeConnectionsDts,
   PROJECT_READ_DTS,
@@ -260,6 +261,8 @@ describe('CAPABILITY_DTS_FRAGMENTS registry', () => {
       'store:install': STORE_INSTALL_DTS,
       'events:emit': EVENTS_EMIT_DTS,
       'knowledge:write': KNOWLEDGE_WRITE_DTS,
+      // The per-project THING rewriting its own space (appendSelfInstruct / writeSelfKnowledge / readSelf).
+      'self:author': SELF_AUTHOR_DTS,
       // The team workspace this pod belongs to. Two ids on purpose — reading the channels and
       // the roster is not the same grant as posting into them.
       'team:read': TEAM_READ_DTS,

@@ -805,7 +805,64 @@ export class Session {
     const userSpace = await loadSpace(spaceDir, { requireAgents: false });
     const dirs = this.opts.systemSpaceDirs ?? defaultSystemSpaceDirs();
     this.systemSpaces = await loadSystemSpaces(dirs);
-    return mergeSystemInto(userSpace, this.systemSpaces);
+    const merged = mergeSystemInto(userSpace, this.systemSpaces);
+    return await this.overlayProjectThing(merged, userSpace);
+  }
+
+  /**
+   * Overlay the project's OWN copy of `user-thing` (`opts.projectThingDir`) over the shipped system
+   * THING, so the running THING is PER-PROJECT and the `self:author` writers can specialize it in
+   * place. Its `thing` agent, tasklists, functions/components and — crucially — its knowledge
+   * domains win over the system THING's (the system merge is first-wins for knowledge domains, so a
+   * per-project knowledge edit would otherwise be shadowed by the shipped copy).
+   *
+   * Three guardrails:
+   *   - **Defensive load.** A missing or unloadable copy leaves `merged` untouched (fall back to the
+   *     shipped THING), so a broken self-edit can never break the session.
+   *   - **Empty-placeholder guard.** A `thing` with no instructBody and no actions does not shadow
+   *     the real one (mirrors {@link mergeSystemInto}).
+   *   - **Project user-space still wins.** If the project ROOT space itself declares a `thing` agent
+   *     or the same knowledge domain, that keeps priority (it already overlaid in `merged`).
+   */
+  private async overlayProjectThing(merged: Space, userSpace: Space): Promise<Space> {
+    const dir = this.opts.projectThingDir;
+    if (!dir) return merged;
+    let projectThing: Space;
+    try {
+      projectThing = await loadSpace(dir);
+    } catch (err) {
+      this.opts.renderHost.log(
+        `[warn] projectThingDir: failed to load "${dir}": ${err instanceof Error ? err.message : String(err)} — using the shipped THING`,
+      );
+      return merged;
+    }
+    const thing = projectThing.agents['thing'];
+    if (!thing || (!thing.instructBody?.trim() && thing.actions.length === 0)) {
+      return merged; // empty placeholder — never shadow the real system THING
+    }
+    const userProvidedThing = !!userSpace.agents['thing'];
+    const agents = userProvidedThing ? merged.agents : { ...merged.agents, thing };
+    const tasklists = { ...projectThing.tasklists, ...merged.tasklists };
+    const functions = { ...projectThing.functions, ...merged.functions };
+    const functionsBundled = { ...projectThing.functionsBundled, ...merged.functionsBundled };
+    const view = { ...projectThing.components.view, ...merged.components.view };
+    const form = { ...projectThing.components.form, ...merged.components.form };
+    // Knowledge precedence: project-ROOT space > project-THING copy > system. `merged` already has
+    // (root over system); layer project-THING in for any slug the ROOT space did not itself declare,
+    // so a per-project knowledge edit wins over the shipped THING's same-slug domain.
+    const domains = { ...merged.knowledge.domains };
+    for (const [slug, domain] of Object.entries(projectThing.knowledge.domains)) {
+      if (!(slug in userSpace.knowledge.domains)) domains[slug] = domain;
+    }
+    return {
+      ...merged,
+      agents,
+      tasklists,
+      functions,
+      functionsBundled,
+      components: { view, form },
+      knowledge: { domains },
+    };
   }
 
   /**

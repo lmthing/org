@@ -106,6 +106,12 @@ export interface SessionOpts {
   projectRoot?: string;
   /** The project id (basename of projectRoot); exposed as LMTHING_PROJECT_ID. */
   projectId?: string;
+  /** Absolute path to the project's OWN copy of the `user-thing` space
+   *  (`<projectRoot>/spaces/user-thing/`), when it has one. When present and loadable, its `thing`
+   *  agent, tasklists, functions/components AND knowledge OVERLAY the shipped system THING in
+   *  {@link Session.loadMergedSpace} — so the running THING is per-project and the `self:author`
+   *  writers can specialize it in place. Absent/unloadable ⇒ the shipped THING runs (back-compat). */
+  projectThingDir?: string;
   /** The PROJECT's functions (`<projectRoot>/functions/*.ts`) — the THIRD function
    *  scope, loaded by libs/cli (loadProjectFunctions) and injected into project-rooted
    *  sessions (and their forks, via the shared agentFunctions map) alongside the

@@ -1,2 +1,2 @@
-export { createProjectAuthoringGlobals, type ProjectAuthoringGlobals } from './globals.js';
+export { createProjectAuthoringGlobals, createSelfAuthoringGlobals, type ProjectAuthoringGlobals } from './globals.js';
 export { resolveCatalogRoot } from './catalog-root.js';

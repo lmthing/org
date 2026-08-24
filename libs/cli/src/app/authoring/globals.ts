@@ -22,7 +22,7 @@ import { runProjectAppCheck } from '../build/check.js';
 import type { AppCheckResult } from '../build/check.js';
 import { dirname, join, resolve, sep } from 'node:path';
 import { transformSync } from 'esbuild';
-import { validateTableSchema, type TableSchema } from '@lmthing/core';
+import { validateTableSchema, parseFrontmatter, type TableSchema } from '@lmthing/core';
 import {
   LintError,
   apiHandlerTypingError,
@@ -1060,4 +1060,88 @@ export function createProjectAuthoringGlobals(opts: {
     // key would still surface a broken proxy on `ctx`.
     ...(callProjectApi ? { callProjectApi } : {}),
   };
+}
+
+// ─── Self-authoring (`self:author`) — the per-project THING rewriting its OWN space ──────────────
+
+/** A single kebab slug for a self-knowledge field/aspect (no path separators, no traversal). */
+const SELF_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+function assertSelfSlug(kind: string, slug: string): string {
+  const s = String(slug ?? '').trim();
+  if (!SELF_SLUG_RE.test(s)) {
+    throw new Error(`${kind} "${slug}" must be a kebab slug (lowercase letters, digits, hyphens)`);
+  }
+  return s;
+}
+
+/**
+ * SELF-AUTHORING host globals (`self:author`) — the per-project THING rewriting its OWN space,
+ * bound to the project's copy of `user-thing` (`<projectRoot>/spaces/user-thing/`).
+ *
+ * Additive by construction: {@link appendSelfInstruct} only ever APPENDS a section to the END of
+ * `agents/thing/instruct.md` (after the shipped frontmatter and body), so a self-edit accumulates
+ * learned project context and can never strip the base persona. Every write stays inside the space
+ * root via `safeResolve`. The edit takes effect on the NEXT session, when the merged space reloads.
+ */
+export function createSelfAuthoringGlobals(opts: { spaceRoot: string }): {
+  appendSelfInstruct: (text: string) => { ok: boolean; error?: string };
+  writeSelfKnowledge: (field: string, aspect: string, markdown: string) => { ok: boolean; error?: string };
+  readSelf: (path?: string) => { ok: boolean; content: string; error?: string };
+} {
+  const spaceRoot = resolve(opts.spaceRoot);
+  const instructRel = join('agents', 'thing', 'instruct.md');
+
+  function appendSelfInstruct(text: string): { ok: boolean; error?: string } {
+    try {
+      if (typeof text !== 'string' || text.trim().length === 0) {
+        return { ok: false, error: 'appendSelfInstruct: text must be a non-empty string' };
+      }
+      const abs = safeResolve(spaceRoot, instructRel);
+      if (!existsSync(abs)) {
+        return { ok: false, error: `appendSelfInstruct: this project has no editable THING (missing ${instructRel})` };
+      }
+      const current = readFileSync(abs, 'utf8');
+      const section = `\n\n---\n\n## Learned about this project\n\n${text.trim()}\n`;
+      const next = current.replace(/\s*$/, '') + section;
+      // Prove the file still splits cleanly into { frontmatter, body } — an EOF append cannot touch
+      // the top-of-file frontmatter, but re-parsing is the cheap guarantee the plan asks for.
+      parseFrontmatter(next, abs);
+      writeFile(abs, next);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: `appendSelfInstruct rejected: ${e instanceof Error ? e.message : String(e)}` };
+    }
+  }
+
+  function writeSelfKnowledge(field: string, aspect: string, markdown: string): { ok: boolean; error?: string } {
+    try {
+      const f = assertSelfSlug('knowledge field', field);
+      const a = assertSelfSlug('knowledge aspect', aspect);
+      if (typeof markdown !== 'string' || markdown.trim().length === 0) {
+        return { ok: false, error: 'writeSelfKnowledge: markdown must be a non-empty string' };
+      }
+      const abs = safeResolve(spaceRoot, join('knowledge', 'self', f, `${a}.md`));
+      // A leading `# <aspect>` header guarantees the file is plain body, never mistaken for
+      // frontmatter (a `---`-led option file would demand a `description` and fail the space load).
+      const body = `# ${a}\n\n${markdown.trim()}\n`;
+      writeFile(abs, body);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: `writeSelfKnowledge rejected: ${e instanceof Error ? e.message : String(e)}` };
+    }
+  }
+
+  function readSelf(path?: string): { ok: boolean; content: string; error?: string } {
+    try {
+      const rel = path && String(path).trim() ? String(path).trim() : instructRel;
+      const abs = safeResolve(spaceRoot, rel);
+      if (!existsSync(abs)) return { ok: false, content: '', error: `no such file: ${rel}` };
+      return { ok: true, content: readFileSync(abs, 'utf8') };
+    } catch (e) {
+      return { ok: false, content: '', error: String(e instanceof Error ? e.message : e) };
+    }
+  }
+
+  return { appendSelfInstruct, writeSelfKnowledge, readSelf };
 }

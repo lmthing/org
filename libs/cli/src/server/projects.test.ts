@@ -2,7 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createProjectSync, uniqueProjectIdSync, scaffoldProjectSync, SYSTEM_PROJECT_ID } from './projects.js';
+import {
+  createProjectSync,
+  uniqueProjectIdSync,
+  scaffoldProjectSync,
+  ensureAppFromBirthSync,
+  SYSTEM_PROJECT_ID,
+} from './projects.js';
+import { writeFileSync } from 'node:fs';
 
 /**
  * The SYNC live-project scaffold that backs the agent-facing `createProject`
@@ -70,5 +77,82 @@ describe('createProjectSync (live-project scaffold)', () => {
     const meta = createProjectSync(root, 'Blank');
     expect(meta.id).toBe('blank');
     expect(existsSync(join(root, 'blank', 'project.json'))).toBe(true);
+  });
+});
+
+/**
+ * App-from-birth: every scaffolded project is a served app that is a single chat page, and
+ * carries its own copy of the `user-thing` space (when the system space is materialized).
+ */
+describe('scaffoldAppFromBirth', () => {
+  let root: string;
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'lmroot-'));
+  });
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  });
+
+  /** Materialize a minimal system user-thing so the per-project copy has a source. */
+  function materializeSystemThing(): void {
+    const agentDir = join(root, 'system', 'spaces', 'user-thing', 'agents', 'thing');
+    mkdirSync(agentDir, { recursive: true });
+    writeFileSync(join(agentDir, 'instruct.md'), '---\ntitle: THING\n---\nYou are THING.', 'utf8');
+    writeFileSync(join(agentDir, 'charter.md'), 'THING charter.', 'utf8');
+  }
+
+  it('scaffolds a chat-only served app: views/index.view.json (one chat section) + shell {assistant:false}', () => {
+    createProjectSync(root, 'My Todos');
+    const dir = join(root, 'my-todos');
+    const indexPath = join(dir, 'views', 'index.view.json');
+    expect(existsSync(indexPath)).toBe(true);
+    const spec = JSON.parse(readFileSync(indexPath, 'utf8'));
+    expect(spec.route).toBe('index');
+    expect(spec.sections).toHaveLength(1);
+    expect(spec.sections[0]).toMatchObject({ kind: 'chat', agent: 'thing', height: 'full' });
+    const shell = JSON.parse(readFileSync(join(dir, 'shell.view.json'), 'utf8'));
+    expect(shell.assistant).toBe(false);
+  });
+
+  it('copies the system user-thing into the project when it is materialized', () => {
+    materializeSystemThing();
+    createProjectSync(root, 'Trip');
+    const projThing = join(root, 'trip', 'spaces', 'user-thing', 'agents', 'thing', 'instruct.md');
+    expect(existsSync(projThing)).toBe(true);
+    expect(readFileSync(projThing, 'utf8')).toContain('You are THING.');
+  });
+
+  it('skips the THING copy gracefully when the system space is not materialized', () => {
+    // No materializeSystemThing() — the copy is best-effort and must not throw.
+    expect(() => createProjectSync(root, 'Bare')).not.toThrow();
+    expect(existsSync(join(root, 'bare', 'spaces', 'user-thing'))).toBe(false);
+    // The chat page is still there — the app serves regardless.
+    expect(existsSync(join(root, 'bare', 'views', 'index.view.json'))).toBe(true);
+  });
+
+  it('ensureAppFromBirthSync adopts an existing legacy project without clobbering real pages', () => {
+    materializeSystemThing();
+    // A legacy project: has real pages, no chat index, no project THING.
+    const dir = join(root, 'legacy');
+    mkdirSync(join(dir, 'views'), { recursive: true });
+    writeFileSync(join(dir, 'project.json'), JSON.stringify({ id: 'legacy', name: 'Legacy', createdAt: 1 }), 'utf8');
+    writeFileSync(join(dir, 'views', 'dashboard.view.json'), JSON.stringify({ route: 'dashboard', sections: [] }), 'utf8');
+
+    ensureAppFromBirthSync(root, 'legacy', 'Legacy');
+
+    // Real page untouched; NO placeholder chat index written (views/ already existed).
+    expect(existsSync(join(dir, 'views', 'dashboard.view.json'))).toBe(true);
+    expect(existsSync(join(dir, 'views', 'index.view.json'))).toBe(false);
+    // But it DID gain a per-project THING copy.
+    expect(existsSync(join(dir, 'spaces', 'user-thing', 'agents', 'thing', 'instruct.md'))).toBe(true);
+  });
+
+  it('ensureAppFromBirthSync is idempotent on a fully-scaffolded project', () => {
+    materializeSystemThing();
+    createProjectSync(root, 'Fresh');
+    const before = readFileSync(join(root, 'fresh', 'views', 'index.view.json'), 'utf8');
+    expect(() => ensureAppFromBirthSync(root, 'fresh', 'Fresh')).not.toThrow();
+    const after = readFileSync(join(root, 'fresh', 'views', 'index.view.json'), 'utf8');
+    expect(after).toBe(before);
   });
 });
