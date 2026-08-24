@@ -7,7 +7,7 @@ import type { AppCapabilities } from '../spaces/capabilities.js';
  * host-tools write gate withholds `writeFileRaw`. Only the read/outbound grants
  * (`db:read`, `api:call`, `connections:use`, `store:read`) survive; every
  * mutating/authoring grant (`db:write`/`db:schema`/`views:write`/`api:write`/
- * `hooks:write`/`knowledge:write`/`store:install`/`events:emit`) is dropped. NOTE: `connections:use`
+ * `hooks:write`/`knowledge:write`/`self:author`/`store:install`/`events:emit`) is dropped. NOTE: `connections:use`
  * can have a side-effect (POST to an external service), but is treated as
  * outbound like `api:call` — the caller's own read-only intent governs, not the
  * transport. Drop it here if read-only forks must never mutate external state.

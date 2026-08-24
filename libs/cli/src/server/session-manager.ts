@@ -34,7 +34,7 @@ import { bootProjectApp } from '../app/boot.js';
 import { loadProjectApp } from '../app/loader.js';
 import { createApiRuntime, type ApiRuntime } from '../app/api/runtime.js';
 import type { ProjectDb } from '../app/store.js';
-import { createProjectAuthoringGlobals, type ProjectAuthoringGlobals } from '../app/authoring/index.js';
+import { createProjectAuthoringGlobals, createSelfAuthoringGlobals, type ProjectAuthoringGlobals } from '../app/authoring/index.js';
 import { generateProjectContracts, type ProjectContracts } from '../app/build/contracts.js';
 import { loadAllHooks } from '../app/hooks/index.js';
 import { ProjectHookRuntime } from '../app/hooks/runtime.js';
@@ -55,6 +55,7 @@ import {
   listSystemSpaceDirs,
   listProjectSpaceDirs,
   ensureDefaultProject,
+  ensureAppFromBirthSync,
   safeDocumentName,
   sessionsDir,
   listProjectSessions,
@@ -167,6 +168,9 @@ export interface BuildSessionArgs {
   preloadSpaceDirs?: string[];
   /** Absolute path to the project's spaces/ dir; exposed to VMs as env. */
   projectSpacesDir?: string;
+  /** Absolute path to the project's OWN copy of `user-thing`, when present — overlays the shipped
+   *  THING so the running THING is per-project (see Session.loadMergedSpace / overlayProjectThing). */
+  projectThingDir?: string;
   /** The project's `functions/*.ts` (third function scope), loaded from
    *  `<projectRoot>/functions/` and injected into the project-rooted session +
    *  its forks. Original TS source + esbuild-bundled ESM (when the project has
@@ -574,6 +578,7 @@ export class SessionManager {
         systemSpaceDirs: args.systemSpaceDirs,
         preloadSpaceDirs: args.preloadSpaceDirs,
         projectSpacesDir: args.projectSpacesDir,
+        projectThingDir: args.projectThingDir,
         projectFunctions: args.projectFunctions,
         projectFunctionsBundled: args.projectFunctionsBundled,
         projectId: args.projectId,
@@ -640,6 +645,13 @@ export class SessionManager {
       // would be silently dropped, while an authoring key surfaces on `ctx` automatically.
       projectAuthoring: this.buildProjectAuthoring(root, projectId),
     });
+  }
+
+  /** The project's OWN copy of `user-thing` (`<root>/<projectId>/spaces/user-thing/`), when it
+   *  exists — the overlay target for a per-project THING. `undefined` ⇒ the shipped THING runs. */
+  private projectThingDir(root: string, projectId: string): string | undefined {
+    const dir = join(root, projectId, 'spaces', 'user-thing');
+    return existsSync(join(dir, 'agents', 'thing')) ? dir : undefined;
   }
 
   /** Build this project's typed live-project authoring writers, bound to its dir, with the
@@ -883,6 +895,13 @@ export class SessionManager {
     // injectAppGlobals), so THING/ordinary agents never see them; the automator writes
     // hooks+events, the engineer writes functions.
     const projectAuthoring = this.buildProjectAuthoring(root, projectId);
+    // SELF-AUTHORING — the per-project THING rewriting its OWN space. Present only when the
+    // project actually has a `spaces/user-thing/` copy (so the writers have a target); injected
+    // onto a VM only under the `self:author` grant (core's injectAppGlobals), which THING holds.
+    const selfThingRoot = join(root, projectId, 'spaces', 'user-thing');
+    const self = existsSync(join(selfThingRoot, 'agents', 'thing'))
+      ? createSelfAuthoringGlobals({ spaceRoot: selfThingRoot })
+      : undefined;
     return {
       // Live forwarder (NOT a build-time snapshot): reflects whatever db is booted for
       // the project when a session/delegate injects it. Present on the CAPABILITY grant
@@ -905,6 +924,13 @@ export class SessionManager {
       writeProjectQuery: projectAuthoring.writeProjectQuery,
       listProjectDir: projectAuthoring.listProjectDir,
       readProjectFile: projectAuthoring.readProjectFile,
+      ...(self
+        ? {
+            appendSelfInstruct: self.appendSelfInstruct,
+            writeSelfKnowledge: self.writeSelfKnowledge,
+            readSelf: self.readSelf,
+          }
+        : undefined),
     };
   }
 
@@ -1446,6 +1472,11 @@ export class SessionManager {
       agentSlug = agent ?? (await resolveDefaultAgent(spaceDir)) ?? agentSlug;
     }
     const projectSpacesDir = join(root, projectId, 'spaces');
+    // Adopt the app-from-birth model for a project that predates it (idempotent): ensure a chat
+    // index + a per-project THING copy exist before we build the session, so the overlay below has
+    // a target and the app is never a 404 on open.
+    ensureAppFromBirthSync(root, projectId, projectId);
+    const projectThingDir = this.projectThingDir(root, projectId);
 
     const [systemSpaceDirs, preloadSpaceDirs] = await Promise.all([
       listSystemSpaceDirs(root),
@@ -1464,6 +1495,7 @@ export class SessionManager {
       systemSpaceDirs,
       preloadSpaceDirs,
       projectSpacesDir,
+      projectThingDir,
       projectFunctions: projectFunctions.functions,
       projectFunctionsBundled: projectFunctions.functionsBundled,
       projectId,
@@ -1507,6 +1539,8 @@ export class SessionManager {
       ? resolveSpaceRefDir(root, projectId, parseSpaceRef(opts.spaceRef).space)
       : join(root, projectId);
     const projectSpacesDir = join(root, projectId, 'spaces');
+    ensureAppFromBirthSync(root, projectId, projectId);
+    const projectThingDir = this.projectThingDir(root, projectId);
 
     // Load persisted meta to restore title/createdAt/messageCount.
     const metaPath = join(snapshotDir, 'meta.json');
@@ -1546,6 +1580,7 @@ export class SessionManager {
       systemSpaceDirs,
       preloadSpaceDirs,
       projectSpacesDir,
+      projectThingDir,
       projectFunctions: projectFunctions.functions,
       projectFunctionsBundled: projectFunctions.functionsBundled,
       projectId,

@@ -17,8 +17,10 @@
  */
 
 import { mkdir, writeFile, readFile, readdir, rm, stat } from 'node:fs/promises';
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync, cpSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
+
+import { SHELL_SPEC_PATH, viewSpecPath } from '../app/view-spec/files.js';
 
 export const DEFAULT_PROJECT_ID = 'user';
 
@@ -303,6 +305,73 @@ export function uniqueProjectIdSync(root: string, name: string): string {
   return candidate;
 }
 
+// ─── App-from-birth: every project is born a served app that is a single chat page ──
+
+/** The greeting shown in a newborn project's full-screen chat page (State 0). */
+export const NEWBORN_CHAT_GREETING =
+  "Hi — I'm your assistant. Tell me what you want to keep track of, plan, or organize, and I'll build it into an app right here as we talk.";
+
+/**
+ * The scaffolded `views/index.view.json` for a newborn project: a single, full-height
+ * `chat` section on the project's own top-level `thing` agent. Opening the project therefore
+ * serves a real app that IS a chat — no 404, no separate surface. Once the app grows real
+ * pages, the app builder REPLACES this index and the chat survives only as the floating
+ * assistant dock (see `system-appbuilder`), which is how "chat embedded/hidden in a modal"
+ * is reached progressively.
+ */
+export function newbornIndexViewSpec(name: string): Record<string, unknown> {
+  return {
+    route: 'index',
+    title: name,
+    sections: [
+      {
+        id: 'chat',
+        kind: 'chat',
+        agent: 'thing',
+        height: 'full',
+        greeting: NEWBORN_CHAT_GREETING,
+      },
+    ],
+  };
+}
+
+/**
+ * The scaffolded `shell.view.json` for a newborn project. The assistant dock is renderer
+ * chrome that is otherwise always-on; while the whole app IS the chat page we SUPPRESS it
+ * (`assistant: false`) so the full-screen chat is not doubled by a floating launcher over
+ * itself. The app builder re-enables the dock when it adds real pages.
+ */
+export const NEWBORN_SHELL_SPEC: Record<string, unknown> = { assistant: false };
+
+/**
+ * Write the app-from-birth artifacts for a freshly-scaffolded project, SYNCHRONOUSLY:
+ *
+ *  1. `views/index.view.json` — a single full-height chat page (see {@link newbornIndexViewSpec}).
+ *  2. `shell.view.json` — `{ assistant: false }` while chat-only (see {@link NEWBORN_SHELL_SPEC}).
+ *  3. A per-project copy of the system `user-thing` space at `<project>/spaces/user-thing/`, so the
+ *     running THING can be specialized to THIS project (it shadows the shipped THING via the
+ *     `loadMergedSpace` project-THING overlay) and rewrite its own instruct/knowledge in place.
+ *
+ * The THING copy is best-effort: when the system space has not been materialized yet
+ * (`<root>/system/spaces/user-thing/`), the copy is skipped and the session falls back to the
+ * shipped THING — so this is safe in bare tests that scaffold without a materialized runtime.
+ */
+export function scaffoldAppFromBirthSync(root: string, id: string, name: string): void {
+  const dir = projectDir(root, id);
+  const indexPath = join(dir, viewSpecPath('index'));
+  mkdirSync(resolve(indexPath, '..'), { recursive: true });
+  writeFileSync(indexPath, JSON.stringify(newbornIndexViewSpec(name), null, 2), 'utf8');
+  writeFileSync(join(dir, SHELL_SPEC_PATH), JSON.stringify(NEWBORN_SHELL_SPEC, null, 2), 'utf8');
+
+  const systemThing = join(root, 'system', 'spaces', 'user-thing');
+  if (existsSync(join(systemThing, 'agents'))) {
+    const dest = join(dir, 'spaces', 'user-thing');
+    if (!existsSync(dest)) {
+      cpSync(systemThing, dest, { recursive: true });
+    }
+  }
+}
+
 /**
  * Scaffold a new project directory SYNCHRONOUSLY, writing project.json + empty
  * files. The sync twin of {@link scaffoldProject}, for the agent-facing
@@ -318,6 +387,7 @@ export function scaffoldProjectSync(root: string, id: string, name: string): Pro
   const meta: ProjectMeta = { id, name, createdAt: Date.now() };
   writeFileSync(projectJsonPath(root, id), JSON.stringify(meta, null, 2), 'utf8');
   writeFileSync(instructionsPath(root, id), '', 'utf8');
+  scaffoldAppFromBirthSync(root, id, name);
   return meta;
 }
 
@@ -348,7 +418,37 @@ export async function scaffoldProject(root: string, id: string, name: string): P
   const meta: ProjectMeta = { id, name, createdAt: Date.now() };
   await writeFile(projectJsonPath(root, id), JSON.stringify(meta, null, 2), 'utf8');
   await writeFile(instructionsPath(root, id), '', 'utf8');
+  scaffoldAppFromBirthSync(root, id, name);
   return meta;
+}
+
+/**
+ * Ensure an EXISTING project has the app-from-birth artifacts (a chat index view + shell + a
+ * per-project `user-thing`). Idempotent: each artifact is written only when absent, so a project
+ * that has already grown real pages (its `index` is no longer the placeholder chat) is left alone.
+ * This is the lazy back-compat path — a project created before this change adopts the model on its
+ * next session start without a migration script.
+ */
+export function ensureAppFromBirthSync(root: string, id: string, name: string): void {
+  const dir = projectDir(root, id);
+  if (!existsSync(dir)) return;
+  const hasAnyView = existsSync(join(dir, 'views')) || existsSync(join(dir, 'pages'));
+  const hasProjectThing = existsSync(join(dir, 'spaces', 'user-thing', 'agents'));
+  if (hasAnyView && hasProjectThing) return;
+  if (!hasAnyView) {
+    const indexPath = join(dir, viewSpecPath('index'));
+    mkdirSync(resolve(indexPath, '..'), { recursive: true });
+    writeFileSync(indexPath, JSON.stringify(newbornIndexViewSpec(name), null, 2), 'utf8');
+    if (!existsSync(join(dir, SHELL_SPEC_PATH))) {
+      writeFileSync(join(dir, SHELL_SPEC_PATH), JSON.stringify(NEWBORN_SHELL_SPEC, null, 2), 'utf8');
+    }
+  }
+  if (!hasProjectThing) {
+    const systemThing = join(root, 'system', 'spaces', 'user-thing');
+    if (existsSync(join(systemThing, 'agents'))) {
+      cpSync(systemThing, join(dir, 'spaces', 'user-thing'), { recursive: true });
+    }
+  }
 }
 
 /**
@@ -478,7 +578,8 @@ export async function ensureDefaultProject(root: string): Promise<void> {
 
   try {
     await stat(projectJsonPath(root, DEFAULT_PROJECT_ID));
-    // Already exists — nothing to do.
+    // Already exists — adopt the app-from-birth model if it predates this change.
+    ensureAppFromBirthSync(root, DEFAULT_PROJECT_ID, 'Personal');
   } catch {
     await scaffoldProject(root, DEFAULT_PROJECT_ID, 'Personal');
   }

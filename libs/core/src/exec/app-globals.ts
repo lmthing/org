@@ -132,6 +132,15 @@ export interface AppGlobalImpls {
    *  (the automator) uses THESE to see what already exists, never the space-rooted tools. */
   listProjectDir?: (dir: string) => { ok: boolean; entries: string[]; error?: string };
   readProjectFile?: (path: string) => { ok: boolean; content: string; error?: string };
+  /** SELF-AUTHORING globals (`self:author`) — the per-project THING rewriting its OWN space,
+   *  bound host-side to `<projectRoot>/spaces/user-thing/`. `appendSelfInstruct` APPENDS a
+   *  delimited section to `agents/thing/instruct.md` (never overwrites — additive, so a bad edit
+   *  can only add, never strip the base persona); `writeSelfKnowledge` writes a knowledge aspect;
+   *  `readSelf` reads a file back for iterative edits. Provided by libs/cli
+   *  (`createSelfAuthoringGlobals`), injected purely on the grant. */
+  appendSelfInstruct?: (text: string) => AuthoringResult;
+  writeSelfKnowledge?: (field: string, aspect: string, markdown: string) => AuthoringResult;
+  readSelf?: (path?: string) => { ok: boolean; content: string; error?: string };
 }
 
 /** Throw the host error shape (naming the allowed tables, like the canDelegateTo
@@ -260,6 +269,15 @@ export function injectAppGlobals(
   if (app['project:manage']) {
     if (impls.createProject) injectGlobal(ctx, 'createProject', impls.createProject as (...a: unknown[]) => unknown);
     if (impls.selectProject) injectGlobal(ctx, 'selectProject', impls.selectProject as (...a: unknown[]) => unknown);
+  }
+
+  // SELF-AUTHORING (`self:author`) — the per-project THING rewriting its own space. Present only
+  // when the host supplies the impls (a project-rooted session whose project has a `user-thing`
+  // copy); absent otherwise, so a stray call fails typecheck rather than mis-targeting.
+  if (app['self:author']) {
+    if (impls.appendSelfInstruct) injectGlobal(ctx, 'appendSelfInstruct', impls.appendSelfInstruct as (...a: unknown[]) => unknown);
+    if (impls.writeSelfKnowledge) injectGlobal(ctx, 'writeSelfKnowledge', impls.writeSelfKnowledge as (...a: unknown[]) => unknown);
+    if (impls.readSelf) injectGlobal(ctx, 'readSelf', impls.readSelf as (...a: unknown[]) => unknown);
   }
 
   // LIVE-project introspection reads — the read-side twins of the writeProject* writers. Gated on

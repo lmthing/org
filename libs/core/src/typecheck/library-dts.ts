@@ -458,6 +458,17 @@ declare function emitEvent(name: string, payload: Record<string, unknown>): Prom
 export const KNOWLEDGE_WRITE_DTS = `/** Author a knowledge option into THIS agent's own space at knowledge/<domain>/<field>/<option>.md (option 'index' is reserved). opts.source tags provenance for later conflict resolution. */
 declare function writeKnowledge(domain: string, field: string, option: string, markdown: string, opts?: { source?: 'user' | 'researched' | 'agent' }): { ok: boolean; path: string; error?: string };`;
 
+// `self:author` — the per-project THING rewriting its OWN space (`<project>/spaces/user-thing/`).
+// The instruct writer only APPENDS, by construction: a self-edit accumulates learned project
+// context and can never strip the base persona. Synchronous host calls (they write a file); the
+// edit takes effect on the NEXT session/turn, when the merged space is reloaded.
+export const SELF_AUTHOR_DTS = `/** Append a section to YOUR OWN instructions (this project's THING). Additive — it never overwrites; use it to record how THIS project works and how the user likes things. Takes effect next session. */
+declare function appendSelfInstruct(text: string): { ok: boolean; error?: string };
+/** Write a knowledge aspect into YOUR OWN space at knowledge/<field>/<aspect>.md, so a durable project fact loads on demand later. */
+declare function writeSelfKnowledge(field: string, aspect: string, markdown: string): { ok: boolean; error?: string };
+/** Read one of your own space files back (default: your instruct.md), to edit iteratively. */
+declare function readSelf(path?: string): { ok: boolean; content: string; error?: string };`;
+
 // `team:read` earns the four READERS of the team workspace this pod belongs to. Every
 // one of them answers for the CALLER whose message started the turn — the identity is
 // closed over host-side, so there is no `userId`/`role` parameter to spoof. A DM the
@@ -515,6 +526,7 @@ export const CAPABILITY_DTS_FRAGMENTS: Record<string, string> = {
   'api:write': PROJECT_API_DTS,
   'hooks:write': PROJECT_AUTHORING_DTS,
   'knowledge:write': KNOWLEDGE_WRITE_DTS,
+  'self:author': SELF_AUTHOR_DTS,
   'project:manage': PROJECT_MANAGE_DTS,
   'store:read': STORE_READ_DTS,
   'store:install': STORE_INSTALL_DTS,
