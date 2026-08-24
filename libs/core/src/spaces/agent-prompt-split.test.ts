@@ -54,8 +54,17 @@ const SPLIT_AGENTS = [
      *   +1  the reply-in-the-user's-language rule, which `06-tanzania` step 11 measures and which
      *       had never been written down ANYWHERE — see `thing-prompt-split.test.ts`. A rule the
      *       product is scored on belongs in the body by definition.
+     *
+     * 566 -> 583 on 2026-08-24, for the chat-first product model — two things a session cannot run
+     * without and that no load can gate, because they govern EVERY project session, not one route:
+     *   +9  "Every project starts as a chat and GROWS into an app" — the app-from-birth lifecycle
+     *       (build in place, replace the chat page, name the app). Without it THING reaches for a
+     *       separate project on every build and never demotes the chat to the dock.
+     *   +8  "Make this project yours (self-authoring)" — the new `self:author` grant. A capability
+     *       THING never uses is dead; the rule that it appends (never overwrites) its OWN instruct
+     *       is exactly the kind of always-on guardrail the split keeps in the body.
      */
-    maxBodyLines: 566,
+    maxBodyLines: 583,
     priorLines: 1270,
   },
   {
