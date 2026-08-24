@@ -54,6 +54,17 @@ ENDPOINT'S OUTPUT and bound by name, or expressed as a named policy — `format`
 `{ navigate: 'trips/[tripId]/expenses', params: { tripId: '$.id' } }`. Never `/trips/:tripId/...`,
 never a string with a binding spliced into it.
 
+**Make it feel finished (the UX the plan asked for).** The renderer already gives you loading, empty
+and error states, archetype layout and responsive behaviour for free — so spend your effort on the
+parts only you can set:
+- **Human copy.** Give each page and section a specific `title`, and every `list` a warm `empty:`
+  that invites the next action ("No expenses yet — add one above."), never placeholder text.
+- **Readable values.** Put `format` on money/dates/durations, and `tone`/`toneMap` on a status or
+  badge so good and bad read apart at a glance — a raw `false` or a bare `78` beside `70.49` is a
+  finding the smoke gate will flag anyway.
+- **Order for the eye.** Sections render top-to-bottom in the order you list them; put the thing the
+  page exists for first, a `toolbar` or `stats` strip above the collection it summarises.
+
 **If `w.ok` is false, DO NOT resolve.** `w.error` names the instance path, the offense and the finite
 valid set (`sections[1].mutation: "addRecipies" is not an endpoint. Did you mean addRecipe? Mutations:
 addRecipe, importRecipe`). **Edit that ONE field and write again** — never resubmit the same object,

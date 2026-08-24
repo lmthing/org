@@ -64,7 +64,7 @@ const SPLIT_AGENTS = [
      *       THING never uses is dead; the rule that it appends (never overwrites) its OWN instruct
      *       is exactly the kind of always-on guardrail the split keeps in the body.
      */
-    maxBodyLines: 583,
+    maxBodyLines: 584,
     priorLines: 1270,
   },
   {
