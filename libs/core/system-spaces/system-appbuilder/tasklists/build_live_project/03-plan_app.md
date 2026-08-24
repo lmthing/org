@@ -93,6 +93,25 @@ from the material for every `<…>` (never leave a placeholder). Plan for an app
   honest gap is a correct answer here and gets routed elsewhere; a page forced into the wrong section
   kind is the failure this pipeline measures.
 
+## Great UX is part of the plan, not a later polish
+
+A build that typechecks but reads like a database admin panel has failed the user. Design for a
+person, using the levers this vocabulary already gives you:
+
+- **Task-first, not table-first.** Pages are built from the STORIES, never one-page-per-table. A
+  reflexive page per table is the classic generated-app tell. Group what the user does together.
+- **The landing earns its role.** `index` answers "what's the state of my world / what do I do here"
+  — a `stats` strip over the primary collection, or that collection itself — never a bare table dump.
+- **Smallest useful thing first.** Deliver the payoff of the stories that were actually asked for;
+  a story nobody told you is not a page to invent. Scope is part of correctness (above).
+- **Everything actionable is actionable.** If a row represents something the user acts on (mark done,
+  pay, archive, edit), plan the endpoint that flips it (server-side — the spec has no `!`) and a
+  `rowAction`/`toolbar` for it. A read-only wall is poor UX.
+- **Consistency through components.** A repeated card/row shape becomes ONE reusable view component so
+  the app feels of a piece, not hand-cut per page.
+- **Meaning through hierarchy.** Plan `stats` for at-a-glance status and lean on `tone`/`toneMap`
+  (good/bad/neutral) and `format` so numbers, money and dates read correctly — detailed in the view step.
+
 Emit one statement:
 
 ```typescript
