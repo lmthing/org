@@ -1,6 +1,6 @@
 import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { useStore, type Project } from '../store/store';
+import { useStore, type Project, type ModelPricing } from '../store/store';
 import { apiGet, apiPost, apiDelete } from './api';
 import { useChatNav } from './chat-nav';
 import { ProjectDropdown } from '../../elements/nav/app-sidebar';
@@ -29,6 +29,7 @@ export function TopBar({ onProjectSettings, onSwitchSurface, surfaceBadges }: To
   const projects = useStore((s) => s.projects);
   const activeProjectId = useStore((s) => s.activeProjectId);
   const setProjects = useStore((s) => s.setProjects);
+  const setPrices = useStore((s) => s.setPrices);
   const nav = useChatNav();
 
   // Keep the list fresh (picking a default when none is named is the shell's job, not this bar's).
@@ -37,6 +38,14 @@ export function TopBar({ onProjectSettings, onSwitchSurface, surfaceBadges }: To
       .then((r) => setProjects(r.projects))
       .catch(() => {});
   }, [setProjects]);
+
+  // Per-model pricing for ChatView's live session cost — this bar is the always-present chat chrome
+  // now, so it owns the fetch the removed sidebar used to.
+  React.useEffect(() => {
+    apiGet<Record<string, ModelPricing>>('/api/prices/azure')
+      .then(setPrices)
+      .catch(() => {});
+  }, [setPrices]);
 
   const createProject = async (name: string) => {
     await apiPost<{ id: string }>('/api/projects', { name });
