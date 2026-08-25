@@ -426,7 +426,7 @@ function SectionHeader({
   )
 }
 
-function ProjectDropdown({
+export function ProjectDropdown({
   projects,
   activeProjectId,
   onSelectProject,

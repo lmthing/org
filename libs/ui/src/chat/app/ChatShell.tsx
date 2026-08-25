@@ -7,7 +7,7 @@ import { applyUrlToState, syncStateToUrl } from './url-state';
 import { ChatNavProvider, useChatNav, type ChatLocation, type ChatNavHost } from './chat-nav';
 import { closeActiveSession, getConnectedSessionId, openSession, startSession } from './session-control';
 import { MissingPane, OpeningPane } from './RoutePanes';
-import { AppFrame } from './AppView';
+import { AppInline } from './AppInline';
 import { CoachMark, useNewbornToAppCoachMark } from './CoachMark';
 import { useAppSurface } from './use-app-pages';
 import { isNotFound } from './api';
@@ -31,13 +31,6 @@ interface ChatShellProps {
   onSwitchSurface?: (surface: Surface) => void;
   /** Forwarded to `AppShell`. */
   surfaceBadges?: Partial<Record<Surface, number>>;
-  /**
-   * Forwarded to `AppShell` → `Sidebar` → `AppSidebar`. A host that can render a project's app pages
-   * NATIVELY (the mobile app) passes this so a tap on a sidebar app page opens the native renderer
-   * instead of the pod's `/app/<project>/…` mount in a browser. Omitted on web — see `Sidebar`'s
-   * `onOpenAppPage`.
-   */
-  onOpenAppPage?: (project: { id: string; name: string }, routePath: string) => void;
 }
 
 /**
@@ -56,7 +49,6 @@ export function ChatShell({
   onNavigate,
   onSwitchSurface,
   surfaceBadges,
-  onOpenAppPage,
 }: ChatShellProps = {}): React.ReactElement {
   const host = React.useMemo<ChatNavHost | null>(
     () => (onNavigate ? { location: { projectId, sessionId }, navigate: onNavigate } : null),
@@ -64,7 +56,7 @@ export function ChatShell({
   );
   return (
     <ChatNavProvider host={host}>
-      <ChatShellBody onSwitchSurface={onSwitchSurface} surfaceBadges={surfaceBadges} onOpenAppPage={onOpenAppPage} />
+      <ChatShellBody onSwitchSurface={onSwitchSurface} surfaceBadges={surfaceBadges} />
     </ChatNavProvider>
   );
 }
@@ -83,8 +75,7 @@ type OpenState =
 function ChatShellBody({
   onSwitchSurface,
   surfaceBadges,
-  onOpenAppPage,
-}: Pick<ChatShellProps, 'onSwitchSurface' | 'surfaceBadges' | 'onOpenAppPage'>): React.ReactElement {
+}: Pick<ChatShellProps, 'onSwitchSurface' | 'surfaceBadges'>): React.ReactElement {
   const nav = useChatNav();
   const projects = useStore((s) => s.projects);
   const [projectsLoaded, setProjectsLoaded] = React.useState(false);
@@ -233,7 +224,7 @@ function ChatShellBody({
     // starts as a chat" happens — the app's own dock is the chat, front-and-centre while the project
     // is newborn and a floating modal once it has real pages. An explicit conversation URL still
     // opens the rich transcript (`ChatView`) below.
-    mainPane = <AppFrame projectId={nav.projectId} title="App" />;
+    mainPane = <AppInline projectId={nav.projectId} />;
   }
 
   return (
@@ -241,7 +232,6 @@ function ChatShellBody({
       <AppShell
         onSwitchSurface={onSwitchSurface}
         surfaceBadges={surfaceBadges}
-        onOpenAppPage={onOpenAppPage}
         mainPane={mainPane}
       />
       {coachMark.show && <CoachMark onDismiss={coachMark.dismiss} />}

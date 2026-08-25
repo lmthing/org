@@ -32,6 +32,10 @@ export type { ViewRendererProps, ViewRoute } from './renderer'
 // does. See `./provider`.
 export { ViewThemeProvider } from './provider'
 
+// ── the app payload + its pure route lookups (shared by the non-URL hosts: native + /chat) ──
+export { normalizeAppViews, resolveRoute, servedRoutePath, routeForServedPath, initialRoute } from './app-views'
+export type { AppViews, ResolvedRoute } from './app-views'
+
 export { createViewClient, buildViewRequest, ViewHttpError, actionEndpoints } from './client'
 export type {
   ViewClient,

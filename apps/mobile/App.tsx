@@ -423,14 +423,14 @@ function HomeShell() {
         />
       </Prim.Box>
       <Prim.Box flex={1} flexDirection="column" display={tab === 'chat' ? 'flex' : 'none'}>
-        {/* Chat's own drawer carries the switcher in its footer — see the note above.
-            `onOpenAppPage` is what makes a tap on the sidebar's APP section render the page NATIVELY:
-            the shared sidebar hands back the project + the served route, and this covers the tabs
-            with `AppScreen` on that page — no WebView, and the chat socket behind it stays live. */}
+        {/* The chat surface now renders a selected project's app INLINE (its own nav + assistant
+            dock, drawn natively by `ViewRenderer`) in `AppShell`'s main pane — the same in-process
+            path the web surface uses. The old `onOpenAppPage` hook (which covered the tabs with a
+            separate `AppScreen` when a sidebar APP row was tapped) is gone with that sidebar; opening
+            a project's app from Home still uses the `AppScreen` cover above (`onOpenProject`). */}
         <ChatShell
           onSwitchSurface={switchTo}
           {...(badges ? { surfaceBadges: badges } : {})}
-          onOpenAppPage={(project, routePath) => setOpenApp({ id: project.id, name: project.name, route: routePath })}
         />
       </Prim.Box>
       <Prim.Box flex={1} flexDirection="column" display={tab === 'teams' ? 'flex' : 'none'}>
