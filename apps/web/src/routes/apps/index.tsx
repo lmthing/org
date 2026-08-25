@@ -2,16 +2,17 @@ import * as Prim from '@lmthing/ui/elements/primitives';
 import { createFileRoute } from '@tanstack/react-router'
 import { useProjects } from '@lmthing/state'
 import { useAuth } from '@lmthing/auth'
-import { COMPUTER_BASE_URL, APP_PATH_PREFIX } from '@/lib/config'
+import { crossAppOrigin } from '@lmthing/ui/lib/app-urls'
 import { setPodSessionCookie } from '@/lib/pod-session'
 
 /**
- * lmthing.app landing — the user's **app launcher**. Lists the projects installed in
- * their pod and opens the pod-served app at `<APP_PATH_PREFIX>/<project>/` (clean
- * `/<project>/` in production, `/app/<project>/` on localhost). A project-app is single-user
- * and has no auth of its own; opening one just ensures the platform-session cookie is set
- * (so the app's pages + assets route to this user's pod — see {@link setPodSessionCookie}).
- * In local dev there is no gateway and the pod is reached directly with no auth at all.
+ * lmthing.app landing — the user's **app launcher**. Lists the projects in their pod and, on
+ * selection, LOADS THE APP INSIDE THE CHAT SURFACE (`/chat/<project>`) rather than opening the
+ * pod-served bundle in a separate tab. Every project is a served app from birth (a chat page that
+ * grows), and the chat surface renders it inline with THING embedded — so there is no longer a
+ * separate app surface to leave for. A project-app is single-user and has no auth of its own;
+ * selecting one ensures the platform-session cookie is set (so its pages/assets/api route to this
+ * user's pod — see {@link setPodSessionCookie}). In local dev there is no gateway and none of this.
  */
 function AppLauncher() {
   const { projects, isLoading } = useProjects()
@@ -19,7 +20,8 @@ function AppLauncher() {
 
   function openApp(id: string) {
     setPodSessionCookie(getAccessTokenSync?.())
-    window.open(`${COMPUTER_BASE_URL}${APP_PATH_PREFIX}/${encodeURIComponent(id)}/`, '_blank', 'noopener')
+    // Load the app inside the chat surface; same origin locally, the chat host in production.
+    window.location.assign(`${crossAppOrigin('chat')}/chat/${encodeURIComponent(id)}`)
   }
 
   return (
@@ -55,7 +57,7 @@ function AppLauncher() {
                 transition="quick" animateOnly={["color", "background-color", "border-color"]} display="flex" width="100%" flexDirection="column" gap="$1" borderRadius="$radius-lg" borderWidth={1} borderColor="$border" backgroundColor="$card" padding="$4" textAlign="left" hoverStyle={{ backgroundColor: "$muted" }}
               >
                 <Prim.Text fontWeight="$medium" color="$foreground">{p.name ?? p.id}</Prim.Text>
-                <Prim.Text fontFamily="$mono" fontSize="$xs" color="$muted-foreground">{APP_PATH_PREFIX}/{p.id}/</Prim.Text>
+                <Prim.Text fontFamily="$mono" fontSize="$xs" color="$muted-foreground">Open in chat</Prim.Text>
               </Prim.Pressable>
             </Prim.ListItem>
           ))}
