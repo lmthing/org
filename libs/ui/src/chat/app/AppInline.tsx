@@ -105,10 +105,15 @@ export function AppInline({ projectId }: { projectId: string }): React.ReactElem
     return <ViewNotFound route={path ?? undefined} />;
   }
 
-  // Always a sidebar: coerce `placement:'sidebar'` (a grown app's nav becomes a left rail; a newborn
-  // chat-only app has 0 destinations and shows none). Preserve everything else the shell declares —
-  // crucially `assistant:false` for a newborn, which keeps the chat as the page rather than a dock.
-  const shell: ShellSpec = { ...(app.shell ?? {}), placement: 'sidebar' };
+  // A GROWN app (a real page beyond the chat index) always renders its nav as a LEFT SIDEBAR — the
+  // chat-first shell wants a rail, never a top-bar row. A NEWBORN app (its only page is the `index`
+  // chat) keeps its shell as-is (`assistant:false` from the scaffold) so it is just the full-height
+  // chat — "in the beginning it's only the chat", no chrome. `undefined` lets the renderer predict a
+  // shell for the rare app that ships none.
+  const grown = app.views.some((v) => v.route !== 'index');
+  const shell: ShellSpec | undefined = grown
+    ? { ...(app.shell ?? {}), placement: 'sidebar' }
+    : (app.shell ?? undefined);
 
   return (
     <Prim.Box flex={1} minHeight={0} backgroundColor="$background">
