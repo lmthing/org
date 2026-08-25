@@ -2,12 +2,11 @@ import * as Prim from '../../elements/primitives/index';
 import React from 'react';
 import { useStore } from '../store/store';
 import { ChatView } from './ChatView';
-import { Sidebar } from './Sidebar';
+import { TopBar } from './TopBar';
 import { NoSessionPane } from './NoSessionPane';
 import { DevPanel } from './DevPanel';
 import { ProjectSettings } from './ProjectSettings';
 import { Drawer } from '../components/ui/Drawer';
-import { cn } from '../lib/cn';
 import { getLiveSend } from './live-send';
 import { readLinkParams } from '../../platform/deep-link';
 import { getWindowSize, subscribeWindowSize } from '../../platform/dimensions';
@@ -28,27 +27,21 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 interface AppShellProps {
   singleSession?: boolean;
-  /** Forwarded to `Sidebar` → its `SurfaceSwitcher` footer — see that component's doc comment. */
+  /** Forwarded to the `TopBar`'s `SurfaceSwitcher` — see that component's doc comment. */
   onSwitchSurface?: (surface: Surface) => void;
-  /** Forwarded to `Sidebar` → its `SurfaceSwitcher` footer. */
+  /** Forwarded to the `TopBar`'s `SurfaceSwitcher`. */
   surfaceBadges?: Partial<Record<Surface, number>>;
-  /** Forwarded to `Sidebar` → its `AppSidebar` — the mobile host that renders app pages natively.
-   *  See `Sidebar`'s `onOpenAppPage` doc comment. */
-  onOpenAppPage?: (project: { id: string; name: string }, routePath: string) => void;
   /**
-   * Replaces the transcript pane. `ChatShell` passes one when the location names a conversation it
-   * is still opening, or one that does not exist — see `RoutePanes.tsx`. It goes HERE rather than
-   * over the whole shell so the sidebar stays on screen: every one of those states needs the
-   * conversation list to be recoverable.
+   * Replaces the transcript pane. `ChatShell` passes one when a project is selected (the app renders
+   * inline via `AppInline`), while a conversation is opening, or when the named one does not exist —
+   * see `RoutePanes.tsx`. It fills the pane below the top bar.
    */
   mainPane?: React.ReactNode;
 }
 
-export function AppShell({ singleSession, onSwitchSurface, surfaceBadges, onOpenAppPage, mainPane }: AppShellProps) {
+export function AppShell({ singleSession, onSwitchSurface, surfaceBadges, mainPane }: AppShellProps) {
   const devPanelOpen = useStore(s => s.devPanelOpen);
-  const sidebarOpen = useStore(s => s.sidebarOpen);
   const setDevPanelOpen = useStore(s => s.setDevPanelOpen);
-  const setSidebarOpen = useStore(s => s.setSidebarOpen);
   const activeProjectId = useStore(s => s.activeProjectId);
   const activeSessionId = useStore(s => s.activeSessionId);
   const sessionTitle = useStore(s => s.sessionTitle);
@@ -69,7 +62,6 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges, onOpen
   }, [noteUser]);
 
   const [projectSettings, setProjectSettings] = React.useState<{ id: string; name: string } | null>(null);
-  const [isMobile, setIsMobile] = React.useState(false);
   const [isTablet, setIsTablet] = React.useState(false);
 
   // Check for ?inspect=1 on load
@@ -77,11 +69,10 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges, onOpen
     if (readLinkParams().inspect === '1') setDevPanelOpen(true);
   }, [setDevPanelOpen]);
 
-  // Responsive breakpoints
+  // Responsive breakpoint — the DevPanel docks ≥1024px and is a drawer below.
   React.useEffect(() => {
     const check = () => {
       const { width } = getWindowSize();
-      setIsMobile(width < 768);
       setIsTablet(width < 1024);
     };
     check();
@@ -139,112 +130,59 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges, onOpen
     return onKeyDown(onKey);
   }, [singleSession, activeProjectId, nav]);
 
-  const showSidebar = !singleSession;
+  const showTopBar = !singleSession;
   const showDevPanel = devPanelOpen;
-
-  // On mobile, sidebar is always a drawer
-  const sidebarAsDrawer = isMobile;
   // On tablet, devpanel is always a drawer
   const devPanelAsDrawer = isTablet;
 
-  // Docked sidebar owns its own width (collapses to a slim rail via its header
-  // toggle). In the mobile drawer we fill the drawer width and hide the toggle.
-  const sidebarContent = (
-    <Sidebar
-      onProjectSettings={(id, name) => setProjectSettings({ id, name })}
-      onSwitchSurface={onSwitchSurface}
-      surfaceBadges={surfaceBadges}
-      onOpenAppPage={onOpenAppPage}
-      height="100%"
-    />
-  );
-
-  const drawerSidebarContent = (
-    <Sidebar
-      onProjectSettings={(id, name) => setProjectSettings({ id, name })}
-      onSwitchSurface={onSwitchSurface}
-      surfaceBadges={surfaceBadges}
-      onOpenAppPage={onOpenAppPage}
-      width="100%"
-      height="100%"
-      collapsible={false}
-    />
-  );
-
-  const devPanelContent = (
-    <DevPanel
-      onClose={() => setDevPanelOpen(false)}
-      height="100%"
-    />
-  );
-
   return (
-    <Prim.Row height="100%" overflow="hidden" backgroundColor="$background">
-      {/* Sidebar — docked on desktop, drawer on mobile */}
-      {showSidebar && !sidebarAsDrawer && sidebarOpen && (
-        <Prim.Box flexShrink={0} height="100%">
-          {sidebarContent}
-        </Prim.Box>
-      )}
-      {showSidebar && sidebarAsDrawer && (
-        <Drawer
-          open={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          side="left"
-          width="$64"
-        >
-          {drawerSidebarContent}
-        </Drawer>
+    <Prim.Col height="100%" overflow="hidden" backgroundColor="$background">
+      {/* Top bar — project switcher + surface switcher. Replaces the old left sidebar. */}
+      {showTopBar && (
+        <TopBar
+          onProjectSettings={(id, name) => setProjectSettings({ id, name })}
+          onSwitchSurface={onSwitchSurface}
+          surfaceBadges={surfaceBadges}
+        />
       )}
 
-      {/* Main: chat */}
-      <Prim.Col position="relative" overflow="hidden" flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
-        {/* Hamburger for mobile */}
-        {showSidebar && sidebarAsDrawer && (
-          <Prim.Pressable
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            position="absolute" top="$3" left="$3" zIndex={10} width="$8" height="$8" display="flex" alignItems="center" justifyContent="center" color="$muted-foreground" borderRadius="$radius-lg" $md={{ display: "none" }} hoverStyle={{ color: "$foreground", backgroundColor: "$muted" }}
-            aria-label="Toggle sidebar"
-          >
-            {/* `Prim.Pressable` is an RN `View` — its `color` above styles the button, not this
-                glyph, so it's restated on the wrapped `Prim.Text`. */}
-            <Prim.Text color="$muted-foreground">☰</Prim.Text>
-          </Prim.Pressable>
-        )}
+      <Prim.Row flexGrow={1} flexShrink={1} flexBasis="0%" minHeight={0} overflow="hidden">
+        {/* Main: the project's app (inline), a routed pane, the no-session pane, or the transcript. */}
+        <Prim.Col position="relative" overflow="hidden" flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
+          {mainPane ? (
+            mainPane
+          ) : showTopBar && !activeSessionId ? (
+            <NoSessionPane activeProjectId={activeProjectId} sidebarIsDrawer={false} />
+          ) : (
+            <ChatView
+              onOpenDevPanel={() => setDevPanelOpen(!devPanelOpen)}
+              devPanelOpen={devPanelOpen}
+              projectId={activeProjectId}
+              singleSession={singleSession}
+              flexGrow={1}
+              flexShrink={1}
+              flexBasis="0%"
+              minHeight={0}
+            />
+          )}
+        </Prim.Col>
 
-        {/* A routed state with no transcript to draw (opening / not found), then the ordinary
-            "nothing open yet" pane, then the conversation itself. */}
-        {mainPane ? (
-          mainPane
-        ) : showSidebar && !activeSessionId ? (
-          <NoSessionPane activeProjectId={activeProjectId} sidebarIsDrawer={sidebarAsDrawer} />
-        ) : (
-          <ChatView
-            onOpenDevPanel={() => setDevPanelOpen(!devPanelOpen)}
-            devPanelOpen={devPanelOpen}
-            projectId={activeProjectId}
-            singleSession={singleSession}
-            flexGrow={1}
-            flexShrink={1}
-            flexBasis="0%"
-            minHeight={0}
-          />
-        )}
-      </Prim.Col>
-
-      {/* DevPanel — docked on desktop, drawer on tablet */}
-      {showDevPanel && !devPanelAsDrawer && devPanelContent}
-      {showDevPanel && devPanelAsDrawer && (
-        <Drawer
-          open={devPanelOpen}
-          onClose={() => setDevPanelOpen(false)}
-          side="right"
-          width="$96"
-          title="DevTools"
-        >
+        {/* DevPanel — docked on desktop, drawer on tablet */}
+        {showDevPanel && !devPanelAsDrawer && (
           <DevPanel onClose={() => setDevPanelOpen(false)} height="100%" />
-        </Drawer>
-      )}
+        )}
+        {showDevPanel && devPanelAsDrawer && (
+          <Drawer
+            open={devPanelOpen}
+            onClose={() => setDevPanelOpen(false)}
+            side="right"
+            width="$96"
+            title="DevTools"
+          >
+            <DevPanel onClose={() => setDevPanelOpen(false)} height="100%" />
+          </Drawer>
+        )}
+      </Prim.Row>
 
       {/* Project settings drawer */}
       {projectSettings && (
@@ -256,6 +194,6 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges, onOpen
           onIntegrationConfigured={onIntegrationConfigured}
         />
       )}
-    </Prim.Row>
+    </Prim.Col>
   );
 }
