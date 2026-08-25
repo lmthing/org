@@ -30,6 +30,34 @@ interface AppManifest {
 /** A route pattern with a parameter segment — `/trips/:tripId`, `/posts/:slug/edit`. */
 export const DYNAMIC_SEGMENT = /(^|\/):[^/]+/;
 
+/**
+ * The three surface states the chat-first shell transitions between as a project GROWS from a chat
+ * into an app (see `org/docs/chat/`): every project is born a served app whose only page is a
+ * full-height chat, and as the builder adds real pages the chat relocates into the floating dock.
+ *
+ * - **`newborn`** — the app has no openable page beyond its `index` (the scaffold's chat page). The
+ *   whole surface IS the chat; no nav rail is shown.
+ * - **`app`** — the app has real pages beyond `index`. The nav rail appears; the chat is the dock.
+ *
+ * Derived purely from the openable page routes (`useAppPages`), so it is a stable, testable input to
+ * the shell's rendering and its one-time demotion transition. `/` and `/index` both denote the home.
+ */
+export type AppSurfaceState = 'newborn' | 'app';
+
+/** Is `routePath` the app's home (`/`, `''`, or `/index`)? */
+function isIndexRoute(routePath: string): boolean {
+  const trimmed = routePath.replace(/^\/+|\/+$/g, '');
+  return trimmed === '' || trimmed === 'index';
+}
+
+/**
+ * `newborn` while the only openable page is the home (the placeholder chat), `app` once a real page
+ * beyond the home exists. Purely a function of the routes, so the shell and its tests agree.
+ */
+export function deriveAppSurfaceState(pageRoutes: readonly string[]): AppSurfaceState {
+  return pageRoutes.some((r) => !isIndexRoute(r)) ? 'app' : 'newborn';
+}
+
 /** `/` → `Home`; `/settings/profile` → `Settings / Profile`. The FULL path, not just the last
  *  segment, because two pages can share one (`/posts/edit` and `/pages/edit`) and a row that
  *  cannot be told from its neighbour is not a link, it is a guess. */
@@ -50,6 +78,15 @@ export function pageLabel(routePath: string): string {
  * also goes false on send, and the manifest is not a free read (it discovers routes and resolves
  * endpoint contracts host-side).
  */
+/**
+ * Convenience hook: {@link useAppPages} paired with its derived {@link AppSurfaceState}. Lets the
+ * shell decide "show the nav rail / demote the chat to the dock" from one source of truth.
+ */
+export function useAppSurface(projectId: string | null): { pages: string[]; state: AppSurfaceState } {
+  const pages = useAppPages(projectId);
+  return { pages, state: deriveAppSurfaceState(pages) };
+}
+
 export function useAppPages(projectId: string | null): string[] {
   const done = useStore((s) => s.done);
   const [pages, setPages] = React.useState<string[]>([]);
