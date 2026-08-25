@@ -7,6 +7,7 @@ import { applyUrlToState, syncStateToUrl } from './url-state';
 import { ChatNavProvider, useChatNav, type ChatLocation, type ChatNavHost } from './chat-nav';
 import { closeActiveSession, getConnectedSessionId, openSession, startSession } from './session-control';
 import { MissingPane, OpeningPane } from './RoutePanes';
+import { AppFrame } from './AppView';
 import { isNotFound } from './api';
 import type { Surface } from '../../elements/nav/surface-switcher';
 
@@ -218,6 +219,13 @@ function ChatShellBody({
         ]}
       />
     );
+  } else if (nav.projectId && !nav.sessionId) {
+    // A project is selected and no specific conversation is open: LOAD THE APP. Every project is a
+    // served app from birth (a chat page that grows), so this is where "select a project and it
+    // starts as a chat" happens — the app's own dock is the chat, front-and-centre while the project
+    // is newborn and a floating modal once it has real pages. An explicit conversation URL still
+    // opens the rich transcript (`ChatView`) below.
+    mainPane = <AppFrame projectId={nav.projectId} title="App" />;
   }
 
   return (
