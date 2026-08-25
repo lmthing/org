@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { execSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
+import { join as joinPath } from 'node:path';
 import type { SessionOpts, SessionDeps } from './types.js';
 import type { CodeNodeCtxFactory } from '../tasklist/orchestrator.js';
 import type { YieldRequest } from '../eval/yield.js';
@@ -130,6 +131,12 @@ export class Session {
   private pendingAttachments = new Map<string, UserAttachment>();
   private systemBlock: string | null = null;
   private ambientDts: string | null = null;
+  /** The agent slug resolved at start()/resume() — used to rebuild the system block after a
+   *  per-project THING self-edit (see {@link Session.refreshSelfAuthoredPromptIfDirty}). */
+  private resolvedAgentSlug = '';
+  /** mtime (ms) of the project THING's `instruct.md` when the system block was last baked. A newer
+   *  mtime on the next turn means `appendSelfInstruct` ran, so the prompt is rebuilt. */
+  private projectThingMtime = 0;
   /**
    * The model THIS session's own turns run on — `agent.model ?? opts.modelAlias`.
    *
@@ -313,6 +320,9 @@ export class Session {
     // Context economy: collapse old turns into a summary once history grows large,
     // keeping the most recent messages (incl. this task) verbatim.
     await this.maybeSummarizeHistory();
+    // Freshness: if THING self-authored its own instructions last turn (`appendSelfInstruct`),
+    // rebuild the system block so the edit applies THIS turn, not only next session. No-op otherwise.
+    await this.refreshSelfAuthoredPromptIfDirty();
     // Freshness: if a table/column was created since the ambient DTS was last baked (a rare
     // createTable/writeProjectTable), re-derive the schema + re-bake so the new table is
     // queryable (typechecks) THIS turn. Gated by a cheap revision check — a no-op otherwise.
@@ -396,6 +406,8 @@ export class Session {
     if (!agent) {
       throw new Error(`Agent "${this.opts.agentSlug}" not found in space at "${this.opts.spaceDir}"`);
     }
+    this.resolvedAgentSlug = resolvedSlug;
+    this.projectThingMtime = this.projectThingInstructMtime();
 
     // 2b. The agent may pin its own model (frontmatter `model:`) — it wins over the
     // session default for this session's OWN turns, exactly as it does when the same
@@ -605,6 +617,8 @@ export class Session {
     if (!agent) {
       throw new Error(`Agent "${snapshot.agentSlug}" not found`);
     }
+    this.resolvedAgentSlug = snapshot.agentSlug;
+    this.projectThingMtime = this.projectThingInstructMtime();
 
     // Same rule as start(): the resumed agent's frontmatter `model:` pins this session.
     this.effectiveModel = agent.model ?? this.opts.modelAlias;
@@ -863,6 +877,55 @@ export class Session {
       components: { view, form },
       knowledge: { domains },
     };
+  }
+
+  /** mtime (ms) of the project THING's `instruct.md`, or 0 when there is no per-project THING or the
+   *  file cannot be stat'd — the change signal for {@link Session.refreshSelfAuthoredPromptIfDirty}. */
+  private projectThingInstructMtime(): number {
+    const dir = this.opts.projectThingDir;
+    if (!dir) return 0;
+    try {
+      return statSync(joinPath(dir, 'agents', 'thing', 'instruct.md')).mtimeMs;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Rebuild the system block when THING has self-authored its own instructions THIS session
+   * (`self:author` → `appendSelfInstruct`/`writeSelfKnowledge`), so a self-edit applies on the NEXT
+   * turn rather than only the next session. Gated by a cheap mtime check — a no-op on every ordinary
+   * turn. Only the PROMPT text is rebuilt (a self-edit is prose/knowledge, never a capability or
+   * function change), so the VM, DTS and injected functions are deliberately left untouched. Fully
+   * guarded: any failure leaves the previous system block in place — a self-edit can never break the
+   * running turn.
+   */
+  private async refreshSelfAuthoredPromptIfDirty(): Promise<void> {
+    const dir = this.opts.projectThingDir;
+    if (!dir || !this.systemBlock) return;
+    const m = this.projectThingInstructMtime();
+    if (m === 0 || m <= this.projectThingMtime) return;
+    this.projectThingMtime = m;
+    try {
+      const space = await this.loadMergedSpace(this.opts.spaceDir);
+      const agent = space.agents[this.resolvedAgentSlug];
+      if (!agent) return;
+      const directDeps = resolveDirectDeps(space, agent.canDelegateTo);
+      const systemFns = systemFunctionSources(this.systemSpaces);
+      const knowledgePreloads = await resolvePreloadedKnowledge(space, agent);
+      this.space = space;
+      this.systemBlock =
+        buildSystemBlock({
+          space,
+          agent,
+          directDeps,
+          systemFunctions: filterUniversalFunctions(systemFns, agent.config.functions),
+          knowledgePreloads,
+          omitDelegate: this.delegatePolicy.mode === 'none',
+        }) + this.projectAgentsBlock();
+    } catch (err) {
+      this.opts.renderHost.log(`[warn] self-authored prompt refresh failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   /**

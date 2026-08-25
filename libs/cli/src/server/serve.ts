@@ -54,7 +54,7 @@ import {
 } from './routes/team-channels.js';
 import { guardRequest, guardWebSocket, isTeamMode } from './team-guard.js';
 import { handleListStoreSpaces, handleInstallStoreSpace, handleListProjectIntegrations } from './routes/store-spaces.js';
-import { listProjects } from './projects.js';
+import { listProjects, ensureAppFromBirthSync } from './projects.js';
 
 // ─── WebSocket handlers ───────────────────────────────────────────────────────
 import { handleAgentWsUpgrade } from './ws/agent.js';
@@ -336,6 +336,21 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // invalidate it). The bundle is built lazily per project (esbuild; buildProjectPages caches
   // by content hash internally) and the result is cached here for the server's lifetime.
   const pageBuildCache = new Map<string, { outDir: string; assetManifest: string[] } | null>();
+  // Lazily adopt the app-from-birth model for a project that predates it (a chat index view + a
+  // per-project THING), the FIRST time its app is served — so a legacy project opened in /chat
+  // without ever starting a session shows its chat page instead of a 404. Idempotent and once per
+  // project (`ensureAppFromBirthSync` only writes what is missing); best-effort — a failure must
+  // never block serving.
+  const ensuredApps = new Set<string>();
+  const ensureAppOnce = (projectId: string): void => {
+    if (!effectiveLmthingRoot || ensuredApps.has(projectId)) return;
+    ensuredApps.add(projectId);
+    try {
+      ensureAppFromBirthSync(effectiveLmthingRoot, projectId, projectId);
+    } catch {
+      /* best-effort adoption — serving proceeds regardless */
+    }
+  };
 
   // Store distribution (Phase 10) — list the catalog + install a catalog app into the
   // user's runtime root (materialize `store/projects/<id>/` → `<root>/<projectId>/`, then boot
@@ -386,6 +401,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   type PageHandler = (req: IncomingMessage, res: ServerResponse, params: Record<string, string>) => Promise<void>;
   const getOutDirForProject = async (projectId: string): Promise<{ outDir: string; assetManifest: string[] } | null> => {
     if (!effectiveLmthingRoot) return null;
+    ensureAppOnce(projectId);
     if (!pageBuildCache.has(projectId)) {
       let built: { outDir: string; assetManifest: string[] } | null = null;
       try {
@@ -413,6 +429,9 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
     const root = effectiveLmthingRoot;
     const shellHandler = shell;
     return async (req, res, params) => {
+      // Adopt the app-from-birth model for a legacy project before we decide how to serve it, so a
+      // never-sessioned project still resolves a spec app (its chat page) rather than a 404.
+      ensureAppOnce(params['projectId']!);
       let specs: ProjectViewSpecs | undefined;
       try {
         specs = readProjectViewSpecs(join(root, params['projectId']!));

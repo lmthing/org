@@ -1,9 +1,11 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { writeFileSync, utimesSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Session } from './session.js';
 import { createMockStreamFn } from '../testing/mock-provider.js';
+import type { StreamOpts } from '../eval/stream-types.js';
 
 /**
  * Per-project THING overlay (`projectThingDir`): a project's OWN copy of `user-thing` becomes the
@@ -112,5 +114,45 @@ describe('per-project THING overlay', () => {
     session.dispose();
 
     expect(systemBlock).toContain('SYSTEM THING BODY');
+  }, 30_000);
+
+  it('applies a self-authored instruct edit on the NEXT turn (self:author)', async () => {
+    const projectRoot = await tmp('lmthing-proj-');
+    const systemThing = await makeSystemThing('SYSTEM THING BODY');
+    const projectThingDir = await makeProjectThing('PROJECT THING BODY');
+    const instruct = join(projectThingDir, 'agents', 'thing', 'instruct.md');
+
+    const systems: string[] = [];
+    const streamFn = createMockStreamFn((o: StreamOpts) => {
+      systems.push(o.system ?? '');
+      return 'display("ok");';
+    });
+    const session = new Session(
+      {
+        spaceDir: projectRoot,
+        agentSlug: 'thing',
+        modelAlias: 'mock',
+        renderHost: { display: () => {}, ask: async () => undefined, log: () => {} },
+        systemSpaceDirs: [systemThing],
+        projectThingDir,
+      },
+      { streamFn },
+    );
+
+    await session.start('hi');
+    expect(systems[0]).toContain('PROJECT THING BODY');
+    expect(systems[0]).not.toContain('LEARNED LIVE');
+
+    // THING self-authors: append to its own instruct, and bump the mtime forward so the change
+    // is unambiguously newer than when the prompt was last baked.
+    writeFileSync(instruct, '---\ntitle: THING\n---\n\nPROJECT THING BODY\n\n## Learned\n\nLEARNED LIVE\n', 'utf8');
+    const future = new Date(Date.now() + 10_000);
+    utimesSync(instruct, future, future);
+
+    await session.continue('again');
+    session.dispose();
+
+    // The turn AFTER the edit runs on the rebuilt prompt.
+    expect(systems[systems.length - 1]).toContain('LEARNED LIVE');
   }, 30_000);
 });
