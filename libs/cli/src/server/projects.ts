@@ -312,6 +312,18 @@ export const NEWBORN_CHAT_GREETING =
   "Hi — I'm your assistant. Tell me what you want to keep track of, plan, or organize, and I'll build it into an app right here as we talk.";
 
 /**
+ * First-run suggestion chips for a newborn project's chat page (State 0). A tap sends the prompt
+ * as the first message, so a blank project isn't a blank slate — it says what talking here does.
+ * The builder replaces this index (and its chips) with real pages once the app grows.
+ */
+export const NEWBORN_CHAT_SUGGESTIONS = [
+  'Track my expenses',
+  'Plan a trip',
+  'Organize my notes',
+  'Make a checklist',
+];
+
+/**
  * The scaffolded `views/index.view.json` for a newborn project: a single, full-height
  * `chat` section on the project's own top-level `thing` agent. Opening the project therefore
  * serves a real app that IS a chat — no 404, no separate surface. Once the app grows real
@@ -330,6 +342,7 @@ export function newbornIndexViewSpec(name: string): Record<string, unknown> {
         agent: 'thing',
         height: 'full',
         greeting: NEWBORN_CHAT_GREETING,
+        suggestions: NEWBORN_CHAT_SUGGESTIONS,
       },
     ],
   };
