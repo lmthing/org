@@ -35,7 +35,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ReplChatView, getAccessToken } from '@lmthing/ui/chat';
 
-import { createChatSession, originBase, resolveProjectId } from './chat-protocol.js';
+import {
+  createChatSession,
+  listChatSessions,
+  originBase,
+  resolveProjectId,
+  type ChatSessionMeta,
+} from './chat-protocol.js';
 
 /**
  * Platform access token from the same-origin `@lmthing/auth` session (reused via
@@ -91,9 +97,13 @@ export function Chat({ agent, projectId, className, title }: ChatProps): React.R
   const [open, setOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [sessions, setSessions] = useState<ChatSessionMeta[]>([]);
   const runningRef = useRef(false);
   const startedOnceRef = useRef(false);
   const isMobile = useIsMobile();
+
+  const pid = projectId ?? (typeof window !== 'undefined' ? resolveProjectId(window.location.pathname) : '');
 
   // Restore last open/closed state (per agent, so multiple `<Chat>` widgets on
   // one page don't fight over a single key). Client only.
@@ -123,7 +133,6 @@ export function Chat({ agent, projectId, className, title }: ChatProps): React.R
     setError(null);
     setSessionId(null);
     try {
-      const pid = projectId ?? resolveProjectId(window.location.pathname);
       const sid = await createChatSession(agent, pid, originBase(), platformAccessToken());
       setSessionId(sid);
     } catch (err) {
@@ -131,7 +140,35 @@ export function Chat({ agent, projectId, className, title }: ChatProps): React.R
     } finally {
       runningRef.current = false;
     }
-  }, [agent, projectId]);
+  }, [agent, pid]);
+
+  // Load this project's past conversations for the history switcher (best-effort, quiet on failure).
+  const loadHistory = useCallback(async () => {
+    if (!pid) return;
+    setSessions(await listChatSessions(pid, originBase(), platformAccessToken()));
+  }, [pid]);
+
+  const toggleHistory = useCallback(() => {
+    setHistoryOpen((was) => {
+      const next = !was;
+      if (next) void loadHistory();
+      return next;
+    });
+  }, [loadHistory]);
+
+  /** Resume a past conversation in place — no POST; the WS resumes it pod-side. */
+  const resumeSession = useCallback((sid: string) => {
+    setError(null);
+    setSessionId(sid);
+    setHistoryOpen(false);
+  }, []);
+
+  /** Start a brand-new conversation from the history view. */
+  const newSession = useCallback(() => {
+    setHistoryOpen(false);
+    startedOnceRef.current = true;
+    void startSession();
+  }, [startSession]);
 
   // Create the session once on mount, whether or not the panel starts open —
   // so it's already connected the moment the user clicks the launcher.
@@ -207,13 +244,63 @@ export function Chat({ agent, projectId, className, title }: ChatProps): React.R
     >
       <div style={styles.header}>
         <span style={styles.headerTitle}>{title ?? 'Chat'}</span>
-        <button type="button" onClick={() => toggle(false)} aria-label="Close chat" style={styles.closeButton}>
-          <CloseIcon />
-        </button>
+        <div style={styles.headerActions}>
+          <button
+            type="button"
+            onClick={toggleHistory}
+            aria-label="Conversation history"
+            aria-pressed={historyOpen}
+            title="History"
+            style={{ ...styles.iconButton, ...(historyOpen ? styles.iconButtonActive : null) }}
+          >
+            <HistoryIcon />
+          </button>
+          <button type="button" onClick={newSession} aria-label="New conversation" title="New conversation" style={styles.iconButton}>
+            <PlusIcon />
+          </button>
+          <button type="button" onClick={() => toggle(false)} aria-label="Close chat" style={styles.closeButton}>
+            <CloseIcon />
+          </button>
+        </div>
       </div>
-      {body}
+      {historyOpen ? (
+        <div style={styles.historyList} role="listbox" aria-label="Past conversations">
+          <button type="button" onClick={newSession} style={styles.historyNew}>
+            + New conversation
+          </button>
+          {sessions.length === 0 ? (
+            <p style={styles.historyEmpty}>No past conversations yet.</p>
+          ) : (
+            sessions.map((s) => (
+              <button
+                type="button"
+                key={s.sessionId}
+                role="option"
+                aria-selected={s.sessionId === sessionId}
+                onClick={() => resumeSession(s.sessionId)}
+                style={{ ...styles.historyRow, ...(s.sessionId === sessionId ? styles.historyRowActive : null) }}
+              >
+                <span style={styles.historyRowTitle}>{s.title || 'Conversation'}</span>
+                <span style={styles.historyRowTime}>{formatRelativeTime(s.lastActivity)}</span>
+              </button>
+            ))
+          )}
+        </div>
+      ) : (
+        body
+      )}
     </div>
   );
+}
+
+/** `1712000000000` → "3h ago". Kept trivial and local — no date library in the app bundle. */
+function formatRelativeTime(ts: number): string {
+  if (!ts) return '';
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return 'just now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 // ── Icons (inline SVG — no icon package dependency) ──────────────────────────
@@ -234,6 +321,24 @@ function CloseIcon(): React.ReactElement {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path strokeLinecap="round" strokeLinejoin="round" d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  );
+}
+
+function HistoryIcon(): React.ReactElement {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v5h5" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+function PlusIcon(): React.ReactElement {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
     </svg>
   );
 }
@@ -295,6 +400,86 @@ const styles = {
     fontSize: 14,
     fontWeight: 600,
     color: 'var(--foreground)',
+  } as React.CSSProperties,
+  headerActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+  } as React.CSSProperties,
+  iconButton: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 28,
+    height: 28,
+    padding: 4,
+    borderRadius: 6,
+    border: 'none',
+    background: 'transparent',
+    color: 'var(--muted-foreground)',
+    cursor: 'pointer',
+  } as React.CSSProperties,
+  iconButtonActive: {
+    background: 'var(--muted)',
+    color: 'var(--foreground)',
+  } as React.CSSProperties,
+  historyList: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    padding: 8,
+    gap: 2,
+    background: 'var(--card)',
+  } as React.CSSProperties,
+  historyNew: {
+    display: 'flex',
+    alignItems: 'center',
+    textAlign: 'left',
+    padding: '8px 10px',
+    borderRadius: 8,
+    border: '1px solid var(--border)',
+    background: 'transparent',
+    color: 'var(--foreground)',
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: 'pointer',
+    marginBottom: 4,
+  } as React.CSSProperties,
+  historyEmpty: {
+    color: 'var(--muted-foreground)',
+    fontSize: 13,
+    padding: '8px 10px',
+  } as React.CSSProperties,
+  historyRow: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'flex-start',
+    textAlign: 'left',
+    padding: '8px 10px',
+    borderRadius: 8,
+    border: 'none',
+    background: 'transparent',
+    color: 'var(--foreground)',
+    cursor: 'pointer',
+  } as React.CSSProperties,
+  historyRowActive: {
+    background: 'var(--muted)',
+  } as React.CSSProperties,
+  historyRowTitle: {
+    fontSize: 13,
+    fontWeight: 500,
+    color: 'var(--foreground)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+    maxWidth: '100%',
+  } as React.CSSProperties,
+  historyRowTime: {
+    fontSize: 11,
+    color: 'var(--muted-foreground)',
+    marginTop: 2,
   } as React.CSSProperties,
   closeButton: {
     display: 'flex',

@@ -1,9 +1,10 @@
 /**
- * Sidebar — the session list. Regression coverage for a touch + native bug: the per-session
- * delete (×) button used `display="none"` revealed only by `$group-hover`, a WEB-only Tamagui
- * affordance with no native fork at all (see `elements/primitives/_native.tsx`) and, even on web,
- * reachable only by a pointer that can hover — never on touch. A phone (or native app) user could
- * not delete a chat session at all.
+ * Sidebar — the project's APP NAVIGATION, not a conversation list.
+ *
+ * The chat surface's side menu is now the app nav: it lists the selected project's openable app
+ * pages (the `APP` section) plus the project switcher and spaces. The conversation HISTORY moved
+ * into the chat block itself (the assistant dock the served app renders), so there is no
+ * `Conversations` section and no per-session delete control in the sidebar anymore.
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -14,21 +15,7 @@ import { Sidebar } from './Sidebar';
 vi.mock('./api', () => ({
   apiGet: vi.fn(async (path: string) => {
     if (path === '/api/projects') return { projects: [{ id: 'p1', name: 'Project One', createdAt: '2024-01-01T00:00:00.000Z' }] };
-    if (path.includes('/sessions')) {
-      return {
-        sessions: [
-          {
-            sessionId: 's1',
-            projectId: 'p1',
-            agentSlug: 'thing',
-            spaceDir: '/x',
-            title: 'A conversation',
-            lastActivity: Date.now(),
-            status: 'idle',
-          },
-        ],
-      };
-    }
+    if (path.includes('/app')) return { hasApp: true, pages: [{ routePath: '/' }, { routePath: '/expenses' }] };
     if (path.includes('/spaces')) return { spaces: [] };
     return {};
   }),
@@ -36,26 +23,16 @@ vi.mock('./api', () => ({
   apiDelete: vi.fn(),
 }));
 
-describe('Sidebar — session delete affordance', () => {
+describe('Sidebar — app navigation, no conversation list', () => {
   beforeEach(() => {
     useStore.setState({ activeProjectId: 'p1', projects: [{ id: 'p1', name: 'Project One', createdAt: '2024-01-01T00:00:00.000Z' }] });
   });
 
-  it('renders the delete control without display:none / a hover-only reveal', async () => {
-    const { getByLabelText, getByText } = render(<Sidebar />);
-    await waitFor(() => expect(getByText('A conversation')).toBeTruthy());
-
-    const deleteBtn = getByLabelText('Delete conversation');
-    expect(deleteBtn).toBeTruthy();
-    // Was `display="none"` + `$group-hover={{ display: "flex" }}` — a web-only pointer-hover
-    // affordance absent on native and unreachable on touch even on web. Neither the element
-    // itself nor any ancestor up to the row may carry a `display: none` — its precise absence
-    // (not just presence in the DOM) is what "reachable" means here.
-    let node: HTMLElement | null = deleteBtn;
-    while (node) {
-      expect(node.style.display).not.toBe('none');
-      expect(node.className).not.toMatch(/_dsp-none\b/);
-      node = node.parentElement;
-    }
+  it('lists the app pages as the nav and shows no conversation list', async () => {
+    const { queryByLabelText, findByText } = render(<Sidebar />);
+    // The APP section lists the project's openable pages — the nav bar.
+    await findByText('Expenses');
+    // Conversation history is in the dock now, not the sidebar: no per-session delete control.
+    expect(queryByLabelText('Delete conversation')).toBeNull();
   });
 });
