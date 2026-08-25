@@ -28,6 +28,12 @@ export interface ReplChatViewProps {
   /** Shown as a "↻ Restart" button in the status bar when provided. */
   onRestart?: () => void;
   restartDisabled?: boolean;
+  /**
+   * First-run suggested prompts. Rendered as tappable chips ABOVE the input while the transcript is
+   * still empty; a tap sends that prompt as the first message. The newborn chat page seeds these so
+   * a blank project says what it can do — "Track my expenses", "Plan a trip". Absent ⇒ no chips.
+   */
+  suggestions?: string[];
 }
 
 /**
@@ -49,6 +55,7 @@ export function ReplChatView({
   style,
   onRestart,
   restartDisabled,
+  suggestions,
 }: ReplChatViewProps): React.ReactElement {
   const [inputValue, setInputValue] = useState('');
   // Locally-echoed user messages. The agent stream (`blocks`) only carries the
@@ -89,16 +96,26 @@ export function ReplChatView({
     setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 60);
   };
 
+  const sendText = useCallback(
+    (raw: string) => {
+      const text = raw.trim();
+      if (!text || !isConnected) return;
+      setUserMsgs((prev) => [
+        ...prev,
+        { id: `u-${Date.now()}-${prev.length}`, text, afterBlock: blocks.length },
+      ]);
+      sendMessage(text);
+    },
+    [isConnected, sendMessage, blocks.length],
+  );
+
   const handleSend = useCallback(() => {
-    const text = inputValue.trim();
-    if (!text || !isConnected) return;
-    setUserMsgs((prev) => [
-      ...prev,
-      { id: `u-${Date.now()}-${prev.length}`, text, afterBlock: blocks.length },
-    ]);
-    sendMessage(text);
+    sendText(inputValue);
     setInputValue('');
-  }, [inputValue, isConnected, sendMessage, blocks.length]);
+  }, [inputValue, sendText]);
+
+  // Show the first-run suggestion chips only while the conversation is still blank.
+  const showSuggestions = !!suggestions?.length && isConnected && blocks.length === 0 && userMsgs.length === 0;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -179,6 +196,16 @@ export function ReplChatView({
               <WorkRow key={n.id} node={n} model={model} />
             ))}
           </Prim.Box>
+        </Prim.Box>
+      )}
+
+      {showSuggestions && (
+        <Prim.Box {...styles.suggestionRow} aria-label="suggested prompts">
+          {suggestions!.map((s) => (
+            <Prim.Pressable key={s} onClick={() => sendText(s)} {...styles.suggestionChip} title={s}>
+              <Prim.Text {...styles.suggestionChipText}>{s}</Prim.Text>
+            </Prim.Pressable>
+          ))}
         </Prim.Box>
       )}
 
@@ -266,6 +293,9 @@ const styles = {
   workLabel: { fontSize: 12, fontWeight: 500, color: "var(--foreground)", fontFamily: "monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } as const,
   workElapsed: { fontSize: 11, color: "var(--muted-foreground)", marginLeft: "auto", flexShrink: 0 } as const,
   workNarration: { fontSize: 12, color: "var(--muted-foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } as const,
+  suggestionRow: { display: "flex", flexWrap: "wrap", gap: 6, paddingVertical: "8px", paddingHorizontal: "12px", flexShrink: 0 } as const,
+  suggestionChip: { paddingVertical: "6px", paddingHorizontal: "12px", borderRadius: 9999, borderWidth: "1px", borderStyle: "solid", borderColor: "var(--border)", backgroundColor: "var(--secondary)", cursor: "pointer" } as const,
+  suggestionChipText: { fontSize: 13, color: "var(--secondary-foreground)" } as const,
   inputRow: { display: "flex", gap: 8, paddingVertical: "8px", paddingHorizontal: "12px", borderTopWidth: "1px", borderTopStyle: "solid", borderTopColor: "var(--border)", flexShrink: 0 } as const,
   textarea: {
     flex: 1,

@@ -49,3 +49,38 @@ describe('ReplChatView transcript container', () => {
     expect(getByText('hello')).toBeTruthy();
   });
 });
+
+describe('ReplChatView first-run suggestion chips (R4)', () => {
+  it('shows chips on a blank connected transcript and sends one on tap', () => {
+    const prev = mockSession.blocks;
+    mockSession.blocks = []; // a brand-new, empty conversation
+    mockSession.sendMessage.mockClear();
+    try {
+      const { getByText } = render(
+        <ReplChatView
+          baseUrl="https://computer.test"
+          sessionId="s1"
+          suggestions={['Track my expenses', 'Plan a trip']}
+        />,
+      );
+      const chip = getByText('Track my expenses');
+      expect(chip).toBeTruthy();
+      chip.click();
+      expect(mockSession.sendMessage).toHaveBeenCalledWith('Track my expenses');
+    } finally {
+      mockSession.blocks = prev;
+    }
+  });
+
+  it('hides chips once the transcript has any agent output', () => {
+    // Default mock has one block → not a blank conversation.
+    const { queryByText } = render(
+      <ReplChatView
+        baseUrl="https://computer.test"
+        sessionId="s1"
+        suggestions={['Track my expenses']}
+      />,
+    );
+    expect(queryByText('Track my expenses')).toBeNull();
+  });
+});

@@ -714,6 +714,9 @@ export interface ChatSection extends SectionBase {
   space?: string
   greeting?: Value
   height?: 'sm' | 'md' | 'lg' | 'full'
+  /** First-run suggested prompts — tappable chips shown while the chat is empty. The newborn chat
+   *  page seeds these so a blank project is not a blank box. */
+  suggestions?: string[]
 }
 
 export interface ToolbarSection extends SectionBase {

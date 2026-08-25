@@ -110,6 +110,9 @@ describe('scaffoldAppFromBirth', () => {
     expect(spec.route).toBe('index');
     expect(spec.sections).toHaveLength(1);
     expect(spec.sections[0]).toMatchObject({ kind: 'chat', agent: 'thing', height: 'full' });
+    // First-run suggestion chips seed the blank chat so it says what talking here does (R4).
+    expect(Array.isArray(spec.sections[0].suggestions)).toBe(true);
+    expect(spec.sections[0].suggestions.length).toBeGreaterThan(0);
     const shell = JSON.parse(readFileSync(join(dir, 'shell.view.json'), 'utf8'));
     expect(shell.assistant).toBe(false);
   });

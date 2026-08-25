@@ -8,6 +8,8 @@ import { ChatNavProvider, useChatNav, type ChatLocation, type ChatNavHost } from
 import { closeActiveSession, getConnectedSessionId, openSession, startSession } from './session-control';
 import { MissingPane, OpeningPane } from './RoutePanes';
 import { AppFrame } from './AppView';
+import { CoachMark, useNewbornToAppCoachMark } from './CoachMark';
+import { useAppSurface } from './use-app-pages';
 import { isNotFound } from './api';
 import type { Surface } from '../../elements/nav/surface-switcher';
 
@@ -169,6 +171,12 @@ function ChatShellBody({
     return () => { cancelled = true; };
   }, [nav.projectId, nav.sessionId, retry]);
 
+  // ── The chat→app demotion coach-mark ───────────────────────────────────────
+  // Derive the project's surface state (newborn vs. has-pages) and fire the one-time hint the first
+  // time it grows a real page — the moment the full-screen chat collapses into the corner dock.
+  const { state: appSurfaceState } = useAppSurface(nav.projectId);
+  const coachMark = useNewbornToAppCoachMark(nav.projectId, appSurfaceState);
+
   // ── What the main pane shows when the location names something that isn't there ──
   const projectMissing =
     projectsLoaded && nav.projectId !== null && !projects.some((p) => p.id === nav.projectId);
@@ -229,11 +237,14 @@ function ChatShellBody({
   }
 
   return (
-    <AppShell
-      onSwitchSurface={onSwitchSurface}
-      surfaceBadges={surfaceBadges}
-      onOpenAppPage={onOpenAppPage}
-      mainPane={mainPane}
-    />
+    <>
+      <AppShell
+        onSwitchSurface={onSwitchSurface}
+        surfaceBadges={surfaceBadges}
+        onOpenAppPage={onOpenAppPage}
+        mainPane={mainPane}
+      />
+      {coachMark.show && <CoachMark onDismiss={coachMark.dismiss} />}
+    </>
   );
 }

@@ -1425,6 +1425,12 @@ export interface ChatSection extends SectionBase {
   space?: string;
   greeting?: Value;
   height?: 'sm' | 'md' | 'lg' | 'full';
+  /**
+   * First-run suggested prompts. Rendered as tappable chips while the transcript is still empty;
+   * a tap sends that prompt as the first message. The newborn chat page seeds these so a blank
+   * project says what it can do ("Track my expenses", "Plan a trip").
+   */
+  suggestions?: string[];
 }
 
 /** A header of mode toggles and actions. Replaces the catalogue's mode-toggle headers. */
@@ -2290,6 +2296,7 @@ const SECTION_DEFS: JsonSchema[] = [
       space: { type: 'string' },
       greeting: V,
       height: { enum: ['sm', 'md', 'lg', 'full'] },
+      suggestions: { type: 'array', items: { type: 'string' } },
     },
     ['agent'],
   ),
