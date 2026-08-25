@@ -83,3 +83,33 @@ export async function createChatSession(
   const { sessionId } = (await res.json()) as { sessionId: string };
   return sessionId;
 }
+
+/** One past conversation of a project, for the dock's history switcher. */
+export interface ChatSessionMeta {
+  sessionId: string;
+  title?: string;
+  lastActivity: number;
+}
+
+/**
+ * List a project's past conversations (`GET /api/projects/:id/sessions`), newest first, for the
+ * in-dock history switcher. Same JWT-gated `/api/*` proxy + optional Bearer token as
+ * {@link createChatSession}; a failure yields `[]` rather than throwing — a missing history is a
+ * quiet empty list, never a broken dock.
+ */
+export async function listChatSessions(
+  projectId: string,
+  base: string,
+  accessToken?: string,
+): Promise<ChatSessionMeta[]> {
+  try {
+    const res = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/sessions`, {
+      headers: { ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}) },
+    });
+    if (!res.ok) return [];
+    const { sessions } = (await res.json()) as { sessions?: ChatSessionMeta[] };
+    return (sessions ?? []).slice().sort((a, b) => (b.lastActivity ?? 0) - (a.lastActivity ?? 0));
+  } catch {
+    return [];
+  }
+}
