@@ -17,10 +17,9 @@ interface TopBarProps {
 /**
  * The `/chat` top bar — the project switcher on the left, the surface switcher on the right.
  *
- * It replaces the former left sidebar entirely: now that a selected project renders its app inline
- * (`AppInline`) and the app supplies its OWN sidebar nav + assistant dock, a second `/chat` sidebar
- * would be a duplicate nav. What the old sidebar uniquely held — switching/creating projects — moves
- * here, into a slim bar above the app.
+ * It replaces the former left sidebar entirely: switching, creating and deleting projects — the one
+ * thing that sidebar uniquely held — moves here, into a slim bar above the transcript. The
+ * conversation history it also carried now lives in the chat's own header controls.
  *
  * Selecting a project is a NAVIGATION (`nav.openProject`), never a store write — `ChatShell` turns
  * the new location back into `activeProjectId`, so this reads it but never sets it.
