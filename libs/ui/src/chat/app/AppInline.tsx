@@ -12,33 +12,42 @@ import {
   type AppViews,
 } from '../../view';
 import type { ShellSpec } from '../../view';
+import { AppView as ServedAppView } from '../../elements/content/app-view';
 import { apiGet } from './api';
 import { getAccessToken } from './auth';
 import { projectAppUrl } from '../../lib/app-urls';
 
 /**
- * A project's app, rendered **in-process** inside `/chat` — the main pane when a project is selected
- * and no specific conversation is open.
+ * A project's app, rendered inside `/chat` — the main pane when a project is selected and no specific
+ * conversation is open.
  *
- * This replaces the former `<iframe src="lmthing.app/<project>/…">`: the served app sends
- * `Content-Security-Policy: frame-ancestors 'self'`, so `lmthing.chat` could not frame `lmthing.app`
- * ("refused to connect"). Rendering the same view specs with the shared `ViewRenderer` sidesteps the
- * CSP entirely and needs no server change — the whole app (its pages, its own sidebar nav, its
- * assistant dock) is drawn here on `Prim.*`, exactly as `apps/app-shell` (web bundle) and
- * `apps/mobile` (native) draw it.
+ * Two kinds of app, one decision — the same one `apps/mobile/src/AppScreen.tsx` makes from the same
+ * `GET /api/apps/:id/views` probe:
  *
- * Routing is **local state**, not the browser URL — the `/chat` surface owns the URL (TanStack
- * Router), so an in-app page change is a `setPath`, never a `history.pushState`. This mirrors the
- * native host (`apps/mobile/src/AppScreen.tsx#NativeApp`); the shared route lookups live in
+ * - **A spec app (`views.length > 0`)** is drawn **in-process** with the shared `ViewRenderer` — its
+ *   pages, its own sidebar nav, its assistant dock, all on `Prim.*`. No iframe: the old
+ *   `<iframe src="lmthing.app/…">` failed because the served app sends `frame-ancestors 'self'` and
+ *   `lmthing.chat` could not frame the cross-origin `lmthing.app`. Rendering the specs sidesteps that.
+ * - **A legacy page-bundle (TSX) app (`views.length === 0`)** has no specs the renderer can draw, so
+ *   it falls back to the pod's **served bundle**. That is now **same-origin** — `lmthing.chat` proxies
+ *   `/app/*` to the pod — so `frame-ancestors 'self'` is satisfied and the CSP that broke the old
+ *   cross-origin iframe does not apply. Without this branch such an app hung forever on the skeleton
+ *   (empty views ⇒ no landing route ⇒ nothing to render).
+ *
+ * Routing (spec apps) is **local state**, not the browser URL — the `/chat` surface owns the URL
+ * (TanStack Router), so an in-app page change is a `setPath`, never a `history.pushState`. This
+ * mirrors the native host (`AppScreen.tsx#NativeApp`); the shared route lookups live in
  * `@lmthing/ui/view` (`view/app-views.ts`).
  *
- * The app always renders with a **sidebar**: `shell.placement` is coerced to `'sidebar'` so a grown
- * app's nav is a left rail (never a top-bar row), per the chat-first shell. A newborn project whose
- * only page is the chat index has no nav destinations, so no rail shows — it is just the full-height
- * chat, which is the point of "in the beginning it's only the chat".
+ * A grown spec app renders with a **sidebar**: `shell.placement` is coerced to `'sidebar'`. A newborn
+ * project (its only page is the chat index) keeps its scaffold shell so it is just the full-height
+ * chat — "in the beginning it's only the chat".
  */
 export function AppInline({ projectId }: { projectId: string }): React.ReactElement {
   const [app, setApp] = React.useState<AppViews | null>(null);
+  // Distinct from `app != null`: `loaded` flips true the moment the probe SETTLES (success OR the
+  // empty-views case), so an app with no spec pages shows its fallback instead of an endless skeleton.
+  const [loaded, setLoaded] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   // The page on screen. `null` until the payload arrives (then the app's landing route); an in-app
   // `navigate` owns it from then on.
@@ -47,6 +56,7 @@ export function AppInline({ projectId }: { projectId: string }): React.ReactElem
   React.useEffect(() => {
     let cancelled = false;
     setApp(null);
+    setLoaded(false);
     setError(null);
     setPath(null);
     void (async () => {
@@ -56,8 +66,12 @@ export function AppInline({ projectId }: { projectId: string }): React.ReactElem
         const normalized = normalizeAppViews(body, projectId);
         setApp(normalized);
         setPath(initialRoute(normalized.views, normalized.shell));
+        setLoaded(true);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+          setLoaded(true);
+        }
       }
     })();
     return () => {
@@ -90,7 +104,22 @@ export function AppInline({ projectId }: { projectId: string }): React.ReactElem
       </Prim.Box>
     );
   }
-  if (!app || path === null) {
+  // Still probing `GET /api/apps/:id/views` — a cold pod's first hit can build the app runtime.
+  if (!loaded || !app) {
+    return (
+      <Prim.Box flex={1} minHeight={0} padding="$4" backgroundColor="$background">
+        <LoadingState shape="block" />
+      </Prim.Box>
+    );
+  }
+  // A LEGACY page-bundle (TSX) app — no view specs for the renderer to draw. Serve the pod's bundle
+  // (same-origin now, so no CSP frame block). Without this, an empty-views app hung on the skeleton.
+  if (app.views.length === 0) {
+    return <ServedAppView url={projectAppUrl(projectId, '/')} title="App" />;
+  }
+  // A spec app resolved but somehow yielded no landing route — keep showing the skeleton rather than
+  // a blank pane (defensive: `views.length > 0` ⇒ `initialRoute` returns a route).
+  if (path === null) {
     return (
       <Prim.Box flex={1} minHeight={0} padding="$4" backgroundColor="$background">
         <LoadingState shape="block" />

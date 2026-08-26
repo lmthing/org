@@ -2,10 +2,11 @@
  * `AppInline` — the project's app rendered IN-PROCESS in the `/chat` main pane.
  *
  * The regression this pins: the pane used to be an `<iframe src="lmthing.app/…">`, which the served
- * app's CSP (`frame-ancestors 'self'`) refused to frame from `lmthing.chat`. `AppInline` renders the
- * same specs with `ViewRenderer` instead — so the load-bearing facts are (1) NO iframe, (2) it fetches
- * the render payload from `GET /api/apps/:id/views`, (3) it mounts `ViewRenderer` on the landing route
- * with the shell coerced to a left `sidebar`.
+ * app's CSP (`frame-ancestors 'self'`) refused to frame from `lmthing.chat`. For a **spec app**
+ * `AppInline` renders the specs with `ViewRenderer` instead — (1) NO iframe, (2) it fetches the render
+ * payload from `GET /api/apps/:id/views`, (3) it mounts `ViewRenderer` on the landing route with the
+ * shell coerced to a left `sidebar`. For a **legacy app with no specs** (`views: []`) it must NOT hang
+ * on the skeleton — it falls back to the pod's served bundle (now same-origin, so no CSP block).
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -70,5 +71,20 @@ describe('AppInline', () => {
     const { findByText, container } = render(<AppInline projectId="trip" />);
     await findByText(/Couldn’t load this app/i);
     expect(container.querySelector('iframe')).toBeNull();
+  });
+
+  it('falls back to the served bundle for a legacy app with NO view specs (never hangs)', async () => {
+    // A page-bundle (TSX) app: the /views payload has an empty `views` array. Without the fallback
+    // `initialRoute` returns null and the pane sits on the skeleton forever.
+    apiGet.mockResolvedValue({ project: 'legacy', views: [], layouts: [], components: [], shell: null, endpoints: {} });
+    const { container } = render(<AppInline projectId="legacy" />);
+    const iframe = await waitFor(() => {
+      const el = container.querySelector('iframe');
+      if (!el) throw new Error('no iframe yet');
+      return el;
+    });
+    // The served bundle at the pod's app mount (same-origin), NOT the in-process renderer.
+    expect(iframe.getAttribute('src')).toContain('/app/legacy');
+    expect(container.querySelector('[data-testid="view-renderer"]')).toBeNull();
   });
 });
