@@ -32,9 +32,9 @@ interface AppShellProps {
   /** Forwarded to the `TopBar`'s `SurfaceSwitcher`. */
   surfaceBadges?: Partial<Record<Surface, number>>;
   /**
-   * Replaces the transcript pane. `ChatShell` passes one while a project's chat is being resolved or
-   * a conversation is opening (`OpeningPane`), or when the named project/conversation does not exist
-   * (`MissingPane`) — see `RoutePanes.tsx`. It fills the pane below the top bar.
+   * Replaces the transcript pane. `ChatShell` passes one when a project is selected (the app renders
+   * inline via `AppInline`), while a conversation is opening, or when the named one does not exist —
+   * see `RoutePanes.tsx`. It fills the pane below the top bar.
    */
   mainPane?: React.ReactNode;
 }
@@ -147,7 +147,7 @@ export function AppShell({ singleSession, onSwitchSurface, surfaceBadges, mainPa
       )}
 
       <Prim.Row flexGrow={1} flexShrink={1} flexBasis="0%" minHeight={0} overflow="hidden">
-        {/* Main: a routed pane (opening / not-found), the no-session pane, or the transcript. */}
+        {/* Main: the project's app (inline), a routed pane, the no-session pane, or the transcript. */}
         <Prim.Col position="relative" overflow="hidden" flexGrow={1} flexShrink={1} flexBasis="0%" minWidth={0}>
           {mainPane ? (
             mainPane

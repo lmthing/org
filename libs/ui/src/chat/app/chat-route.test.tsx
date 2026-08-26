@@ -24,11 +24,7 @@ const P = ({ children }: { children: React.ReactNode }) => (
   </TamaguiProvider>
 )
 
-const h = vi.hoisted(() => ({
-  connected: null as string | null,
-  fail: null as number | null,
-  resolved: null as string | null,
-}))
+const h = vi.hoisted(() => ({ connected: null as string | null, fail: null as number | null }))
 
 vi.mock('./session-control', () => ({
   getConnectedSessionId: () => h.connected,
@@ -43,12 +39,9 @@ vi.mock('./session-control', () => ({
   startSession: vi.fn(async () => 's-new'),
   switchSession: vi.fn(),
   resumeSession: vi.fn(),
-  // A project with no conversation named resolves to its most-recent one (or a fresh one). The
-  // real helper lists `/api/projects/:id/sessions`; here it returns whatever the test set.
-  resolveProjectChat: vi.fn(async () => h.resolved ?? 's-new'),
 }))
 
-import { openSession, closeActiveSession, startSession, resolveProjectChat } from './session-control'
+import { openSession, closeActiveSession, startSession } from './session-control'
 
 const PROJECTS = [
   { id: 'user', name: 'Personal', createdAt: '2024-01-01T00:00:00.000Z' },
@@ -88,7 +81,6 @@ describe('chat — the location is the source of truth', () => {
     vi.clearAllMocks()
     h.connected = null
     h.fail = null
-    h.resolved = null
     useStore.setState({ projects: [], activeProjectId: null, activeSessionId: null })
     vi.stubGlobal('fetch', vi.fn(stubFetch))
   })
@@ -105,19 +97,10 @@ describe('chat — the location is the source of truth', () => {
     )
   })
 
-  it('opens the project’s chat when a location names a project but no conversation', async () => {
-    // A project's main surface is its chat, so a bare `/chat/<project>` resolves the project's
-    // most-recent conversation and REDIRECTS to it (replace — the app answering "open this project",
-    // not a place to come Back to).
-    h.resolved = 's-recent'
+  it('leaves a location that already names a project alone', async () => {
     const { onNavigate } = renderShell({ projectId: 'trips', sessionId: null })
-    await vi.waitFor(() => expect(resolveProjectChat).toHaveBeenCalledWith('trips'))
-    await vi.waitFor(() =>
-      expect(onNavigate).toHaveBeenCalledWith(
-        { projectId: 'trips', sessionId: 's-recent' },
-        { replace: true },
-      ),
-    )
+    await vi.waitFor(() => expect(useStore.getState().projects).toHaveLength(2))
+    expect(onNavigate).not.toHaveBeenCalled()
     expect(useStore.getState().activeProjectId).toBe('trips')
   })
 
