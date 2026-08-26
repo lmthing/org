@@ -26,6 +26,9 @@ export class ReplRpcClient {
   private ws: WebSocket | null = null;
   private handlers: Map<string, EventHandler[]> = new Map();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Set by {@link disconnect} so an intentional close does not trigger the backoff reconnect. */
+  private closedByUser = false;
+  private reconnectAttempts = 0;
 
   private legacyUrl: string | null = null;
   private config: ReplClientConfig | null = null;
@@ -86,16 +89,30 @@ export class ReplRpcClient {
     return this.config?.sessionId ?? null;
   }
 
-  connect(): void {
-    const wsUrl = this.config
+  private buildWsUrl(): string {
+    return this.config
       ? `${toWsUrl(this.config.baseUrl)}/api/ws?sessionId=${encodeURIComponent(this.config.sessionId)}` +
         (this.config.accessToken ? `&access_token=${encodeURIComponent(this.config.accessToken)}` : '')
       : (this.legacyUrl as string);
+  }
 
-    this.ws = new WebSocket(wsUrl);
-    this.ws.onopen = () => this.emit('connect', undefined);
-    this.ws.onclose = () => this.emit('disconnect', undefined);
-    this.ws.onerror = (err) => this.emit('error', err);
+  connect(): void {
+    this.closedByUser = false;
+    this.ws = new WebSocket(this.buildWsUrl());
+    this.ws.onopen = () => {
+      this.reconnectAttempts = 0;
+      this.emit('connect', undefined);
+    };
+    this.ws.onclose = () => {
+      this.emit('disconnect', undefined);
+      this.scheduleReconnect();
+    };
+    // A transport error is NOT a server wire error. Emitting the DOM Event on the `'error'` channel
+    // — the same one the server's `{ type: 'error', message }` uses — made a failed handshake render
+    // as a transcript error whose `data` was the messageless DOM Event ("undefined"). Keep the two
+    // apart: transport errors ride `'socket_error'` (unhandled by default), and the close handler
+    // above drives recovery.
+    this.ws.onerror = (err) => this.emit('socket_error', err);
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data as string) as { type: string };
@@ -106,7 +123,21 @@ export class ReplRpcClient {
     };
   }
 
+  /** Reconnect with capped exponential backoff, mirroring the main surface's socket
+   *  (`store/ws-client.ts`). A dropped dock socket used to stay dead — there was no reconnect at
+   *  all — so a brief blip wedged the embedded chat until a reload. */
+  private scheduleReconnect(): void {
+    if (this.closedByUser || this.reconnectTimer) return;
+    const delay = Math.min(8000, 500 * 2 ** this.reconnectAttempts);
+    this.reconnectAttempts++;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, delay);
+  }
+
   disconnect(): void {
+    this.closedByUser = true;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

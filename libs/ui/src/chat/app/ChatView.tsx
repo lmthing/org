@@ -1,7 +1,8 @@
 import * as Prim from '../../elements/primitives/index';
 import React from 'react';
 import { useStore } from '../store/store';
-import type { ConvoBlock, UploadedAttachment } from '../store/model';
+import type { UploadedAttachment } from '../store/model';
+import { groupBlocks } from './group-blocks';
 import { Message, AssistantTurn } from './Message';
 import { Composer } from './Composer';
 import { StatusLine } from './StatusLine';
@@ -40,36 +41,6 @@ function ConnectionDot() {
       <Prim.Text color="$muted-foreground">{label}</Prim.Text>
     </Prim.Text>
   );
-}
-
-type MessageGroup =
-  | { type: 'user'; block: ConvoBlock }
-  | { type: 'assistant'; blocks: ConvoBlock[]; nodeIds: string[] };
-
-function groupBlocks(blocks: ConvoBlock[]): MessageGroup[] {
-  const groups: MessageGroup[] = [];
-  let current: ConvoBlock[] = [];
-  let nodeIds: string[] = [];
-
-  const flush = () => {
-    if (current.length) {
-      groups.push({ type: 'assistant', blocks: current, nodeIds });
-      current = [];
-      nodeIds = [];
-    }
-  };
-
-  for (const b of blocks) {
-    if (b.type === 'user') {
-      flush();
-      groups.push({ type: 'user', block: b });
-    } else {
-      current.push(b);
-      if (b.nodeId && !nodeIds.includes(b.nodeId)) nodeIds.push(b.nodeId);
-    }
-  }
-  flush();
-  return groups;
 }
 
 interface ChatViewProps {

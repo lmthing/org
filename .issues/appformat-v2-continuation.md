@@ -185,13 +185,16 @@ alongside Tier 2.
 
 ---
 
-## Two old follow-ups from the original W6 live run (still open, low priority)
+## One old follow-up from the original W6 live run (still open, low priority)
 
-- **Assistant-dock WebSocket** fails handshake in a bare test pod (`ws://…/app/<id>/api/ws`) — the one
-  console error on an otherwise-clean page. Orthogonal to data rendering; likely behaves differently
-  behind the real gateway.
 - **`APPFORMAT.md` is stale** — still describes v1 (generated-wrapper trick, 8/24/5 vocabulary). Needs a
   v2 pass; `org/docs/` too (`pnpm docs:check` should be green before closing this issue).
+
+<!-- Fixed: the assistant-dock WebSocket that failed its handshake against `…/app/<id>/api/ws` now
+opens at the pod origin (`view/sections/chat.tsx` passes `podOrigin(client.baseUrl)`), and a
+transport error no longer renders as a bogus "undefined" transcript block (rpc-client splits the DOM
+`onerror` onto its own channel). Covered by rpc-client.test.ts / useReplSession.test.ts. -->
+
 
 ---
 
