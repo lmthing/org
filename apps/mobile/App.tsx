@@ -423,10 +423,11 @@ function HomeShell() {
         />
       </Prim.Box>
       <Prim.Box flex={1} flexDirection="column" display={tab === 'chat' ? 'flex' : 'none'}>
-        {/* A project's main surface is its chat: selecting a project resolves its most-recent
-            conversation (or starts one) and shows the full `ChatView` transcript in `AppShell`'s
-            main pane — the same shared `ChatShell` path the web surface uses. Opening a project's
-            app pages from Home still uses the `AppScreen` cover above (`onOpenProject`). */}
+        {/* The chat surface now renders a selected project's app INLINE (its own nav + assistant
+            dock, drawn natively by `ViewRenderer`) in `AppShell`'s main pane — the same in-process
+            path the web surface uses. The old `onOpenAppPage` hook (which covered the tabs with a
+            separate `AppScreen` when a sidebar APP row was tapped) is gone with that sidebar; opening
+            a project's app from Home still uses the `AppScreen` cover above (`onOpenProject`). */}
         <ChatShell
           onSwitchSurface={switchTo}
           {...(badges ? { surfaceBadges: badges } : {})}

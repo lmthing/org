@@ -5,14 +5,11 @@ import { apiUrl } from '../../platform/api-base';
 import { AppShell } from './AppShell';
 import { applyUrlToState, syncStateToUrl } from './url-state';
 import { ChatNavProvider, useChatNav, type ChatLocation, type ChatNavHost } from './chat-nav';
-import {
-  closeActiveSession,
-  getConnectedSessionId,
-  openSession,
-  resolveProjectChat,
-  startSession,
-} from './session-control';
+import { closeActiveSession, getConnectedSessionId, openSession, startSession } from './session-control';
 import { MissingPane, OpeningPane } from './RoutePanes';
+import { AppInline } from './AppInline';
+import { CoachMark, useNewbornToAppCoachMark } from './CoachMark';
+import { useAppSurface } from './use-app-pages';
 import { isNotFound } from './api';
 import type { Surface } from '../../elements/nav/surface-switcher';
 
@@ -165,30 +162,15 @@ function ChatShellBody({
     return () => { cancelled = true; };
   }, [nav.projectId, nav.sessionId, retry]);
 
+  // ── The chat→app demotion coach-mark ───────────────────────────────────────
+  // Derive the project's surface state (newborn vs. has-pages) and fire the one-time hint the first
+  // time it grows a real page — the moment the full-screen chat collapses into the corner dock.
+  const { state: appSurfaceState } = useAppSurface(nav.projectId);
+  const coachMark = useNewbornToAppCoachMark(nav.projectId, appSurfaceState);
+
   // ── What the main pane shows when the location names something that isn't there ──
   const projectMissing =
     projectsLoaded && nav.projectId !== null && !projects.some((p) => p.id === nav.projectId);
-
-  // ── `/chat/<project>` with no conversation → open the project's chat ────────
-  // A project's main surface is its chat — the fully-fledged transcript (`ChatView`), not a
-  // stripped dock — so landing on a project resolves its most-recent conversation (or starts one)
-  // and REDIRECTS to it. Replace, not push: the bare-project entry is the app answering "open this
-  // project", so a Back that returned to it would only resolve-and-bounce again. Waits for the
-  // project list so a ghost id shows its own pane instead of minting a chat in a project that isn't
-  // there; a failure here (cold pod, deleted snapshot) surfaces through the same open-state panes as
-  // a bad conversation link.
-  useEffect(() => {
-    if (!nav.projectId || nav.sessionId || !projectsLoaded || projectMissing) return;
-    const projectId = nav.projectId;
-    let cancelled = false;
-    setOpenState({ status: 'opening' });
-    void resolveProjectChat(projectId)
-      .then((sessionId) => { if (!cancelled) nav.redirect({ projectId, sessionId }); })
-      .catch((err: unknown) => {
-        if (!cancelled) setOpenState({ status: isNotFound(err) ? 'gone' : 'unavailable' });
-      });
-    return () => { cancelled = true; };
-  }, [nav, projectsLoaded, projectMissing, retry]);
 
   const newChatHere = React.useCallback(() => {
     const target = nav.projectId;
@@ -237,17 +219,22 @@ function ChatShellBody({
       />
     );
   } else if (nav.projectId && !nav.sessionId) {
-    // A project is selected and no specific conversation is open: the resolve effect above is
-    // continuing (or starting) the project's chat and is about to redirect to it. Show the opening
-    // pane for that window so the surface never flashes the "no conversation" pane on the way in.
-    mainPane = <OpeningPane />;
+    // A project is selected and no specific conversation is open: LOAD THE APP. Every project is a
+    // served app from birth (a chat page that grows), so this is where "select a project and it
+    // starts as a chat" happens — the app's own dock is the chat, front-and-centre while the project
+    // is newborn and a floating modal once it has real pages. An explicit conversation URL still
+    // opens the rich transcript (`ChatView`) below.
+    mainPane = <AppInline projectId={nav.projectId} />;
   }
 
   return (
-    <AppShell
-      onSwitchSurface={onSwitchSurface}
-      surfaceBadges={surfaceBadges}
-      mainPane={mainPane}
-    />
+    <>
+      <AppShell
+        onSwitchSurface={onSwitchSurface}
+        surfaceBadges={surfaceBadges}
+        mainPane={mainPane}
+      />
+      {coachMark.show && <CoachMark onDismiss={coachMark.dismiss} />}
+    </>
   );
 }

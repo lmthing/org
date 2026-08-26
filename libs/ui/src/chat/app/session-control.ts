@@ -1,5 +1,5 @@
 import { connectLive, useStore } from '../store/store';
-import { apiGet, apiPost } from './api';
+import { apiPost } from './api';
 import { wsTokenSuffix } from './auth';
 import { setLiveSend } from './live-send';
 import { wsUrl } from '../../platform/api-base';
@@ -102,26 +102,4 @@ export async function startSession(projectId: string): Promise<string> {
 export async function resumeSession(projectId: string, resumeSessionId: string): Promise<string> {
   await openSession(projectId, resumeSessionId);
   return resumeSessionId;
-}
-
-/**
- * Resolve the conversation to open when a project is entered with no specific one named.
- *
- * A project's main surface IS its chat, so landing on `/chat/<project>` continues the project's
- * most-recent conversation — or starts a fresh one when it has none. The caller redirects to the
- * returned id, so the full transcript (`ChatView`) renders and the location becomes shareable.
- *
- * It does NOT connect the resumed id itself — the newest one is handed straight back and the shell's
- * location effect runs `openSession` for it, so a cold-pod 503 or a deleted snapshot flows through
- * that effect's "gone / unavailable" handling exactly as a pasted `/chat/<project>/<session>` link
- * does. The empty-project branch is the one exception: `startSession` both creates and connects, and
- * there is no persisted id to hand back otherwise.
- */
-export async function resolveProjectChat(projectId: string): Promise<string> {
-  const { sessions } = await apiGet<{ sessions: { sessionId: string }[] }>(
-    `/api/projects/${encodeURIComponent(projectId)}/sessions`,
-  );
-  const mostRecent = sessions?.[0]?.sessionId;
-  if (mostRecent) return mostRecent;
-  return startSession(projectId);
 }

@@ -1,11 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import {
-  openSession,
-  closeActiveSession,
-  getConnectedSessionId,
-  startSession,
-  resolveProjectChat,
-} from './session-control'
+import { openSession, closeActiveSession, getConnectedSessionId, startSession } from './session-control'
 import { useStore } from '../store/store'
 
 /**
@@ -40,7 +34,7 @@ vi.mock('../store/store', async (importOriginal) => ({
   }),
 }))
 
-import { apiPost, apiGet } from './api'
+import { apiPost } from './api'
 
 /** A promise this test controls the settling of. */
 function deferred<T>() {
@@ -121,42 +115,5 @@ describe('session-control — following the location', () => {
     closeActiveSession()
     expect(h.connections[0]!.close).toHaveBeenCalled()
     expect(getConnectedSessionId()).toBe(null)
-  })
-})
-
-describe('resolveProjectChat — the project’s own chat', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    h.connections = []
-    h.post = null
-    closeActiveSession()
-  })
-
-  it('continues the project’s most-recent conversation, without creating one', async () => {
-    // `/api/projects/:id/sessions` is newest-first, so the first entry is the one to resume.
-    vi.mocked(apiGet).mockResolvedValue({
-      sessions: [{ sessionId: 's-recent' }, { sessionId: 's-older' }],
-    })
-    const id = await resolveProjectChat('trips')
-    expect(id).toBe('s-recent')
-    expect(apiGet).toHaveBeenCalledWith('/api/projects/trips/sessions')
-    // It hands the id back for the shell to open — it does NOT post a new session itself.
-    expect(apiPost).not.toHaveBeenCalled()
-  })
-
-  it('starts a fresh chat when the project has none', async () => {
-    vi.mocked(apiGet).mockResolvedValue({ sessions: [] })
-    h.post = () => Promise.resolve({ sessionId: 's-fresh' })
-    const id = await resolveProjectChat('trips')
-    expect(id).toBe('s-fresh')
-    // A brand-new project's first chat is created AND connected in one round trip.
-    expect(apiPost).toHaveBeenCalledWith('/api/sessions', { projectId: 'trips' })
-    expect(getConnectedSessionId()).toBe('s-fresh')
-  })
-
-  it('encodes an odd project id into the sessions path', async () => {
-    vi.mocked(apiGet).mockResolvedValue({ sessions: [{ sessionId: 's-1' }] })
-    await resolveProjectChat('a/b')
-    expect(apiGet).toHaveBeenCalledWith('/api/projects/a%2Fb/sessions')
   })
 })
