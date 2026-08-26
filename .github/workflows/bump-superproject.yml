@@ -1,0 +1,32 @@
+name: Bump sdk/org in lmthing
+
+# When main moves — which is exactly what merging a PR does — tell the lmthing
+# superproject to re-pin its `sdk/org` submodule to this new head. The bump itself
+# happens over in lmthing (see its `bump-org-submodule.yml`); this job only fires the
+# signal, so it needs no checkout and no knowledge of the superproject's layout.
+#
+# Requires a repo secret `LMTHING_DISPATCH_TOKEN`: a token (fine-grained PAT or GitHub
+# App installation token) allowed to send a `repository_dispatch` to `lmthing/lmthing`
+# (Contents: write is sufficient). The default `GITHUB_TOKEN` cannot reach another repo.
+
+on:
+  push:
+    branches: [main]
+
+# Coalesce a burst of merges into the latest one — an older run bumping to an earlier
+# head after a newer merge would just be undone by the next dispatch anyway.
+concurrency:
+  group: bump-superproject
+  cancel-in-progress: true
+
+jobs:
+  notify-lmthing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch submodule bump to lmthing/lmthing
+        env:
+          GH_TOKEN: ${{ secrets.LMTHING_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '{"event_type":"org-main-updated","client_payload":{"sha":"%s"}}' "$GITHUB_SHA" \
+            | gh api repos/lmthing/lmthing/dispatches --input -
