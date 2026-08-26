@@ -14,10 +14,19 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '../../test-utils/index';
 import { ReplChatView } from './ReplChatView';
+import { emptyModel, type ConvoBlock, type SessionModel } from '../store/model';
+
+function modelWith(blocks: ConvoBlock[]): SessionModel {
+  return { ...emptyModel(), rootId: 'n', blocks };
+}
+
+const HELLO: ConvoBlock = { id: 'b1', ts: 0, nodeId: 'n', type: 'display', descriptor: 'hello' };
 
 const mockSession = {
-  blocks: [{ id: 'b1', type: 'display' as const, data: 'hello' }],
-  model: { nodes: {}, rootIds: [] },
+  // The transcript is now `model.blocks` (the same `ConvoBlock[]` the full /chat surface renders),
+  // grouped by the shared `groupBlocks`. `blocks` (the legacy ad-hoc list) is unused by this view.
+  blocks: [] as unknown[],
+  model: modelWith([HELLO]),
   sendMessage: vi.fn(),
   submitForm: vi.fn(),
   cancelAsk: vi.fn(),
@@ -52,8 +61,8 @@ describe('ReplChatView transcript container', () => {
 
 describe('ReplChatView first-run suggestion chips (R4)', () => {
   it('shows chips on a blank connected transcript and sends one on tap', () => {
-    const prev = mockSession.blocks;
-    mockSession.blocks = []; // a brand-new, empty conversation
+    const prev = mockSession.model;
+    mockSession.model = modelWith([]); // a brand-new, empty conversation
     mockSession.sendMessage.mockClear();
     try {
       const { getByText } = render(
@@ -68,7 +77,7 @@ describe('ReplChatView first-run suggestion chips (R4)', () => {
       chip.click();
       expect(mockSession.sendMessage).toHaveBeenCalledWith('Track my expenses');
     } finally {
-      mockSession.blocks = prev;
+      mockSession.model = prev;
     }
   });
 
@@ -82,5 +91,27 @@ describe('ReplChatView first-run suggestion chips (R4)', () => {
       />,
     );
     expect(queryByText('Track my expenses')).toBeNull();
+  });
+});
+
+describe('ReplChatView fully-featured transcript', () => {
+  it('renders user turns, a markdown display, and an ask form from model.blocks', () => {
+    const prev = mockSession.model;
+    mockSession.model = modelWith([
+      { id: 'u1', ts: 1, nodeId: 'n', type: 'user', content: 'plan a trip' },
+      { id: 'd1', ts: 2, nodeId: 'n', type: 'display', descriptor: 'Sure — **where** to?' },
+      { id: 'a1', ts: 3, nodeId: 'n', type: 'ask', askId: 'ask-1', descriptor: 'Destination?', state: 'open' },
+    ]);
+    try {
+      const { getByText } = render(<ReplChatView baseUrl="https://computer.test" sessionId="s1" />);
+      // The user's own turn (previously dropped by the ad-hoc block list).
+      expect(getByText('plan a trip')).toBeTruthy();
+      // Assistant prose rendered as markdown (the "where" is inside a <strong>).
+      expect(getByText('where')).toBeTruthy();
+      // The ask form is rendered from the ConvoBlock ask (its Submit control).
+      expect(getByText('Submit')).toBeTruthy();
+    } finally {
+      mockSession.model = prev;
+    }
   });
 });

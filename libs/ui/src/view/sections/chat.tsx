@@ -97,7 +97,7 @@ export function ChatSectionView({ section, scope }: { section: ChatSection; scop
         {error ? (
           <ErrorState title="The assistant is unavailable" message={error} />
         ) : sessionId ? (
-          <ReplChatView baseUrl={client.baseUrl} sessionId={sessionId} accessToken={token} suggestions={section.suggestions} />
+          <ReplChatView baseUrl={podOrigin(client.baseUrl)} sessionId={sessionId} accessToken={token} suggestions={section.suggestions} />
         ) : (
           <Prim.Box padding="$4">
             <LoadingState shape="block" />

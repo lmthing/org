@@ -1,6 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ReplRpcClient, type ReplClientConfig } from './rpc-client';
-import { buildModel, emptyModel, type SessionModel, type WireEvent } from '../store/model';
+import {
+  applyWireEvent,
+  emptyModel,
+  pushAskBlock,
+  resolveAskBlock,
+  pushErrorBlock,
+  type ConvoBlock,
+  type SessionModel,
+  type WireEvent,
+} from '../store/model';
 
 export interface ReplBlock {
   id: string;
@@ -54,6 +63,8 @@ export function useReplSession(target: string | ReplClientConfig): {
   blocks: ReplBlock[];
   /** Live execution-tree model (nodes for forks/delegates/tasklists) rebuilt
    *  from the session's trace stream. Empty until trace events arrive. */
+  /** The single live transcript + execution-tree model, fed from the session's trace stream plus the
+   *  ask/error channels. `model.blocks` is the ordered `ConvoBlock[]` the rich dock renders. */
   model: SessionModel;
   sendMessage: (content: string) => void;
   submitForm: (id: string, value: unknown) => void;
@@ -62,19 +73,34 @@ export function useReplSession(target: string | ReplClientConfig): {
   isDone: boolean;
 } {
   const [blocks, setBlocks] = useState<ReplBlock[]>([]);
-  const [model, setModel] = useState<SessionModel>(emptyModel);
   const [isConnected, setIsConnected] = useState(false);
   const [isDone, setIsDone] = useState(false);
   const clientRef = useRef<ReplRpcClient | null>(null);
   const blockIdCounter = useRef(0);
-  // Wire events keyed by seq (dedupe snapshot vs live overlap); the model is
-  // rebuilt from the seq-ordered values on every batch.
-  const wireBySeq = useRef<Map<number, WireEvent>>(new Map());
+  // Trace seqs already folded into the model — dedupes the snapshot-vs-live overlap AND the
+  // whole-snapshot resend on a reconnect, so re-applying is a no-op rather than a double-count.
+  const seenSeq = useRef<Set<number>>(new Set());
+  // The single live model is held in a ref and mutated in place (matching how the main store feeds
+  // it); a version counter forces the re-render. Mutating inside a `setState` updater would be
+  // double-applied under React StrictMode/concurrent — a ref keeps each event folded in exactly once.
+  const modelRef = useRef<SessionModel>(emptyModel());
+  const [, setVersion] = useState(0);
+  const rerender = () => setVersion((v) => v + 1);
 
   const nextId = () => {
     blockIdCounter.current++;
     return String(blockIdCounter.current);
   };
+
+  const mutateModel = (fn: (m: SessionModel) => void) => {
+    fn(modelRef.current);
+    rerender();
+  };
+
+  const hasOpenAsk = (m: SessionModel, askId: string): boolean =>
+    m.blocks.some((b): b is Extract<ConvoBlock, { type: 'ask' }> =>
+      b.type === 'ask' && b.askId === askId && b.state === 'open',
+    );
 
   const depKey = typeof target === 'string' ? target : `${target.baseUrl}#${target.sessionId}`;
 
@@ -91,13 +117,18 @@ export function useReplSession(target: string | ReplClientConfig): {
     }
     const client = new ReplRpcClient(target);
     clientRef.current = client;
-    // Fresh session/target — drop any accumulated tree from a prior binding.
-    wireBySeq.current = new Map();
-    setModel(emptyModel());
+    // Fresh session/target — drop any accumulated transcript from a prior binding.
+    seenSeq.current = new Set();
+    modelRef.current = emptyModel();
+    rerender();
+    setBlocks([]);
 
-    const rebuildModel = () => {
-      const ordered = [...wireBySeq.current.values()].sort((a, b) => a.seq - b.seq);
-      setModel(buildModel(ordered));
+    // Fold a trace event into the model exactly once. Applied incrementally (never a wholesale
+    // rebuild) so the ask/error blocks pushed imperatively below survive each new batch.
+    const applyTrace = (we: WireEvent) => {
+      if (seenSeq.current.has(we.seq)) return;
+      seenSeq.current.add(we.seq);
+      mutateModel((m) => applyWireEvent(m, we));
     };
 
     client.on('connect', () => setIsConnected(true));
@@ -105,16 +136,17 @@ export function useReplSession(target: string | ReplClientConfig): {
 
     client.on('trace_snapshot', (data) => {
       const event = data as TraceSnapshotEvent;
-      for (const we of event.events ?? []) wireBySeq.current.set(we.seq, we);
-      rebuildModel();
+      for (const we of event.events ?? []) applyTrace(we);
     });
 
     client.on('trace', (data) => {
       const event = data as TraceEventMsg;
-      wireBySeq.current.set(event.seq, { seq: event.seq, event: event.event });
-      rebuildModel();
+      applyTrace({ seq: event.seq, event: event.event });
     });
 
+    // `display` also arrives as a trace event (folded into `model.blocks` above); keep the legacy
+    // `blocks` list populated too, for the other `useReplSession` consumers (cli `--web`, the studio
+    // agent-chat route) that still render it directly.
     client.on('display', (data) => {
       const event = data as DisplayEvent;
       setBlocks((prev) => [
@@ -123,16 +155,26 @@ export function useReplSession(target: string | ReplClientConfig): {
       ]);
     });
 
+    // Asks and errors are NOT trace events — the server streams them on their own channels — so feed
+    // them into the model here (mirroring the main surface's `noteAskStart`/`noteAskEnd`/`noteError`)
+    // to keep `model.blocks` the single, correctly-ordered transcript the rich dock renders. Guarded
+    // against the reconnect resend so an already-open ask is not duplicated.
     client.on('ask_start', (data) => {
       const event = data as AskStartEvent;
-      setBlocks((prev) => [
-        ...prev,
-        { id: event.id, type: 'ask', data: event.descriptor },
-      ]);
+      mutateModel((m) => { if (!hasOpenAsk(m, event.id)) pushAskBlock(m, event.id, event.descriptor); });
+      setBlocks((prev) => [...prev, { id: event.id, type: 'ask', data: event.descriptor }]);
+    });
+
+    client.on('ask_pending', (data) => {
+      const event = data as { asks?: { id: string; descriptor: unknown }[] };
+      for (const a of event.asks ?? []) {
+        mutateModel((m) => { if (!hasOpenAsk(m, a.id)) pushAskBlock(m, a.id, a.descriptor); });
+      }
     });
 
     client.on('ask_end', (data) => {
       const event = data as AskEndEvent;
+      mutateModel((m) => resolveAskBlock(m, event.id, undefined, false));
       setBlocks((prev) => prev.filter((b) => b.id !== event.id));
     });
 
@@ -144,12 +186,15 @@ export function useReplSession(target: string | ReplClientConfig): {
       ]);
     });
 
+    // Only a real server wire error (a string `message`) becomes a transcript error. A socket
+    // transport failure rides the client's separate `'socket_error'` channel now, so this no longer
+    // renders a messageless DOM Event as the literal text "undefined".
     client.on('error', (data) => {
-      const event = data as ErrorEvent;
-      setBlocks((prev) => [
-        ...prev,
-        { id: nextId(), type: 'error', data: event.message },
-      ]);
+      const event = data as Partial<ErrorEvent>;
+      if (typeof event.message !== 'string') return;
+      const message = event.message;
+      mutateModel((m) => pushErrorBlock(m, message));
+      setBlocks((prev) => [...prev, { id: nextId(), type: 'error', data: message }]);
     });
 
     client.on('done', () => {
@@ -178,5 +223,5 @@ export function useReplSession(target: string | ReplClientConfig): {
     clientRef.current?.cancelAsk(id);
   }, []);
 
-  return { blocks, model, sendMessage, submitForm, cancelAsk, isConnected, isDone };
+  return { blocks, model: modelRef.current, sendMessage, submitForm, cancelAsk, isConnected, isDone };
 }

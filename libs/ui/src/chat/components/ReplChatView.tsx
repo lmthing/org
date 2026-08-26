@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useReplSession } from '../client/useReplSession';
 import { DisplayBlock } from './DisplayBlock';
 import { AskBlock } from './AskBlock';
-import { VariablesBlock } from './VariablesBlock';
+import { groupBlocks } from '../app/group-blocks';
 import {
   selectActiveWork,
   latestSubtreeStatement,
@@ -12,7 +12,7 @@ import {
   KIND_ICON,
   fmtDuration,
 } from '../app/node-meta';
-import type { SessionModel } from '../store/model';
+import type { ConvoBlock, SessionModel } from '../store/model';
 
 export interface ReplChatViewProps {
   /** HTTP/WS origin of the pod (e.g. https://computer.test). */
@@ -58,11 +58,6 @@ export function ReplChatView({
   suggestions,
 }: ReplChatViewProps): React.ReactElement {
   const [inputValue, setInputValue] = useState('');
-  // Locally-echoed user messages. The agent stream (`blocks`) only carries the
-  // agent's display/ask/variables output, never the user's own turns — so we
-  // track them here and interleave them into the transcript by recording how
-  // many agent blocks existed when each was sent.
-  const [userMsgs, setUserMsgs] = useState<{ id: string; text: string; afterBlock: number }[]>([]);
   // Whether the transcript is scrolled to (or near) its end. Gates auto-follow the same way
   // `ChatView` does — see `stickToEnd` below. Was an unconditional `scrollIntoView` on every
   // `blocks`/`userMsgs` change, which yanked the reader back to the bottom on the very next token
@@ -70,11 +65,18 @@ export function ReplChatView({
   // dock and the project-app `<Chat>` widget (this component's two hosts).
   const [atBottom, setAtBottom] = useState(true);
 
-  const { blocks, model, sendMessage, submitForm, cancelAsk, isConnected, isDone } = useReplSession({
+  const { model, sendMessage, submitForm, cancelAsk, isConnected, isDone } = useReplSession({
     baseUrl,
     sessionId,
     accessToken,
   });
+
+  // The single source of truth for the transcript: the same `ConvoBlock[]` the full `/chat`
+  // transcript renders (user turns + display/markdown + asks + errors), grouped into turns by the
+  // shared `groupBlocks`. Replaces this dock's former hand-rolled block list, which dropped the
+  // user's own turns and rendered assistant prose without markdown.
+  const blocks = model.blocks;
+  const groups = groupBlocks(blocks);
 
   const activeWork = selectActiveWork(model);
 
@@ -100,13 +102,11 @@ export function ReplChatView({
     (raw: string) => {
       const text = raw.trim();
       if (!text || !isConnected) return;
-      setUserMsgs((prev) => [
-        ...prev,
-        { id: `u-${Date.now()}-${prev.length}`, text, afterBlock: blocks.length },
-      ]);
+      // No local echo: the server streams the user's turn back as a `user_message` block, so it lands
+      // in `model.blocks` (the one transcript) the same way the assistant's turns do.
       sendMessage(text);
     },
-    [isConnected, sendMessage, blocks.length],
+    [isConnected, sendMessage],
   );
 
   const handleSend = useCallback(() => {
@@ -115,7 +115,7 @@ export function ReplChatView({
   }, [inputValue, sendText]);
 
   // Show the first-run suggestion chips only while the conversation is still blank.
-  const showSuggestions = !!suggestions?.length && isConnected && blocks.length === 0 && userMsgs.length === 0;
+  const showSuggestions = !!suggestions?.length && isConnected && blocks.length === 0;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -124,36 +124,38 @@ export function ReplChatView({
     }
   };
 
-  const renderAgentBlock = (block: (typeof blocks)[number]): React.ReactNode => {
-    if (block.type === 'display') return <DisplayBlock key={block.id} descriptor={block.data} />;
+  const renderAgentBlock = (block: ConvoBlock): React.ReactNode => {
+    if (block.type === 'display') return <DisplayBlock key={block.id} descriptor={block.descriptor} />;
     if (block.type === 'ask')
       return (
-        <AskBlock key={block.id} id={block.id} descriptor={block.data} onSubmit={submitForm} onCancel={cancelAsk} />
+        <AskBlock
+          key={block.id}
+          id={block.askId}
+          descriptor={block.descriptor}
+          onSubmit={submitForm}
+          onCancel={cancelAsk}
+        />
       );
-    if (block.type === 'variables')
-      return <VariablesBlock key={block.id} vars={block.data as Record<string, unknown>} />;
     if (block.type === 'error')
       return (
         <Prim.Box key={block.id} {...styles.errorBlock}>
-          <Prim.Text>{String(block.data)}</Prim.Text>
+          <Prim.Text>{block.message}</Prim.Text>
         </Prim.Box>
       );
     return null;
   };
 
-  const userBubble = (m: { id: string; text: string }): React.ReactNode => (
-    <Prim.Box key={m.id} style={styles.userMsg}>
-      <Prim.Text>{m.text}</Prim.Text>
+  const userBubble = (block: Extract<ConvoBlock, { type: 'user' }>): React.ReactNode => (
+    <Prim.Box key={block.id} style={styles.userMsg}>
+      <Prim.Text>{block.content}</Prim.Text>
     </Prim.Box>
   );
 
   const transcript: React.ReactNode[] = [];
-  let u = 0;
-  for (let i = 0; i < blocks.length; i++) {
-    while (u < userMsgs.length && userMsgs[u]!.afterBlock <= i) transcript.push(userBubble(userMsgs[u++]!));
-    transcript.push(renderAgentBlock(blocks[i]!));
+  for (const g of groups) {
+    if (g.type === 'user') transcript.push(userBubble(g.block as Extract<ConvoBlock, { type: 'user' }>));
+    else for (const b of g.blocks) transcript.push(renderAgentBlock(b));
   }
-  while (u < userMsgs.length) transcript.push(userBubble(userMsgs[u++]!));
 
   return (
     <Prim.Box {...CONTAINER} style={style} className={className}>
