@@ -35,6 +35,7 @@ function findOrgRoot(startDir) {
 
 const root = findOrgRoot(dirname(fileURLToPath(import.meta.url)));
 const cliDist = resolve(root, 'libs/cli/dist');
+const coreDist = resolve(root, 'libs/core/dist');
 const cliBin = resolve(cliDist, 'cli/bin.js');
 const webDir = resolve(root, 'apps/web');
 
@@ -60,11 +61,21 @@ function run(label, cmd, args, opts = {}) {
   return child;
 }
 
-// 1. CLI — rebuild dist on every source change.
+// 1. Core — rebuild dist on every source change. The CLI's own `tsup --watch` below only
+// rebuilds @lmthing/cli; @lmthing/core is a separate workspace package the CLI resolves through
+// its built dist (not aliased to source the way apps/web aliases the UI libs), so without this
+// watcher a core source change (a new capability, a session/space-loading fix) silently keeps
+// running against whatever core/dist was last built — the exact staleness that made every fresh
+// project fail with `Agent "thing" not found` after `self:author` was added but core was never
+// rebuilt. See org/docs/devops/local-dev.md.
+log('starting core watch build (tsup --watch)');
+run('core-build', 'pnpm', ['--filter', '@lmthing/core', 'dev'], { cwd: root });
+
+// 2. CLI — rebuild dist on every source change.
 log('starting CLI watch build (tsup --watch)');
 run('cli-build', 'pnpm', ['--filter', '@lmthing/cli', 'dev'], { cwd: root });
 
-// 2. CLI serve — single front door: /api + agent WS + the web app (Vite HMR).
+// 3. CLI serve — single front door: /api + agent WS + the web app (Vite HMR).
 let serveProc = null;
 let restartTimer = null;
 
@@ -86,7 +97,7 @@ function restartServe(reason) {
   clearTimeout(restartTimer);
   restartTimer = setTimeout(() => {
     restartTimer = null;
-    log(`CLI changed (${reason}) — restarting serve`);
+    log(`runtime changed (${reason}) — restarting serve`);
     if (serveProc && !serveProc.killed) {
       serveProc.once('exit', startServe);
       serveProc.kill('SIGTERM');
@@ -96,12 +107,18 @@ function restartServe(reason) {
   }, 300);
 }
 
-// Wait for the first CLI build, then serve + watch dist for rebuilds.
+// Wait for the first CLI + core build, then serve + watch both dists for rebuilds. `serve` is a
+// live Node process — its `require`/`import` cache holds whatever core/cli dist it loaded at
+// startup, so a core-only rebuild needs the SAME restart core's watch triggers for cli, or the
+// running server keeps the stale build until something else happens to bounce it.
 function waitForBinThenServe() {
-  if (existsSync(cliBin)) {
+  if (existsSync(cliBin) && existsSync(coreDist)) {
     startServe();
     watch(cliDist, { recursive: true }, (_evt, file) => {
       if (file && String(file).endsWith('.js')) restartServe(String(file));
+    });
+    watch(coreDist, { recursive: true }, (_evt, file) => {
+      if (file && String(file).endsWith('.js')) restartServe(`core: ${file}`);
     });
     return;
   }
