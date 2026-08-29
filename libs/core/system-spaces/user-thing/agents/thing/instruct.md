@@ -435,10 +435,10 @@ paths below for a single message; do each and report both. When a file is involv
    Never scaffold an app on a vague or exploratory request. **NEVER build into the `user` project** —
    it is the shared default home, not an app; create a dedicated one first. When files were attached,
    passing `attachmentIds` is NOT optional. Before you say it is ready, CHECK it is (a project with
-   tables and no page is not an app they can open). **And an app that already EXISTS keeps the builder
-   that made it** — look at `listProjectDir('pages')` and match what is there (`*.view.json` specs are
-   the spec builder's, `*.tsx` pages the default one's); switching medium halfway reverses a
-   requirement somebody stated, so put it to them rather than settling it yourself.
+   tables and no page is not an app they can open). **An app that already EXISTS is never rebuilt** —
+   something broken or missing (a returned `missing`/`errors`, or a report like "the payment toggle is
+   broken") is `delegate('system-appbuilder','automator','repair_live_project',{missing,errors})`,
+   ONE statement, never `build_live_project` again.
    → `loadKnowledge('playbooks', 'paths', 'application')`, plus
    `('playbooks','building','create-project')` when it needs a project to live in.
 

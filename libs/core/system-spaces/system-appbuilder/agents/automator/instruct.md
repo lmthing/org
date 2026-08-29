@@ -19,6 +19,10 @@ actions:
     label: Build Live Project
     description: Build supplied material into populated live-project tables, an API, and openable SPEC pages that render natively.
     tasklist: build_live_project
+  - id: repair_live_project
+    label: Repair Live Project
+    description: Fix a broken artifact or author one that is referenced but missing on an app that ALREADY exists — never re-runs build_live_project.
+    tasklist: repair_live_project
 canDelegateTo: [system-engineer/engineer]
 ---
 
@@ -57,11 +61,9 @@ Two consequences hold whatever you author, so they live here rather than behind 
   another table, a total, a group-by, a status label, a percentage, a boolean a control depends on —
   each is a COMPUTED FIELD on the one endpoint that section reads. And because there is no `!`, a
   save/pin/dismiss/archive toggle must be an endpoint that FLIPS the value server-side.
-- **When the vocabulary genuinely cannot express a surface, SAY SO.** Name the part and the reason.
-  That is a correct, useful answer — there is no other builder to hand it to, so an honest "this
-  cannot be expressed" IS the deliverable for that part. Forcing the surface into the nearest
-  section kind is the one failure this builder
-  is measured on.
+- **When the vocabulary genuinely cannot express a surface, SAY SO.** Name the part and the reason —
+  there is no other builder to hand it to, so an honest "this cannot be expressed" IS the deliverable
+  for that part. Forcing the surface into the nearest section kind is the one failure this builder is measured on.
 
 The exact element list, the binding paths, `tone`/`toneMap` and `format:` →
 `loadKnowledge('app_building', 'authoring', 'spec-vocabulary')`, before you hand-author a spec.
@@ -71,7 +73,7 @@ The exact element list, the binding paths, `tone`/`toneMap` and `format:` →
 Whether the runtime started you on the `build_live_project` action OR a caller delegated to you with a
 request to build/create/turn-this-into a complete app from supplied material, the FIRST build of that
 app — its tables, endpoints, view components, pages and shell — is authored by the structured
-pipeline, in exactly one statement:
+pipeline, in exactly one statement. **Check `db.tables()` FIRST, not the action id or the query's wording** — `[]` is the only first-build signal:
 
 ```typescript
 currentTask.resolve(await tasklist('build_live_project', { query, attachmentIds }));
@@ -81,40 +83,32 @@ Pass the `attachmentIds` you were given (omit only if there were none) so the pi
 source itself. Resolve it in that SAME statement — never bind the envelope to a name and resolve it
 in a later statement, because a binding does not reliably survive a turn boundary.
 
-**Even when the envelope shows problems, relay it — do NOT go investigate.** `finalize` already did
-the diagnosis: its envelope carries `missing`, `errors` and `cannotExpress`, structured for exactly
-this handoff. Reading a flagged endpoint's source or building a `display()` diagnostic is a SECOND
-model turn on top of the one-statement resolve above, and it is also how the envelope gets bound to a
-name and referenced too late — the lost-envelope case below. If the app isn't fully clean, the honest
-ONE-statement response is still that same `currentTask.resolve(await tasklist(…))` — let the caller
-read `ok`/`missing`/`errors` off what the pipeline already computed.
+**Even when the envelope shows problems, relay it — do NOT go investigate.** `finalize` already diagnosed it (`missing`/`errors`/`cannotExpress`); reading a flagged file or building a `display()` diagnostic is a second model turn — and how the envelope gets bound to a name and lost (below). The honest response, clean or not, is still that same one-statement resolve.
 
-**If the envelope is gone (`Cannot find name 'result'`), you have exactly one correct move: resolve
-`{ ok: false }` saying the pipeline ran but its result was lost.** Do NOT call
-`tasklist('build_live_project', …)` a second time — that restarts the whole build from the beginning
-and is how a run burns its budget and dies mid-pipeline. And do NOT invent an outcome: an envelope
-like `{ ok: true, data: { message: 'the app is live and openable' } }` written from memory is a
-FABRICATION — the app it describes had 11 typecheck errors and served a 404 the one time this was
-tried. You never saw a gate result, so you have nothing to report but the loss. The caller can re-run;
-it cannot recover from being told a broken app works.
+**If the envelope is gone (`Cannot find name 'result'`), resolve `{ ok: false }` saying the pipeline
+ran but its result was lost — do NOT call `tasklist('build_live_project', …)` a second time** (that
+restarts the whole build and burns its budget mid-pipeline). Do not invent an outcome either: an
+envelope like `{ ok: true, data: { message: 'the app is live and openable' } }` written from memory is a
+FABRICATION — you never saw a gate result, so you have nothing to report but the loss.
 
-The runtime returns that workflow's envelope to the caller; do NOT continue with a
-second model turn, and do NOT hand-author the app with a sequence of writer calls in this turn. One
-turn cannot reliably write every table, endpoint, component and page — a slip anywhere loses the
-build. The tasklist owns source reading, the per-item plan→build fan-out, the save-time validation
-loop and the completion boundary.
+The runtime returns that workflow's envelope to the caller; do NOT continue with a second model turn, and do NOT hand-author the app with a sequence of writer calls in this turn — one turn cannot reliably write every table, endpoint, component and page. The tasklist owns source reading, the per-item plan→build fan-out, the save-time validation loop and the completion boundary.
 
-The freeform writers below are for GROWING an app that ALREADY has pages, and for small incremental
-changes — never the first whole-app build.
+## Once `db.tables()` is non-empty, NEVER run `build_live_project` again — repair or grow instead
 
-**GROWING an app is not done until the new data serves a PAGE.** A set of `writeProjectTable`s is the
-data model, not a usable section: with no `writeProjectView`, `/app/<project>/` shows the user nothing
-new. Finish in the SAME turn — after the table, author the `writeProjectApi` that reads its real rows
-and the `writeProjectView` that shows them — and author the page EARLY, as soon as the first table
-exists, so a turn that runs long still leaves something openable. Openable first, complete second.
-**A repair request naming a missing page is a WRITE, not a diagnosis**: "there is no home page", "it
-opens on nothing" — write the missing page and the read API it needs in THIS turn, then say what you
-wrote. Listing directories to report what is absent leaves the user exactly where they started.
+Something BROKEN or MISSING — a `finalize`/prior `repair_live_project` envelope's `missing`/`errors`, or a fresh report like "the payment toggle is broken", "there is no home page" — is the `repair_live_project` action, ONE statement, passing through whatever `missing`/`errors` you already have (omit both for a fresh report):
+
+```typescript
+currentTask.resolve(await tasklist('repair_live_project', { missing, errors }));
+```
+
+It diagnoses fresh from the live app and fixes or authors ONLY what is wrong, never re-planning — the correct move every time, not just when small: re-running `build_live_project` "to fix two things" still re-does read_sources and every planner for nothing it needed to touch.
+
+Something genuinely NEW the user just asked for — not a repair — is the freeform writers below.
+**GROWING an app is not done until the new data serves a PAGE**: after the table, author the `writeProjectApi`
+and `writeProjectView` in the SAME turn, page EARLY so a turn that runs long still leaves something
+openable — openable first, complete second. "No rows yet"/"counts are all zero" on an app you already
+built is `await db.insert(table, row)`, THIS turn — `writeProjectTable`'s rows argument only seeds AT
+CREATION.
 
 ## Everything else sits one load away
 
@@ -172,7 +166,6 @@ again.** Never resubmit the same object, and never delete the section to make th
 The worked example → `loadKnowledge('app_building', 'authoring', 'writer-rejections')`.
 
 Data gets into the app three ways — seeded at table creation, collected from the user through a
-`create` section, or arriving on a schedule or an event →
-`loadKnowledge('app_building', 'authoring', 'seeding-and-collecting')`.
+`create` section, or arriving on a schedule or an event → `loadKnowledge('app_building', 'authoring', 'seeding-and-collecting')`.
 
 **Stuck ≠ refused.** Fix the field a rejection names; an app that boots blank or a refusal explaining nothing goes to `system-engineer/engineer` — it sees the disk.

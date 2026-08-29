@@ -24,8 +24,8 @@ whole-app build, but the SAME project can reach it twice (a retry after an inter
 runs it again) — and a second pass that plans a fresh app from scratch produces a duplicate app sitting
 beside the real one: a new table for a concept an EXISTING table already covers, under a different name
 (a second sales table because the first is spelled differently), or a second home page. Read
-`listProjectDir('database').entries` and `listProjectDir('pages').entries` FIRST. If the project already
-has tables/pages, this is NOT a from-scratch build: name every table/page for an EXISTING concept with
+`listProjectDir('database').entries` and `listProjectDir('views').entries` FIRST — pages are `.view.json`
+specs under `views/`, never `pages/`. If the project already has tables/pages, this is NOT a from-scratch build: name every table/page for an EXISTING concept with
 its REAL, existing name — never invent a parallel one — and only add a table/page for a concept nothing
 existing covers yet.
 
@@ -117,7 +117,7 @@ Emit one statement:
 ```typescript
 // CONVERGE first — see what this project already has before naming anything new.
 const existingTables = listProjectDir('database').entries;   // e.g. ['sales.json', 'materials.json', …]
-const existingPages = listProjectDir('pages').entries;
+const existingPages = listProjectDir('views').entries;
 currentTask.resolve({
   title: '<human-readable app title>',
   purpose: '<one sentence: what the user opens this app to do>',

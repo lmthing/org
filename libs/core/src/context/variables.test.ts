@@ -77,6 +77,20 @@ describe('extractBindingNames', () => {
     expect(extractBindingNames('let x: string;')).toEqual(['x']);
     expect(extractBindingNames('var result;')).toEqual(['result']);
   });
+
+  it('handles no-initializer declarations whose type annotation has internal `;`/`,` (live bug: a flat [^=;] class stopped at the first one, dropping the binding — the model then hit "\'w\' is not defined" on the very next statement)', () => {
+    expect(extractBindingNames('let w: { ok: boolean; error?: string };')).toEqual(['w']);
+    expect(extractBindingNames('let w2: { ok: boolean; error?: string };')).toEqual(['w2']);
+    expect(extractBindingNames('let pair: { a: number, b: number };')).toEqual(['pair']);
+    expect(extractBindingNames('let cb: (a: number, b: number) => void;')).toEqual(['cb']);
+    // Multi-line no-initializer declaration
+    expect(extractBindingNames('let w: {\n  ok: boolean;\n  error?: string;\n};')).toEqual(['w']);
+    // A multi-line WITH-initializer declaration must NOT be mistaken for no-init just
+    // because the with-initializer regex above can't see an `=` past the first line —
+    // hasTopLevelEquals must catch the `=` on the later line and bail out (same
+    // no-names-extracted behavior as before this fix, not a regression).
+    expect(extractBindingNames('let w: {\n  ok: boolean;\n} = { ok: true };')).toEqual([]);
+  });
 });
 
 describe('emitVariables', () => {

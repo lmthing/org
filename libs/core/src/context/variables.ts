@@ -176,14 +176,20 @@ export function extractBindingNames(statement: string): string[] {
     return names;
   }
 
-  // Declaration with NO initializer: `let parsed;`, `let a, b;`, `let x: string;`.
-  // Without this, such names are never propagated to globalThis, so a later eval
-  // statement that references them throws ReferenceError (each eval is its own module).
-  const noInitMatch = stripped.match(/^\s*(?:const|let|var)\s+([^=;]+?)\s*;?\s*$/);
-  if (noInitMatch) {
-    for (const part of noInitMatch[1]!.split(',')) {
-      const name = part.replace(/\s*:.*$/, '').trim(); // strip type annotation
-      if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name)) names.push(name);
+  // Declaration with NO initializer: `let parsed;`, `let a, b;`, `let x: string;`,
+  // `let w: { ok: boolean; error?: string };`. A no-initializer declarator can only ever
+  // be a bare identifier with an optional type annotation — destructuring patterns
+  // (`{ a, b }` / `[a, b]`) require an initializer in JS/TS, so they can't appear here.
+  // The declarator list is therefore just top-level-comma-separated identifiers, but the
+  // type annotation on any of them may itself contain `;`/`,` at brace/paren/bracket
+  // depth (e.g. an inline object type's members) — a flat `[^=;]` character class can't
+  // tell those apart from real declarator separators, so it must split comma-aware
+  // (`splitByTopLevelCommas`) rather than matching the whole tail with one regex.
+  const noInitKeywordMatch = stripped.match(/^\s*(?:const|let|var)\s+([\s\S]+?);?\s*$/);
+  if (noInitKeywordMatch && !hasTopLevelEquals(noInitKeywordMatch[1]!)) {
+    for (const part of splitByTopLevelCommas(noInitKeywordMatch[1]!)) {
+      const nameMatch = part.trim().match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)/);
+      if (nameMatch) names.push(nameMatch[1]!);
     }
     return names;
   }
@@ -227,4 +233,29 @@ function splitByTopLevelCommas(str: string): string[] {
   }
   parts.push(str.slice(start));
   return parts;
+}
+
+/**
+ * True if `str` contains a top-level (depth-0) assignment `=` — as opposed to one that's
+ * part of a comparison/arrow (`==`, `=>`, `<=`, `>=`, `!=`) or nested inside a bracketed
+ * type (a function-type member's own `=>`). Used to tell a genuine no-initializer
+ * declaration (`let w: { a: () => void };`) apart from a WITH-initializer declaration
+ * whose `=` simply falls outside what the single-line with-initializer regex above can see
+ * (a multi-line `let w: {\n  ...\n} = value;`) — the latter must NOT be parsed as no-init.
+ */
+function hasTopLevelEquals(str: string): boolean {
+  let depth = 0;
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i];
+    if (c === '{' || c === '[' || c === '(') depth++;
+    else if (c === '}' || c === ']' || c === ')') depth--;
+    else if (c === '=' && depth === 0) {
+      const prev = str[i - 1];
+      const next = str[i + 1];
+      if (next === '=' || next === '>') continue; // ==, =>
+      if (prev === '=' || prev === '!' || prev === '<' || prev === '>') continue; // ==, !=, <=, >=
+      return true;
+    }
+  }
+  return false;
 }
