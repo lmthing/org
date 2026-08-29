@@ -39,10 +39,11 @@ async function scratchRoot(projectId: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'lm-mounts-'));
   tmpDirs.push(root);
   const proj = join(root, projectId);
-  await mkdir(join(proj, 'pages'), { recursive: true });
+  await mkdir(join(proj, 'views'), { recursive: true });
   await mkdir(join(proj, 'api', 'feed-list'), { recursive: true });
   await mkdir(join(proj, 'database'), { recursive: true });
   await writeFile(join(proj, 'package.json'), JSON.stringify({ name: projectId, version: '0.0.0' }));
+  await writeFile(join(proj, 'app.json'), JSON.stringify({ format: 2, title: projectId }));
   // The app api runtime only exists for a project with a data model.
   await writeFile(
     join(proj, 'database', 'items.json'),
@@ -54,8 +55,8 @@ async function scratchRoot(projectId: string): Promise<string> {
     'utf8',
   );
   await writeFile(
-    join(proj, 'pages', 'index.tsx'),
-    `export default function Home() { return <div>home</div> }\n`,
+    join(proj, 'views', 'index.view.json'),
+    JSON.stringify({ route: 'index', title: 'Home', sections: [{ kind: 'markdown', text: 'home' }] }),
     'utf8',
   );
   await writeFile(
@@ -138,7 +139,7 @@ describe('project-app mounts (route table)', () => {
     ['clean root URL', (p: string) => `/${p}`],
   ])('serves the app\'s own shell + api on the %s mount', async (_label, mount) => {
     const projectId = 'demo-app';
-    const base = await startServer(await scratchRoot(projectId));
+    const base = await startServer(await scratchRoot(projectId), await shellDist());
 
     const page = await fetch(`${base}${mount(projectId)}/`);
     expect(page.status).toBe(200);
@@ -192,30 +193,5 @@ describe('project-app mounts (route table)', () => {
     expect(await asset.text()).toBe('console.log("app shell")');
 
     await expect(stat(join(root, projectId, '.data', 'pages-dist'))).rejects.toMatchObject({ code: 'ENOENT' });
-  }, 60_000);
-
-  it('keeps a legacy TSX project on its per-project bundle while the shell is enabled', async () => {
-    const projectId = 'legacy-app';
-    const base = await startServer(await scratchRoot(projectId), await shellDist());
-
-    const page = await fetch(`${base}/app/${projectId}/`);
-    expect(page.status).toBe(200);
-    const html = await page.text();
-    expect(html).not.toContain('data-app-shell="true"');
-    expect(html).toContain(`<base href="/app/${projectId}/">`);
-  }, 60_000);
-
-  it('uses the legacy bundle for a spec project when LM_APP_SHELL=0', async () => {
-    const projectId = 'spec-with-wrapper';
-    const root = await scratchSpecRoot(projectId);
-    await mkdir(join(root, projectId, 'pages'), { recursive: true });
-    await writeFile(join(root, projectId, 'pages', 'index.tsx'), 'export default function Home() { return <div>legacy wrapper</div> }');
-    const base = await startServer(root);
-
-    const page = await fetch(`${base}/app/${projectId}/`);
-    expect(page.status).toBe(200);
-    const html = await page.text();
-    expect(html).not.toContain('data-app-shell="true"');
-    expect(html).toContain(`<base href="/app/${projectId}/">`);
   }, 60_000);
 });

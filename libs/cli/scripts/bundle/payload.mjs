@@ -82,13 +82,13 @@ const NOT_A_PACKAGE = new Set([
  * for whichever platform the install runs on — which is the target's own runner.
  */
 const UNSCANNABLE = [
-  // Resolved by NAME FROM AN ARRAY OF STRINGS, never imported: both the
-  // project-app page build and the `--web` dev server loop over
-  // ['react', 'react-dom', 'react/jsx-runtime', 'react-dom/client'] calling
-  // `req.resolve(pkg)` to pin one React instance across the app and the
-  // runtime-bundled space components. No scan of import syntax can see that, and
-  // its absence does not break startup — it breaks every project-app page build
-  // with an unresolved `react-dom/client`, long after the bundle shipped.
+  // Resolved by NAME FROM AN ARRAY OF STRINGS, never imported: the `--web` dev
+  // server loops over ['react', 'react-dom', 'react/jsx-runtime',
+  // 'react-dom/client'] calling `req.resolve(pkg)` to pin one React instance
+  // across the app and the runtime-bundled space components. No scan of import
+  // syntax can see that, and its absence does not break startup — it breaks the
+  // `--web` DevTools UI with an unresolved `react-dom/client`, long after the
+  // bundle shipped.
   'react-dom',
 ];
 

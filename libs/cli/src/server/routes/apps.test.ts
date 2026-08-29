@@ -57,7 +57,7 @@ function mockRes(): { res: ServerResponse; captured: Captured } {
 const APP = 'demo';
 const STORE_URL = 'http://store.test';
 
-const DEMO_PAGE = `export default function Index() { return null; }\n`;
+const DEMO_VIEW = { route: 'index', sections: [{ id: 'welcome', kind: 'markdown', source: '# Demo' }] };
 const DEMO_API = `
 export const name = 'list'
 export const description = 'List items.'
@@ -82,8 +82,8 @@ async function writeDemoApp(storeDir: string): Promise<void> {
     }),
     'utf8',
   );
-  await mkdir(join(appRoot, 'pages'), { recursive: true });
-  await writeFile(join(appRoot, 'pages', 'index.tsx'), DEMO_PAGE, 'utf8');
+  await mkdir(join(appRoot, 'views'), { recursive: true });
+  await writeFile(join(appRoot, 'views', 'index.view.json'), JSON.stringify(DEMO_VIEW), 'utf8');
   await mkdir(join(appRoot, 'api', 'list'), { recursive: true });
   await writeFile(join(appRoot, 'api', 'list', 'GET.ts'), DEMO_API, 'utf8');
   await writeFile(
@@ -124,8 +124,8 @@ async function writeNoProjApp(storeDir: string): Promise<void> {
     }),
     'utf8',
   );
-  await mkdir(join(appRoot, 'pages'), { recursive: true });
-  await writeFile(join(appRoot, 'pages', 'index.tsx'), DEMO_PAGE, 'utf8');
+  await mkdir(join(appRoot, 'views'), { recursive: true });
+  await writeFile(join(appRoot, 'views', 'index.view.json'), JSON.stringify(DEMO_VIEW), 'utf8');
   // NOTE: package.json only — deliberately NO project.json.
   await writeFile(
     join(appRoot, 'package.json'),
@@ -146,7 +146,7 @@ async function writeManifest(storeDir: string): Promise<void> {
         description: 'A demo catalog app',
         icon: null,
         tables: ['items'],
-        pages: ['index.tsx'],
+        pages: ['/'],
         endpoints: ['list'],
         hooks: [],
         files,
@@ -157,7 +157,7 @@ async function writeManifest(storeDir: string): Promise<void> {
         description: 'An app-builder app with no project.json',
         icon: null,
         tables: ['items'],
-        pages: ['index.tsx'],
+        pages: ['/'],
         endpoints: [],
         hooks: [],
         files: noprojFiles,
@@ -273,7 +273,7 @@ describe('handleInstallApp', () => {
 
     const dest = join(lmthingRoot, APP);
     expect(existsSync(join(dest, 'database', 'items.json'))).toBe(true);
-    expect(existsSync(join(dest, 'pages', 'index.tsx'))).toBe(true);
+    expect(existsSync(join(dest, 'views', 'index.view.json'))).toBe(true);
     expect(existsSync(join(dest, 'api', 'list', 'GET.ts'))).toBe(true);
     expect(existsSync(join(dest, 'package.json'))).toBe(true);
 
@@ -293,7 +293,7 @@ describe('handleInstallApp', () => {
 
   it('holds back an edited copy with diverged:true, preserving the edit', async () => {
     const dest = join(lmthingRoot, APP);
-    await writeFile(join(dest, 'pages', 'index.tsx'), 'export default function Index() { return "edited"; }\n', 'utf8');
+    await writeFile(join(dest, 'views', 'index.view.json'), 'export default function Index() { return "edited"; }\n', 'utf8');
 
     const { res, captured } = mockRes();
     const handler = handleInstallApp(manager, lmthingRoot, STORE_URL);
@@ -303,7 +303,7 @@ describe('handleInstallApp', () => {
     expect(body.ok).toBe(false);
     expect(body.diverged).toBe(true);
 
-    expect(await readFile(join(dest, 'pages', 'index.tsx'), 'utf8')).toContain('edited');
+    expect(await readFile(join(dest, 'views', 'index.view.json'), 'utf8')).toContain('edited');
   }, 30_000);
 
   it('force:true overwrites a diverged copy', async () => {
@@ -313,7 +313,7 @@ describe('handleInstallApp', () => {
     await handler(mockReq({ method: 'POST', body: JSON.stringify({ appId: APP, force: true }) }), res, {});
     expect(captured.status).toBe(200);
     expect((captured.body as { ok: boolean }).ok).toBe(true);
-    expect(await readFile(join(dest, 'pages', 'index.tsx'), 'utf8')).not.toContain('edited');
+    expect(await readFile(join(dest, 'views', 'index.view.json'), 'utf8')).not.toContain('edited');
   }, 30_000);
 
   it('synthesizes project.json for an app that ships only package.json', async () => {

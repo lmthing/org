@@ -173,8 +173,7 @@ export function AppHost() {
 }
 
 /**
- * Contain a page's render crash to THAT page — the same boundary the cli's `@app/runtime`
- * carries (`libs/cli/src/app/runtime/router.tsx#PageErrorBoundary`).
+ * Contain a page's render crash to THAT page, not the whole shell.
  *
  * A spec page is data-bound to a live, drifting database, so one will eventually hit a null
  * it did not expect. Without a boundary React unmounts the whole tree: every route 200s, the

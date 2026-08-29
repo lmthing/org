@@ -148,22 +148,23 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
 
   // ── App-shell dark-launch (W6 step 2) ──────────────────────────────────────
   // Resolve the prebuilt @lmthing/app-shell dist ONCE at boot. A valid dist is
-  // enabled by default; LM_APP_SHELL=0 is the dark-launch escape hatch and an invalid
-  // or absent dist keeps every project on its legacy per-project bundle.
+  // enabled by default; LM_APP_SHELL=0 is the dark-launch escape hatch, and an invalid
+  // or absent dist leaves every project unserveable (see `noProjectBuild` below — there
+  // is no per-project bundle left to fall back to).
   let appShellBundle: { outDir: string; assetManifest: string[] } | null = null;
   if (process.env['LM_APP_SHELL'] !== '0') {
     try {
       const shellDist = resolveAppShellDist();
       const manifest = await scanDistManifest(shellDist);
       if (manifest.length === 0 || !manifest.includes('index.html')) {
-        console.warn(`[serve] no usable app-shell dist at ${shellDist} — legacy fallback`);
+        console.warn(`[serve] no usable app-shell dist at ${shellDist} — every project unserveable`);
       } else {
         appShellBundle = { outDir: shellDist, assetManifest: manifest };
         console.log(`[serve] app-shell enabled (${manifest.length} assets from ${shellDist})`);
       }
     } catch (err) {
       console.warn(
-        `[serve] app-shell dist resolution failed: ${err instanceof Error ? err.message : err} — legacy fallback`,
+        `[serve] app-shell dist resolution failed: ${err instanceof Error ? err.message : err} — every project unserveable`,
       );
     }
   }

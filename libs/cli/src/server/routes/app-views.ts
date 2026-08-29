@@ -4,15 +4,11 @@
  * A `system-appbuilder` app's pages are not a bundle: they are **specs**
  * (`sdk/org/libs/cli/src/app/view-spec/schema.ts`), persisted as JSON by the
  * authoring writers and rendered by the shared `ViewRenderer` on both targets.
- * This route is the transport for the **native** target, and it exists because
- * of one asymmetry:
- *
- *  - on **web** the generated wrapper page carries its spec inline and the
- *    endpoint manifest arrives as `window.__APP_ENDPOINTS__`, injected by the
- *    page entry (`../../app/build/pages.ts`, `../../app/runtime/client.ts`);
- *  - on **native** there is no host page to inject anything into, so the
- *    manifest has to travel WITH the specs — which is why `endpoints` is part of
- *    this payload rather than a second request.
+ * This route is the ONE transport both targets use — the prebuilt web shell
+ * (`AppHost`) and the mobile app alike fetch this same payload rather than
+ * having anything injected into a per-project page, because there is no
+ * per-project page anymore: `endpoints` travels alongside the specs so
+ * neither host needs a host page to inject a manifest into.
  *
  * The pod **transports** specs; it does not interpret them. Validation is the
  * writer's job at save time and the whole-app gate's at verify time
@@ -54,11 +50,11 @@ type AppHandler = (
 
 /** One endpoint, as the renderer's client resolves it.
  *
- *  `method` + `routePath` are the web manifest's two fields verbatim
- *  (`EndpointManifestEntry` in `../../app/runtime/client.ts`) so a spec resolves a
- *  NAME identically on both targets. The two schemas ride along because a
- *  `create` section derives its form fields from the mutation's **Input** schema,
- *  and native has no second place to get them from. */
+ *  `method` + `routePath` are the same two fields `createViewClient` needs on
+ *  either target (`libs/ui/src/view/client.ts`), so a spec resolves a NAME
+ *  identically on both. The two schemas ride along because a `create` section
+ *  derives its form fields from the mutation's **Input** schema, and neither
+ *  target has a second place to get them from. */
 export interface AppViewEndpoint {
   method: EndpointContract['method'];
   routePath: string;

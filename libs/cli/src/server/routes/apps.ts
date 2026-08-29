@@ -39,7 +39,7 @@ import { readBody, sendJson } from './utils.js';
 import { safeProjectId, RESERVED_PROJECT_IDS } from '../projects.js';
 import type { AppAdminManager } from './app-admin.js';
 import { generateProjectContracts } from '../../app/build/contracts.js';
-import { loadProjectViews } from '../../app/view-spec/files.js';
+import { loadProjectViews, viewRoutePath } from '../../app/view-spec/files.js';
 
 /** Public store base — the CLI downloads catalog apps from `${STORE_URL}/projects/…`
  *  (there is NO local catalog in the pod). Overridable for tests / self-hosting. */
@@ -432,41 +432,9 @@ async function scanHooks(appDir: string): Promise<string[]> {
     .sort();
 }
 
-const PAGE_EXT = /\.(tsx|jsx)$/;
-
+/** Every page's served route, sorted (`index` collapses to `/`; `[id]` → `:id`). */
 async function scanPages(appDir: string): Promise<string[]> {
-  const pagesDir = join(appDir, 'pages');
-  const out: string[] = [];
-  await walkPages(pagesDir, pagesDir, out);
-  out.sort();
-  return out;
-}
-
-async function walkPages(root: string, dir: string, out: string[]): Promise<void> {
-  for (const entry of await safeReaddir(dir)) {
-    const abs = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === 'components' || entry.name === 'lib' || entry.name.startsWith('_')) continue;
-      await walkPages(root, abs, out);
-      continue;
-    }
-    if (!entry.isFile() || !PAGE_EXT.test(entry.name)) continue;
-    const base = entry.name.replace(PAGE_EXT, '');
-    if (base.startsWith('_')) continue; // _app / _layout wrappers, not routes
-    out.push(pageRoutePath(root, abs));
-  }
-}
-
-/** Map a page file to its route pattern (`index` collapses; `[id]` → `:id`). */
-function pageRoutePath(root: string, file: string): string {
-  const rel = relative(root, file).replace(PAGE_EXT, '');
-  const segs = rel.split(sep).filter((s) => s.length > 0);
-  if (segs.length > 0 && segs[segs.length - 1] === 'index') segs.pop();
-  const parts = segs.map((s) => {
-    const m = /^\[(.+)\]$/.exec(s);
-    return m ? `:${m[1]}` : s;
-  });
-  return '/' + parts.join('/');
+  return loadProjectViews(appDir).views.map((v) => viewRoutePath(v.route)).sort();
 }
 
 const METHOD_FILE_RE = /^(GET|POST|PUT|PATCH|DELETE)\.ts$/;

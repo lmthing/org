@@ -98,42 +98,40 @@ async function get(id: string): Promise<Captured> {
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), 'lm-app-views-'));
 
-  // A viewbuilder app: two pages (one nested + dynamic), a component, a shell, an api dir.
+  // An app: two pages (one nested + dynamic), a component, a shell, an api dir.
   await writeProject('kitchen', {
     'api/recipes/GET.ts': 'export const name = "listRecipes"\n',
-    'pages/index.view.json': JSON.stringify({
+    'views/index.view.json': JSON.stringify({
       route: 'index',
       title: 'Kitchen',
       sections: [{ kind: 'list', query: 'listRecipes', item: { title: '$.name' } }],
     }),
-    'pages/recipes/[id].view.json': JSON.stringify({
+    'views/recipes/[id].view.json': JSON.stringify({
       // Deliberately WRONG — the file path is the route of record.
       route: 'stale/route',
       sections: [{ kind: 'detail', query: 'getRecipe' }],
     }),
-    'pages/components/RecipeCard.view.json': JSON.stringify({
+    'components/RecipeCard.view.json': JSON.stringify({
       name: 'RecipeCard',
       props: { recipe: 'Recipe' },
       node: { el: 'surface', children: [{ el: 'heading', text: '$props.recipe.title' }] },
     }),
-    'pages/_shell.view.json': JSON.stringify({
+    'shell.view.json': JSON.stringify({
       brand: 'Kitchen',
       nav: [{ route: 'index', label: 'Home', icon: 'home' }],
     }),
-    // Must NOT be picked up as a page: a TSX page of an app that has both.
-    'pages/legacy.tsx': 'export default function Legacy() { return null }\n',
   });
 
-  // An appbuilder app: pages, no specs.
+  // A db/api-only app: no views/ dir at all.
   await writeProject('blog', {
-    'pages/index.tsx': 'export default function Index() { return null }\n',
+    'api/posts/GET.ts': 'export const name = "listPosts"\n',
   });
 
-  // A viewbuilder app with one broken file among two.
+  // An app with one broken file among two.
   await writeProject('broken', {
-    'pages/index.view.json': JSON.stringify({ route: 'index', sections: [] }),
-    'pages/oops.view.json': '{ not json',
-    'pages/nope.view.json': JSON.stringify({ title: 'no route, no sections' }),
+    'views/index.view.json': JSON.stringify({ route: 'index', sections: [] }),
+    'views/oops.view.json': '{ not json',
+    'views/nope.view.json': JSON.stringify({ title: 'no route, no sections' }),
   });
 });
 
@@ -175,14 +173,13 @@ describe('GET /api/apps/:id/views', () => {
     expect(detail?.route).toBe('recipes/[id]');
   });
 
-  it('never mistakes a TSX page, a component def or the shell for a route', async () => {
+  it('never mistakes a component def or the shell for a route', async () => {
     const body = (await get('kitchen')).body as AppViewsPayload;
-    expect(body.views.map((v) => v.route)).not.toContain('legacy');
     expect(body.views.map((v) => v.route)).not.toContain('components/RecipeCard');
     expect(body.views.map((v) => v.route)).not.toContain('_shell');
   });
 
-  it('answers an appbuilder app with an empty view list — the branch signal, not an error', async () => {
+  it('answers a views-less app with an empty view list — the branch signal, not an error', async () => {
     const captured = await get('blog');
     expect(captured.status).toBe(200);
     const body = captured.body as AppViewsPayload;
@@ -197,8 +194,8 @@ describe('GET /api/apps/:id/views', () => {
     const body = captured.body as AppViewsPayload;
     expect(body.views.map((v) => v.route)).toEqual(['index']);
     expect(body.errors?.map((e) => e.file).sort()).toEqual([
-      'pages/nope.view.json',
-      'pages/oops.view.json',
+      'views/nope.view.json',
+      'views/oops.view.json',
     ]);
     expect(body.errors?.find((e) => e.file.endsWith('oops.view.json'))?.message).toContain('not valid JSON');
   });

@@ -2,18 +2,15 @@
  * `createViewClient` — the one parameterised data client, for both targets.
  *
  * A spec names ENDPOINTS, never URLs and never fetch code. The bridge from a name to a
- * request is the endpoint manifest (`name → { method, routePath }`), and the request
- * semantics are exactly `@app/runtime`'s `buildRequest`:
+ * request is the endpoint manifest (`name → { method, routePath }`):
  *
  *  - `:param` segments are filled from `input` and those keys are consumed;
  *  - **GET / DELETE** send the remainder as a query string;
  *  - **POST / PATCH / PUT** send the remainder as a JSON body.
  *
- * Those semantics are re-implemented here rather than imported because `@lmthing/cli`
- * depends on `@lmthing/ui` (importing back would be a package cycle) and because the cli
- * copy reads `window.location` and `window.__APP_ENDPOINTS__`, neither of which exists on
- * a phone. `client.test.ts` asserts this copy against the same cases as
- * `libs/cli/src/app/runtime/client.test.ts`.
+ * This is the ONE implementation of those semantics — both targets fetch the identical
+ * manifest from `GET /api/apps/:id/views` and build requests through this same client;
+ * there is no separate web-side request builder to keep in sync with.
  *
  * ## The two configurations, and why nothing here assumes an origin
  *
