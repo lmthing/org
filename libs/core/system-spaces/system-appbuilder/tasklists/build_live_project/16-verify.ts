@@ -128,13 +128,11 @@ interface RenderSmokeResult extends ViewValidationResult {
   rendererMounted: boolean;
 }
 
-/** The v2 canonical shell spec path (top level) — where an app-wide finding with no file of its own
+/** The canonical shell spec path (top level) — where an app-wide finding with no file of its own
  *  is attributed, since the shell is the artifact that owns the whole-app nav. */
 const SHELL_SPEC_PATH = 'shell.view.json';
-/** Every shell spec path a finding might carry — v2 (top level) and legacy v1 (`pages/_shell.view.json`). */
-const SHELL_SPEC_PATHS = [SHELL_SPEC_PATH, 'pages/_shell.view.json'];
-/** The view-component dir prefix, v2 (top-level `components/`) and legacy v1 (`pages/components/`). */
-const VIEW_COMPONENT_PREFIXES = ['components/', 'pages/components/'];
+/** The view-component dir prefix (top-level `components/`). */
+const VIEW_COMPONENT_PREFIX = 'components/';
 
 interface Finding {
   line?: number;
@@ -252,8 +250,8 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
       });
       return;
     }
-    // `file` is already project-relative (`pages/index.view.json`,
-    // `pages/components/RecipeCard.view.json`). App-wide findings carry none — the shell is the
+    // `file` is already project-relative (`views/index.view.json`,
+    // `components/RecipeCard.view.json`). App-wide findings carry none — the shell is the
     // only artifact that owns the app as a whole, so an orphan-route / bad-nav-target lands there.
     add(e.file || SHELL_SPEC_PATH, { phase, message });
   };
@@ -337,11 +335,10 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
   }
 
   // ORDER MATTERS: shell and component paths must be tested BEFORE the generic view fallback, or a
-  // component/shell would be handed to the fixer as a view. Both v2 (top-level) and v1 (under
-  // `pages/`) layouts are recognised, because findings carry whichever path landed on disk.
+  // component/shell would be handed to the fixer as a view.
   const kindOf = (path: string): string => {
-    if (SHELL_SPEC_PATHS.includes(path)) return 'shell';
-    if (VIEW_COMPONENT_PREFIXES.some((p) => path.startsWith(p))) return 'viewComponent';
+    if (path === SHELL_SPEC_PATH) return 'shell';
+    if (path.startsWith(VIEW_COMPONENT_PREFIX)) return 'viewComponent';
     if (path.startsWith('api/')) return 'api';
     if (path.startsWith('hooks/')) return 'hook';
     return 'view';

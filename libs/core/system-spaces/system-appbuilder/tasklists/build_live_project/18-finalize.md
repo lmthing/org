@@ -77,13 +77,12 @@ const okComponents = (Array.isArray(implement_view_components) ? implement_view_
 const automationResults = Array.isArray(implement_automations) ? implement_automations : [];
 const okAutomations = automationResults.filter((x: { ok: boolean }) => x.ok).map((x: { slug: string }) => x.slug);
 const pageResults = Array.isArray(implement_views) ? implement_views : [];
-// Views actually on disk (ground truth): every persisted page spec. Pages live in `views/` (v2);
-// a legacy project may still hold them in `pages/`. `shell.view.json` is top level (not in `views/`),
-// a `_`-prefixed spec is a layout, and `components/` is its own top-level dir — none is a page.
-const listPageSpecs = (dir: string): string[] => (listProjectDir(dir).entries || [])
+// Views actually on disk (ground truth): every persisted page spec lives in `views/`.
+// `shell.view.json` is top level (not in `views/`), a `_`-prefixed spec is a layout, and
+// `components/` is its own top-level dir — none of those three is a page.
+const diskPages = (listProjectDir('views').entries || [])
   .filter((e: string) => e.endsWith('.view.json') && !e.startsWith('_'))
   .map((e: string) => e.replace(/\.view\.json$/, ''));
-const diskPages = [...new Set([...listPageSpecs('views'), ...listPageSpecs('pages')])];
 const gaps = (Array.isArray(check_acceptance?.dataGaps) ? check_acceptance.dataGaps : []) as unknown[];
 const unproven = (Array.isArray(check_acceptance?.malformed) ? check_acceptance.malformed : []) as unknown[];
 const missing = [

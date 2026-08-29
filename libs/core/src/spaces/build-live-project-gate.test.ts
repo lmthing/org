@@ -139,8 +139,8 @@ const findingsFor = (r: GateResult, path: string) =>
 const CLEAN = {
   'database/costs.json': '{}',
   'api/costs-list/GET.ts': LIST_ENDPOINT,
-  'pages/index.view.json': '{"route":"index","sections":[]}',
-  'pages/_shell.view.json': '{"nav":[]}',
+  'views/index.view.json': '{"route":"index","sections":[]}',
+  'shell.view.json': '{"nav":[]}',
 };
 
 describe('build_live_project — the verify gate (16-verify.ts)', () => {
@@ -226,38 +226,38 @@ export default async function handler(_i: any, ctx: any) { return { items: await
       {},
     );
     expect(r.ok).toBe(false);
-    expect(r.offending.map((o) => o.path)).toEqual(['pages/_shell.view.json']);
+    expect(r.offending.map((o) => o.path)).toEqual(['shell.view.json']);
     expect(r.offending[0]!.kind).toBe('shell');
-    expect(findingsFor(r, 'pages/_shell.view.json')).toContain('not reachable from the nav');
+    expect(findingsFor(r, 'shell.view.json')).toContain('not reachable from the nav');
     expect(r.offending[0]!.errors[0]!.phase).toBe('views');
   });
 
   it('routes a per-artifact view fault to the artifact the message names, with the right kind', async () => {
-    // ORDER MATTERS in `kindOf`: the shell and the component dir both live UNDER `pages/`, so a
-    // generic "starts with pages/" branch first would hand every component to the fixer as a view —
-    // and the fix fork would reach for `writeProjectView` on a component definition.
+    // ORDER MATTERS in `kindOf`: the shell path and the component prefix must be tested before the
+    // generic view fallback, or a component would be handed to the fixer as a view — and the fix
+    // fork would reach for `writeProjectView` on a component definition.
     const r = await run(
       ctxFor(CLEAN, undefined, {
         validate: viewResult([
-          { code: 'bad-field', path: 'sections[1].item', message: 'metaFormat is not a property', severity: 'error', file: 'pages/index.view.json' },
-          { code: 'bad-el', path: 'node.children[1].el', message: '"chip" is not an element', severity: 'error', file: 'pages/components/CostRow.view.json' },
+          { code: 'bad-field', path: 'sections[1].item', message: 'metaFormat is not a property', severity: 'error', file: 'views/index.view.json' },
+          { code: 'bad-el', path: 'node.children[1].el', message: '"chip" is not an element', severity: 'error', file: 'components/CostRow.view.json' },
         ]),
       }),
       {},
     );
     const byPath = Object.fromEntries(r.offending.map((o) => [o.path, o.kind]));
-    expect(byPath['pages/index.view.json']).toBe('view');
-    expect(byPath['pages/components/CostRow.view.json']).toBe('viewComponent');
+    expect(byPath['views/index.view.json']).toBe('view');
+    expect(byPath['components/CostRow.view.json']).toBe('viewComponent');
     // The instance PATH rides along with the message — it is the whole reason the fixer can edit
     // one field instead of rewriting the artifact.
-    expect(findingsFor(r, 'pages/index.view.json')).toContain('sections[1].item:');
+    expect(findingsFor(r, 'views/index.view.json')).toContain('sections[1].item:');
   });
 
   it('REPORTS a warning but never ROUTES it — fix fans out over offending and would "repair" it', async () => {
     const r = await run(
       ctxFor(CLEAN, undefined, {
         validate: viewResult([
-          { code: 'dead-component', path: 'components', message: 'CostRow is declared but nothing uses it', severity: 'warning', file: 'pages/components/CostRow.view.json' },
+          { code: 'dead-component', path: 'components', message: 'CostRow is declared but nothing uses it', severity: 'warning', file: 'components/CostRow.view.json' },
         ]),
       }),
       {},
@@ -273,7 +273,7 @@ export default async function handler(_i: any, ctx: any) { return { items: await
     const zero = await run(ctxFor(CLEAN, undefined, { validate: viewResult([], 0) }), {});
     expect(zero.ok).toBe(false);
     expect(zero.viewsValidated).toBe(false);
-    expect(findingsFor(zero, 'pages/_shell.view.json')).toContain('examined 0 artifacts');
+    expect(findingsFor(zero, 'shell.view.json')).toContain('examined 0 artifacts');
 
     const missing = await run(ctxFor(CLEAN, undefined, { validate: undefined }), {});
     expect(missing.ok).toBe(false);
@@ -281,7 +281,7 @@ export default async function handler(_i: any, ctx: any) { return { items: await
     expect(missing.unavailable).toContain('validateAppViews');
     // And it must name the exact wiring that is absent — this message is the only thing that ever
     // gets the global threaded through `ProjectAuthoringGlobals`.
-    expect(findingsFor(missing, 'pages/_shell.view.json')).toContain('libs/cli/src/app/authoring/globals.ts');
+    expect(findingsFor(missing, 'shell.view.json')).toContain('libs/cli/src/app/authoring/globals.ts');
   });
 
   // ── (3) THE RENDER SMOKE — the failure only a MOUNT can see ───────────────────────────────────
@@ -299,7 +299,7 @@ export default async function handler(_i: any, ctx: any) { return { items: await
             path: 'sections[0].item.caption',
             message: '$.paid_by_name was null on every row',
             severity: 'error',
-            file: 'pages/index.view.json',
+            file: 'views/index.view.json',
             endpoint: 'costs-list',
           },
         ]),
@@ -336,13 +336,13 @@ export default async function handler(_i: any, ctx: any) { return { items: await
     expect(unavailable.ok).toBe(false);
     expect(unavailable.renderSmoked).toBe(false);
     expect(unavailable.unavailable).toContain('renderSmokeViews');
-    expect(findingsFor(unavailable, 'pages/_shell.view.json')).toContain('ctx has no callProjectApi');
+    expect(findingsFor(unavailable, 'shell.view.json')).toContain('ctx has no callProjectApi');
 
     const missing = await run(ctxFor(CLEAN, undefined, { smoke: undefined }), {});
     expect(missing.ok).toBe(false);
     expect(missing.renderSmoked).toBe(false);
     expect(missing.unavailable).toContain('renderSmokeViews');
-    expect(findingsFor(missing, 'pages/_shell.view.json')).toContain('every binding contract-valid and every value null');
+    expect(findingsFor(missing, 'shell.view.json')).toContain('every binding contract-valid and every value null');
   });
 
   // ── FOLDED-IN RUNTIME PROBES ─────────────────────────────────────────────────────────────────
@@ -491,14 +491,14 @@ export default async function handler(_i: any, ctx: any) { return { items: await
     const r = await run(
       ctxFor({
         ...CLEAN,
-        'pages/index.view.json': JSON.stringify({
+        'views/index.view.json': JSON.stringify({
           route: 'index',
           sections: [
             { kind: 'list', id: 'costs', query: 'costs-list', item: { title: '$.label', caption: '$.paid_by_name' } },
             { kind: 'chat', id: 'dock', agent: 'thing' },
           ],
         }),
-        'pages/components/CostRow.view.json': JSON.stringify({
+        'components/CostRow.view.json': JSON.stringify({
           name: 'CostRow',
           node: { el: 'row', children: [{ el: 'text', text: '$props.cost.label' }] },
         }),

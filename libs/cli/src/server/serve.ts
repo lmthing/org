@@ -34,7 +34,6 @@ import { buildCronManifest, publishCronManifest } from './cron-manifest.js';
 import { handleReportBug } from './routes/report-bug.js';
 import { createAppApiHandler } from './routes/app-api.js';
 import { createPageServeHandler } from '../app/pages-serve.js';
-import { buildProjectPages } from '../app/build/pages.js';
 import { createHookRunHandler, createHooksListHandler, createHookDisableHandler, bootCatchUpAndSchedule } from './routes/hooks.js';
 import { createInboundHandler } from './routes/webhooks.js';
 import { republishAll, buildRepublishDeps } from './republish.js';
@@ -42,7 +41,7 @@ import { emitInternalSignal, installInternalSignalSink } from './internal-signal
 import type { EventDispatchManager } from './event-dispatch.js';
 import {
   handleAppManifest, handleGetAppFile, handlePutAppFile,
-  handleListRows, handleUpdateRow, handleBuildStatus, handleRebuild, handleAppCheck,
+  handleListRows, handleUpdateRow, handleBuildStatus, handleAppCheck,
 } from './routes/app-admin.js';
 import { handleListApps, handleInstallApp } from './routes/apps.js';
 import { handleAppViews, readProjectViewSpecs, type ProjectViewSpecs } from './routes/app-views.js';
@@ -315,15 +314,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // A rebuild emits NEW content-hashed assets, so the cached bundle (below) is stale the moment
   // it returns: its manifest still lists the old `entry-*.js`, while the fresh index.html asks
   // for the new one → the asset falls through to the SPA shell and the app renders BLANK.
-  router.add(
-    'POST',
-    '/api/projects/:projectId/app/build',
-    handleRebuild(manager, effectiveLmthingRoot, (projectId) => {
-      pageBuildCache.delete(projectId);
-    }),
-  );
-  // The AUTHORITATIVE verdict (typecheck THEN bundle) — `app/build` above is esbuild-only and
-  // reports `built:true` for an app that does not type-check. Same host check the appbuilder runs
+  // The AUTHORITATIVE verdict (typecheck THEN bundle) — same host check the appbuilder runs
   // via a CODE node's `ctx.buildProjectApp()` (`runProjectAppCheck`).
   router.add('POST', '/api/projects/:projectId/app/check', handleAppCheck(manager, effectiveLmthingRoot));
   router.add('GET', '/api/projects/:projectId/app/data/:table', handleListRows(manager, effectiveLmthingRoot));
@@ -332,10 +323,6 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   router.add('PUT', '/api/projects/:projectId/app/files/*', handlePutAppFile(manager, effectiveLmthingRoot));
   router.add('GET', '/api/projects/:projectId/app', handleAppManifest(manager, effectiveLmthingRoot));
 
-  // Per-project built-pages cache (declared before the install route so a reinstall can
-  // invalidate it). The bundle is built lazily per project (esbuild; buildProjectPages caches
-  // by content hash internally) and the result is cached here for the server's lifetime.
-  const pageBuildCache = new Map<string, { outDir: string; assetManifest: string[] } | null>();
   // Lazily adopt the app-from-birth model for a project that predates it (a chat index view + a
   // per-project THING), the FIRST time its app is served — so a legacy project opened in /chat
   // without ever starting a session shows its chat page instead of a 404. Idempotent and once per
@@ -354,16 +341,12 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
 
   // Store distribution (Phase 10) — list the catalog + install a catalog app into the
   // user's runtime root (materialize `store/projects/<id>/` → `<root>/<projectId>/`, then boot
-  // + build). Reserved `/api/*`, so these match before the SPA catch-all. On (re)install we
-  // DROP the cached page build so the freshly-rebuilt assets (new hashes) are served instead
-  // of the stale manifest (which would 404 the new assets/entry-*.js → blank app).
+  // + build). Reserved `/api/*`, so these match before the SPA catch-all.
   router.add('GET', '/api/apps', handleListApps());
   router.add(
     'POST',
     '/api/apps/install',
-    handleInstallApp(manager, effectiveLmthingRoot, undefined, (projectId) => {
-      pageBuildCache.delete(projectId);
-    }),
+    handleInstallApp(manager, effectiveLmthingRoot, undefined, () => {}),
   );
 
   // The view specs of an installed app (`system-appbuilder`), for a client that
@@ -375,14 +358,12 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
 
   // Store-installable integration spaces (a project installs the ones it needs
   // into its OWN `spaces/` dir, rather than every session always carrying all
-  // of them — see routes/store-spaces.ts). Dropping the page cache mirrors the
-  // app-install invalidation above; harmless when the project has no pages.
+  // of them — see routes/store-spaces.ts).
   router.add('GET', '/api/store/spaces', handleListStoreSpaces());
   router.add(
     'POST',
     '/api/store/spaces/install',
     handleInstallStoreSpace(effectiveLmthingRoot, undefined, (projectId, spaceId?: string) => {
-      pageBuildCache.delete(projectId);
       // Republish-on-write (S9): a freshly installed space may add webhook/cron
       // emitter defs + `events/*.ts` — regenerate the manifest + crontab and drop
       // the emitter scan cache so they go live without a pod restart. Fire-and-forget
@@ -399,50 +380,41 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
   // with an asset-manifest SPA fallback (dotted route params route client-side) + a strict
   // CSP. Registered AFTER the api route so `…/api/*` matches first.
   type PageHandler = (req: IncomingMessage, res: ServerResponse, params: Record<string, string>) => Promise<void>;
-  const getOutDirForProject = async (projectId: string): Promise<{ outDir: string; assetManifest: string[] } | null> => {
-    if (!effectiveLmthingRoot) return null;
+  // No per-project build exists any more (specs render through the shared app shell) — this
+  // resolver only exists to give `createPageServeHandler` its "not built" branch when the shell
+  // itself is unavailable (see `branchAppShell` below).
+  const noProjectBuild = async (projectId: string): Promise<null> => {
     ensureAppOnce(projectId);
-    if (!pageBuildCache.has(projectId)) {
-      let built: { outDir: string; assetManifest: string[] } | null = null;
-      try {
-        const r = await buildProjectPages(join(effectiveLmthingRoot, projectId));
-        if (r.assetManifest.length > 0) built = { outDir: r.outDir, assetManifest: r.assetManifest };
-      } catch (err) {
-        console.error(`[app] page build failed for "${projectId}": ${err instanceof Error ? err.message : String(err)}`);
-      }
-      pageBuildCache.set(projectId, built);
-    }
-    return pageBuildCache.get(projectId) ?? null;
+    return null;
   };
 
-  // ── App-shell dark-launch branch (W6 step 2) ──────────────────────────────
+  // ── App-shell branch ──────────────────────────────────────────────────────
   // When the prebuilt shell dist was resolved at boot AND a project has view specs
-  // (views.length > 0 — the same discriminator native uses), serve the shell instead
-  // of the per-project esbuild bundle: ONE static dist for every spec app, NO
-  // buildProjectPages call, NO pageBuildCache entry. Everything else (LM_APP_SHELL=0,
-  // no specs, payload threw, no lmthingRoot) falls through to the legacy handler. The shell
-  // handler IS createPageServeHandler with a fixed bundle — the SAME CSP, path-traversal
-  // guard, <base>/window.__APP_BASE__ injection and SPA fallback apply, with zero
-  // duplication of that security-sensitive logic.
-  function branchAppShell(legacy: PageHandler, shell: PageHandler | null): PageHandler {
-    if (!shell || !appShellBundle || !effectiveLmthingRoot) return legacy;
+  // (views.length > 0 — the same discriminator native uses), serve the shell: ONE
+  // static dist for every spec app. Everything else (LM_APP_SHELL=0, no specs, payload
+  // threw, no lmthingRoot) falls through to `notBuilt`. The shell handler IS
+  // createPageServeHandler with a fixed bundle — the SAME CSP, path-traversal guard,
+  // <base>/window.__APP_BASE__ injection and SPA fallback apply, with zero duplication
+  // of that security-sensitive logic.
+  function branchAppShell(notBuilt: PageHandler, shell: PageHandler | null): PageHandler {
+    if (!shell || !appShellBundle || !effectiveLmthingRoot) return notBuilt;
     const root = effectiveLmthingRoot;
     const shellHandler = shell;
     return async (req, res, params) => {
-      // Adopt the app-from-birth model for a legacy project before we decide how to serve it, so a
-      // never-sessioned project still resolves a spec app (its chat page) rather than a 404.
+      // Adopt the app-from-birth model for a project that predates it before we decide how to
+      // serve it, so a never-sessioned project still resolves a spec app (its chat page) rather
+      // than a 404.
       ensureAppOnce(params['projectId']!);
       let specs: ProjectViewSpecs | undefined;
       try {
         specs = readProjectViewSpecs(join(root, params['projectId']!));
       } catch {
-        /* malformed payload — fall through to legacy (a spec app whose payload is
-         * broken still renders via the legacy wrapper bundle if one exists). */
+        /* malformed payload — fall through to notBuilt. */
       }
       if (specs && specs.views.length > 0) {
         return shellHandler(req, res, params);
       }
-      return legacy(req, res, params);
+      return notBuilt(req, res, params);
     };
   }
 
@@ -453,7 +425,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
         return createPageServeHandler(async () => bundle);
       })()
     : null;
-  router.add('*', '/app/:projectId/*', branchAppShell(createPageServeHandler(getOutDirForProject), shellPageServe));
+  router.add('*', '/app/:projectId/*', branchAppShell(createPageServeHandler(noProjectBuild), shellPageServe));
 
   // Project-app ROOT mount — `/<project>/*` (+ `/<project>/api/*`), the SAME app
   // served with NO `/app` prefix so lmthing.app can show clean URLs
@@ -484,7 +456,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
         return createPageServeHandler(async () => bundle, '', webFallback);
       })()
     : null;
-  const rootPageServe = branchAppShell(createPageServeHandler(getOutDirForProject, '', webFallback), shellRootPageServe);
+  const rootPageServe = branchAppShell(createPageServeHandler(noProjectBuild, '', webFallback), shellRootPageServe);
   router.add('*', '/:projectId/api/*', async (req, res, params) => {
     if (RESERVED_ROOT_SEGMENTS.has(params['projectId']!)) { webFallback(req, res); return; }
     await appApiHandler(req, res, params);
@@ -712,11 +684,7 @@ export async function startSessionServer(opts: SessionServerOpts): Promise<Sessi
           }),
         );
       manager.setRepublish(republish);
-      // An authored page/api write must also drop the SERVED bundle, or the running app keeps
-      // showing the pre-write build (see session-manager's `onAppWrite`).
-      manager.setInvalidatePageBuild((projectId) => {
-        pageBuildCache.delete(projectId);
-      });
+      manager.setInvalidatePageBuild(() => {});
       await republish();
 
       if (gatewayUrl && computeJwt && process.env.LMTHING_SELF_IDLE !== '0') {

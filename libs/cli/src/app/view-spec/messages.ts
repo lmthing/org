@@ -120,7 +120,7 @@ export interface ViewError {
   message: string;
   /** `warning` findings are reported but do not fail the gate. */
   severity: 'error' | 'warning';
-  /** Which artifact carries it (`pages/index.view.json`), when the finding is app-wide. */
+  /** Which artifact carries it (`views/index.view.json`), when the finding is app-wide. */
   file?: string;
   /**
    * The endpoint to fix instead of the view. Set by `renderSmokeViews` for an always-null
@@ -481,7 +481,7 @@ export function orphanRoute(route: string, file: string, navTargets: readonly st
   return err(
     'orphan-route',
     '',
-    `pages/${route}: no navigation reaches this page. Add it to the shell (nav/groups/subnav), ` +
+    `views/${route}: no navigation reaches this page. Add it to the shell (nav/groups/subnav), ` +
       `or give some page a { navigate: '${route}' } action / rowAction. ` +
       `${menu('Reachable today', navTargets)}`,
     { file },
@@ -507,7 +507,7 @@ export function pageHasNoData(route: string, file: string, kinds: readonly strin
   return err(
     'no-data',
     '',
-    `pages/${route}: no section on this page reads data (sections: ${kinds.join(', ') || 'none'}). ` +
+    `views/${route}: no section on this page reads data (sections: ${kinds.join(', ') || 'none'}). ` +
       `A page with no query/mutation renders chrome over nothing. Add a list, detail, stats, ` +
       `timeline or create section bound to an endpoint.`,
     { file },
@@ -723,7 +723,7 @@ export function emptyRender(route: string, file: string, detail: string): ViewEr
   return err(
     'empty-render',
     '',
-    `pages/${route}: renders empty against live data — ${detail}. This passes every static gate ` +
+    `views/${route}: renders empty against live data — ${detail}. This passes every static gate ` +
       `and ships a blank page. Check that the sections' endpoints return rows (smoke_endpoints), ` +
       `and that the bound fields are populated.`,
     { file },
@@ -748,7 +748,7 @@ export function emptySection(
   return err(
     'empty-render',
     `sections[${index}]`,
-    `pages/${route} sections[${index}]: this ${kind} section draws NOTHING against live data — ` +
+    `views/${route} sections[${index}]: this ${kind} section draws NOTHING against live data — ` +
       `${detail}. Its heading is all a user sees. A bound value that resolves to nothing renders ` +
       `nothing, label and wrapper included (S1), so a section whose every binding is null is a ` +
       `heading over an empty box.`,
@@ -758,7 +758,7 @@ export function emptySection(
 
 /** The renderer threw. */
 export function renderThrew(route: string, file: string, message: string): ViewError {
-  return err('render-error', '', `pages/${route}: the renderer threw while mounting — ${message}`, { file });
+  return err('render-error', '', `views/${route}: the renderer threw while mounting — ${message}`, { file });
 }
 
 // ── ajv → menu ────────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
  * (`../authoring/globals.ts`), the app-wide validators (`./validate.ts`) and the pod's
  * spec-fetch route all agree without importing each other.
  *
- * ## The v2 layout
+ * ## The layout
  *
  * ```
  * views/<route>.view.json              a page spec          (authored)
@@ -12,8 +12,6 @@
  * shell.view.json                      the app shell        (authored, TOP LEVEL)
  * ```
  *
- * Three moves, each removing an exception rather than adding one:
- *
  *  - **`views/` holds JSON and nothing else.** The prebuilt app shell fetches these specs directly,
  *    so a spec app has no generated React source or per-project bundle.
  *  - **`components/` and `shell.view.json` are top level.** They no longer need to hide from a page
@@ -21,13 +19,6 @@
  *  - **`_layout.view.json` nests.** A layout frames every route beneath its directory, which is
  *    what lets an entity's header and sub-nav be authored once for a family instead of repeated
  *    on every child page.
- *
- * ## v1 is still read
- *
- * Every reader below falls back to the v1 locations (`pages/*.view.json`,
- * `pages/components/`, `pages/_shell.view.json`) so a project written before this change keeps
- * serving. Only the WRITE paths are v2 — an app is migrated by being written to, never by a
- * migration step that could half-finish.
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -38,23 +29,14 @@ import type { ShellSpec, ViewComponentSpec, ViewLayoutSpec, ViewSpec } from './s
 /** The extension that marks a view artifact. */
 export const VIEW_EXT = '.view.json';
 
-/** The v2 spec directory. */
+/** The spec directory. */
 export const VIEWS_DIR = 'views';
 
-/** The v1 spec directory, still read for compatibility with existing projects. */
-export const PAGES_DIR = 'pages';
-
-/** The v2 component directory — top level. */
+/** The component directory — top level. */
 export const COMPONENT_DIR = 'components';
 
-/** The v1 component directory, still read. */
-export const VIEW_COMPONENT_DIR = 'components';
-
-/** The v2 shell path. */
+/** The shell path. */
 export const SHELL_SPEC_PATH = `shell${VIEW_EXT}`;
-
-/** The v1 shell path, still read. */
-export const LEGACY_SHELL_SPEC_PATH = `pages/_shell${VIEW_EXT}`;
 
 /** The basename that marks a nested layout. */
 export const LAYOUT_BASENAME = `_layout${VIEW_EXT}`;
@@ -128,7 +110,7 @@ function walkViewFiles(dir: string, out: { pages: string[]; layouts: string[] })
       continue;
     }
     if (isDir) {
-      if (entry === VIEW_COMPONENT_DIR || entry === 'lib' || entry.startsWith('_') || entry.startsWith('.')) continue;
+      if (entry === COMPONENT_DIR || entry === 'lib' || entry.startsWith('_') || entry.startsWith('.')) continue;
       walkViewFiles(abs, out);
       continue;
     }
@@ -166,14 +148,10 @@ export function prefixOfLayoutFile(specDir: string, abs: string): string {
   return rel.slice(0, -1).join('/');
 }
 
-/** Which spec directories this project actually has — v2 first, v1 as a fallback. */
+/** Which spec directories this project actually has. */
 function specDirs(projectRoot: string): string[] {
-  const out: string[] = [];
-  for (const d of [VIEWS_DIR, PAGES_DIR]) {
-    const abs = join(projectRoot, d);
-    if (existsSync(abs)) out.push(abs);
-  }
-  return out;
+  const abs = join(projectRoot, VIEWS_DIR);
+  return existsSync(abs) ? [abs] : [];
 }
 
 /**
@@ -181,10 +159,6 @@ function specDirs(projectRoot: string): string[] {
  * and an unparseable file lands in {@link LoadedViews.malformed} — an app-wide gate that crashed
  * on one bad file would report nothing at all about the other nineteen, which the pipeline reads
  * as "clean".
- *
- * A route present in BOTH `views/` and `pages/` resolves to the v2 copy: a project mid-migration
- * has the newer spec under `views/`, and serving the stale one would make the migration look
- * broken.
  */
 export function loadProjectViews(projectRoot: string): LoadedViews {
   const malformed: MalformedArtifact[] = [];
@@ -221,30 +195,21 @@ export function loadProjectViews(projectRoot: string): LoadedViews {
     }
   }
 
-  const seenComponents = new Set<string>();
-  for (const dir of [join(projectRoot, COMPONENT_DIR), join(projectRoot, PAGES_DIR, VIEW_COMPONENT_DIR)]) {
-    if (!existsSync(dir)) continue;
-    for (const entry of readdirSync(dir).sort()) {
+  const componentDir = join(projectRoot, COMPONENT_DIR);
+  if (existsSync(componentDir)) {
+    for (const entry of readdirSync(componentDir).sort()) {
       if (!entry.endsWith(VIEW_EXT)) continue;
       const name = entry.slice(0, -VIEW_EXT.length);
-      if (seenComponents.has(name)) continue;
-      const abs = join(dir, entry);
+      const abs = join(componentDir, entry);
       const rel = relative(projectRoot, abs).split(sep).join('/');
       const def = readJson<ViewComponentSpec>(abs, rel, malformed);
-      if (def) {
-        seenComponents.add(name);
-        components.push({ name, def, path: rel });
-      }
+      if (def) components.push({ name, def, path: rel });
     }
   }
 
   let shell: ShellSpec | undefined;
-  for (const rel of [SHELL_SPEC_PATH, LEGACY_SHELL_SPEC_PATH]) {
-    const abs = join(projectRoot, rel);
-    if (!existsSync(abs)) continue;
-    shell = readJson<ShellSpec>(abs, rel, malformed);
-    if (shell) break;
-  }
+  const shellAbs = join(projectRoot, SHELL_SPEC_PATH);
+  if (existsSync(shellAbs)) shell = readJson<ShellSpec>(shellAbs, SHELL_SPEC_PATH, malformed);
 
   return { views, layouts, components, shell, malformed };
 }

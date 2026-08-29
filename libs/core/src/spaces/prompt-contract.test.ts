@@ -439,6 +439,30 @@ describe('system-appbuilder live-project build action', () => {
     expect(automator).toMatch(/Whether the runtime started you on the `build_live_project` action OR a caller delegated/i);
   });
 
+  /**
+   * Regression: a live run asked THING to fix two small issues on an app it had already built (a bad
+   * view field reference, no seed data). The automator was re-delegated onto the SAME `build_live_project`
+   * action and, despite the query plainly describing a fix rather than a build, re-ran the entire
+   * pipeline (read_sources → every planner → every implement step) instead of using the freeform
+   * writers already documented below for exactly this case. "First build" must be a mechanical,
+   * project-state check — not an inference from the action id or the query's wording.
+   */
+  it('requires a mechanical db.tables() check before running the pipeline, and routes seeding to db.insert', () => {
+    const automator = readFileSync(
+      join(SYSTEM_SPACES, 'system-appbuilder', 'agents', 'automator', 'instruct.md'),
+      'utf8',
+    );
+
+    expect(
+      automator,
+      'first-build must be decided from project state, not the action id or query wording',
+    ).toMatch(/Check `db\.tables\(\)` FIRST, not the action id or the query's\s+wording/i);
+    expect(
+      automator,
+      'seeding a placeholder row into an EXISTING table must route to a direct db.insert, never a full rebuild',
+    ).toMatch(/await db\.insert\(table,\s+row\)/);
+  });
+
   it('builds the live app as a plan → per-item build DAG (multiple pages + reusable components)', () => {
     const dir = join(SYSTEM_SPACES, 'system-appbuilder', 'tasklists', 'build_live_project');
     const read = (f: string) => readFileSync(join(dir, f), 'utf8');
@@ -530,7 +554,7 @@ describe('system-appbuilder live-project build action', () => {
 
     // finalize reports pages HONESTLY from disk and surfaces any planned page that went missing — it
     // does NOT declare a clean `ok` on a partial build (the reporting half of the silent-drop fix).
-    expect(read('18-finalize.md')).toMatch(/listProjectDir\('pages'\)/);
+    expect(read('18-finalize.md')).toMatch(/listProjectDir\('views'\)/);
     expect(read('18-finalize.md')).toMatch(/const missing =/);
     expect(read('18-finalize.md')).toMatch(/missing\.length === 0/);
 
@@ -607,17 +631,31 @@ describe('system-appbuilder live-project build action', () => {
 });
 
 describe('system-appbuilder repair turns', () => {
+  /**
+   * Superseded incident guard: a repair request naming a missing page used to be answered with a
+   * SAME-TURN freeform write (fragile — a full pipeline rebuild for the SAME underlying "just tell
+   * me what's wrong and I'll re-run everything" failure mode was the actual live incident this
+   * session). The fix routes ANY broken/missing artifact — not just a page — to the dedicated
+   * `repair_live_project` tasklist, whose own `03-author_missing.md` step is the one that must
+   * actually WRITE the thing, never just inventory/diagnose it.
+   */
   it('requires a missing-page repair to write the page rather than inventory the project', () => {
     const automator = readFileSync(
       join(SYSTEM_SPACES, 'system-appbuilder', 'agents', 'automator', 'instruct.md'),
       'utf8',
     );
+    // The one-liner is ALWAYS ON — once an app exists, broken/missing routes to repair_live_project,
+    // never a same-turn freeform patch and never build_live_project again.
+    expect(automator).toMatch(/NEVER run `build_live_project` again — repair or grow instead/i);
+    expect(automator).toMatch(/tasklist\('repair_live_project', \{ missing, errors \}\)/);
 
-    // The one-liner is ALWAYS ON — a repair turn that never loads an aspect must still write.
-    expect(automator).toMatch(/A repair request naming a missing page is a WRITE, not a diagnosis/i);
-    // The concrete instruction is in the same always-on body — a repair turn that loads nothing must
-    // still write, so this one cannot sit behind a `loadKnowledge`.
-    expect(automator).toMatch(/write the missing page and the read API it needs/i);
+    const authorMissing = readFileSync(
+      join(SYSTEM_SPACES, 'system-appbuilder', 'tasklists', 'repair_live_project', '03-author_missing.md'),
+      'utf8',
+    );
+    // The actual write happens here, not a listing: an author turn must call the real writers.
+    expect(authorMissing).toMatch(/writeProjectApi\(route, src\)/);
+    expect(authorMissing).toMatch(/writeProjectView\(item\.name, spec\)/);
   });
 });
 

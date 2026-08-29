@@ -9,16 +9,15 @@
  *
  * Three phases, cheapest-first, each short-circuiting the next:
  *   1. **typecheck** ({@link typecheckProjectApp}) — a real `tsc` program over the
- *      project's own legacy `pages/`/`components/`/`api/` sources. Non-empty ⇒ short-circuit:
- *      we never generate contracts or build known-broken code.
+ *      project's own `api/` sources. Non-empty ⇒ short-circuit: we never generate
+ *      contracts or build known-broken code.
  *   2. **contract** ({@link checkProjectContracts}) — {@link generateProjectContracts}, the
  *      per-endpoint `ts-json-schema-generator` pass both transports and API handlers rely on.
  *      It turns failures into structured errors instead of leaking throws from the check API.
- *   3. **build** — a legacy TSX app runs {@link buildProjectPagesChecked}; a view-spec app mounts
- *      every view through the shared renderer, including its shell and layout chain.
+ *   3. **build** — mounts every view through the shared renderer, including its shell and
+ *      layout chain.
  *
- * `ok` is zero errors across all phases. `built` means the served artifact exists: an esbuild
- * bundle for legacy pages, or a clean shared-renderer mount for an AppHost project.
+ * `ok` is zero errors across all phases. `built` means a clean shared-renderer mount.
  */
 
 import { relative, sep } from 'node:path';
@@ -26,29 +25,27 @@ import { relative, sep } from 'node:path';
 import { BaseError } from 'ts-json-schema-generator';
 
 import { typecheckProjectApp } from './typecheck.js';
-import { buildProjectPagesChecked } from './pages.js';
 import { generateProjectContracts } from './contracts.js';
 import { loadProjectViews, viewRoutePath } from '../view-spec/files.js';
 import { renderSpecAppSmoke } from '../view-spec/validate.js';
 
 // The check contract's SINGLE source of truth is `@lmthing/core`'s `AppCheckResult`;
 // re-exported here as a type-only import (erased at build — no runtime coupling) so
-// `typecheck.ts`/`pages.ts` share the exact same shape and can never drift.
+// `typecheck.ts` shares the exact same shape and can never drift.
 export type { AppCheckError, AppCheckResult } from '@lmthing/core';
 import type { AppCheckError, AppCheckResult } from '@lmthing/core';
 
 /**
  * Build + programmatically check a project's live app: typecheck first (short-
  * circuiting on any type error — never bundle known-broken code), then contract
- * generation, then esbuild. Reached from a tasklist CODE node via `ctx.buildProjectApp()`
- * and over HTTP at `POST .../app/check`.
+ * generation, then the render mount. Reached from a tasklist CODE node via
+ * `ctx.buildProjectApp()` and over HTTP at `POST .../app/check`.
  */
 export async function runProjectAppCheck(projectRoot: string): Promise<AppCheckResult> {
   const views = loadProjectViews(projectRoot).views;
-  const isSpecApp = views.length > 0;
-  const routes = isSpecApp ? views.map((view) => viewRoutePath(view.route)) : [];
+  const routes = views.map((view) => viewRoutePath(view.route));
 
-  const tcErrors = await typecheckProjectApp(projectRoot, isSpecApp ? { sourceDirs: ['api'] } : undefined);
+  const tcErrors = await typecheckProjectApp(projectRoot);
   if (tcErrors.length > 0) {
     return { ok: false, built: false, routes, errors: tcErrors };
   }
@@ -58,33 +55,23 @@ export async function runProjectAppCheck(projectRoot: string): Promise<AppCheckR
     return { ok: false, built: false, routes, errors: [contractError] };
   }
 
-  if (isSpecApp) {
-    const smoke = await renderSpecAppSmoke(projectRoot);
-    return {
-      ok: smoke.errorCount === 0,
-      built: smoke.errorCount === 0,
-      routes,
-      errors: smoke.errors.map((error) => ({
-        phase: 'build' as const,
-        file: error.file ?? '(app)',
-        message: error.message,
-      })),
-    };
-  }
-
-  const b = await buildProjectPagesChecked(projectRoot);
+  const smoke = await renderSpecAppSmoke(projectRoot);
   return {
-    ok: b.errors.length === 0,
-    built: b.built && b.errors.length === 0,
-    routes: b.routes,
-    errors: b.errors,
+    ok: smoke.errorCount === 0,
+    built: smoke.errorCount === 0,
+    routes,
+    errors: smoke.errors.map((error) => ({
+      phase: 'build' as const,
+      file: error.file ?? '(app)',
+      message: error.message,
+    })),
   };
 }
 
 /**
  * Run {@link generateProjectContracts} and convert a thrown failure into a structured
  * `phase:'contract'` {@link AppCheckError} instead of letting it propagate uncaught. `null`
- * on success (the generated contracts/dts are discarded here — `buildProjectPagesChecked`
+ * on success (the generated contracts/dts are discarded here — `renderSpecAppSmoke`
  * regenerates them as part of the real build in phase 3).
  */
 async function checkProjectContracts(projectRoot: string): Promise<AppCheckError | null> {

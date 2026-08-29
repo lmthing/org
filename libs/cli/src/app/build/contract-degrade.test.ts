@@ -19,13 +19,11 @@
  */
 import { describe, expect, it, afterAll } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { generateAppTypes } from './schema.js';
 import { generateProjectContracts } from './contracts.js';
-import { buildProjectPages } from './pages.js';
 
 const tmpDirs: string[] = [];
 afterAll(async () => {
@@ -63,24 +61,14 @@ export default async function handler(input: Input): Promise<Output> {
 }
 `;
 
-const PAGE = `import { useApi } from '@app/runtime';
-
-export default function Home() {
-  const { data } = useApi<{ pong: boolean }>('ping', {});
-  return <div>{data ? 'up' : 'loading'}</div>;
-}
-`;
-
 /** A project whose SECOND endpoint references a type nothing declares. */
 async function projectWithOneOrphanedHandler(): Promise<string> {
   const root = await scratch('lm-degrade-');
   await mkdir(join(root, 'api', 'ping'), { recursive: true });
   await mkdir(join(root, 'api', 'bikes'), { recursive: true });
-  await mkdir(join(root, 'pages'), { recursive: true });
   await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'degrade-scratch', version: '0.0.0' }));
   await writeFile(join(root, 'api', 'ping', 'GET.ts'), PING, 'utf8');
   await writeFile(join(root, 'api', 'bikes', 'GET.ts'), ORPHANED, 'utf8');
-  await writeFile(join(root, 'pages', 'index.tsx'), PAGE, 'utf8');
   return root;
 }
 
@@ -114,10 +102,4 @@ describe('a handler whose types do not resolve degrades that ENDPOINT, not the a
     expect(contracts.endpoints.map((e) => e.name).sort()).toEqual(['bikes-list', 'ping']);
   }, 60_000);
 
-  it('THE POINT: the page bundle still builds — a working app is not destroyed by one bad handler', async () => {
-    const root = await projectWithOneOrphanedHandler();
-    const result = await buildProjectPages(root);
-    expect(result.routes.map((r) => r.routePath)).toContain('/');
-    expect(existsSync(join(root, '.data', 'pages-dist', 'index.html'))).toBe(true);
-  }, 120_000);
 });

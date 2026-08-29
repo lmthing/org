@@ -2,26 +2,23 @@
  * Project-app **typecheck** (Phase 2 of the durability fix) — the real `tsc`
  * program {@link runProjectAppCheck} runs BEFORE ever touching esbuild.
  *
- * Before this module, there was NO typecheck of a project's `pages/`/`components/`/
- * `api/` sources — the pages build (`./pages.js`) transpiles with esbuild, which
- * strips types without checking them, so a page that doesn't even compile still
- * "builds" fine and fails silently at runtime. The tasklist prompts that promise
- * agents a "NO-DOM ambient" ("`console`/`window` are typecheck errors, catch it
- * before shipping") were describing code that didn't exist — this is that code.
+ * Before this module, there was NO typecheck of a project's `api/` sources — the
+ * spec-app build transpiles with esbuild, which strips types without checking
+ * them, so a handler that doesn't even compile still "builds" fine and fails
+ * silently at runtime. The tasklist prompts that promise agents a "NO-DOM ambient"
+ * ("`console`/`window` are typecheck errors, catch it before shipping") were
+ * describing code that didn't exist — this is that code.
  *
  * ## The ambient
  *
- * A project page/component authors against `@app/runtime` + automatic-JSX React —
- * neither of which is a real npm dependency of the PROJECT (they're aliased by
- * `./pages.js`'s esbuild config, not resolvable by a bare `tsc` run). So every
- * program built here carries one synthetic, **in-memory** ambient `.d.ts`
- * ({@link AMBIENT_DTS}) declaring:
+ * An API handler authors against `@app/runtime`, not a real npm dependency of the
+ * PROJECT, so every program built here carries one synthetic, **in-memory** ambient
+ * `.d.ts` ({@link AMBIENT_DTS}) declaring:
  *   - `react` / `react/jsx-runtime` — just enough of the React surface (hooks,
  *     `ReactNode`/`FC`/`ComponentType`, the automatic-JSX factory) for a real
  *     functional component to compile, PLUS a **global** `React` namespace mirror
- *     (this codebase's own fixtures reference `React.ReactNode` as a bare type
- *     without importing `React` — see `./pages.test.ts`'s `_layout.tsx` fixture —
- *     so both the module and the global form must resolve).
+ *     — kept for `@app/runtime`'s own typed surface, which still exposes hook/
+ *     component types even though no project source authors JSX any more.
  *   - a global `JSX` namespace with `IntrinsicElements: { [elem: string]: any }` —
  *     intrinsic tags (`<div>`, `<main>`, `className`, …) are deliberately untyped;
  *     this is a project-app typecheck, not a DOM-attribute linter.
@@ -68,13 +65,9 @@ import type { AppCheckError } from './check.js';
 import { loadApiRoutes } from '../api/loader.js';
 import { buildClientApiDts } from './apicall-dts.js';
 
-/** The project source roots the legacy TSX typecheck covers. */
-const SOURCE_DIRS = ['pages', 'components', 'api'] as const;
-
-export interface TypecheckProjectAppOptions {
-  /** A view-spec app has no project UI source; only its API handlers need TypeScript checking. */
-  sourceDirs?: readonly string[];
-}
+/** The project source root the whole-app typecheck covers — API handlers only; a
+ *  view-spec app has no other project UI source needing TypeScript checking. */
+const SOURCE_DIRS = ['api'] as const;
 
 /** File extensions treated as project TS source. */
 const TS_EXT = /\.(ts|tsx)$/;
@@ -446,33 +439,31 @@ function createProgramHost(
 }
 
 /**
- * Typecheck a project's `pages/`/`components/`/`api/` sources against the
- * `@app/runtime` + automatic-JSX-React ambient (see the module doc). Returns one
+ * Typecheck a project's `api/` sources against the `@app/runtime` +
+ * automatic-JSX-React ambient (see the module doc). Returns one
  * {@link AppCheckError} (`phase:'typecheck'`) per diagnostic in the project's OWN
  * source — diagnostics inside the synthetic ambient or the generated `.d.ts` are
  * dropped (they are build-generated, never author-fixable).
  */
 export async function typecheckProjectApp(
   projectRoot: string,
-  opts: TypecheckProjectAppOptions = {},
 ): Promise<AppCheckError[]> {
-  const sourceDirs = opts.sourceDirs ?? SOURCE_DIRS;
   const sourceFiles = (
-    await Promise.all(sourceDirs.map((d) => collectSourceFiles(join(projectRoot, d))))
+    await Promise.all(SOURCE_DIRS.map((d) => collectSourceFiles(join(projectRoot, d))))
   ).flat();
 
   const generatedDtsPath = join(projectRoot, 'types', 'generated.d.ts');
   const hasGeneratedDts = existsSync(generatedDtsPath);
   // The appbuilder's `emit_types` writes `types/contract.d.ts` as a GLOBAL ambient script (no
-  // export), so its interfaces are in scope in every page/component/api with NO import — which is
+  // export), so its interfaces are in scope in every api handler with NO import — which is
   // why it must be a program ROOT here. Without this, `useApi<CostLinesOutput>(...)` is a "Cannot
   // find name" error and the author is pushed back onto a relative import (and the depth math + the
   // "Cannot find module" panic that made 06-tanzania run 36 abandon the contract).
   const contractDtsPath = join(projectRoot, 'types', 'contract.d.ts');
   const hasContractDts = existsSync(contractDtsPath);
 
-  // Nothing to typecheck (no pages/components/api at all) — a db/api-only or
-  // spaces-only project has no project-app source.
+  // Nothing to typecheck (no api/ at all) — a db-only or spaces-only project has
+  // no project-app source.
   if (sourceFiles.length === 0) return [];
 
   // Narrow the client data hooks to THIS project's endpoints, so a page naming an

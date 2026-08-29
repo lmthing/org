@@ -33,7 +33,6 @@ import { loadProjectApp } from '../../app/loader.js';
 import { generateProjectContracts } from '../../app/build/contracts.js';
 import type { EndpointContract } from '../../app/build/schema.js';
 import { loadHooks, loadHooksState, type LoadedHook } from '../../app/hooks/index.js';
-import { buildProjectPages } from '../../app/build/pages.js';
 import { runProjectAppCheck } from '../../app/build/check.js';
 import { loadProjectViews, viewRoutePath } from '../../app/view-spec/files.js';
 import type { ProjectDb } from '../../app/store.js';
@@ -472,67 +471,10 @@ export function handleBuildStatus(_manager: AppAdminManager, lmthingRoot: string
 }
 
 /**
- * `POST /api/projects/:projectId/app/build` — force a page rebuild
- * ({@link buildProjectPages} with `force:true`) and return its result.
- */
-export function handleRebuild(
-  _manager: AppAdminManager,
-  lmthingRoot: string | undefined,
-  /** Drop the server's cached page bundle for this project. A forced rebuild emits NEW
-   *  content-hashed assets, so any bundle cached from the previous build is stale: its manifest
-   *  no longer contains the `entry-*.js` the fresh index.html asks for, the asset request falls
-   *  through to the SPA shell (`text/html`), and the app renders BLANK. */
-  onBuilt?: (projectId: string) => void,
-): AppHandler {
-  return async (_req, res, params) => {
-    const projectId = params['projectId']!;
-    if (!safeProjectId(projectId)) {
-      sendJson(res, 400, { error: `invalid project id: ${projectId}` });
-      return;
-    }
-    if (!lmthingRoot) {
-      sendJson(res, 404, { error: 'no project root configured' });
-      return;
-    }
-    const projectRoot = join(lmthingRoot, projectId);
-    const views = loadProjectViews(projectRoot).views;
-    if (views.length > 0) {
-      sendJson(res, 200, {
-        built: true,
-        assetManifest: [],
-        routes: views.map((view) => ({ routePath: viewRoutePath(view.route), file: view.path })),
-      });
-      return;
-    }
-    try {
-      const result = await buildProjectPages(projectRoot, { force: true });
-      onBuilt?.(projectId);
-      sendJson(res, 200, {
-        built: result.built,
-        assetManifest: result.assetManifest,
-        routes: result.routes.map((r) => ({ routePath: r.routePath, file: relFile(projectRoot, r.file) })),
-      });
-    } catch (err) {
-      sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
-    }
-  };
-}
-
-/**
  * `POST /api/projects/:projectId/app/check` — the AUTHORITATIVE build verdict:
  * `{ ok, built, routes, errors }` from {@link runProjectAppCheck}, i.e. the project-app typecheck
- * FOLLOWED BY the esbuild bundle. This is the same call the `verify` code node makes via
+ * FOLLOWED BY the shared-renderer mount. This is the same call the `verify` code node makes via
  * `ctx.buildProjectApp()`, so the HTTP verdict and the build gate agree.
- *
- * Deliberately SEPARATE from `POST .../app/build`, which runs {@link buildProjectPages} — esbuild
- * only, no typecheck — and is what actually serves the app. That tolerance is intentional and stays:
- * all 5 shipped store apps carry type errors and run fine, so making serving conditional on a clean
- * typecheck would take them offline.
- *
- * The split existed but only `build` was reachable over REST, so anything asking the pod "did it
- * build?" got the esbuild-only answer. The 06-tanzania scenario reported `built: true, error: null`
- * for run 34's app while the authoritative check returned 4 typecheck errors — a harness that
- * cannot see a failure reports success, which is the one thing a verification harness must never do.
  */
 export function handleAppCheck(_manager: AppAdminManager, lmthingRoot: string | undefined): AppHandler {
   return async (_req, res, params) => {

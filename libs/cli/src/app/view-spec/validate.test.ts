@@ -738,8 +738,8 @@ describe('validateAppViews', () => {
   it('reports a page no navigation reaches', async () => {
     const root = await project({
       'api/recipes/GET.ts': HANDLER('listRecipes', ' id: string; '),
-      'pages/index.view.json': view({ route: 'index', sections: [{ kind: 'list', query: 'listRecipes' }] }),
-      'pages/admin/secrets.view.json': view({
+      'views/index.view.json': view({ route: 'index', sections: [{ kind: 'list', query: 'listRecipes' }] }),
+      'views/admin/secrets.view.json': view({
         route: 'admin/secrets',
         sections: [{ kind: 'list', query: 'listRecipes' }],
       }),
@@ -747,18 +747,18 @@ describe('validateAppViews', () => {
     const res = await validateAppViews(root, { contracts: { endpoints: [] } as never });
     const orphan = res.errors.find((e) => e.code === 'orphan-route');
     expect(orphan?.message).toBe(
-      'pages/admin/secrets: no navigation reaches this page. Add it to the shell (nav/groups/subnav), ' +
+      'views/admin/secrets: no navigation reaches this page. Add it to the shell (nav/groups/subnav), ' +
         'or give some page a { navigate: \'admin/secrets\' } action / rowAction. Reachable today: index',
     );
   });
 
   it('does not call a page an orphan when a rowAction navigates to it', async () => {
     const root = await project({
-      'pages/index.view.json': view({
+      'views/index.view.json': view({
         route: 'index',
         sections: [{ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipes/[id]', params: { id: '$.id' } } }],
       }),
-      'pages/recipes/[id].view.json': view({
+      'views/recipes/[id].view.json': view({
         route: 'recipes/[id]',
         sections: [{ kind: 'detail', query: 'getRecipe' }],
       }),
@@ -769,8 +769,8 @@ describe('validateAppViews', () => {
 
   it('warns about a component nothing uses, without failing the gate on it', async () => {
     const root = await project({
-      'pages/index.view.json': view({ route: 'index', sections: [{ kind: 'list', query: 'listRecipes' }] }),
-      'pages/components/Unused.view.json': view({ name: 'Unused', node: { el: 'text', text: 'hi' } }),
+      'views/index.view.json': view({ route: 'index', sections: [{ kind: 'list', query: 'listRecipes' }] }),
+      'components/Unused.view.json': view({ name: 'Unused', node: { el: 'text', text: 'hi' } }),
     });
     const res = await validateAppViews(root, { contracts: { endpoints: [] } as never });
     const dead = res.errors.find((e) => e.code === 'dead-component');
@@ -783,11 +783,11 @@ describe('validateAppViews', () => {
 
   it('reports a page that reads no data at all', async () => {
     const root = await project({
-      'pages/index.view.json': view({ route: 'index', sections: [{ kind: 'markdown', source: '# Welcome' }] }),
+      'views/index.view.json': view({ route: 'index', sections: [{ kind: 'markdown', source: '# Welcome' }] }),
     });
     const res = await validateAppViews(root, { contracts: { endpoints: [] } as never });
     expect(res.errors.find((e) => e.code === 'no-data')?.message).toBe(
-      'pages/index: no section on this page reads data (sections: markdown). A page with no query/mutation ' +
+      'views/index: no section on this page reads data (sections: markdown). A page with no query/mutation ' +
         'renders chrome over nothing. Add a list, detail, stats, timeline or create section bound to an endpoint.',
     );
   });
@@ -802,7 +802,7 @@ describe('validateAppViews', () => {
 
   it('reports an unparseable artifact instead of throwing', async () => {
     const root = await project({
-      'pages/index.view.json': '{ this is not json',
+      'views/index.view.json': '{ this is not json',
     });
     const res = await validateAppViews(root, { contracts: { endpoints: [] } as never });
     expect(res.errors.some((e) => e.code === 'malformed')).toBe(true);
@@ -829,7 +829,7 @@ describe('renderSmokeViews', () => {
 
   const app = () =>
     project({
-      'pages/index.view.json': JSON.stringify({
+      'views/index.view.json': JSON.stringify({
         route: 'index',
         sections: [{ kind: 'list', query: 'listRecipes', item: { title: '$.title', meta: '$.rating' } }],
       }),
@@ -875,7 +875,7 @@ describe('renderSmokeViews', () => {
     });
     expect(res.pages[0].empty).toBe(true);
     expect(res.errors.find((e) => e.code === 'empty-render')?.message).toBe(
-      'pages/index: renders empty against live data — every section\'s endpoint returned zero rows. ' +
+      'views/index: renders empty against live data — every section\'s endpoint returned zero rows. ' +
         'This passes every static gate and ships a blank page. Check that the sections\' endpoints return ' +
         'rows (smoke_endpoints), and that the bound fields are populated.',
     );
@@ -1008,7 +1008,7 @@ export interface Recipe { id: string; title: string }
 export type Output = Recipe[];
 export default async function h() { return [] as Output; }
 `,
-      'pages/index.view.json': JSON.stringify({
+      'views/index.view.json': JSON.stringify({
         route: 'index',
         sections: [{ kind: 'list', query: 'listRecipes', item: { title: '$.title' } }],
       }),
@@ -1241,7 +1241,7 @@ describe('unknown route — a warning at save time, an error app-wide (D-3b)', (
 
   it('validateAppViews keeps it an error — the check is not lost, only deferred', async () => {
     const root = await project({
-      'pages/index.view.json': JSON.stringify({
+      'views/index.view.json': JSON.stringify({
         route: 'index',
         sections: [{ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'nowhere' } }],
       }),
@@ -1277,7 +1277,7 @@ describe('renderSmokeViews — the section\'s own source, not a heuristic (S1)',
     // `rowsOf` took `mealsByDay` as "the rows", so 14 correct `$.tonight.*` bindings were reported
     // as always-null — each naming the wrong culprit, and `17-fix` routes those at the handler.
     const root = await project({
-      'pages/index.view.json': JSON.stringify({
+      'views/index.view.json': JSON.stringify({
         route: 'index',
         sections: [
           {
@@ -1298,7 +1298,7 @@ describe('renderSmokeViews — the section\'s own source, not a heuristic (S1)',
 
   it('binds a `from` section against the array it names, and never checks `from` itself', async () => {
     const root = await project({
-      'pages/index.view.json': JSON.stringify({
+      'views/index.view.json': JSON.stringify({
         route: 'index',
         sections: [{ kind: 'list', query: 'currentPlan', from: '$.mealsByDay', item: { title: '$.title' } }],
       }),
@@ -1330,7 +1330,7 @@ describe('renderSmokeViews — dependent queries and scoped ids (S2, S3)', () =>
 
   it('resolves `$data.<section>.path` the way the renderer does (S2)', async () => {
     const root = await project({
-      'pages/shopping.view.json': JSON.stringify({
+      'views/shopping.view.json': JSON.stringify({
         route: 'shopping',
         sections: [
           { kind: 'stats', id: 'plan', query: 'currentPlan', cards: [{ label: 'Plan', value: '$.plan.id' }] },
@@ -1364,15 +1364,15 @@ describe('renderSmokeViews — dependent queries and scoped ids (S2, S3)', () =>
     const root = await project({
       // `pantry` sorts before `recipes`, which is exactly how the flat first-write-wins pool got
       // an INGREDIENT id into `paramPool['id']` and then 404'd every `recipes/[id]` section.
-      'pages/pantry.view.json': JSON.stringify({
+      'views/pantry.view.json': JSON.stringify({
         route: 'pantry',
         sections: [{ kind: 'list', query: 'listPantry', item: { title: '$.name' } }],
       }),
-      'pages/recipes.view.json': JSON.stringify({
+      'views/recipes.view.json': JSON.stringify({
         route: 'recipes',
         sections: [{ kind: 'list', query: 'listRecipes', item: { title: '$.title' } }],
       }),
-      'pages/recipes/[id].view.json': JSON.stringify({
+      'views/recipes/[id].view.json': JSON.stringify({
         route: 'recipes/[id]',
         sections: [{ kind: 'detail', query: 'getRecipe', header: { title: '$.title' } }],
       }),
@@ -1403,7 +1403,7 @@ describe('renderSmokeViews — an error body is not data (S4)', () => {
 
   const brokenPage = () =>
     project({
-      'pages/index.view.json': JSON.stringify({
+      'views/index.view.json': JSON.stringify({
         route: 'index',
         sections: [{ kind: 'detail', query: 'getRecipe', header: { title: '$.title' } }],
       }),
@@ -1474,7 +1474,7 @@ describe('renderSmokeViews — a record section reads the `{ items: [record] }` 
 
   const dashboard = () =>
     project({
-      'pages/index.view.json': JSON.stringify({
+      'views/index.view.json': JSON.stringify({
         route: 'index',
         sections: [
           {
@@ -1514,7 +1514,7 @@ describe('renderSmokeViews — a record section reads the `{ items: [record] }` 
     // rows, so `bindingsCovered > 0` and the page is "not empty" — while the stats strip above it
     // renders as a bare heading, exactly what run 202's screenshot shows.
     const root = await project({
-      'pages/index.view.json': JSON.stringify({
+      'views/index.view.json': JSON.stringify({
         route: 'index',
         sections: [
           { kind: 'stats', query: 'shopDashboard', cards: [{ label: 'Bikes in shop', value: '$.in_shop_count' }] },
@@ -1533,7 +1533,7 @@ describe('renderSmokeViews — a record section reads the `{ items: [record] }` 
     const finding = res.errors.find((e) => e.code === 'empty-render');
     expect(finding?.path).toBe('sections[0]'); // …and the dead section is still named
     expect(finding?.message).toBe(
-      'pages/index sections[0]: this stats section draws NOTHING against live data — ' +
+      'views/index sections[0]: this stats section draws NOTHING against live data — ' +
         '1 bound field(s), none of which had a value. Its heading is all a user sees. A bound value ' +
         'that resolves to nothing renders nothing, label and wrapper included (S1), so a section ' +
         'whose every binding is null is a heading over an empty box.',
@@ -1637,7 +1637,7 @@ describe('renderSmokeViews — the render-error tier actually runs', () => {
     // in one instance. Two more mount requirements the wrapper already satisfies came out behind
     // it — the theme provider and a real client — so this asserts the whole tier, not one fix.
     const root = await project({
-      'pages/index.view.json': JSON.stringify({
+      'views/index.view.json': JSON.stringify({
         route: 'index',
         sections: [{ kind: 'list', query: 'listRecipes', item: { title: '$.title' } }],
       }),
