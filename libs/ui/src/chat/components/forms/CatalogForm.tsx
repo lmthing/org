@@ -126,9 +126,15 @@ function btnProps(primary: boolean) {
 export function CatalogForm({
   descriptor,
   onSubmit,
+  onCancel,
 }: {
   descriptor: unknown;
   onSubmit: (value: unknown) => void;
+  /** Renders a Cancel affordance alongside Submit/Yes-No/choice buttons when supplied. The
+   *  main `/chat` surface (`Message.tsx`) omits it — an answered ask there has no way to be
+   *  un-asked. `ReplChatView`'s `AskBlock` passes it, since its ask can legitimately be
+   *  dismissed (the embedded dock, `--web` DevTools, studio agent-chat). */
+  onCancel?: () => void;
 }): React.ReactElement {
   const spec = React.useMemo(() => flattenForm(descriptor), [descriptor]);
   const [values, setValues] = React.useState<Record<string, unknown>>(() =>
@@ -156,12 +162,14 @@ export function CatalogForm({
               button fill, not this label, so it is restated on the wrapped `Prim.Text`. */}
           <Prim.Pressable {...btnProps(true)} onClick={() => onSubmit(true)}><Prim.Text color={btnProps(true).color}>Yes</Prim.Text></Prim.Pressable>
           <Prim.Pressable {...btnProps(false)} onClick={() => onSubmit(false)}><Prim.Text color={btnProps(false).color}>No</Prim.Text></Prim.Pressable>
+          {onCancel ? <Prim.Pressable {...btnProps(false)} onClick={onCancel}><Prim.Text color={btnProps(false).color}>Cancel</Prim.Text></Prim.Pressable> : null}
         </Prim.Box>
       );
     }
     return (
       <Prim.Box display="flex" gap={8} flexWrap="wrap">
         {only.options?.map((o, i) => <Prim.Pressable key={i} {...btnProps(i === 0)} onClick={() => onSubmit(o.value)}>{o.label}</Prim.Pressable>)}
+        {onCancel ? <Prim.Pressable {...btnProps(false)} onClick={onCancel}><Prim.Text color={btnProps(false).color}>Cancel</Prim.Text></Prim.Pressable> : null}
       </Prim.Box>
     );
   }
@@ -176,7 +184,10 @@ export function CatalogForm({
           {f.error ? <Prim.Text fontSize={10} color="var(--destructive)">{f.error}</Prim.Text> : null}
         </Prim.Text>
       ))}
-      <Prim.Pressable {...btnProps(true)} alignSelf="flex-start" onClick={submit}><Prim.Text>{spec.submitLabel}</Prim.Text></Prim.Pressable>
+      <Prim.Box display="flex" gap={8}>
+        <Prim.Pressable {...btnProps(true)} alignSelf="flex-start" onClick={submit}><Prim.Text color={btnProps(true).color}>{spec.submitLabel}</Prim.Text></Prim.Pressable>
+        {onCancel ? <Prim.Pressable {...btnProps(false)} alignSelf="flex-start" onClick={onCancel}><Prim.Text color={btnProps(false).color}>Cancel</Prim.Text></Prim.Pressable> : null}
+      </Prim.Box>
     </Prim.Box>
   );
 }
