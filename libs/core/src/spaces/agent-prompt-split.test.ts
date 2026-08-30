@@ -72,15 +72,17 @@ const SPLIT_AGENTS = [
     space: 'system-appbuilder',
     agent: 'automator',
     domains: ['app_building'],
-    maxBodyLines: 230,
-    priorLines: 781,
-  },
-  {
-    label: 'system-appbuilder/automator',
-    space: 'system-appbuilder',
-    agent: 'automator',
-    domains: ['app_building'],
-    maxBodyLines: 175,
+    /**
+     * Deliberate ratchet — see the body-growth check. (This entry once coexisted with a second,
+     * looser one left over from the original 781-line split; that stale duplicate is removed —
+     * it stopped meaning anything the moment this number went below it.)
+     *
+     * 175 -> 179 on 2026-08-30, for a third live-project action, `iterate_live_project` (add/change
+     * ONE feature on an app that already works — never re-runs build_live_project or
+     * repair_live_project): +4 frontmatter (the new `actions` entry — capability surface, not
+     * prose) folded into the existing repair/iterate routing paragraph rather than a new one.
+     */
+    maxBodyLines: 179,
     priorLines: 184,
   },
 ] as const;

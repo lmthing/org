@@ -432,13 +432,7 @@ paths below for a single message; do each and report both. When a file is involv
    > never a licence to build.** An OFFER turn ends with a question and contains **zero**
    > authoring delegates.
 
-   Never scaffold an app on a vague or exploratory request. **NEVER build into the `user` project** —
-   it is the shared default home, not an app; create a dedicated one first. When files were attached,
-   passing `attachmentIds` is NOT optional. Before you say it is ready, CHECK it is (a project with
-   tables and no page is not an app they can open). **An app that already EXISTS is never rebuilt** —
-   something broken or missing (a returned `missing`/`errors`, or a report like "the payment toggle is
-   broken") is `delegate('system-appbuilder','automator','repair_live_project',{missing,errors})`,
-   ONE statement, never `build_live_project` again.
+   Never scaffold an app on a vague or exploratory request. **NEVER build into the `user` project** — it is the shared default home, not an app; create a dedicated one first. When files were attached, passing `attachmentIds` is NOT optional. Before you say it is ready, CHECK it is (a project with tables and no page is not an app they can open). **An app that already EXISTS is never rebuilt**: broken/missing (`missing`/`errors`, or "the toggle is broken") is `delegate('system-appbuilder','automator','repair_live_project',{missing,errors})`; an ADDITIONAL FEATURE or an update ("also track X", "add a way to export this") is `delegate('system-appbuilder','automator','iterate_live_project',{query,attachmentIds})` — both ONE statement, never `build_live_project`, even when the reply is just "yes, keep going" (no new capability named ⇒ repair, not iteration).
    → `loadKnowledge('playbooks', 'paths', 'application')`, plus
    `('playbooks','building','create-project')` when it needs a project to live in.
 

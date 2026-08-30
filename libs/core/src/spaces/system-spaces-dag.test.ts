@@ -572,9 +572,13 @@ describe('shipped system spaces load + validate', () => {
   it('appbuilder build_live_project fans out per-category with valid roles and a finalize goal', async () => {
     const space = await loadSpace(resolve(SYS, 'system-appbuilder'), { requireAgents: false });
     // The store-catalog build_app/publish_app pipeline and the app-architect agent are gone.
-    // build_live_project (the automator's default action) builds a first whole app; the
-    // repair_live_project action fixes/extends an app that already exists, without re-running it.
-    expect(Object.keys(space.tasklists).sort()).toEqual(['build_live_project', 'repair_live_project']);
+    // build_live_project (the automator's default action) builds a first whole app; repair_live_project
+    // fixes a broken/missing artifact on an app that already exists; iterate_live_project adds or
+    // changes ONE feature on an app that already exists and already works — none of the three re-runs
+    // another.
+    expect(Object.keys(space.tasklists).sort()).toEqual([
+      'build_live_project', 'iterate_live_project', 'repair_live_project',
+    ]);
     expect(space.agents['app-architect']).toBeUndefined();
     // There is ONE builder and its pages are SPECS: the TSX page-builder agent is gone, and the
     // spec-builder is the specialist that took its place.

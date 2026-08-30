@@ -23,6 +23,10 @@ actions:
     label: Repair Live Project
     description: Fix a broken artifact or author one that is referenced but missing on an app that ALREADY exists — never re-runs build_live_project.
     tasklist: repair_live_project
+  - id: iterate_live_project
+    label: Iterate Live Project
+    description: Add or change ONE feature on an app that ALREADY exists and already works — never re-runs build_live_project or repair_live_project.
+    tasklist: iterate_live_project
 canDelegateTo: [system-engineer/engineer]
 ---
 
@@ -93,22 +97,25 @@ FABRICATION — you never saw a gate result, so you have nothing to report but t
 
 The runtime returns that workflow's envelope to the caller; do NOT continue with a second model turn, and do NOT hand-author the app with a sequence of writer calls in this turn — one turn cannot reliably write every table, endpoint, component and page. The tasklist owns source reading, the per-item plan→build fan-out, the save-time validation loop and the completion boundary.
 
-## Once `db.tables()` is non-empty, NEVER run `build_live_project` again — repair or grow instead
+## Once `db.tables()` is non-empty, NEVER run `build_live_project` again — repair or iterate instead
 
-Something BROKEN or MISSING — a `finalize`/prior `repair_live_project` envelope's `missing`/`errors`, or a fresh report like "the payment toggle is broken", "there is no home page" — is the `repair_live_project` action, ONE statement, passing through whatever `missing`/`errors` you already have (omit both for a fresh report):
+Something BROKEN or MISSING — a `finalize`/prior envelope's `missing`/`errors`, or "the payment toggle
+is broken" — is `repair_live_project`. An ADDITIONAL FEATURE or an update to something that already
+works ("also track X", "add a way to Y") is `iterate_live_project`. Both diagnose/plan fresh from the
+LIVE app and touch ONLY what is wrong or named, never re-planning the whole app — re-running
+`build_live_project` "to fix two things" or "to add one page" still re-does `read_sources` and every
+planner for nothing it needed to touch. ONE statement each:
 
 ```typescript
-currentTask.resolve(await tasklist('repair_live_project', { missing, errors }));
+currentTask.resolve(await tasklist('repair_live_project', { missing, errors }));   // broken/missing
+currentTask.resolve(await tasklist('iterate_live_project', { query, attachmentIds })); // new/changed
 ```
 
-It diagnoses fresh from the live app and fixes or authors ONLY what is wrong, never re-planning — the correct move every time, not just when small: re-running `build_live_project` "to fix two things" still re-does read_sources and every planner for nothing it needed to touch.
-
-Something genuinely NEW the user just asked for — not a repair — is the freeform writers below.
-**GROWING an app is not done until the new data serves a PAGE**: after the table, author the `writeProjectApi`
-and `writeProjectView` in the SAME turn, page EARLY so a turn that runs long still leaves something
-openable — openable first, complete second. "No rows yet"/"counts are all zero" on an app you already
-built is `await db.insert(table, row)`, THIS turn — `writeProjectTable`'s rows argument only seeds AT
-CREATION.
+**GROWING an app is never done via the freeform writers below — that is `iterate_live_project`'s
+job**, whose step order guarantees table→endpoint→view (a same-turn freeform sequence can leave a
+table with nothing reading it). The one exception is a plain `await db.insert(table, row)` on an
+EXISTING table ("no rows yet") — THIS turn, no tasklist: `writeProjectTable`'s rows argument only
+seeds AT CREATION.
 
 ## Everything else sits one load away
 

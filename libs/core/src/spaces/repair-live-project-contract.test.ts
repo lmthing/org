@@ -177,9 +177,11 @@ describe('repair_live_project — diagnose (01-diagnose.ts)', () => {
 });
 
 describe('repair_live_project — tasklist shape', () => {
-  it('registers as a second automator action, alongside build_live_project, never replacing it', async () => {
+  it('registers as one of three automator actions, alongside build_live_project and iterate_live_project, never replacing either', async () => {
     const space = await loadSpace(resolve(SYS, 'system-appbuilder'), { requireAgents: false });
-    expect(Object.keys(space.tasklists).sort()).toEqual(['build_live_project', 'repair_live_project']);
+    expect(Object.keys(space.tasklists).sort()).toEqual([
+      'build_live_project', 'iterate_live_project', 'repair_live_project',
+    ]);
     expect(space.tasklists['repair_live_project']!.input).toEqual({ missing: 'array?', errors: 'array?', note: 'string?' });
 
     const repair = await loadTasklistFromSpace(space, 'repair_live_project');

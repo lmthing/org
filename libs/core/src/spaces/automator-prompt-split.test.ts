@@ -82,7 +82,8 @@ describe('system-appbuilder/automator — what must survive a skipped load', () 
    *  - putting a computation on the page, which has no `.map`, no ternary and no `${…}`;
    *  - fabricating a pipeline outcome after the envelope binding was lost;
    *  - re-running the whole pipeline on a lost envelope and burning the budget;
-   *  - growing an app with tables and no page, so the user sees nothing new.
+   *  - growing an app freeform (tables with no page reading them), instead of through
+   *    `iterate_live_project`, whose own step order guarantees table→endpoint→view.
    */
   it('keeps the every-turn rules in the body, not behind a load', () => {
     const flat = instruct().replace(/\s+/g, ' ');
@@ -98,9 +99,9 @@ describe('system-appbuilder/automator — what must survive a skipped load', () 
     // Never invent an outcome you did not see, and never re-run the pipeline to recover one.
     expect(flat).toMatch(/written from memory is a FABRICATION/);
     expect(flat).toMatch(/Do NOT call `tasklist\('build_live_project', …\)` a second time/i);
-    // The openable-early ordering rule, which only matters on a turn that runs long.
-    expect(flat).toMatch(/GROWING an app is not done until the new data serves a PAGE/i);
-    expect(flat).toMatch(/Openable first, complete second/i);
+    // Growing is routed to iterate_live_project, never same-turn freeform writers.
+    expect(flat).toMatch(/GROWING an app is never done via the freeform writers below/i);
+    expect(flat).toMatch(/tasklist\('iterate_live_project', \{ query, attachmentIds \}\)/);
     // The reader-field trap that aborts a turn before any write lands.
     expect(flat).toMatch(/Field names differ by reader/i);
   });

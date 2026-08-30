@@ -36,8 +36,14 @@ describe('system-appbuilder/automator — the empty-app failure', () => {
    * SMALL app (3 tables) authored index + detail + _layout + 2 API routes and served 200, which is
    * what isolates the cause: not a missing gate, but a missing ORDERING rule. The existing gate says
    * a page is required; it did not say to write it EARLY, before the data can eat the turn.
+   *
+   * Growing an app used to be a freeform same-turn sequence with the SAME risk (a table written,
+   * then the turn runs out before the page reading it lands) — `iterate_live_project` replaces that
+   * with a tasklist whose own `dependsOn` chain (table -> endpoint -> view) makes the ordering
+   * STRUCTURAL rather than a prose reminder the model has to remember mid-turn; see
+   * `iterate-live-project-contract.test.ts`'s tasklist-shape assertions for that chain.
    */
-  it('routes a first whole-app build to the tasklist and keeps the openable-early gate for the freeform grow path', () => {
+  it('routes a first whole-app build to the tasklist, and growth to iterate_live_project, never freeform', () => {
     const instruct = readFileSync(join(SYSTEM_SPACES, 'system-appbuilder', 'agents', 'automator', 'instruct.md'), 'utf8');
 
     // The reliability guarantee: a first whole-app build NEVER goes freeform — it runs the pipeline.
@@ -46,12 +52,9 @@ describe('system-appbuilder/automator — the empty-app failure', () => {
       'a first whole-app build must route to build_live_project, never freeform in one turn (freeform is the single-page/empty-app failure)',
     ).toMatch(/ALWAYS runs the `build_live_project` tasklist — never freeform/i);
 
-    // The page-required gate still applies to the freeform GROW path.
-    expect(instruct).toMatch(/not done until the new data serves a PAGE/i);
-
-    // The ordering rule (the one that survives running out of turn) — the regression guard.
-    expect(instruct).toMatch(/openable first|make it openable early/i);
-    expect(instruct).toMatch(/turn that runs long|run out of turn|cut off/i);
+    // Growth is never freeform either — it is `iterate_live_project`'s job now.
+    expect(instruct).toMatch(/GROWING an app is never done via the freeform writers below/i);
+    expect(instruct).toMatch(/tasklist\('iterate_live_project', \{ query, attachmentIds \}\)/);
   });
 });
 
@@ -646,7 +649,7 @@ describe('system-appbuilder repair turns', () => {
     );
     // The one-liner is ALWAYS ON — once an app exists, broken/missing routes to repair_live_project,
     // never a same-turn freeform patch and never build_live_project again.
-    expect(automator).toMatch(/NEVER run `build_live_project` again — repair or grow instead/i);
+    expect(automator).toMatch(/NEVER run `build_live_project` again — repair or iterate instead/i);
     expect(automator).toMatch(/tasklist\('repair_live_project', \{ missing, errors \}\)/);
 
     const authorMissing = readFileSync(
