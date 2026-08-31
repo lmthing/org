@@ -196,8 +196,12 @@ describe('shipped system spaces load + validate', () => {
     // build_app builds the app part via the automator (depends on add_specialist so a skipped
     // conditional dep still satisfies — findReadyTasks treats skipped as done).
     expect(add['build_app']!.dependsOn).toEqual(['assess', 'add_specialist']);
-    expect(add['build_app']!.canDelegateTo).toEqual(['system-appbuilder/automator#build_live_project']);
-    expect(add['build_app']!.instruction).toContain('build_live_project');
+    // ITERATE, not build: add_area adds an area to a project that ALREADY EXISTS ("directly into
+    // THIS project"), so build_live_project would re-run the whole first-build pipeline instead of
+    // making the one change. The instruction also NAMES build_live_project in prose (explaining why
+    // it is wrong here), so assert on the delegate CALL, not a bare substring that prose satisfies.
+    expect(add['build_app']!.canDelegateTo).toEqual(['system-appbuilder/automator#iterate_live_project']);
+    expect(add['build_app']!.instruction).toContain("'iterate_live_project'");
     expect(add['build_app']!.goal).toBeFalsy();
 
     // report is the UNCONDITIONAL goal terminal merging both branches (assess always, add_specialist

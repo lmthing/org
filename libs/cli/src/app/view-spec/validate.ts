@@ -40,7 +40,7 @@ import { pathToFileURL } from 'node:url';
 
 import type { EndpointContract } from '../build/schema.js';
 import { braceBody } from '../authoring/lint.js';
-import { SHELL_SPEC_PATH, loadProjectViews, viewSpecPath } from './files.js';
+import { SHELL_SPEC_PATH, loadProjectViews, viewSpecPath, type LoadedViews } from './files.js';
 import {
   alwaysNullBinding,
   badBindingRoot,
@@ -753,6 +753,14 @@ interface WalkCtx {
   /** The route of the page being validated. `undefined` inside a component def — see checkNavigation. */
   pageRoute: string | undefined;
   routeParams: Set<string>;
+  /**
+   * True only while walking a PAGE spec, whose `routeParams` is therefore the complete truth
+   * about what `$route.*` can resolve. A component def is validated with NO route (its host
+   * page is unknown at write time) and a layout is validated against its own PREFIX — the
+   * renderer hands layout sections the PAGE's params — so for both, an empty `routeParams`
+   * must mean "not knowable here", never "this route has no parameters".
+   */
+  routeParamsKnown: boolean;
   /** Declared prop names — set only while walking a component definition. */
   propNames: Set<string> | undefined;
   /** Field universe of the current scope's endpoint. `undefined` ⇒ do not check `$.x`. */
@@ -763,6 +771,16 @@ interface WalkCtx {
   resultFields: Set<string> | undefined;
   /** Input keys of the mutation whose `prefill.input` we are inside. */
   formFields: Set<string> | undefined;
+  /**
+   * True ONLY while walking a SECTION's own `input`/`param` — the CALL-TIME arguments its query
+   * is invoked with. In that position a bare `$.field` binding is circular (it reads the query's
+   * own result, which exists only after the call), so checkString rejects it there — while the
+   * same `$.field` stays the row/result binding everywhere else (item/fields/value, and an
+   * ACTION's input, where `$.id` is the row the action fires on — see schema.ts's Wave-2 note).
+   * Set only by walkSpec's section loop, never by walkNode's generic descent, so nested inputs
+   * (action.input, prefill.input) are never flagged.
+   */
+  inSectionInput: boolean;
 }
 
 function childPath(path: string, key: string): string {
@@ -921,7 +939,12 @@ function checkString(value: string, path: string, key: string, ctx: WalkCtx): vo
     return;
   }
   if (root === 'route') {
-    if (ctx.routeParams.size && first && !ctx.routeParams.has(first)) {
+    // `routeParamsKnown` (a PAGE spec) ⇒ flag ANY `$route.*` this page's route cannot supply,
+    // including the zero-param case — a `$route.id` on a param-less route resolves to nothing,
+    // the query it feeds never fires, and the page renders skeletons forever with no error.
+    // Otherwise (component def, layout) the check stays size-guarded: an empty set there means
+    // "not knowable here", not "no parameters".
+    if ((ctx.routeParamsKnown || ctx.routeParams.size) && first && !ctx.routeParams.has(first)) {
       ctx.errors.push(
         viewError(
           'bad-binding',
@@ -970,6 +993,25 @@ function checkString(value: string, path: string, key: string, ctx: WalkCtx): vo
   // `$.field` — the current scope. `'$.title'.slice(1).split('.')` is `['', 'title']`, so the
   // root is empty and the field is the first segment.
   if (root !== '') return; // an unknown root reaching here would already have failed isBinding
+  if (ctx.inSectionInput) {
+    // CIRCULAR: a section's input is what its query is CALLED with, so `$.field` there reads the
+    // query's own result — which exists only after the call. The renderer resolves input BEFORE
+    // the fetch (`useSectionSource` gates it on `inputs.ready`), so the value is never present,
+    // the query never fires, and the page renders loading skeletons forever with no error —
+    // the exact silent failure a `$route.<param>` on a param-less route produces.
+    ctx.errors.push(
+      viewError(
+        'bad-binding',
+        path,
+        `${path}: "${value}" — a section's input is what its query is CALLED with, so it cannot ` +
+          `bind the query's own result (a $.field exists only once that result has arrived; the ` +
+          `query would wait on itself forever and never fire). Bind a value that exists BEFORE the ` +
+          `call: a $route.<param> this page's route supplies, a $data.<sectionId>.<field> an ` +
+          `EARLIER section on this page published, or a literal.`,
+      ),
+    );
+    return;
+  }
   if (first && ctx.fields && ctx.fieldsFrom && !ctx.fields.has(first)) {
     ctx.errors.push(unknownField(path, value, ctx.fieldsFrom, [...ctx.fields]));
   }
@@ -1207,6 +1249,7 @@ function walkSpec(
    */
   ctx.pageRoute = kind === 'layout' ? undefined : view.route;
   ctx.routeParams = new Set([...view.route.matchAll(/\[([A-Za-z][A-Za-z0-9]*)\]/g)].map((m) => m[1]));
+  ctx.routeParamsKnown = kind === 'page';
   for (const s of view.sections) if (s.id) ctx.sectionIds.add(s.id);
 
   // Two passes: a section's `from` may address a section declared before it, so every scope has to
@@ -1251,7 +1294,16 @@ function walkSpec(
 
     for (const [k, v] of Object.entries(rec)) {
       if (k === 'kind' || k === 'id' || k === 'query' || k === 'mutation' || k === 'from') continue;
+      // A QUERY section's `input`/`param` are call-time arguments — walk them with
+      // `inSectionInput` set so checkString rejects a circular `$.field` there. Only HERE:
+      // a create section's `input` instead supplies its mutation, while an action's
+      // `input: { id: '$.id' }` binds the ROW the action fires on (both legal); and
+      // `from: '$.field'` projects the query's OWN Output after the response arrives.
+      const callTime = typeof rec['query'] === 'string' && (k === 'input' || k === 'param');
+      const wasCallTime = ctx.inSectionInput;
+      if (callTime) ctx.inSectionInput = true;
       walkNode(v, childPath(path, k), k, ctx);
+      ctx.inSectionInput = wasCallTime;
     }
     ctx.resultFields = undefined;
     ctx.formFields = undefined;
@@ -1359,11 +1411,13 @@ function makeCtx(input: ContractsLike | ViewContracts): WalkCtx {
     sectionIds: new Set(),
     pageRoute: undefined,
     routeParams: new Set(),
+    routeParamsKnown: false,
     propNames: undefined,
     fields: undefined,
     fieldsFrom: undefined,
     resultFields: undefined,
     formFields: undefined,
+    inSectionInput: false,
   };
 }
 
@@ -1443,15 +1497,32 @@ function underPrefix(route: string, prefix: string): boolean {
  * every endpoint answers — and three of the pages have no way in. The appbuilder shipped exactly
  * that (scenario 07's `/vault-dashboard`), and no static check on any one page could have found it.
  */
-export async function validateAppViews(
-  projectRoot: string,
-  opts: { contracts?: ContractsLike } = {},
-): Promise<ViewValidationResult> {
-  const loaded = loadProjectViews(projectRoot);
+/**
+ * The whole-app sweep over an ALREADY-LOADED set of view artifacts — the sync core of
+ * {@link validateAppViews}, extracted so a caller that already has the app in memory can run the
+ * SAME checks without touching disk. The delete-side guards in `app/authoring/globals.ts` use it
+ * to validate the POST-DELETE state before anything is removed: they load the app, drop the
+ * artifact being deleted from the in-memory set, and run this over the remainder, so a delete is
+ * refused by exactly the findings the shipped app-wide gate would report afterwards.
+ *
+ * `agents` is passed in rather than loaded here because it is a project property, not a view
+ * artifact — it cannot change by deleting a view/component/layout/endpoint, and the guards run
+ * before/after comparisons where an unrelated reload would only add noise.
+ */
+export function appViewFindings(
+  loaded: LoadedViews,
+  contracts: ContractsLike | ViewContracts,
+  agents: Record<string, string[]> | undefined,
+): ViewValidationResult {
   const errors: ViewError[] = loaded.malformed.map((m) => malformedArtifact(m.path, m.message));
 
   if (loaded.views.length === 0) {
-    // An empty result is what a pipeline reads as "clean" — say the opposite, loudly.
+    // An empty result is what a pipeline reads as "clean" — say the opposite, loudly. But do NOT
+    // early-return: whatever shell/layouts/components ARE on disk still get validated below (with
+    // `routes: []`), because a shell whose nav points at routes that no longer exist is a fault
+    // even on a pageless app. This is load-bearing for the DELETE guards in
+    // `app/authoring/globals.ts`: retiring the LAST page must still be refused while the shell
+    // navigates to it, and an early return here is exactly the hole that would let it through.
     errors.push(
       viewError(
         'no-data',
@@ -1460,14 +1531,8 @@ export async function validateAppViews(
           `writeProjectView, nothing landed.`,
       ),
     );
-    return resultOf(errors, 0);
   }
 
-  // Bound before the await: TS drops a property's narrowing across one, and `opts.contracts` would
-  // read back as possibly-undefined in the expression that consumes it.
-  const supplied = opts.contracts;
-  const contracts: ContractsLike =
-    supplied ?? (await import('../build/contracts.js').then((m) => m.generateProjectContracts(projectRoot)));
   const routes = loaded.views.map((v) => v.route);
   const components = loaded.components.map((c) => c.def);
   // `routesComplete` is the whole point of running here: every page is on disk now, so a
@@ -1477,7 +1542,7 @@ export async function validateAppViews(
     ...toViewContracts(contracts),
     components,
     routes,
-    agents: loadProjectAgents(projectRoot),
+    agents,
     routesComplete: true,
   };
 
@@ -1556,6 +1621,25 @@ export async function validateAppViews(
   }
 
   return resultOf(errors, loaded.views.length + loaded.components.length);
+}
+
+/**
+ * Whole-app view validation, fresh from disk: orphan pages, dead components, nav targets, pages
+ * that read nothing — the shipped gate `validateAppViews` code nodes and the REST check call.
+ * Loads every `*.view.json` + the endpoint contracts, then runs the sync sweep
+ * {@link appViewFindings} over the loaded set.
+ */
+export async function validateAppViews(
+  projectRoot: string,
+  opts: { contracts?: ContractsLike } = {},
+): Promise<ViewValidationResult> {
+  const loaded = loadProjectViews(projectRoot);
+  // Bound before the await: TS drops a property's narrowing across one, and `opts.contracts` would
+  // read back as possibly-undefined in the expression that consumes it.
+  const supplied = opts.contracts;
+  const contracts: ContractsLike =
+    supplied ?? (await import('../build/contracts.js').then((m) => m.generateProjectContracts(projectRoot)));
+  return appViewFindings(loaded, contracts, loadProjectAgents(projectRoot));
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

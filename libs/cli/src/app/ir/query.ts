@@ -33,7 +33,7 @@ import {
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 /** The declarative query kinds (tier 1, §7). */
-export type QueryKind = 'list' | 'get' | 'aggregate' | 'create' | 'update' | 'toggle';
+export type QueryKind = 'list' | 'get' | 'aggregate' | 'create' | 'update' | 'toggle' | 'delete';
 
 /** A comparison operator in a `where` clause. `is-null`/`not-null` take no value. */
 export type WhereOp =
@@ -123,7 +123,7 @@ export interface GeneratedHandler {
   source: string;
 }
 
-const KINDS = new Set<QueryKind>(['list', 'get', 'aggregate', 'create', 'update', 'toggle']);
+const KINDS = new Set<QueryKind>(['list', 'get', 'aggregate', 'create', 'update', 'toggle', 'delete']);
 const METHODS = new Set<HttpMethod>(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const WHERE_OPS = new Set<WhereOp>([
   '=', '!=', 'in', 'not-in', 'gt', 'gte', 'lt', 'lte', 'contains', 'is-null', 'not-null',
@@ -139,6 +139,8 @@ export function defaultMethod(kind: QueryKind): HttpMethod {
     case 'update':
     case 'toggle':
       return 'PATCH';
+    case 'delete':
+      return 'DELETE';
     default:
       return 'GET';
   }
@@ -333,6 +335,9 @@ export function validateQueryIr(ir: unknown, tables: Map<string, TableSchema>): 
   }
   if (kind === 'update' && routeParams(String(q.route)).length === 0 && !(q.where && (q.where as unknown[]).length)) {
     push('an "update" needs a [param] in its route (or a "where") to identify the row to change');
+  }
+  if (kind === 'delete' && routeParams(String(q.route)).length === 0 && !(q.where && (q.where as unknown[]).length)) {
+    push('a "delete" needs a [param] in its route (or a "where") to identify the row to remove');
   }
   if (kind === 'toggle') {
     if (typeof q.toggleField !== 'string') push('a "toggle" needs "toggleField" (the boolean column to flip)');
@@ -583,7 +588,7 @@ export function generateQueryHandler(ir: QueryIr, tables: Map<string, TableSchem
   const method = ir.method ?? defaultMethod(ir.kind);
   const params = routeParams(ir.route);
   const idParam = params[0];
-  const needHttpError = ir.kind === 'get' || ir.kind === 'update' || ir.kind === 'toggle';
+  const needHttpError = ir.kind === 'get' || ir.kind === 'update' || ir.kind === 'toggle' || ir.kind === 'delete';
 
   const inputs = inputProps(ir, table);
   const inputDecl = inputs.length
@@ -662,6 +667,17 @@ export function generateQueryHandler(ir: QueryIr, tables: Map<string, TableSchem
       `  const n = await ctx.db.update(${JSON.stringify(ir.entity)}, { where: { ${JSON.stringify(pk)}: input[${JSON.stringify(idParam)}] }, set: ${setLiteral(plainSetEntries(ir.set))} });`,
       `  if (n === 0) throw new HttpError(404, ${JSON.stringify(`no ${ir.entity} to update`)});`,
       `  const [row] = (await ctx.db.query(${JSON.stringify(ir.entity)})).filter((r) => r[${JSON.stringify(pk)}] === input[${JSON.stringify(idParam)}]);`,
+      `  return { items: [row as _Item] };`,
+      `}`,
+    ];
+  } else if (ir.kind === 'delete') {
+    const pk = primaryKeyOf(table);
+    outputDecl = `interface _Item {\n${itemFields(ir, table).map((f) => `  ${f}`).join('\n')}\n}\nexport interface Output { items: _Item[]; }`;
+    body = [
+      `export default async function handler(input: Input, ctx: _Ctx): Promise<Output> {`,
+      `  const [row] = (await ctx.db.query(${JSON.stringify(ir.entity)})).filter((r) => r[${JSON.stringify(pk)}] === input[${JSON.stringify(idParam)}]);`,
+      `  if (!row) throw new HttpError(404, ${JSON.stringify(`no such ${ir.entity}`)});`,
+      `  await ctx.db.remove(${JSON.stringify(ir.entity)}, { where: { ${JSON.stringify(pk)}: input[${JSON.stringify(idParam)}] } });`,
       `  return { items: [row as _Item] };`,
       `}`,
     ];

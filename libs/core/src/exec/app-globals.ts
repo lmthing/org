@@ -111,6 +111,18 @@ export interface AppGlobalImpls {
    *  to `<projectRoot>/api/<route>/<METHOD>.ts`, so a list/get/aggregate/create/update/toggle endpoint
    *  cannot disagree with its own contract. */
   writeProjectQuery?: (name: string, query: unknown) => AuthoringResult;
+  /** Delete twins of the writers above — retire ONE artifact of the matching kind. Each is
+   *  guarded: a delete that would leave a view/shell referencing a ghost (a nav entry, a
+   *  `{ use: … }`, a page's query) returns `{ ok: false }` naming the referencing file(s), and
+   *  deleting a missing artifact is `{ ok: false }`, never a silent success. Tables are NOT
+   *  deletable (they hold user data; `db.remove` is host-only by design) and there is no generic
+   *  file delete. Gated by the SAME capability as the corresponding write. */
+  deleteProjectView?: (route: string) => AuthoringResult;
+  deleteProjectViewComponent?: (name: string) => AuthoringResult;
+  deleteProjectViewLayout?: (prefix: string) => AuthoringResult;
+  deleteProjectApi?: (route: string) => AuthoringResult;
+  deleteProjectQuery?: (name: string) => AuthoringResult;
+  deleteProjectHook?: (slug: string) => AuthoringResult;
   /** LIVE-project VIEW-SPEC writers (`views:write`) — the ONLY UI-authoring surface: a page as
    *  validated DATA, rendered by the shared `ViewRenderer` on the web bundle and natively in the
    *  mobile app. `writeProjectView` persists the spec; `writeProjectViewLayout` writes a nested
@@ -252,6 +264,14 @@ export function injectAppGlobals(
     injectGlobal(ctx, 'writeProjectViewLayout', impls.writeProjectViewLayout as (...a: unknown[]) => unknown);
   if (app['views:write'] && impls.writeProjectViewComponent) injectGlobal(ctx, 'writeProjectViewComponent', impls.writeProjectViewComponent as (...a: unknown[]) => unknown);
   if (app['views:write'] && impls.writeProjectViewShell) injectGlobal(ctx, 'writeProjectViewShell', impls.writeProjectViewShell as (...a: unknown[]) => unknown);
+  // The DELETE twins — same grants as the writes they mirror, so an agent that may author a
+  // kind of artifact may also retire it, and nothing else can.
+  if (app['views:write'] && impls.deleteProjectView) injectGlobal(ctx, 'deleteProjectView', impls.deleteProjectView as (...a: unknown[]) => unknown);
+  if (app['views:write'] && impls.deleteProjectViewComponent)
+    injectGlobal(ctx, 'deleteProjectViewComponent', impls.deleteProjectViewComponent as (...a: unknown[]) => unknown);
+  if (app['views:write'] && impls.deleteProjectViewLayout) injectGlobal(ctx, 'deleteProjectViewLayout', impls.deleteProjectViewLayout as (...a: unknown[]) => unknown);
+  if (app['api:write'] && impls.deleteProjectApi) injectGlobal(ctx, 'deleteProjectApi', impls.deleteProjectApi as (...a: unknown[]) => unknown);
+  if (app['api:write'] && impls.deleteProjectQuery) injectGlobal(ctx, 'deleteProjectQuery', impls.deleteProjectQuery as (...a: unknown[]) => unknown);
   if (app['api:write'] && impls.writeProjectApi) injectGlobal(ctx, 'writeProjectApi', impls.writeProjectApi as (...a: unknown[]) => unknown);
   if (app['api:write'] && impls.writeProjectQuery) injectGlobal(ctx, 'writeProjectQuery', impls.writeProjectQuery as (...a: unknown[]) => unknown);
   // Live-project authoring (S11) — same `hooks:write` grant, but these write into the
@@ -259,6 +279,7 @@ export function injectAppGlobals(
   // supplies them (a project-rooted session); a catalog-only appbuilder session leaves
   // them absent, so a stray call there fails typecheck rather than mis-targeting.
   if (app['hooks:write'] && impls.writeProjectHook) injectGlobal(ctx, 'writeProjectHook', impls.writeProjectHook as (...a: unknown[]) => unknown);
+  if (app['hooks:write'] && impls.deleteProjectHook) injectGlobal(ctx, 'deleteProjectHook', impls.deleteProjectHook as (...a: unknown[]) => unknown);
   if (app['hooks:write'] && impls.writeProjectEvent) injectGlobal(ctx, 'writeProjectEvent', impls.writeProjectEvent as (...a: unknown[]) => unknown);
   if (app['hooks:write'] && impls.writeProjectFunction) injectGlobal(ctx, 'writeProjectFunction', impls.writeProjectFunction as (...a: unknown[]) => unknown);
   // The LIVE-project table writer — same `db:schema` grant, but it targets the session's

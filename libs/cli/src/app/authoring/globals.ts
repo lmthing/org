@@ -7,7 +7,9 @@
  * events/ functions/ components/` dirs. A writer here does exactly one thing:
  * validate the input, write ONE file (creating its parent dirs), fire the
  * project's republish/re-derive side effect, and return `{ ok, error? }` — never
- * a bulk delete. The old STORE-CATALOG authoring engine (`createAppAuthoringGlobals`,
+ * a bulk delete. The APP-authoring writers additionally REFUSE when the bound
+ * project is the personal `user` workspace (or the reserved `system` tree) — a
+ * built app may never land there; see the guard in `createProjectAuthoringGlobals`. The old STORE-CATALOG authoring engine (`createAppAuthoringGlobals`,
  * which templated `store/projects/<id>/`) has been removed: THING now creates a
  * LIVE project and delegates the build INTO it (see `SessionManager` `resolveBuildTarget`).
  *
@@ -17,10 +19,10 @@
  * `appGlobals` — it is simply never exposed to a capability-less agent.
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { runProjectAppCheck } from '../build/check.js';
 import type { AppCheckResult } from '../build/check.js';
-import { dirname, join, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { transformSync } from 'esbuild';
 import { validateTableSchema, parseFrontmatter, type TableSchema } from '@lmthing/core';
 import {
@@ -36,8 +38,9 @@ import { saveTypecheckError } from './save-typecheck.js';
 import { validateEntityIr, compileEntity, type EntityIr, type FactRecord } from '../ir/entity.js';
 import { validateQueryIr, generateQueryHandler, type QueryIr } from '../ir/query.js';
 import { serializeTableSchema } from '../ir/check.js';
-import { SHELL_SPEC_PATH, viewComponentPath, viewLayoutPath, viewSpecPath } from '../view-spec/files.js';
+import { SHELL_SPEC_PATH, loadProjectViews, viewComponentPath, viewLayoutPath, viewSpecPath, type LoadedViews } from '../view-spec/files.js';
 import {
+  appViewFindings,
   formatViewErrors,
   loadViewContracts,
   renderSmokeViews,
@@ -48,6 +51,9 @@ import {
   validateViewSpec,
   type ApiCaller,
   type RenderSmokeResult,
+  type ViewContracts,
+  type ViewEndpoint,
+  type ViewError,
   type ViewValidationResult,
 } from '../view-spec/validate.js';
 import {
@@ -57,6 +63,7 @@ import {
   type ViewLayoutSpec,
   type ViewSpec,
 } from '../view-spec/schema.js';
+import { DEFAULT_PROJECT_ID, SYSTEM_PROJECT_ID } from '../../server/projects.js';
 
 /** Throw a {@link LintError} when a lint check returned a message, so it surfaces to the model as a
  *  retryable error (like a typecheck failure) instead of a `{ ok:false }` a node might ignore. Each
@@ -227,6 +234,29 @@ export interface ProjectAuthoringGlobals {
    *  handler still passes every gate a hand-written one does (lint, typing, project typecheck); a
    *  genuinely bespoke endpoint keeps `writeProjectApi`/`api/<name>.handler.ts` as its escape hatch. */
   writeProjectQuery: (name: string, query: unknown) => { ok: boolean; error?: string };
+  /** Delete `views/<route>.view.json` — the delete twin of {@link ProjectAuthoringGlobals.writeProjectView},
+   *  for retiring a superseded/broken page. REFUSED while anything still references the route
+   *  (shell nav/groups/subnav, another page's navigate/link): the error names the referencing
+   *  file(s); repoint or delete those first. Deleting a route that has no spec is `{ ok: false }`
+   *  (never a silent success, never a throw). Tables are NOT deletable — a table holds user data
+   *  (`db.remove` is host-only by design) — and no generic file delete exists. */
+  deleteProjectView: (route: string) => { ok: boolean; error?: string };
+  /** Delete `components/<Name>.view.json` — REFUSED while any view/layout/component still
+   *  references it as `{ use: '<Name>' }` (the error names the referencing file(s)). */
+  deleteProjectViewComponent: (name: string) => { ok: boolean; error?: string };
+  /** Delete `views/<prefix>/_layout.view.json` — REFUSED when removing the frame would leave a
+   *  page under the prefix unreachable or otherwise fault the app (the error names what breaks). */
+  deleteProjectViewLayout: (prefix: string) => { ok: boolean; error?: string };
+  /** Delete `api/<path>/<METHOD>.ts` (route encodes the method last, exactly like
+   *  {@link ProjectAuthoringGlobals.writeProjectApi}) — REFUSED while any view still queries or
+   *  mutates the endpoint's `export const name` (the error names the referencing page(s)). */
+  deleteProjectApi: (route: string) => { ok: boolean; error?: string };
+  /** Delete `api/<name>.query.json` AND the handler it generated — REFUSED while any view still
+   *  uses the endpoint (same guard as {@link ProjectAuthoringGlobals.deleteProjectApi}). */
+  deleteProjectQuery: (name: string) => { ok: boolean; error?: string };
+  /** Delete `hooks/<slug>.ts` and republish (the webhook manifest + crontab re-derive from the
+   *  remaining hooks). A hook is a consumer nothing references, so there is no reference guard. */
+  deleteProjectHook: (slug: string) => { ok: boolean; error?: string };
   /** List the files under `<projectRoot>/<dir>` (e.g. 'database', 'hooks', 'events') — the
    *  read-side twin of the writers. Project-rooted (NOT the space dir), so a delegated
    *  system-space agent can see the PROJECT's contents. Returns `entries: []` for a missing dir. */
@@ -294,6 +324,10 @@ const ALLOWED_GENERATED_FILE = /^types\/[A-Za-z0-9_.-]+\.d\.ts$/;
 
 export function createProjectAuthoringGlobals(opts: {
   projectRoot: string;
+  /** The project's id — the basename of the `<lmthingRoot>/<projectId>/` dir the writers target.
+   *  REQUIRED (not defaulted, not derived) so every caller states it and the non-buildable-project
+   *  guard below always has the host's own notion of which project this is. */
+  projectId: string;
   republish?: () => void;
   /** Called after a successful `writeProjectTable` — the host re-derives the project's
    *  db from `database/*.json` (a project with no tables has NO db at all, so the first
@@ -311,7 +345,51 @@ export function createProjectAuthoringGlobals(opts: {
    *  Omit for a project with no `api/` — the global is then simply absent. */
   callProjectApi?: (name: string, input?: unknown) => Promise<{ status: number; body: unknown }>;
 }): ProjectAuthoringGlobals {
-  const { projectRoot, republish, onSchemaWrite, onAppWrite, callProjectApi } = opts;
+  const { projectRoot, projectId, republish, onSchemaWrite, onAppWrite, callProjectApi } = opts;
+
+  // ── the personal-workspace guard ────────────────────────────────────────────
+  //
+  // `"user"` is the personal THING workspace: it holds the host-written chat scaffold
+  // (`projects.ts#scaffoldAppFromBirthSync` / `#ensureAppFromBirthSync` — `views/index.view.json`
+  // + `shell.view.json`, written DIRECTLY by the host, never through these globals) and the
+  // user's spaces — NEVER a built app. The agent prompts have always said THING refuses to
+  // build into it, but a prompt is prose: found live, a build_live_project run whose automator
+  // was never retargeted authored a whole app INTO `.lmthing/user/` (a shell, 5 views, 2
+  // components, 4 api handlers, 2 tables). The writer is where faults are caught, so the
+  // refusal lives HERE — `{ ok:false }` with retarget instructions, not a throw.
+  //
+  // `"system"` is refused from the other side: it is the reserved system-spaces tree, not a
+  // project (`projects.ts#SYSTEM_PROJECT_ID`), so an app authored there would pollute the
+  // shipped runtime tree. No session runs on it today; the guard makes that permanent.
+  //
+  // Keyed off BOTH the explicit id and the root's basename (the on-disk layout is
+  // `<lmthingRoot>/<projectId>/`, so the basename IS the id): a pair that disagrees is a caller
+  // bug, and failing closed is the safe direction for that too.
+  const rootName = basename(resolve(projectRoot));
+  const nonBuildableId =
+    projectId === DEFAULT_PROJECT_ID || rootName === DEFAULT_PROJECT_ID
+      ? DEFAULT_PROJECT_ID
+      : projectId === SYSTEM_PROJECT_ID || rootName === SYSTEM_PROJECT_ID
+        ? SYSTEM_PROJECT_ID
+        : null;
+  const refuseNonBuildable = (writer: string): { ok: boolean; error: string } =>
+    nonBuildableId === SYSTEM_PROJECT_ID
+      ? {
+          ok: false,
+          error:
+            `${writer} refused: "system" is the reserved system-spaces tree, not a project — an app ` +
+            `cannot be built there. Create a real project with createProject(...) (or retarget an ` +
+            `existing one with selectProject(...)) and author the app there.`,
+        }
+      : {
+          ok: false,
+          error:
+            `${writer} refused: "user" is the personal THING workspace — it can never hold a built app. ` +
+            `Its views/ and shell.view.json are the host-written chat scaffold, not an app surface; personal ` +
+            `automations still belong here (hooks/events/functions stay writable). Create a real project ` +
+            `with createProject(...) — or retarget an existing one with selectProject(...) — and author the ` +
+            `app there.`,
+        };
 
   /** Write `rel` under the project root, then fire the republish (best-effort). */
   function writeUnder(rel: string, src: string): { ok: boolean; error?: string } {
@@ -563,6 +641,7 @@ export function createProjectAuthoringGlobals(opts: {
     schema: unknown,
     rows?: unknown[],
   ): { ok: boolean; error?: string } {
+    if (nonBuildableId) return refuseNonBuildable('writeProjectTable');
     try {
       assertTableName(name);
       validateTableSchema(name, schema as TableSchema);
@@ -639,6 +718,7 @@ export function createProjectAuthoringGlobals(opts: {
     entity: unknown,
     rows?: unknown[],
   ): { ok: boolean; error?: string } {
+    if (nonBuildableId) return refuseNonBuildable('writeProjectEntity');
     try {
       assertTableName(name);
       if (!entity || typeof entity !== 'object' || Array.isArray(entity)) {
@@ -712,6 +792,7 @@ export function createProjectAuthoringGlobals(opts: {
    * checks live in the writer rather than in a downstream gate.
    */
   function writeProjectView(route: string, spec: unknown): { ok: boolean; error?: string } {
+    if (nonBuildableId) return refuseNonBuildable('writeProjectView');
     let rel: string;
     let normalized: ViewSpec;
     try {
@@ -758,6 +839,7 @@ export function createProjectAuthoringGlobals(opts: {
    * makes a layout a layout: exactly one `outlet`.
    */
   function writeProjectViewLayout(prefix: string, spec: unknown): { ok: boolean; error?: string } {
+    if (nonBuildableId) return refuseNonBuildable('writeProjectViewLayout');
     let rel: string;
     let normalized: ViewLayoutSpec;
     try {
@@ -805,6 +887,7 @@ export function createProjectAuthoringGlobals(opts: {
    * declared and typed, references acyclic, bindings well-formed).
    */
   function writeProjectViewComponent(name: string, def: unknown): { ok: boolean; error?: string } {
+    if (nonBuildableId) return refuseNonBuildable('writeProjectViewComponent');
     let normalized: ViewComponentSpec;
     try {
       if (!COMPONENT_NAME_RE.test(name)) {
@@ -840,6 +923,7 @@ export function createProjectAuthoringGlobals(opts: {
 
   /** Write the app SHELL — nav, groups, per-entity subnav, brand, assistant dock. */
   function writeProjectViewShell(shell: unknown): { ok: boolean; error?: string } {
+    if (nonBuildableId) return refuseNonBuildable('writeProjectViewShell');
     try {
       if (!shell || typeof shell !== 'object' || Array.isArray(shell)) {
         throw new Error(`writeProjectViewShell(…) expects a shell OBJECT — got ${Array.isArray(shell) ? 'an array' : typeof shell}.`);
@@ -868,6 +952,7 @@ export function createProjectAuthoringGlobals(opts: {
    * mirror the catalog writer.
    */
   function writeProjectApi(route: string, src: string): { ok: boolean; error?: string } {
+    if (nonBuildableId) return refuseNonBuildable('writeProjectApi');
     let target: string;
     try {
       const rel = assertPathSegments('api route', route);
@@ -924,6 +1009,7 @@ export function createProjectAuthoringGlobals(opts: {
    * path and fell back to hand-writing every endpoint.
    */
   function writeProjectQuery(name: string, query: unknown): { ok: boolean; error?: string } {
+    if (nonBuildableId) return refuseNonBuildable('writeProjectQuery');
     let generated: ReturnType<typeof generateQueryHandler>;
     let target: string;
     try {
@@ -976,6 +1062,323 @@ export function createProjectAuthoringGlobals(opts: {
       }
     }
     return handlerOut;
+  }
+
+  // ── deleters — the delete twins of the writers, guarded by the app they leave behind ─────
+  //
+  // The writers can only ADD/EDIT; nothing could RETIRE an artifact. Live, repair correctly
+  // fixed a broken param-less page by creating views/<route>/[id].view.json — and then could not
+  // remove the superseded views/<route>.view.json, which stayed on disk and wired into nav, so
+  // the user-visible bug survived every repair round. These six mirror the write surface ONE
+  // KIND AT A TIME (no generic file delete — the same closed-surface principle as the writers)
+  // and refuse any delete that would leave the app referencing a ghost.
+
+  /** Delete `rel` under the project root, prune now-empty parent dirs (never a DIRECT child of
+   *  the root — `views/`, `api/`, … stay put), then fire the republish (best-effort, like
+   *  {@link writeUnder}'s — the delete itself has already landed when we return). */
+  function deleteUnder(rel: string): { ok: boolean; error?: string } {
+    try {
+      const target = safeResolve(projectRoot, rel);
+      if (!existsSync(target)) return { ok: false, error: `no such file: ${rel}` };
+      rmSync(target);
+      let dir = dirname(target);
+      const rootAbs = resolve(projectRoot);
+      // A depth >= 2 dir is deeper than a direct child of the root, so `views/dog-detail/` goes
+      // when its last file does, but `views/` itself never does.
+      while (relative(rootAbs, dir).split(sep).length >= 2) {
+        try {
+          if (readdirSync(dir).length > 0) break;
+          // `recursive: true` — plain rmSync on a directory throws EISDIR on Node (found live: the
+          // prune silently no-opped and left the empty dir behind).
+          rmSync(dir, { recursive: true });
+        } catch {
+          break;
+        }
+        dir = dirname(dir);
+      }
+      try {
+        republish?.();
+      } catch {
+        /* best-effort — the file is already gone */
+      }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+  }
+
+  /**
+   * The write-time guard's delete twin: would the app STILL validate with `loadedAfter` on disk
+   * and `endpointsAfter` in its vocabulary? Runs the SAME whole-app sweep the shipped gate uses
+   * (`appViewFindings`) over the post-delete state — computed purely in memory, so nothing is
+   * removed and restored; a delete either lands whole or does not land at all.
+   *
+   * The comparison is a DIFF, not an absolute check: an app that already has faults may still
+   * have its unrelated artifacts retired — only faults the DELETE itself introduces are refusal
+   * grounds. `no-data` ("the project has no view specs") is deliberately excluded: deleting the
+   * last page is a legal intermediate state of a rebuild, not a broken app.
+   *
+   * Returns `null` when the delete may proceed, or the `{ ok:false }` refusal naming every
+   * referencing file so the agent can repoint those FIRST — the same menu-shaped contract every
+   * writer rejection has.
+   */
+  function refuseIfNewFaults(
+    what: string,
+    loadedAfter: LoadedViews,
+    endpointsAfter: ViewEndpoint[],
+  ): { ok: boolean; error?: string } | null {
+    const contractsOf = (loaded: LoadedViews, endpoints: ViewEndpoint[]): ViewContracts => ({
+      endpoints,
+      components: loaded.components.map((c) => c.def),
+      routes: loaded.views.map((v) => v.route),
+      // `agents` cannot change by deleting a view artifact or endpoint; omitting it skips the
+      // chat-agent check identically on both sides of the diff.
+      agents: undefined,
+      routesComplete: true,
+    });
+    const keyOf = (e: ViewError): string => `${e.code}|${e.file ?? ''}|${e.path}|${e.message}`;
+    const countsOf = (errors: ViewError[]): Map<string, number> => {
+      const out = new Map<string, number>();
+      for (const e of errors) {
+        if (e.severity !== 'error' || e.code === 'no-data') continue;
+        const k = keyOf(e);
+        out.set(k, (out.get(k) ?? 0) + 1);
+      }
+      return out;
+    };
+    const loadedBefore = loadProjectViews(projectRoot);
+    const before = countsOf(
+      appViewFindings(loadedBefore, contractsOf(loadedBefore, loadViewContracts(projectRoot).endpoints), undefined).errors,
+    );
+    const after = appViewFindings(loadedAfter, contractsOf(loadedAfter, endpointsAfter), undefined).errors.filter(
+      (e) => e.severity === 'error' && e.code !== 'no-data',
+    );
+    const fresh = after.filter((e) => {
+      const k = keyOf(e);
+      const seen = before.get(k) ?? 0;
+      if (seen > 0) before.set(k, seen - 1); // multiset: an app with the same fault twice keeps one
+      return seen === 0;
+    });
+    if (fresh.length === 0) return null;
+    return {
+      ok: false,
+      error:
+        `${what} refused: deleting it would leave the app with ${fresh.length} new fault${fresh.length === 1 ? '' : 's'} — ` +
+        `repoint or delete the referencing artifact(s) first, then delete again:\n` +
+        fresh.map((e) => `  - ${e.file ?? e.path ?? '(app)'}: ${e.message}`).join('\n'),
+    };
+  }
+
+  /** `export const name = '…'` — the loader-level identity of a handler. The same extraction
+   *  `view-spec/validate.ts#exportedName` performs; kept local because that helper is not
+   *  exported and a writer-module helper must stay sync + dependency-free. */
+  const EXPORTED_NAME_RE = /export\s+const\s+name\s*=\s*['"`]([A-Za-z0-9_-]+)['"`]/;
+
+  /** Every `api/**​/*.ts` handler file, project-relative (the query deleter's scan surface). */
+  function apiHandlerFiles(): string[] {
+    const out: string[] = [];
+    const walk = (dir: string): void => {
+      let entries;
+      try {
+        entries = readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of entries) {
+        const abs = join(dir, e.name);
+        if (e.isDirectory()) walk(abs);
+        else if (e.name.endsWith('.ts')) out.push(relative(projectRoot, abs).split(sep).join('/'));
+      }
+    };
+    walk(safeResolve(projectRoot, 'api'));
+    return out.sort();
+  }
+
+  function deleteProjectView(route: string): { ok: boolean; error?: string } {
+    let rel: string;
+    try {
+      rel = assertPathSegments('view route', route).replace(/\.(tsx|jsx|json)$/, '');
+      if (!ROUTE_RE.test(rel)) {
+        throw new Error(
+          `view route "${route}" is not a valid route. Routes are lowercase, slash-separated, and ` +
+            `may end a segment with a [param]: index, recipes, recipes/[id], searches/[searchId]/inbox.`,
+        );
+      }
+    } catch (e) {
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+    const target = viewSpecPath(rel);
+    if (!existsSync(safeResolve(projectRoot, target))) {
+      return {
+        ok: false,
+        error: `no such view: ${target}. listProjectDir('views') lists the routes that really exist — check the spelling (a [param] page lives at '<route>/[id]').`,
+      };
+    }
+    const loaded = loadProjectViews(projectRoot);
+    const loadedAfter: LoadedViews = { ...loaded, views: loaded.views.filter((v) => v.route !== rel) };
+    const refusal = refuseIfNewFaults(`deleteProjectView("${route}")`, loadedAfter, loadViewContracts(projectRoot).endpoints);
+    if (refusal) return refusal;
+    const out = deleteUnder(target);
+    if (!out.ok) return out;
+    try {
+      onAppWrite?.('page', rel);
+    } catch {
+      /* best-effort — the file is already gone */
+    }
+    return { ok: true };
+  }
+
+  function deleteProjectViewComponent(name: string): { ok: boolean; error?: string } {
+    if (!COMPONENT_NAME_RE.test(name)) {
+      return { ok: false, error: `view component name "${name}" is not PascalCase (expected /${COMPONENT_NAME_RE.source}/)` };
+    }
+    const target = viewComponentPath(name);
+    if (!existsSync(safeResolve(projectRoot, target))) {
+      return { ok: false, error: `no such component: ${target}. listProjectDir('components') lists the definitions that really exist.` };
+    }
+    const loaded = loadProjectViews(projectRoot);
+    const loadedAfter: LoadedViews = { ...loaded, components: loaded.components.filter((c) => c.name !== name) };
+    const refusal = refuseIfNewFaults(`deleteProjectViewComponent("${name}")`, loadedAfter, loadViewContracts(projectRoot).endpoints);
+    if (refusal) return refusal;
+    const out = deleteUnder(target);
+    if (!out.ok) return out;
+    try {
+      onAppWrite?.('component', name);
+    } catch {
+      /* best-effort — the file is already gone */
+    }
+    return { ok: true };
+  }
+
+  function deleteProjectViewLayout(prefix: string): { ok: boolean; error?: string } {
+    let rel: string;
+    try {
+      rel = assertPathSegments('layout prefix', prefix).replace(/\.(tsx|jsx|json)$/, '');
+      if (!ROUTE_RE.test(rel)) {
+        throw new Error(
+          `layout prefix "${prefix}" is not a valid route prefix. Prefixes are lowercase, ` +
+            `slash-separated, and may end a segment with a [param]: trips, trips/[tripId].`,
+        );
+      }
+    } catch (e) {
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+    const target = viewLayoutPath(rel);
+    if (!existsSync(safeResolve(projectRoot, target))) {
+      return { ok: false, error: `no such layout: ${target}. listProjectDir('views') lists the spec tree — a layout is <prefix>/_layout.view.json.` };
+    }
+    const loaded = loadProjectViews(projectRoot);
+    const loadedAfter: LoadedViews = { ...loaded, layouts: loaded.layouts.filter((l) => l.prefix !== rel) };
+    const refusal = refuseIfNewFaults(`deleteProjectViewLayout("${prefix}")`, loadedAfter, loadViewContracts(projectRoot).endpoints);
+    if (refusal) return refusal;
+    const out = deleteUnder(target);
+    if (!out.ok) return out;
+    try {
+      onAppWrite?.('page', rel);
+    } catch {
+      /* best-effort — the file is already gone */
+    }
+    return { ok: true };
+  }
+
+  function deleteProjectApi(route: string): { ok: boolean; error?: string } {
+    let rel: string;
+    let target: string;
+    let endpointName: string | undefined;
+    try {
+      rel = assertPathSegments('api route', route);
+      const segments = rel.split('/');
+      const method = segments.pop() as string;
+      if (!METHODS.has(method)) {
+        throw new Error(`api route "${route}" has an invalid method "${method}" (expected one of ${[...METHODS].join(', ')})`);
+      }
+      if (segments.length === 0) {
+        throw new Error(`api route "${route}" is missing an endpoint path before the method`);
+      }
+      target = join('api', ...segments, `${method}.ts`);
+      const existing = safeResolve(projectRoot, target);
+      if (!existsSync(existing)) {
+        return {
+          ok: false,
+          error: `no such endpoint file: ${target}. listProjectDir('api') lists the real handler dirs — the route encodes the method last (e.g. 'items-list/GET').`,
+        };
+      }
+      endpointName = EXPORTED_NAME_RE.exec(readFileSync(existing, 'utf8'))?.[1];
+    } catch (e) {
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+    // A handler with no exported name is referenced by nothing (views bind the NAME), so there is
+    // no reference guard to run — deleting it cannot dangle a binding.
+    if (endpointName) {
+      const refusal = refuseIfNewFaults(
+        `deleteProjectApi("${route}")`,
+        loadProjectViews(projectRoot),
+        loadViewContracts(projectRoot).endpoints.filter((ep) => ep.name !== endpointName),
+      );
+      if (refusal) return refusal;
+    }
+    const out = deleteUnder(target);
+    if (!out.ok) return out;
+    try {
+      onAppWrite?.('api', rel);
+    } catch {
+      /* best-effort — the file is already gone */
+    }
+    return { ok: true };
+  }
+
+  function deleteProjectQuery(name: string): { ok: boolean; error?: string } {
+    if (!SLUG_RE.test(name)) {
+      return { ok: false, error: `query name "${name}" is not a valid kebab-case id (expected /${SLUG_RE.source}/)` };
+    }
+    const queryRel = join('api', `${name}.query.json`);
+    if (!existsSync(safeResolve(projectRoot, queryRel))) {
+      return { ok: false, error: `no such query: api/${name}.query.json. listProjectDir('api') lists what is really there.` };
+    }
+    // The generated handler is found by its `export const name` (the IR name IS the endpoint
+    // name a view binds) rather than by re-deriving the route from the IR — robust even if the
+    // IR's route was authored differently than the write-time default.
+    const handlerRel = apiHandlerFiles().find((p) => {
+      try {
+        return EXPORTED_NAME_RE.exec(readFileSync(safeResolve(projectRoot, p), 'utf8'))?.[1] === name;
+      } catch {
+        return false;
+      }
+    });
+    const refusal = refuseIfNewFaults(
+      `deleteProjectQuery("${name}")`,
+      loadProjectViews(projectRoot),
+      loadViewContracts(projectRoot).endpoints.filter((ep) => ep.name !== name),
+    );
+    if (refusal) return refusal;
+    const queryOut = deleteUnder(queryRel);
+    if (!queryOut.ok) return queryOut;
+    if (handlerRel) {
+      const handlerOut = deleteUnder(handlerRel);
+      if (!handlerOut.ok) return handlerOut; // the IR is gone; surface the leftover handler honestly
+    }
+    try {
+      onAppWrite?.('api', name);
+    } catch {
+      /* best-effort — both files are already gone */
+    }
+    return { ok: true };
+  }
+
+  /** A hook is a CONSUMER — nothing in the app references it (a view never binds a hook), so the
+   *  only guards are existence + traversal. The republish inside {@link deleteUnder} re-derives
+   *  the webhook manifest and crontab from the hooks that remain. */
+  function deleteProjectHook(slug: string): { ok: boolean; error?: string } {
+    try {
+      assertSlug('hook slug', slug);
+    } catch (e) {
+      return { ok: false, error: String(e instanceof Error ? e.message : e) };
+    }
+    const target = join('hooks', `${slug}.ts`);
+    if (!existsSync(safeResolve(projectRoot, target))) {
+      return { ok: false, error: `no such hook: ${target}. listProjectDir('hooks') lists the slugs that really exist.` };
+    }
+    return deleteUnder(target);
   }
 
   /** List `<projectRoot>/<dir>` — project-rooted introspection (the read twin of the writers).
@@ -1047,6 +1450,12 @@ export function createProjectAuthoringGlobals(opts: {
     writeProjectViewLayout,
     writeProjectViewComponent,
     writeProjectViewShell,
+    deleteProjectView,
+    deleteProjectViewComponent,
+    deleteProjectViewLayout,
+    deleteProjectApi,
+    deleteProjectQuery,
+    deleteProjectHook,
     // Host-side gates, reachable from a tasklist CODE node (like `buildProjectApp` itself). `16-verify`
     // merges these two structured lists with `buildProjectApp`'s; `17-fix` fans out over the union.
     validateAppViews: () => validateAppViews(opts.projectRoot),

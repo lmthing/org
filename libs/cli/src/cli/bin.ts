@@ -647,7 +647,7 @@ async function main(): Promise<void> {
         // available to an appbuilder/automator delegate without affecting any other agent.
         // (The old store-catalog authoring engine has been removed.)
         appGlobals: (() => {
-          const projectAuthoring = createProjectAuthoringGlobals({ projectRoot });
+          const projectAuthoring = createProjectAuthoringGlobals({ projectRoot, projectId });
           return {
             ...(projectDb ? { db: projectDb.db } : undefined),
             writeProjectHook: projectAuthoring.writeProjectHook,

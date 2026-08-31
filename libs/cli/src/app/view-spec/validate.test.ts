@@ -203,6 +203,60 @@ describe('validateViewSpec — bindings', () => {
     );
   });
 
+  it('rejects a route parameter on a route that has no [param] segment at all', () => {
+    // The zero-param case: `$route.id` on a param-less route resolves to nothing at render time,
+    // the query it feeds never fires, and the page shows loading skeletons forever — silent in a
+    // browser, so the save-time check is the only place it can be caught.
+    const e = only(page({ kind: 'detail', query: 'getRecipe', param: '$route.id' }, 'recipes'));
+    expect(e.message).toBe(
+      'sections[0].param: "$route.id" — this page\'s route has no parameter "id". ' +
+        'Route parameters: (none — this route has no [param] segment)',
+    );
+  });
+
+  it('rejects a CIRCULAR $.field in a section input — the query would wait on its own result forever', () => {
+    // The live dog-walks defect: repair replaced `"id": "$route.id"` with `"id": "$.id"` —
+    // the input now reads the query's OWN result, which exists only after the call, so the
+    // renderer never sees a ready input and the page renders skeletons forever (zero requests).
+    const e = only(page({ kind: 'detail', query: 'getRecipe', input: { id: '$.id' } }, 'recipes/[id]'));
+    expect(e.code).toBe('bad-binding');
+    expect(e.message).toBe(
+      'sections[0].input.id: "$.id" — a section\'s input is what its query is CALLED with, so it ' +
+        'cannot bind the query\'s own result (a $.field exists only once that result has arrived; the ' +
+        'query would wait on itself forever and never fire). Bind a value that exists BEFORE the ' +
+        'call: a $route.<param> this page\'s route supplies, a $data.<sectionId>.<field> an EARLIER ' +
+        'section on this page published, or a literal.',
+    );
+  });
+
+  it('rejects the same circularity on a section param', () => {
+    const e = only(page({ kind: 'detail', query: 'getRecipe', param: '$.id' }, 'recipes/[id]'));
+    expect(e.code).toBe('bad-binding');
+    expect(e.message).toContain('sections[0].param: "$.id"');
+    expect(e.message).toContain('cannot bind the query\'s own result');
+  });
+
+  it('still allows $.field where it means the ROW/RESULT — item bindings, from, and an action input', () => {
+    // `from: '$.items'` projects the query's OWN Output (legal — it runs after the response),
+    // `item.title` binds the row, and an ACTION's `input: { title: '$.title' }` carries the row
+    // the action fires on (schema.ts's Wave-2 note) — none of these is call-time-circular.
+    const res = check({
+      route: 'recipes/[id]',
+      sections: [
+        {
+          kind: 'list',
+          query: 'listRecipes',
+          from: '$.items',
+          item: {
+            title: '$.title',
+            action: { mutate: 'addRecipe', input: { title: '$.title' } },
+          },
+        },
+      ],
+    });
+    expect(res.errors).toEqual([]);
+  });
+
   it('rejects $result outside an onSuccess', () => {
     const e = only(page({ kind: 'list', query: 'listRecipes', item: { title: '$result.id' } }));
     expect(e.message).toBe(
@@ -221,7 +275,7 @@ describe('validateViewSpec — bindings', () => {
 
   it('resolves $data.<sectionId> against the page, and rejects a target that is not a section', () => {
     const ok = check({
-      route: 'recipes',
+      route: 'recipes/[id]',
       sections: [
         { kind: 'detail', id: 'current', query: 'getRecipe', param: '$route.id' },
         { kind: 'list', query: 'listRecipes', input: { cuisine: '$data.current.title' } },
@@ -456,7 +510,7 @@ describe('validateViewSpec — a create section must have something to fill in',
   });
 
   it('rejects a form whose every field the page already supplies', () => {
-    const res = form({ kind: 'create', mutation: 'addRecipe', input: { title: '$route.id', cuisine: 'thai' } });
+    const res = form({ kind: 'create', mutation: 'addRecipe', input: { title: '$route.id', cuisine: 'thai' } }, 'recipes/[id]');
     expect(res.errors.map((e) => e.message)).toEqual([
       'sections[0].mutation: a create section has no fields of its own — it renders "addRecipe"\'s ' +
         'Input schema, and that derives NONE here: every property it declares (cuisine, title) is ' +

@@ -661,6 +661,7 @@ export class SessionManager {
   private buildProjectAuthoring(root: string, projectId: string): ProjectAuthoringGlobals {
     return createProjectAuthoringGlobals({
       projectRoot: join(root, projectId),
+      projectId,
       // Lets a code node PROVE an endpoint works instead of inferring it from a clean compile.
       // Resolved per call (not captured) so a node that runs right after `implement_endpoints`
       // sees the runtime rebuilt around the handlers this run just wrote.
@@ -922,6 +923,12 @@ export class SessionManager {
       writeProjectViewShell: projectAuthoring.writeProjectViewShell,
       writeProjectApi: projectAuthoring.writeProjectApi,
       writeProjectQuery: projectAuthoring.writeProjectQuery,
+      deleteProjectView: projectAuthoring.deleteProjectView,
+      deleteProjectViewComponent: projectAuthoring.deleteProjectViewComponent,
+      deleteProjectViewLayout: projectAuthoring.deleteProjectViewLayout,
+      deleteProjectApi: projectAuthoring.deleteProjectApi,
+      deleteProjectQuery: projectAuthoring.deleteProjectQuery,
+      deleteProjectHook: projectAuthoring.deleteProjectHook,
       listProjectDir: projectAuthoring.listProjectDir,
       readProjectFile: projectAuthoring.readProjectFile,
       ...(self

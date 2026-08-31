@@ -104,7 +104,7 @@ export default async function handler() { return { items: [] }; }
     'utf8',
   );
   const { createProjectAuthoringGlobals } = await import('../authoring/globals.js');
-  const pa = createProjectAuthoringGlobals({ projectRoot: root });
+  const pa = createProjectAuthoringGlobals({ projectId: 'liveproj', projectRoot: root });
   const written = pa.writeProjectView('index', {
     title: 'Recipes',
     sections: [{ kind: 'list', query: 'listRecipes', item: { title: '$.title' } }],
@@ -134,7 +134,7 @@ describe('runProjectAppCheck — spec-app (AppHost) branch', () => {
   it('mounts a [param] route clean — the placeholder param path does not throw, single or nested', async () => {
     const root = await specProject();
     const { createProjectAuthoringGlobals } = await import('../authoring/globals.js');
-    const pa = createProjectAuthoringGlobals({ projectRoot: root });
+    const pa = createProjectAuthoringGlobals({ projectId: 'liveproj', projectRoot: root });
     const w1 = pa.writeProjectView('recipes/[id]', {
       title: 'Recipe',
       sections: [{ kind: 'detail', id: 'detail', query: 'listRecipes', param: '$route.id' }],

@@ -138,6 +138,17 @@ describe('validateQueryIr', () => {
     expect(res.errors.join(' ')).toMatch(/needs a "set" map/);
   });
 
+  it('accepts a delete with a [id] param', () => {
+    const res = validateQueryIr({ name: 'x', kind: 'delete', entity: 'job', route: 'jobs/[id]' }, TABLES);
+    expect(res.errors).toEqual([]);
+    expect(res.ok).toBe(true);
+  });
+
+  it('rejects a delete with no [param] and no where', () => {
+    const res = validateQueryIr({ name: 'x', kind: 'delete', entity: 'job', route: 'jobs/all' }, TABLES);
+    expect(res.errors.join(' ')).toMatch(/needs a \[param\]/);
+  });
+
   it('rejects a set targeting an unknown column', () => {
     const res = validateQueryIr(
       { name: 'x', kind: 'create', entity: 'job', route: 'jobs/create', set: { bogus: { value: 1 } } },
@@ -259,6 +270,13 @@ describe('generateQueryHandler — parses + typechecks standalone, every kind', 
       route: 'jobs/create',
       set: { status: { input: 'status' } },
     };
+    const { source } = generateQueryHandler(ir, TABLES);
+    assertParses(source);
+    expect(typecheckStandalone(source)).toEqual([]);
+  });
+
+  it('delete: [id] param resolves via the primary key and removes the row', () => {
+    const ir: QueryIr = { name: 'job-delete', kind: 'delete', entity: 'job', route: 'jobs/[id]' };
     const { source } = generateQueryHandler(ir, TABLES);
     assertParses(source);
     expect(typecheckStandalone(source)).toEqual([]);
@@ -504,6 +522,22 @@ describe('generateQueryHandler — end-to-end execution against a real project d
     expect((res.body as { items: Array<{ status: string }> }).items[0].status).toBe('in-progress');
 
     const missing = await runtime.handle('PATCH', '/jobs/does-not-exist', { status: 'x' });
+    expect(missing.status).toBe(404);
+  });
+
+  it('delete removes the row and returns the deleted row — and 404s for a missing one', async () => {
+    const root = await scratch();
+    await writeHandler(root, { name: 'job-delete', kind: 'delete', entity: 'job', route: 'jobs/[id]' });
+    const { runtime, project } = await runtimeFor(root);
+    const j = project.db.insert('job', { status: 'quoted', hours: 1 }) as { id: string };
+
+    const res = await runtime.handle('DELETE', `/jobs/${j.id}`);
+    expect(res.status).toBe(200);
+    expect((res.body as { items: Array<{ id: string }> }).items[0].id).toBe(j.id);
+    // the row is really gone from the db
+    expect(project.db.query('job', { where: { id: j.id } })).toHaveLength(0);
+
+    const missing = await runtime.handle('DELETE', `/jobs/${j.id}`);
     expect(missing.status).toBe(404);
   });
 });

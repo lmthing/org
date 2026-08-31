@@ -17,12 +17,14 @@
  * of vanishing. Applied at the single per-statement choke point in the turn loop (the
  * `sanitize` closure in `runTurnLoop`).
  *
- * Safety invariant every habit upholds: **only rewrite a statement that is NOTHING BUT
- * the artifact.** {@link commentIfPureMarkup} enforces it — if stripping the markup
- * leaves any surviving code (including a legitimate string literal that merely contains
- * the markup, e.g. `display("</think>")`), the statement is returned untouched. Real
- * code is never corrupted; the worst case is a no-op comment on a line that was pure
- * noise anyway.
+ * Safety invariant every habit upholds: **only rewrite a region that STRIPS TO NOTHING
+ * but the artifact.** {@link commentIfPureMarkup} enforces it — the whole statement is
+ * commented out when stripping the markup leaves only whitespace, and when the artifact
+ * is confined to complete LEADING lines of an otherwise-real statement just those lines
+ * are commented (a trailing artifact glued to code — `display("</think>")`, or a tag on
+ * the same line as code — never matches, so those statements are returned untouched).
+ * Real code is never corrupted; the worst case is a no-op comment on a line that was
+ * pure noise anyway.
  */
 
 /**
@@ -52,11 +54,40 @@ function commentOut(stmt: string): string {
     .join('\n');
 }
 
-/** Build a `clean` from a markup-stripping function that upholds the safety invariant:
- *  comment the WHOLE statement out only when stripping the markup leaves nothing but
- *  whitespace; otherwise return the statement untouched (real code survives verbatim). */
+/**
+ * Neutralize markup in a statement that is REAL CODE PLUS ARTIFACT:
+ *
+ *  - Nothing but markup → comment the WHOLE statement out (the original behavior).
+ *  - Markup confined to complete LEADING lines, real code after → comment just those
+ *    lines and keep the rest verbatim. This shape arrives when the boundary detector
+ *    HELD a buffer whose head is an error artifact (e.g. a leaked `</think>` the parser
+ *    cannot split from the statement behind it) and surfaced the whole thing through
+ *    flush(): without the leading-line rewrite the code behind the tag would die in
+ *    typecheck and burn the exact retry this module exists to save.
+ *
+ * Safety invariant, upheld in both cases: only a region that STRIPS TO NOTHING is ever
+ * rewritten (commented) — surviving code is never modified, only preserved. A tag that
+ * merely appears inside or after real code (`display("</think>")`, `foo(); // <think>`)
+ * is not an artifact-only prefix and is left untouched.
+ */
+function neutralizeMarkup(strip: (s: string) => string, stmt: string): string {
+  if (strip(stmt).trim() === '') return commentOut(stmt);
+  let idx = -1;
+  while ((idx = stmt.indexOf('\n', idx + 1)) !== -1) {
+    const prefix = stmt.slice(0, idx + 1);
+    if (strip(prefix).trim() === '') {
+      return (
+        prefix.split('\n').map((line) => (line.trim() === '' ? line : `// ${line}`)).join('\n') +
+        stmt.slice(idx + 1)
+      );
+    }
+  }
+  return stmt;
+}
+
+/** Build a `clean` from a markup-stripping function. See neutralizeMarkup. */
 function commentIfPureMarkup(strip: (s: string) => string): (stmt: string) => string {
-  return (stmt) => (strip(stmt).trim() === '' ? commentOut(stmt) : stmt);
+  return (stmt) => neutralizeMarkup(strip, stmt);
 }
 
 // ---------------------------------------------------------------------------

@@ -127,6 +127,39 @@ describe('repair_live_project — diagnose (01-diagnose.ts)', () => {
     expect(r.toAuthor).toEqual([]);
   });
 
+  it('files an orphan-route finding under the SHELL, not the unreachable page — reachability is an inbound property', async () => {
+    // `orphanRoute` attaches the page's own file (validate.ts does the same for display); a
+    // fix_broken fork restricted to that page can never make it reachable, so the item would
+    // never resolve. Reachability is fixed in shell.view.json nav — so that is the artifact the
+    // finding must be filed under, with kind 'shell' (02-fix_broken.md's writeProjectViewShell
+    // branch), and N orphan routes must collapse into ONE shell entry: fix_broken forks run in
+    // parallel, and N view forks each editing the shell would be a write race.
+    const orphan = (route: string): ViewError => ({
+      code: 'orphan-route',
+      path: '',
+      message: `views/${route}: no navigation reaches this page. Add it to the shell (nav/groups/subnav).`,
+      severity: 'error',
+      file: `views/${route}.view.json`,
+    });
+    const r = await run(
+      ctxFor(CLEAN, {}, {
+        validate: viewResult([orphan('sessions'), orphan('billing')]),
+      }),
+      {},
+    );
+    expect(r.offending).toEqual([
+      {
+        path: 'shell.view.json',
+        kind: 'shell',
+        errors: [
+          { phase: 'views', message: orphan('sessions').message },
+          { phase: 'views', message: orphan('billing').message },
+        ],
+      },
+    ]);
+    expect(r.toAuthor).toEqual([]);
+  });
+
   it('routes an endpoint referenced but never written to toAuthor, not offending — the live incident', async () => {
     // No `api/sessions-list/GET.ts` on disk — the view-check error names an endpoint that does not exist.
     const r = await run(

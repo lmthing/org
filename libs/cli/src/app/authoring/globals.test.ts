@@ -18,6 +18,7 @@ import type { TableSchema } from '@lmthing/core';
 
 import { createProjectAuthoringGlobals } from './globals.js';
 import { LintError } from './lint.js';
+import { DEFAULT_PROJECT_ID, SYSTEM_PROJECT_ID } from '../../server/projects.js';
 
 // ── Live-project authoring globals (plan S11) ──────────────────────────────────
 
@@ -38,6 +39,7 @@ describe('createProjectAuthoringGlobals', () => {
 
   function make() {
     return createProjectAuthoringGlobals({
+      projectId: 'liveproj',
       projectRoot,
       republish: () => {
         republishCalls += 1;
@@ -104,6 +106,7 @@ describe('createProjectAuthoringGlobals', () => {
 
   it('a throwing republish never fails the write (fire-and-forget)', () => {
     const pa = createProjectAuthoringGlobals({
+      projectId: 'liveproj',
       projectRoot,
       republish: () => {
         throw new Error('republish boom');
@@ -126,6 +129,7 @@ describe('createProjectAuthoringGlobals', () => {
   it('writeProjectTable lands database/<name>.json in the LIVE project and fires onSchemaWrite', () => {
     const schemaWrites: string[] = [];
     const pa = createProjectAuthoringGlobals({
+      projectId: 'liveproj',
       projectRoot,
       republish: () => {
         republishCalls += 1;
@@ -373,6 +377,7 @@ describe('createProjectAuthoringGlobals', () => {
   it('writeProjectTable forwards seed rows to onSchemaWrite (move known data into the app in one pass)', () => {
     const seeds: Array<{ table: string; rows: unknown[] | undefined }> = [];
     const pa = createProjectAuthoringGlobals({
+      projectId: 'liveproj',
       projectRoot,
       republish: () => {},
       onSchemaWrite: (t, rows) => seeds.push({ table: t, rows }),
@@ -420,6 +425,7 @@ describe('createProjectAuthoringGlobals', () => {
   it('writeProjectTable rejects an invalid schema (missing description) and does NOT re-derive', () => {
     let schemaWrites = 0;
     const pa = createProjectAuthoringGlobals({
+      projectId: 'liveproj',
       projectRoot,
       republish: () => {},
       onSchemaWrite: () => {
@@ -440,9 +446,29 @@ describe('createProjectAuthoringGlobals', () => {
     expect(existsSync(join(projectRoot, 'database'))).toBe(false);
   });
 
+  it('deleteProjectHook: deletes hooks/<slug>.ts and republishes; a missing slug is { ok:false }', () => {
+    const pa = make();
+    const src = "export default { type: 'event', on: { event: 'integration-slack/message.posted' } };";
+    pa.writeProjectHook('slack-watch', src);
+    expect(republishCalls).toBe(1);
+
+    expect(pa.deleteProjectHook('slack-watch')).toEqual({ ok: true });
+    expect(existsSync(join(projectRoot, 'hooks', 'slack-watch.ts'))).toBe(false);
+    // The republish re-derives the webhook manifest + crontab from the hooks that remain.
+    expect(republishCalls).toBe(2);
+
+    const miss = pa.deleteProjectHook('slack-watch');
+    expect(miss.ok).toBe(false);
+    expect(miss.error).toContain('no such hook');
+    expect(miss.error).toContain("listProjectDir('hooks')");
+    // A non-slug is refused by the same shape check the writer uses — traversal-safe.
+    expect(pa.deleteProjectHook('../evil').ok).toBe(false);
+  });
+
   it('writeProjectApi lands api/<path>/<METHOD>.ts and fires onAppWrite(api)', () => {
     const appWrites: Array<[string, string]> = [];
     const pa = createProjectAuthoringGlobals({
+      projectId: 'liveproj',
       projectRoot,
       republish: () => {},
       onAppWrite: (kind, route) => appWrites.push([kind, route]),
@@ -472,6 +498,7 @@ describe('createProjectAuthoringGlobals', () => {
   it('writeProjectApi rejects an invalid method and a traversal route (no onAppWrite)', () => {
     let appWrites = 0;
     const pa = createProjectAuthoringGlobals({
+      projectId: 'liveproj',
       projectRoot,
       republish: () => {},
       onAppWrite: () => {
@@ -532,7 +559,7 @@ describe('writeProjectApi save-time typecheck', () => {
     rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
   function make() {
-    return createProjectAuthoringGlobals({ projectRoot });
+    return createProjectAuthoringGlobals({ projectRoot, projectId: 'liveproj' });
   }
   function endpoint(dirSegs: string[], method: string, name: string) {
     mkdirSync(join(projectRoot, 'api', ...dirSegs), { recursive: true });
@@ -579,7 +606,7 @@ describe('writeProjectApi — the endpoint boundary is TYPED and CHECKED at save
     );
   });
   afterEach(() => rmSync(projectRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
-  const make = () => createProjectAuthoringGlobals({ projectRoot });
+  const make = () => createProjectAuthoringGlobals({ projectRoot, projectId: 'liveproj' });
 
   it('REJECTS the live escape — `(input: any, ctx: ApiCtx): Promise<any>` — and writes nothing', () => {
     const pa = make();
@@ -639,14 +666,14 @@ describe('writeProjectFile — the narrowly-scoped escape hatch', () => {
   // in a code node aborts the tasklist). It stays as small as that job needs.
   it('writes types/contract.d.ts', () => {
     const root = mkTmp();
-    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    const g = createProjectAuthoringGlobals({ projectId: 'liveproj', projectRoot: root });
     expect(g.writeProjectFile('types/contract.d.ts', 'export interface A { x: string }')).toEqual({ ok: true });
     expect(readFileSync(join(root, 'types', 'contract.d.ts'), 'utf8')).toContain('interface A');
   });
 
   it('REFUSES types/generated.d.ts — a build artifact the next build erases', () => {
     const root = mkTmp();
-    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    const g = createProjectAuthoringGlobals({ projectId: 'liveproj', projectRoot: root });
     const r = g.writeProjectFile('types/generated.d.ts', 'export interface A { x: string }');
     expect(r.ok).toBe(false);
     expect(r.error).toContain('BUILD ARTIFACT');
@@ -655,7 +682,7 @@ describe('writeProjectFile — the narrowly-scoped escape hatch', () => {
 
   it('REFUSES anything outside types/*.d.ts, naming the typed writer to use', () => {
     const root = mkTmp();
-    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    const g = createProjectAuthoringGlobals({ projectId: 'liveproj', projectRoot: root });
     for (const bad of ['pages/index.tsx', 'api/x/GET.ts', 'database/costs.json', 'types/notes.md', 'README.md']) {
       const r = g.writeProjectFile(bad, 'x');
       expect(r.ok, bad).toBe(false);
@@ -665,7 +692,7 @@ describe('writeProjectFile — the narrowly-scoped escape hatch', () => {
 
   it('cannot escape the project root', () => {
     const root = mkTmp();
-    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    const g = createProjectAuthoringGlobals({ projectId: 'liveproj', projectRoot: root });
     expect(g.writeProjectFile('../../types/evil.d.ts', 'x').ok).toBe(false);
     expect(g.writeProjectFile('/types/contract.d.ts', 'export type A = 1;').ok).toBe(true); // leading / is stripped, not absolute
   });
@@ -696,7 +723,7 @@ describe('createProjectAuthoringGlobals — writeProjectEntity / writeProjectQue
   it('writeProjectEntity compiles model/<name>.entity.json straight to database/<name>.json and fires onSchemaWrite', () => {
     const root = mkTmp();
     const schemaWrites: string[] = [];
-    const g = createProjectAuthoringGlobals({ projectRoot: root, onSchemaWrite: (t) => schemaWrites.push(t) });
+    const g = createProjectAuthoringGlobals({ projectId: 'liveproj', projectRoot: root, onSchemaWrite: (t) => schemaWrites.push(t) });
 
     const res = g.writeProjectEntity('job', JOB_ENTITY);
     expect(res).toEqual({ ok: true });
@@ -709,7 +736,7 @@ describe('createProjectAuthoringGlobals — writeProjectEntity / writeProjectQue
 
   it('writeProjectEntity rejects an enum rebuild that drops a previously-declared value', () => {
     const root = mkTmp();
-    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    const g = createProjectAuthoringGlobals({ projectId: 'liveproj', projectRoot: root });
     expect(g.writeProjectEntity('job', JOB_ENTITY).ok).toBe(true);
 
     const shrunk = { ...JOB_ENTITY, fields: { ...JOB_ENTITY.fields, status: { fact: 'job.status', type: 'enum', values: ['quoted'] } } };
@@ -718,7 +745,7 @@ describe('createProjectAuthoringGlobals — writeProjectEntity / writeProjectQue
 
   it('writeProjectEntity rejects a fact key reused on a different entity', () => {
     const root = mkTmp();
-    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    const g = createProjectAuthoringGlobals({ projectId: 'liveproj', projectRoot: root });
     expect(g.writeProjectEntity('job', JOB_ENTITY).ok).toBe(true);
 
     const invoice = { entity: 'invoice', title: 'Invoice', identity: 'id', fields: { id: { fact: 'invoice.id', type: 'id' }, state: { fact: 'job.status', type: 'enum', values: ['x'] } } };
@@ -727,7 +754,7 @@ describe('createProjectAuthoringGlobals — writeProjectEntity / writeProjectQue
 
   it('writeProjectQuery generates api/<route>/<METHOD>.ts from a list query.json, and the endpoint actually WORKS end-to-end', async () => {
     const root = mkTmp();
-    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    const g = createProjectAuthoringGlobals({ projectId: 'liveproj', projectRoot: root });
     expect(g.writeProjectEntity('job', JOB_ENTITY).ok).toBe(true);
 
     const res = g.writeProjectQuery('jobs-list', {
@@ -764,9 +791,39 @@ describe('createProjectAuthoringGlobals — writeProjectEntity / writeProjectQue
     }
   });
 
+  it('deleteProjectQuery: deletes the IR AND its generated handler; refuses while a view still queries it', async () => {
+    const root = mkTmp();
+    const g = createProjectAuthoringGlobals({ projectId: 'liveproj', projectRoot: root });
+    expect(g.writeProjectEntity('job', JOB_ENTITY).ok).toBe(true);
+    expect(
+      g.writeProjectQuery('jobs-list', { kind: 'list', entity: 'job', route: 'jobs/list' }).ok,
+    ).toBe(true);
+
+    // Queried by a live page → refused with the page named, both files still on disk.
+    expect(g.writeProjectView('jobs', { sections: [{ kind: 'list', query: 'jobs-list' }] }).ok).toBe(true);
+    const refused = g.deleteProjectQuery('jobs-list');
+    expect(refused.ok).toBe(false);
+    expect(refused.error).toContain('deleteProjectQuery("jobs-list") refused');
+    expect(refused.error).toContain('views/jobs.view.json');
+    expect(existsSync(join(root, 'api', 'jobs-list.query.json'))).toBe(true);
+    expect(existsSync(join(root, 'api', 'jobs', 'list', 'GET.ts'))).toBe(true);
+
+    // Unblocked once the referencing page is gone — and BOTH artifacts go together.
+    expect(g.deleteProjectView('jobs')).toEqual({ ok: true });
+    expect(g.deleteProjectQuery('jobs-list')).toEqual({ ok: true });
+    expect(existsSync(join(root, 'api', 'jobs-list.query.json'))).toBe(false);
+    expect(existsSync(join(root, 'api', 'jobs', 'list', 'GET.ts'))).toBe(false);
+    expect(existsSync(join(root, 'api', 'jobs'))).toBe(false); // pruned with its last file
+
+    // Missing → { ok:false }.
+    const miss = g.deleteProjectQuery('jobs-list');
+    expect(miss.ok).toBe(false);
+    expect(miss.error).toContain('no such query');
+  });
+
   it('writeProjectQuery rejects a where clause on a column the entity does not have', () => {
     const root = mkTmp();
-    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    const g = createProjectAuthoringGlobals({ projectId: 'liveproj', projectRoot: root });
     expect(g.writeProjectEntity('job', JOB_ENTITY).ok).toBe(true);
 
     expect(() =>
@@ -782,7 +839,7 @@ describe('createProjectAuthoringGlobals — writeProjectEntity / writeProjectQue
 
   it('writeProjectQuery rejects an unknown entity, naming the tables that exist', () => {
     const root = mkTmp();
-    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    const g = createProjectAuthoringGlobals({ projectId: 'liveproj', projectRoot: root });
     expect(g.writeProjectEntity('job', JOB_ENTITY).ok).toBe(true);
 
     expect(() =>
@@ -802,7 +859,7 @@ describe('createProjectAuthoringGlobals — writeProjectEntity / writeProjectQue
   // declarative write must still succeed.
   it('writeProjectQuery succeeds even when types/contract.d.ts already declares this endpoint\'s global Output (the real-pipeline case)', () => {
     const root = mkTmp();
-    const g = createProjectAuthoringGlobals({ projectRoot: root });
+    const g = createProjectAuthoringGlobals({ projectId: 'liveproj', projectRoot: root });
     expect(g.writeProjectEntity('job', JOB_ENTITY).ok).toBe(true);
 
     // Mirrors what `09-emit_types.ts` actually writes: a GLOBAL (no export) ambient declaring
@@ -818,5 +875,177 @@ declare interface JobsListInput { [k: string]: unknown }
     const res = g.writeProjectQuery('jobs-list', { kind: 'list', entity: 'job', route: 'jobs/list' });
     expect(res).toEqual({ ok: true });
     expect(existsSync(join(root, 'api', 'jobs', 'list', 'GET.ts'))).toBe(true);
+  });
+});
+
+// ── the personal-workspace guard ───────────────────────────────────────────────
+//
+// The "user" project is the personal THING workspace: it holds the HOST-written chat scaffold
+// (`projects.ts#scaffoldAppFromBirthSync` / `#ensureAppFromBirthSync` — a different seam from these
+// globals, proven unaffected in view-writers.test.ts) and personal automations, NEVER a built app.
+// Found live: a build_live_project run whose automator was not retargeted authored an entire app
+// INTO `.lmthing/user/` — shell + 5 views + 2 components + 4 api handlers + 2 tables — even though
+// the agent prompts say THING refuses to build there. A prompt is prose; the writer is the gate.
+describe('the personal-workspace guard (user / system can never hold a built app)', () => {
+  let tmpRoot: string;
+  let userRoot: string;
+  let republishCalls: number;
+  let schemaWrites: number;
+  let appWrites: number;
+
+  beforeEach(() => {
+    tmpRoot = mkdtempSync(join(tmpdir(), 'lm-user-guard-'));
+    userRoot = join(tmpRoot, DEFAULT_PROJECT_ID);
+    mkdirSync(userRoot, { recursive: true });
+    republishCalls = 0;
+    schemaWrites = 0;
+    appWrites = 0;
+  });
+
+  afterEach(() => {
+    rmSync(tmpRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  });
+
+  const TIPS = {
+    title: 'Tips',
+    description: 'Story tips',
+    columns: {
+      id: { type: 'string', description: 'pk', primaryKey: true, generated: 'uuid' },
+      headline: { type: 'string', description: 'short headline' },
+    },
+  } as unknown as TableSchema;
+
+  const makeUser = (projectId = DEFAULT_PROJECT_ID) =>
+    createProjectAuthoringGlobals({
+      projectId,
+      projectRoot: userRoot,
+      republish: () => {
+        republishCalls += 1;
+      },
+      onSchemaWrite: () => {
+        schemaWrites += 1;
+      },
+      onAppWrite: () => {
+        appWrites += 1;
+      },
+    });
+
+  it('REFUSES every app-authoring writer (view/layout/component/shell/api/query/table/entity) with the retarget message', () => {
+    const pa = makeUser();
+    const refusals: Array<{ ok: boolean; error?: string }> = [
+      pa.writeProjectView('books/[id]', { sections: [{ kind: 'list', query: 'listBooks' }] }),
+      pa.writeProjectViewLayout('books', { sections: [{ kind: 'outlet' }] }),
+      pa.writeProjectViewComponent('BookCard', { props: {}, node: { el: 'text', text: 'x' } }),
+      pa.writeProjectViewShell({ brand: 'Book Club Tracker', nav: [] }),
+      pa.writeProjectApi('books-list/GET', "export const name = 'booksList';\nexport default async () => ({ items: [] });"),
+      pa.writeProjectQuery('books-list', { kind: 'list', entity: 'books', route: 'books/list' }),
+      pa.writeProjectTable('books', TIPS),
+      pa.writeProjectEntity('books', { entity: 'books', fields: {} }),
+    ];
+    const writers = [
+      'writeProjectView',
+      'writeProjectViewLayout',
+      'writeProjectViewComponent',
+      'writeProjectViewShell',
+      'writeProjectApi',
+      'writeProjectQuery',
+      'writeProjectTable',
+      'writeProjectEntity',
+    ];
+    for (let i = 0; i < refusals.length; i++) {
+      const r = refusals[i];
+      expect(r.ok, writers[i]).toBe(false);
+      expect(r.error, writers[i]).toContain(`${writers[i]} refused`);
+      expect(r.error, writers[i]).toContain('personal THING workspace');
+      expect(r.error, writers[i]).toContain('can never hold a built app');
+      expect(r.error, writers[i]).toContain('createProject');
+      expect(r.error, writers[i]).toContain('selectProject');
+    }
+    // Nothing landed — the exact live-pollution shapes (views/books/, database/books.json, api/)
+    // left NO trace, and no side effect (republish / schema re-derive / app rebuild) fired.
+    for (const dir of ['views', 'components', 'api', 'database', 'model']) {
+      expect(existsSync(join(userRoot, dir)), dir).toBe(false);
+    }
+    expect(existsSync(join(userRoot, 'shell.view.json'))).toBe(false);
+    expect(republishCalls).toBe(0);
+    expect(schemaWrites).toBe(0);
+    expect(appWrites).toBe(0);
+  });
+
+  it('still allows the PERSONAL automation writers (hook/event/function) in the user project', () => {
+    const pa = makeUser();
+    expect(
+      pa.writeProjectHook('personal-digest', "export default { type: 'cron', every: '1d', handler: async () => {} };").ok,
+    ).toBe(true);
+    expect(existsSync(join(userRoot, 'hooks', 'personal-digest.ts'))).toBe(true);
+    expect(
+      pa.writeProjectEvent(
+        'feed-writes',
+        "export default { type: 'db', on: { table: 'feed_items', event: 'insert' }, emits: {}, emit: () => [] };",
+      ).ok,
+    ).toBe(true);
+    expect(pa.writeProjectFunction('slackPostMessage', 'export default async function slackPostMessage(i: unknown) { return i; }').ok).toBe(true);
+    expect(republishCalls).toBe(3);
+  });
+
+  it('keeps every DELETE writer working in the user project — cleaning up a polluted workspace must stay possible', () => {
+    // Plant the live-pollution shapes HOST-side (the writers rightly refuse to create them now).
+    mkdirSync(join(userRoot, 'views'), { recursive: true });
+    writeFileSync(
+      join(userRoot, 'views', 'polluted.view.json'),
+      JSON.stringify({ route: 'polluted', title: 'Polluted', sections: [{ id: 'chat', kind: 'chat', agent: 'thing' }] }),
+    );
+    mkdirSync(join(userRoot, 'components'), { recursive: true });
+    writeFileSync(join(userRoot, 'components', 'Polluted.view.json'), JSON.stringify({ name: 'Polluted', props: {}, node: { el: 'text', text: 'x' } }));
+    mkdirSync(join(userRoot, 'api', 'polluted', 'q'), { recursive: true });
+    writeFileSync(join(userRoot, 'api', 'polluted', 'GET.ts'), "export const name = 'pollutedList';\nexport default async () => ({ items: [] });\n");
+    writeFileSync(join(userRoot, 'api', 'polluted.query.json'), JSON.stringify({ name: 'polluted', kind: 'list', entity: 'books', route: 'books/list' }));
+    writeFileSync(join(userRoot, 'api', 'polluted', 'q', 'GET.ts'), "export const name = 'polluted';\nexport default async () => ({ items: [] });\n");
+    mkdirSync(join(userRoot, 'hooks'), { recursive: true });
+    writeFileSync(join(userRoot, 'hooks', 'polluted.ts'), "export default { type: 'event', on: { event: 'x/y' } };\n");
+
+    const pa = makeUser();
+    expect(pa.deleteProjectView('polluted')).toEqual({ ok: true });
+    expect(pa.deleteProjectViewComponent('Polluted')).toEqual({ ok: true });
+    expect(pa.deleteProjectApi('polluted/GET')).toEqual({ ok: true });
+    expect(pa.deleteProjectQuery('polluted')).toEqual({ ok: true });
+    expect(pa.deleteProjectHook('polluted')).toEqual({ ok: true });
+    for (const gone of [
+      join(userRoot, 'views', 'polluted.view.json'),
+      join(userRoot, 'components', 'Polluted.view.json'),
+      join(userRoot, 'api', 'polluted', 'GET.ts'),
+      join(userRoot, 'api', 'polluted.query.json'),
+      join(userRoot, 'hooks', 'polluted.ts'),
+    ]) {
+      expect(existsSync(gone)).toBe(false);
+    }
+  });
+
+  it('refuses the reserved "system" tree with its own message (it is not a project at all)', () => {
+    const systemRoot = join(tmpRoot, SYSTEM_PROJECT_ID);
+    mkdirSync(systemRoot, { recursive: true });
+    const pa = createProjectAuthoringGlobals({ projectId: SYSTEM_PROJECT_ID, projectRoot: systemRoot });
+    const res = pa.writeProjectView('index', { sections: [{ kind: 'chat', agent: 'thing' }] });
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain('reserved system-spaces tree');
+    expect(res.error).toContain('not a project');
+    expect(res.error).toContain('createProject');
+  });
+
+  it('fails CLOSED on an id/root mismatch — a root whose basename is "user" is refused whatever id the caller claims', () => {
+    const pa = makeUser('liveproj'); // caller says "liveproj", the root IS <tmp>/user
+    const res = pa.writeProjectView('index', { sections: [{ kind: 'chat', agent: 'thing' }] });
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain('personal THING workspace');
+  });
+
+  it('does NOT fire for an ordinary project — the same writers work as before', () => {
+    const root = join(tmpRoot, 'bookclub');
+    mkdirSync(root, { recursive: true });
+    const pa = createProjectAuthoringGlobals({ projectId: 'bookclub', projectRoot: root });
+    expect(pa.writeProjectTable('books', TIPS).ok).toBe(true);
+    expect(pa.writeProjectApi('books-list/GET', "export const name = 'booksList';\nexport default async () => ({ items: [] });").ok).toBe(true);
+    expect(existsSync(join(root, 'database', 'books.json'))).toBe(true);
+    expect(existsSync(join(root, 'api', 'books-list', 'GET.ts'))).toBe(true);
   });
 });

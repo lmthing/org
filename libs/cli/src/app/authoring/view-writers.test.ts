@@ -14,13 +14,14 @@
 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createProjectAuthoringGlobals } from './globals.js';
 import { LintError } from './lint.js';
 import { validateAppViews } from '../view-spec/validate.js';
+import { DEFAULT_PROJECT_ID, ensureAppFromBirthSync, scaffoldAppFromBirthSync } from '../../server/projects.js';
 
 describe('view-spec writers', () => {
   let projectRoot: string;
@@ -54,6 +55,7 @@ export default async function handler() { return { id: '1' }; }
 
   const make = () =>
     createProjectAuthoringGlobals({
+      projectId: 'liveproj',
       projectRoot,
       onAppWrite: (kind, route) => appWrites.push({ kind, route }),
     });
@@ -290,5 +292,224 @@ export default async function handler() { return { id: '1' }; }
     const smoke = await pa.renderSmokeViews();
     expect(smoke.unavailable).toBe(true);
     expect(smoke.checked).toBe(0);
+  });
+
+  // ── the delete twins (deleteProjectView / …Component / …Layout / …Api) ──────────
+  //
+  // Three things proven per kind, mirroring the writers above: the happy delete lands and fires
+  // the app-write side effect; a MISSING artifact is { ok:false } (never a silent success, never
+  // a throw); and the guard — a delete that would leave the app referencing a ghost is refused
+  // with the referencing FILE named, and nothing leaves disk on a refusal (validate-then-delete).
+
+  it('deleteProjectView: deletes an unreferenced page, prunes its empty dir, and fires onAppWrite', () => {
+    const pa = make();
+    pa.writeProjectView('recipes/[id]', { sections: [{ kind: 'list', query: 'listRecipes' }] });
+    appWrites.length = 0;
+
+    expect(pa.deleteProjectView('recipes/[id]')).toEqual({ ok: true });
+    expect(existsSync(join(projectRoot, 'views', 'recipes', '[id].view.json'))).toBe(false);
+    // The now-empty views/recipes/ dir went with it (views/ itself stays).
+    expect(existsSync(join(projectRoot, 'views', 'recipes'))).toBe(false);
+    expect(existsSync(join(projectRoot, 'views'))).toBe(true);
+    expect(appWrites).toEqual([{ kind: 'page', route: 'recipes/[id]' }]);
+  });
+
+  it('deleteProjectView: a missing route is { ok:false } with the real list hinted, never a throw', () => {
+    const pa = make();
+    const res = pa.deleteProjectView('nope');
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain('no such view');
+    expect(res.error).toContain("listProjectDir('views')");
+  });
+
+  it('deleteProjectView: REFUSED while the shell nav still points at the route — names shell.view.json, nothing leaves disk', () => {
+    const pa = make();
+    pa.writeProjectView('recipes', { sections: [{ kind: 'list', query: 'listRecipes' }] });
+    pa.writeProjectViewShell({ nav: [{ route: 'recipes', label: 'Recipes' }] });
+
+    const res = pa.deleteProjectView('recipes');
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain('deleteProjectView("recipes") refused');
+    expect(res.error).toContain('shell.view.json');
+    // The guarded state never touched disk.
+    expect(existsSync(join(projectRoot, 'views', 'recipes.view.json'))).toBe(true);
+
+    // Repoint the shell first — now the same delete lands.
+    pa.writeProjectViewShell({ nav: [] });
+    expect(pa.deleteProjectView('recipes')).toEqual({ ok: true });
+    expect(existsSync(join(projectRoot, 'views', 'recipes.view.json'))).toBe(false);
+  });
+
+  it('deleteProjectView: deleting the LAST page is allowed — a rebuild is mid-flight, not broken', () => {
+    const pa = make();
+    pa.writeProjectView('recipes', { sections: [{ kind: 'list', query: 'listRecipes' }] });
+    expect(pa.deleteProjectView('recipes')).toEqual({ ok: true });
+    expect(existsSync(join(projectRoot, 'views'))).toBe(true);
+  });
+
+  it('deleteProjectViewComponent: deletes an unused component; a referenced one is REFUSED with the view named', () => {
+    const pa = make();
+    pa.writeProjectViewComponent('RecipeCard', {
+      props: { title: 'string' },
+      node: { el: 'text', text: '$props.title' },
+    });
+    // Unused → deletes (a dead component is a warning, not a fault).
+    expect(pa.deleteProjectViewComponent('RecipeCard')).toEqual({ ok: true });
+    expect(existsSync(join(projectRoot, 'components', 'RecipeCard.view.json'))).toBe(false);
+
+    // Missing → { ok:false }.
+    expect(pa.deleteProjectViewComponent('RecipeCard').ok).toBe(false);
+
+    // Referenced → refused, view named, disk untouched.
+    pa.writeProjectViewComponent('RecipeCard', {
+      props: { title: 'string' },
+      node: { el: 'text', text: '$props.title' },
+    });
+    pa.writeProjectView('recipes', {
+      sections: [{ kind: 'list', query: 'listRecipes', item: { use: 'RecipeCard', props: { title: '$.title' } } }],
+    });
+    const res = pa.deleteProjectViewComponent('RecipeCard');
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain('views/recipes.view.json');
+    expect(existsSync(join(projectRoot, 'components', 'RecipeCard.view.json'))).toBe(true);
+    // Deleting the referencing view first unblocks it.
+    expect(pa.deleteProjectView('recipes')).toEqual({ ok: true });
+    expect(pa.deleteProjectViewComponent('RecipeCard')).toEqual({ ok: true });
+  });
+
+  it('deleteProjectViewLayout: deletes a layout whose children stay reachable; refuses one whose child it orphans', () => {
+    const pa = make();
+    const layout = {
+      sections: [
+        { kind: 'toolbar', actions: [{ label: 'All', action: { navigate: 'recipes/index' } }] },
+        { kind: 'outlet' },
+      ],
+    };
+    // Child reachable through the SHELL, not only through the layout → the frame is retired freely.
+    pa.writeProjectViewLayout('recipes', layout);
+    pa.writeProjectView('recipes/index', { sections: [{ kind: 'list', query: 'listRecipes' }] });
+    pa.writeProjectViewShell({ nav: [{ route: 'recipes/index', label: 'Recipes' }] });
+    expect(pa.deleteProjectViewLayout('recipes')).toEqual({ ok: true });
+    expect(existsSync(join(projectRoot, 'views', 'recipes', '_layout.view.json'))).toBe(false);
+
+    // …but with nothing else pointing at the child, the layout is its ONLY inbound link: deleting
+    // it would orphan the child, so it is refused with the orphan named and disk untouched.
+    pa.writeProjectViewLayout('recipes', layout);
+    pa.writeProjectViewShell({ nav: [] });
+    const res = pa.deleteProjectViewLayout('recipes');
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain('deleteProjectViewLayout("recipes") refused');
+    expect(res.error).toContain('views/recipes/index.view.json');
+    expect(existsSync(join(projectRoot, 'views', 'recipes', '_layout.view.json'))).toBe(true);
+
+    // Missing → { ok:false }.
+    expect(pa.deleteProjectViewLayout('ghost').ok).toBe(false);
+  });
+
+  it('deleteProjectApi: deletes an unreferenced handler; a queried one is REFUSED with the page named', () => {
+    const pa = make();
+    appWrites.length = 0;
+    // Nothing queries it (no views at all) → deletes, fires onAppWrite(api).
+    expect(pa.deleteProjectApi('recipes/GET')).toEqual({ ok: true });
+    expect(existsSync(join(projectRoot, 'api', 'recipes', 'GET.ts'))).toBe(false);
+    expect(appWrites).toEqual([{ kind: 'api', route: 'recipes/GET' }]);
+
+    // Missing → { ok:false }, and a bad method is rejected exactly like the writer's.
+    expect(pa.deleteProjectApi('recipes/GET').ok).toBe(false);
+    expect(pa.deleteProjectApi('recipes/FETCH').ok).toBe(false);
+
+    // Queried → refused, the referencing page named, handler still on disk.
+    writeFileSync(
+      join(projectRoot, 'api', 'recipes', 'GET.ts'),
+      `export const name = 'listRecipes';
+export interface Output { items: { id: string; title: string; minutes: number }[]; }
+export default async function handler() { return { items: [] }; }
+`,
+    );
+    pa.writeProjectView('recipes', { sections: [{ kind: 'list', query: 'listRecipes' }] });
+    const res = pa.deleteProjectApi('recipes/GET');
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain('deleteProjectApi("recipes/GET") refused');
+    expect(res.error).toContain('views/recipes.view.json');
+    expect(existsSync(join(projectRoot, 'api', 'recipes', 'GET.ts'))).toBe(true);
+    // Deleting the referencing page first unblocks it.
+    expect(pa.deleteProjectView('recipes')).toEqual({ ok: true });
+    expect(pa.deleteProjectApi('recipes/GET')).toEqual({ ok: true });
+  });
+});
+
+// ── the personal-workspace guard ───────────────────────────────────────────────
+//
+// The "user" project is the personal THING workspace: it may hold the HOST-written chat scaffold
+// (a newborn `views/index.view.json` + `shell.view.json`) and personal automations, NEVER a built
+// app. Found live: a build_live_project run whose automator was not retargeted authored an entire
+// app INTO `.lmthing/user/` (a shell, 5 views, 2 components, 4 api handlers, 2 tables). The two
+// halves below are proven TOGETHER on purpose — the guard must refuse the agent-authored build
+// without ever touching the host scaffold that writes the very same file paths, through its own
+// seam (`projects.ts#scaffoldAppFromBirthSync` / `#ensureAppFromBirthSync` — direct fs writes,
+// never these globals).
+describe('the user-project guard — no built app in the personal workspace', () => {
+  let userRoot: string; // <tmp>/…/user — basename AND project id are both "user"
+
+  beforeEach(() => {
+    userRoot = join(mkdtempSync(join(tmpdir(), 'lm-user-guard-')), DEFAULT_PROJECT_ID);
+    mkdirSync(userRoot, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(userRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  });
+
+  const makeUser = (projectId = DEFAULT_PROJECT_ID) =>
+    createProjectAuthoringGlobals({ projectId, projectRoot: userRoot, onAppWrite: () => {
+      throw new Error('onAppWrite must never fire for a refused write');
+    } });
+
+  it('REFUSES all four view writers with the retarget message — nothing lands, no side effect fires', () => {
+    const pa = makeUser();
+    const refusals = [
+      pa.writeProjectView('books/[id]', { sections: [{ kind: 'list', query: 'listBooks' }] }),
+      pa.writeProjectViewLayout('books', { sections: [{ kind: 'outlet' }] }),
+      pa.writeProjectViewComponent('BookCard', { props: {}, node: { el: 'text', text: 'x' } }),
+      pa.writeProjectViewShell({ brand: 'Book Club Tracker', nav: [{ route: 'books', label: 'Books' }] }),
+    ];
+    for (const r of refusals) {
+      expect(r.ok).toBe(false);
+      expect(r.error).toContain('personal THING workspace');
+      expect(r.error).toContain('can never hold a built app');
+      expect(r.error).toContain('createProject');
+      expect(r.error).toContain('selectProject');
+    }
+    // The exact live-pollution shapes left NOTHING behind — no views/, components/, no shell.
+    expect(existsSync(join(userRoot, 'views'))).toBe(false);
+    expect(existsSync(join(userRoot, 'components'))).toBe(false);
+    expect(existsSync(join(userRoot, 'shell.view.json'))).toBe(false);
+  });
+
+  it('the HOST scaffold still writes the very paths the guard protects — through its own seam', () => {
+    // (a) the agent-facing writers refuse…
+    const pa = makeUser();
+    expect(pa.writeProjectView('index', { sections: [{ id: 'chat', kind: 'chat', agent: 'thing' }] }).ok).toBe(false);
+    expect(pa.writeProjectViewShell({ assistant: false }).ok).toBe(false);
+
+    // (b) …while the host scaffold creates the newborn chat app-from-birth directly.
+    scaffoldAppFromBirthSync(dirname(userRoot), DEFAULT_PROJECT_ID, 'Personal');
+    const indexPath = join(userRoot, 'views', 'index.view.json');
+    const shellPath = join(userRoot, 'shell.view.json');
+    expect(existsSync(indexPath)).toBe(true);
+    expect(existsSync(shellPath)).toBe(true);
+    expect(JSON.parse(readFileSync(shellPath, 'utf8'))).toEqual({ assistant: false });
+
+    // (c) …and the lazy-ensure (the serve/session-start path observed recreating them live)
+    // brings BOTH artifacts back after a deletion, guard or no guard.
+    rmSync(join(userRoot, 'views'), { recursive: true, force: true });
+    rmSync(shellPath, { force: true });
+    expect(existsSync(indexPath)).toBe(false);
+    ensureAppFromBirthSync(dirname(userRoot), DEFAULT_PROJECT_ID, 'Personal');
+    expect(existsSync(indexPath)).toBe(true);
+    const index = JSON.parse(readFileSync(indexPath, 'utf8'));
+    expect(index.route).toBe('index');
+    expect(index.sections[0]).toMatchObject({ kind: 'chat', agent: 'thing' });
+    expect(JSON.parse(readFileSync(shellPath, 'utf8'))).toEqual({ assistant: false });
   });
 });
