@@ -1383,7 +1383,8 @@ export function createProjectAuthoringGlobals(opts: {
 
   /** List `<projectRoot>/<dir>` — project-rooted introspection (the read twin of the writers).
    *  A missing dir returns `entries: []` (not an error) so an agent can safely check "what tables
-   *  exist?" on a fresh project. `safeResolve` keeps it inside the project (no traversal). */
+   *  exist?" on a fresh project. `safeResolve` keeps it inside the project (no traversal). The file
+   *  names live in `entries` — never `content`/`raw` (a list has no text). */
   function listProjectDir(dir: string): { ok: boolean; entries: string[]; error?: string } {
     try {
       const target = safeResolve(projectRoot, dir || '.');
@@ -1395,7 +1396,11 @@ export function createProjectAuthoringGlobals(opts: {
     }
   }
 
-  /** Read `<projectRoot>/<path>` as UTF-8 text — project-rooted (the read twin of the writers). */
+  /** Read `<projectRoot>/<path>` as UTF-8 text — project-rooted (the read twin of the writers).
+   *  The body is the PLAIN, unmodified file text in `content` — there is NO `raw` field and NO
+   *  line-numbered variant. (A `.raw` access is a typecheck error; it belongs only to the engineer's
+   *  scratch `readFile`, where `content` is line-numbered for display and `raw` is the clean text.
+   *  Here `content` is already the clean text, so `.raw` is both wrong and pointless.) */
   function readProjectFile(path: string): { ok: boolean; content: string; error?: string } {
     try {
       const target = safeResolve(projectRoot, path);

@@ -25,12 +25,15 @@ const ORG = resolve(HERE, '..');
 const ROOT = join(HERE, 'parallel-build');
 const RUNS = join(ROOT, 'runs');
 const ENV_FILE = join(ORG, '.env');
+// These are lmthing provider specs, not pi provider names. They are the distinct deployments
+// configured in sdk/org/.env; resolve.ts supports `azure:modelId` (chat-completions) only.
 const SLOTS = Object.freeze([
-  { id: 'azure-chat', model: 'azure-chat/DeepSeek-V4-Flash-0731' },
-  { id: 'azure-responses-terra', model: 'azure-responses/gpt-5.6-terra' },
-  { id: 'azure-responses-luna', model: 'azure-responses/gpt-5.6-luna' },
-  { id: 'zai', model: 'zai/glm-5.3' }, // deliberately one lane: this provider rate-limits fleets
+  { id: 'azure-deepseek-flash', model: 'azure:DeepSeek-V4-Flash-0731' },
+  { id: 'azure-deepseek-pro', model: 'azure:DeepSeek-V4-Pro' },
 ]);
+// All configured models are deployments on one Azure resource. Separate deployment names do not
+// prove separate quota, so do not unleash the whole table concurrently on full app builds.
+const MAX_PARALLEL = 2;
 const DEFAULT_IDEAS = Object.freeze([
   'Recipe box: build a list and detail app for recipes with ingredients and prep time. Include add, edit, and delete forms for every entity.',
   'Gym workout log: build an app for numeric workout series, per-exercise statistics, and a summary view. Include add, edit, and delete forms for every entity.',
@@ -42,7 +45,7 @@ function usage() {
   console.log('usage: node scenarios/parallel-build.mjs [--parallel N] [--ideas file] [--dry-run]');
 }
 function parseArgs(argv) {
-  const out = { parallel: SLOTS.length, ideas: DEFAULT_IDEAS, dryRun: false };
+  const out = { parallel: MAX_PARALLEL, ideas: DEFAULT_IDEAS, dryRun: false, preflightOnly: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--parallel') {
@@ -55,6 +58,7 @@ function parseArgs(argv) {
       out.ideas = readFileSync(resolve(path), 'utf8').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
       if (!out.ideas.length) throw new Error('--ideas file contains no ideas');
     } else if (a === '--dry-run') out.dryRun = true;
+    else if (a === '--preflight-only') out.preflightOnly = true;
     else if (a === '--help' || a === '-h') { usage(); process.exit(0); }
     else throw new Error(`unknown argument: ${a}`);
   }
@@ -64,10 +68,12 @@ function parseArgs(argv) {
 /** A slot allocator never emits the same slot twice; excess jobs remain queued. */
 export function allocateSlots(jobs, parallel, slots = SLOTS) {
   if (!Number.isInteger(parallel) || parallel < 1) throw new Error('parallel must be a positive integer');
-  const width = Math.min(parallel, slots.length);
+  const width = Math.min(parallel, slots.length, MAX_PARALLEL);
   const waves = [];
   for (let at = 0; at < jobs.length; at += width) {
-    waves.push(jobs.slice(at, at + width).map((job, i) => ({ job, slot: slots[i] })));
+    // Rotate across waves so a four-idea default batch exercises all three deployments while
+    // retaining uniqueness within a concurrent wave.
+    waves.push(jobs.slice(at, at + width).map((job, i) => ({ job, slot: slots[(at + i) % slots.length] })));
   }
   return waves;
 }
@@ -143,6 +149,45 @@ function voided(log, turnError) {
 function prompt(idea) {
   return `Create a completely new live project for this app idea: ${idea}\nUse the fresh-app build path (build_live_project) exactly once. Do not repair an existing project; this project is empty.`;
 }
+/**
+ * Resolve a spec the only authoritative way available to this lazy resolver: start its own server,
+ * create a new session, and finish one real model turn. A parsed CLI flag is not validation.
+ */
+async function preflightSlot(slot) {
+  const dir = mkdtempSync(join(tmpdir(), 'parallel-build-preflight-'));
+  const run = { dataDir: join(dir, 'data'), logFile: join(dir, 'sessions.log'), port: await port(), slot };
+  run.base = `http://localhost:${run.port}`;
+  let turn, error = null;
+  try {
+    startServer(run);
+    await waitUp(run.base);
+    const thing = new ThingSession(new Pod({ base: run.base }), { projectId: 'user' });
+    await thing.start(); // deliberately no resumeSessionId
+    turn = await thing.send('Reply with exactly OK.');
+    if (!turn?.lastText?.trim()) throw new Error('model turn completed without a display response');
+  } catch (e) {
+    error = String(e?.stack ?? e);
+  } finally {
+    stop(run);
+  }
+  const log = existsSync(run.logFile) ? readFileSync(run.logFile, 'utf8') : '';
+  rmSync(dir, { recursive: true, force: true });
+  return { slot: slot.id, model: slot.model, ok: !error, completion: turn?.lastText?.trim() ?? '', error, log };
+}
+async function preflightSlots() {
+  // Serial on purpose: this proves each configured deployment without itself creating an Azure
+  // concurrency/saturation experiment before the actual batch starts.
+  const results = [];
+  for (const slot of SLOTS) {
+    const result = await preflightSlot(slot);
+    results.push(result);
+    if (!result.ok) break;
+  }
+  for (const r of results) console.log(r.ok
+    ? `preflight PASS ${r.slot} (${r.model}): ${JSON.stringify(r.completion)}`
+    : `PREFLIGHT-VOID ${r.slot} (${r.model}): ${r.error?.split('\\n')[0] ?? 'unresolvable model'}`);
+  return results;
+}
 async function execute(job, slot) {
   const reserved = nextIntegerDir(RUNS);
   const run = { ...reserved, idea: job.idea, slot, dataDir: join(reserved.dir, 'data'), logFile: join(reserved.dir, 'sessions.log'), port: await port() };
@@ -184,15 +229,15 @@ async function dryRun(options) {
   // Exercise the safety boundary independent of the caller's chosen idea count: five jobs at a
   // requested width above the four-slot fleet must make two waves, and every individual wave must
   // have unique providers. This is the assertion that prevents accidental endpoint oversubscription.
-  const allocatorProbe = allocateSlots(Array.from({ length: SLOTS.length + 1 }, (_, index) => ({ index })), SLOTS.length + 1);
-  if (allocatorProbe.length !== 2 || allocatorProbe[0].length !== SLOTS.length || allocatorProbe[1].length !== 1) throw new Error('allocator did not queue excess jobs');
+  const allocatorProbe = allocateSlots(Array.from({ length: MAX_PARALLEL + 1 }, (_, index) => ({ index })), SLOTS.length);
+  if (allocatorProbe.length !== 2 || allocatorProbe[0].length !== MAX_PARALLEL || allocatorProbe[1].length !== 1) throw new Error('allocator did not queue excess jobs');
   if (allocatorProbe.some((wave) => new Set(wave.map((x) => x.slot.id)).size !== wave.length)) throw new Error('allocator double-booked a provider slot');
   const temp = mkdtempSync(join(tmpdir(), 'parallel-build-')); const created = nextIntegerDir(temp); rmSync(temp, { recursive: true, force: true });
   const realLog = join(ORG, 'scenarios/07-life-admin/runs/26/sessions.log');
   const census = errorCensus(readFileSync(realLog, 'utf8'));
   if (!census.length) throw new Error(`census extractor found no [error] records in ${realLog}`);
-  console.log(`argument parsing: PASS (parallel=${options.parallel}, ideas=${jobs.length})`);
-  console.log(`slot allocator: PASS (caller plan ${waves.map((w) => `[${w.map((x) => x.slot.id).join(', ')}]`).join(' → ')}; five-job probe ${allocatorProbe.map((w) => `[${w.map((x) => x.slot.id).join(', ')}]`).join(' → ')}; no duplicate booking; excess queued)`);
+  console.log(`argument parsing: PASS (parallel=${options.parallel}, ideas=${jobs.length}, cap=${MAX_PARALLEL})`);
+  console.log(`slot allocator: PASS (caller plan ${waves.map((w) => `[${w.map((x) => x.slot.id).join(', ')}]`).join(' → ')}; three-job probe ${allocatorProbe.map((w) => `[${w.map((x) => x.slot.id).join(', ')}]`).join(' → ')}; no duplicate booking; excess queued)`);
   console.log(`run-dir creation: PASS (${created.dir} created atomically then cleaned)`);
   console.log(`census extractor: PASS (${realLog}; ${errorLineCount(readFileSync(realLog, 'utf8'))} [error] lines, ${census.length} distinct messages)`);
   console.log(censusText(census.slice(0, 3)));
@@ -202,12 +247,19 @@ try {
   const options = parseArgs(process.argv.slice(2));
   if (options.dryRun) await dryRun(options);
   else {
-    const waves = allocateSlots(options.ideas.map((idea, index) => ({ index, idea })), options.parallel);
-    console.log(`parallel-build: ${options.ideas.length} fresh runs in ${waves.length} wave(s); effective parallelism ${Math.min(options.parallel, SLOTS.length)}.`);
-    const results = [];
-    for (const wave of waves) results.push(...await Promise.all(wave.map(({ job, slot }) => execute(job, slot))));
-    table(results);
-    process.exitCode = results.some((r) => !r.pass) ? 1 : 0;
+    const preflight = await preflightSlots();
+    // An invalid/unreachable model is a harness VOID, never a product build result. No lane starts.
+    if (preflight.length !== SLOTS.length || preflight.some((r) => !r.ok)) {
+      console.error('PREFLIGHT-VOID: no build lanes were launched; fix the named model spec and rerun.');
+      process.exitCode = 2;
+    } else if (!options.preflightOnly) {
+      const waves = allocateSlots(options.ideas.map((idea, index) => ({ index, idea })), options.parallel);
+      console.log(`parallel-build: ${options.ideas.length} fresh runs in ${waves.length} wave(s); effective parallelism ${Math.min(options.parallel, SLOTS.length, MAX_PARALLEL)}.`);
+      const results = [];
+      for (const wave of waves) results.push(...await Promise.all(wave.map(({ job, slot }) => execute(job, slot))));
+      table(results);
+      process.exitCode = results.some((r) => !r.pass) ? 1 : 0;
+    }
   }
 } catch (e) {
   console.error(`parallel-build: ${e instanceof Error ? e.message : String(e)}`);

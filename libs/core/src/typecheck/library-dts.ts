@@ -347,6 +347,8 @@ declare function deleteProjectApi(route: string): { ok: boolean; error?: string 
 /** Delete a declarative query (api/<name>.query.json) AND the handler it generated. Same reference guard as deleteProjectApi. */
 declare function deleteProjectQuery(name: string): { ok: boolean; error?: string };`;
 
+import { VIEW_SPEC_TYPES } from './view-spec-dts.generated.js';
+
 // `views:write` — the ONLY UI-authoring capability, and the mechanism behind the zero-WebView
 // guarantee. It earns the VIEW-SPEC writers: a page is DATA (a validated object literal) rather
 // than TSX, rendered by one shared `ViewRenderer` on the web bundle AND natively in the mobile
@@ -359,17 +361,23 @@ declare function deleteProjectQuery(name: string): { ok: boolean; error?: string
 //
 // All validate against the project's REAL endpoint contracts at save time and reject with a
 // menu-shaped error naming the instance path, the offence and the finite valid set — which is why
-// the parameters are `unknown` rather than an imported spec type: the model emits a TypeScript
-// OBJECT LITERAL (trailing commas and comments legal, never a JSON string), and the host, not the
-// DTS, is what tells it which section kinds and elements exist.
-export const PROJECT_VIEW_DTS = `/** Write a page as a validated VIEW SPEC (views/<route>.view.json). Sections: list|detail|create|stats|markdown|chat|toolbar|timeline|board|calendar|chart. Bindings are paths ($.field), never expressions. */
-declare function writeProjectView(route: string, spec: unknown): { ok: boolean; error?: string };
+// the parameters are the generated schema types: the model emits a TypeScript OBJECT LITERAL
+// (trailing commas and comments legal, never a JSON string), while the host still validates live
+// endpoint references and other project-specific constraints at write time.
+export const PROJECT_VIEW_DTS = VIEW_SPEC_TYPES + `
+/** Write a page as a validated VIEW SPEC (views/<route>.view.json). Sections: list|detail|create|stats|markdown|chat|toolbar|timeline|board|calendar|chart. Bindings are paths ($.field), never expressions. */
+/** define* contextually types fresh specs, including nested objects, before a variable is passed to a writer. */
+declare function defineViewSpec(spec: ViewSpec): ViewSpec;
+declare function defineViewComponent(def: ViewComponentSpec): ViewComponentSpec;
+declare function defineViewLayout(spec: ViewLayoutSpec): ViewLayoutSpec;
+declare function defineViewShell(shell: ShellSpec): ShellSpec;
+declare function writeProjectView(route: string, spec: ViewSpec): { ok: boolean; error?: string };
 /** Write a reusable element composition with typed props, referenced from any view as { use: '<Name>' }. PascalCase. */
-declare function writeProjectViewComponent(name: string, def: unknown): { ok: boolean; error?: string };
+declare function writeProjectViewComponent(name: string, def: ViewComponentSpec): { ok: boolean; error?: string };
 /** Write a nested LAYOUT (views/<prefix>/_layout.view.json) — the frame every route under <prefix> renders inside. Exactly one section is { kind: 'outlet' }, where the child route draws. */
-declare function writeProjectViewLayout(prefix: string, spec: unknown): { ok: boolean; error?: string };
+declare function writeProjectViewLayout(prefix: string, spec: ViewLayoutSpec): { ok: boolean; error?: string };
 /** Write the app shell — nav entries/groups, per-entity subnav, brand, assistant dock. Every target must be a real static route. */
-declare function writeProjectViewShell(shell: unknown): { ok: boolean; error?: string };
+declare function writeProjectViewShell(shell: ShellSpec): { ok: boolean; error?: string };
 /** Delete a page (views/<route>.view.json). REFUSED while anything still references the route — shell nav/groups/subnav or another page's navigate/link — the error names the referencing file(s); repoint or delete those first. */
 declare function deleteProjectView(route: string): { ok: boolean; error?: string };
 /** Delete a view component. REFUSED while any view/layout still references it as { use: '<Name>' }. */
@@ -430,7 +438,13 @@ declare function writeProjectEntity(name: string, entity: {
 // agent's OWN `LMTHING_SPACE_DIR` — a footgun for a delegated system-space agent whose space dir is
 // its source tree. A project-authoring agent uses THESE to see what already exists in the project.
 // Emitted on any db grant + a project-rooted session (see buildAppCapabilityDts / injectAppGlobals).
+// NOTE: `readProjectFile`'s `content` is the PLAIN unmodified text — there is deliberately NO `raw`
+// field and NO line-numbered variant (unlike the engineer's scratch `readFile`, whose `content` is
+// line-numbered for display/citation). An agent that reaches for `readProjectFile(path).raw` gets a
+// typecheck error on the first use; parse `content` directly. See org/docs/runtime-globals/session-and-utils.md.
 export const PROJECT_READ_DTS = `declare function listProjectDir(dir: string): { ok: boolean; entries: string[]; error?: string };
+// \`content\` is the plain file text. There is NO \`.raw\` here (that exists only on the engineer's
+// scratch readFile, whose content is line-numbered); \`.raw\` is a typecheck error — parse content.
 declare function readProjectFile(path: string): { ok: boolean; content: string; error?: string };`;
 
 // `project:manage` — the authority to create or bind a LIVE project. createProject

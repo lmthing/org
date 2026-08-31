@@ -5,6 +5,10 @@
  * editing it. `relPath` is a path relative to the space root (e.g.
  * 'agents/researcher/instruct.md'). No imports.
  *
+ * `content` is the PLAIN, unmodified file text — there is NO `raw` field and NO line-numbered
+ * variant (a `.raw` access is a typecheck error; `.raw` exists only on the engineer's scratch
+ * `readFile`, whose `content` is line-numbered for display — not here).
+ *
  * @returns { ok, content, error? }
  */
 export function readSpaceFile(

@@ -27,6 +27,8 @@ import {
   PROCESS_ENV_DTS,
 } from './library-dts.js';
 import { runTsc } from './tsc.js';
+import { VIEW_SPEC_TYPES } from './view-spec-dts.generated.js';
+import { generatedViewSpecDts } from './generate-view-spec-dts.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -193,6 +195,39 @@ describe('schema-gated db DTS is enforced by tsc', () => {
     const loose = composeDbDts({ read: true, write: true });
     const r = runTsc({ ambientDts: loose, sessionContext: '', statement: `const r = db.query('anything', { where: { whatever: 1 } });` });
     expect(r.ok).toBe(true);
+  });
+});
+
+describe('typed view writers', () => {
+  const check = (statement: string): ReturnType<typeof runTsc> =>
+    runTsc({ ambientDts: PROJECT_VIEW_DTS, sessionContext: '', statement });
+
+  it('is generated from the schema source and exposes the four root contracts', () => {
+    expect(VIEW_SPEC_TYPES).toBe(generatedViewSpecDts());
+    expect(PROJECT_VIEW_DTS).not.toContain('writeProjectView(route: string, spec: unknown)');
+    expect(PROJECT_VIEW_DTS).toContain('writeProjectView(route: string, spec: ViewSpec)');
+    expect(PROJECT_VIEW_DTS).toContain('writeProjectViewComponent(name: string, def: ViewComponentSpec)');
+    expect(PROJECT_VIEW_DTS).toContain('writeProjectViewLayout(prefix: string, spec: ViewLayoutSpec)');
+    expect(PROJECT_VIEW_DTS).toContain('writeProjectViewShell(shell: ShellSpec)');
+  });
+
+  it('accepts the schema minimum and rejects invalid section kinds and properties', () => {
+    expect(check(`writeProjectView('books', { route: 'books', sections: [{ kind: 'list', query: 'books-list' }] });`).ok).toBe(true);
+    expect(check(`writeProjectView('books', { route: 'books', sections: [{ kind: 'wat', query: 'books-list' }] });`).ok).toBe(false);
+    const badProperty = check(`writeProjectView('books', { route: 'books', sections: [{ kind: 'list', query: 'books-list', item: { title: { field: '$.title' } } }] });`);
+    expect(badProperty.ok).toBe(false);
+  });
+
+  it('provides a contextual helper for variable-built specs, preserving nested excess checks', () => {
+    expect(check(`const spec = defineViewSpec({ route: 'books', sections: [{ kind: 'list', query: 'books-list' }] }); writeProjectView('books', spec);`).ok).toBe(true);
+    expect(check(`const spec = defineViewSpec({ route: 'books', sections: [{ kind: 'list', query: 'books-list', bogus: true }] });`).ok).toBe(false);
+  });
+
+  it('types component, layout, and shell writers instead of accepting unknown', () => {
+    expect(check(`writeProjectViewComponent('BookRow', { name: 'BookRow', node: { el: 'text', text: '$.title' } });`).ok).toBe(true);
+    expect(check(`writeProjectViewLayout('books', { prefix: 'books', sections: [{ kind: 'outlet' }] });`).ok).toBe(true);
+    expect(check(`writeProjectViewShell({ nav: [{ route: 'books', label: 'Books' }] });`).ok).toBe(true);
+    expect(check(`writeProjectViewShell({ nav: [{ route: 'books', nope: true }] });`).ok).toBe(false);
   });
 });
 
