@@ -52,7 +52,12 @@ export function runTsc(opts: TscOpts): TscResult {
   ]);
 
   const compilerOptions: ts.CompilerOptions = {
+    // Keep strict null/property/index checking, but accept callbacks whose source collection is
+    // dynamically typed (`any`) at the statement boundary. Agent results commonly arrive as
+    // `any`; rejecting `.map((x) => …)` / `.filter((x) => …)` there burns a retry without
+    // making the runtime safer. A concrete `string[]` still contextually types its callback.
     strict: true,
+    noImplicitAny: false,
     module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     target: ts.ScriptTarget.ES2022,

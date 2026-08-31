@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { runTsc } from './tsc.js';
+import { transpileStatement } from './transpile.js';
 import { LIBRARY_DTS, COMMON_DTS } from './library-dts.js';
 
 describe('runTsc', () => {
@@ -164,5 +165,30 @@ describe('runTsc — types:[] keeps @types/node off the model surface', () => {
   it('console still typechecks — injected in every VM, now declared in COMMON_DTS', () => {
     const result = runTsc({ ambientDts: COMMON_DTS, sessionContext: '', statement: 'console.log("hi", 42);' });
     expect(result.ok).toBe(true);
+  });
+});
+
+describe('runTsc — callbacks over dynamic agent values', () => {
+  // A live build received `ep` from an untyped agent result. That deliberately makes `name`
+  // `any`, but ordinary string munging must still be executable: rejecting an inferred callback
+  // parameter here is friction, not a useful runtime-safety boundary.
+  const context = 'declare const ep: any;\nconst name = ep.name;';
+
+  it('accepts an unannotated map callback after split/filter on a dynamic string', () => {
+    const result = runTsc({
+      ambientDts: LIBRARY_DTS,
+      sessionContext: context,
+      statement:
+        "const Pascal = name.split(/[^A-Za-z0-9]+/).filter(Boolean).map((s) => s[0].toUpperCase() + s.slice(1)).join('');",
+    });
+    expect(result).toEqual({ ok: true, diagnostics: [] });
+  });
+
+  it('parses and transpiles a type-predicate arrow callback in the runtime .tsx statement path', () => {
+    const statement =
+      "const Pascal = name.split(/[^A-Za-z0-9]+/).filter((s): s is string => Boolean(s)).map((s: string) => s[0].toUpperCase() + s.slice(1)).join('');";
+    const result = runTsc({ ambientDts: LIBRARY_DTS, sessionContext: context, statement });
+    expect(result).toEqual({ ok: true, diagnostics: [] });
+    expect(transpileStatement(statement)).toContain('.filter((s) => Boolean(s))');
   });
 });

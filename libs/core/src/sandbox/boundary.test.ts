@@ -22,6 +22,38 @@ describe('BoundaryDetector', () => {
     expect(stmts[0]).toContain('const x = 1;');
   });
 
+  it('does not emit a const-with-type-annotation prefix while the initializer is still streaming (live f-loss bug)', () => {
+    // A chunk boundary landing right after the type annotation's `}` leaves the buffer
+    // holding `const f: { ... }` — a GRAMMATICAL no-init declaration and therefore a
+    // complete parse, but never a complete statement: `const` requires an initializer,
+    // so this can only ever be a PREFIX of a longer declaration. Emitting it fails
+    // typecheck ("'const' declarations must be initialized"), the declaring statement
+    // never commits to accumulatedContext, and every later reference dies with
+    // "Cannot find name 'f'". The detector must hold until the `=` arrives.
+    const stmts = bd.feed('const f: { path: string; kind: string; errors: Array<{ line?: number }> }');
+    expect(stmts).toHaveLength(0);
+    // The rest of the declaration arrives in the next chunk: the declaration now
+    // completes and emits WHOLE, followed by the resolve statement.
+    const rest = bd.feed(' =\n  item as { path: string; kind: string; errors: Array<{ line?: number }> };\ncurrentTask.resolve(f.path);\n');
+    expect(rest).toHaveLength(2);
+    expect(rest[0]).toContain('const f');
+    expect(rest[0]).toContain('item as');
+    expect(rest[1]).toContain('currentTask.resolve(f.path)');
+  });
+
+  it('applies the same error-token gate to the multi-statement branch as the single-statement branch', () => {
+    // The single-statement path refuses statements with missing/error tokens, but the
+    // statements.length > 1 shortcut returns statements[0] with NO such check — so an
+    // orphan fragment like ` = readProjectFile(item.path);` (a real parse error that can
+    // never become valid) is EMITTED as a "statement" the moment any second statement
+    // follows it in the same chunk. Downstream it fails typecheck with
+    // "Declaration or statement expected." and the cascade that follows the prefix-cut
+    // above turns into per-fragment retry noise.
+    const stmts = bd.feed(' = readProjectFile(item.path);\nconst len = 1;\n');
+    expect(stmts).toHaveLength(0);
+    expect(bd.flush()).toContain(' = readProjectFile(item.path);');
+  });
+
   it('extracts multiple complete statements', () => {
     const stmts = bd.feed('const a = 1;\nconst b = 2;\n');
     expect(stmts).toHaveLength(2);

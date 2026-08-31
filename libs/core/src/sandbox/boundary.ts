@@ -56,18 +56,24 @@ export class BoundaryDetector {
     if (sf.statements.length > 1) {
       const first = sf.statements[0]!;
       const firstText = buf.slice(0, first.end).trim();
-      // Prose guard: a natural-language line with an apostrophe contraction (e.g.
-      // "I'll start by") parses as a bare identifier ("I") followed by an unterminated
-      // string ("'ll start by"). Emitting just "I" hides the prose from the turn loop's
-      // looksLikeProse() drop, so it burns a retry on "Cannot find name 'I'". When the
-      // first statement is a bare identifier carved out of a longer line, surface the
-      // WHOLE physical line instead so the prose-drop can discard it; if the line hasn't
-      // finished streaming yet, wait (it'll be handled here or by flush()).
+      // Prose guard FIRST: its whole reason to exist is an error-flagged head (the
+      // bare identifier carved out of an apostrophe prose line), so the completeness
+      // gates below must not run ahead of it and hold the line.
       if (/^[A-Za-z_$][\w$]*$/.test(firstText)) {
         const nl = buf.indexOf('\n');
         if (nl === -1) return null;
         return buf.slice(0, nl);
       }
+      // The head statement must then pass the SAME error-token gate as the
+      // single-statement branch below. That a further statement follows proves the
+      // stream continued — it does NOT prove the head itself is whole: a garbage
+      // fragment (` = readProjectFile(item.path);`) parses statement-shaped after the
+      // parser skips its stray token, and without this gate it was emitted as a
+      // "statement" the moment any second statement shared its chunk. A head HELD here
+      // (e.g. a leaked `</think>` glued to real code behind it) still reaches the turn
+      // loop through flush(), whose sanitizer neutralizes a pure-markup LEADING line
+      // and keeps the code — so holding never strands a binding.
+      if (hasMissingOrErrorTokens(first) || isConstWithoutInitializer(first)) return null;
       return buf.slice(0, first.end);
     }
 
@@ -80,14 +86,59 @@ export class BoundaryDetector {
     const endsWithSemiOrBrace = lastChar === ';' || lastChar === '}';
     if (!endsWithSemiOrBrace) return null;
 
-    // Check for error / synthetic / missing tokens
-    if (hasMissingOrErrorTokens(stmt)) return null;
+    // Check for error / synthetic / missing tokens — and the other incompleteness
+    // shapes a syntactically clean parse can still hide.
+    if (
+      hasMissingOrErrorTokens(stmt) ||
+      parsedPastSkippedText(sf, stmt) ||
+      isConstWithoutInitializer(stmt)
+    ) {
+      return null;
+    }
 
     // Ignore leading whitespace from the full buffer
     void leadingWs; // used implicitly via buf above
 
     return buf.slice(0, stmt.end);
   }
+}
+
+/**
+ * True when the statement was parsed past SKIPPED source text: a parse diagnostic that
+ * starts BEFORE the statement's first token can only target characters the parser threw
+ * away to make the statement parse — the head is a fragment
+ * (` = readProjectFile(item.path);` parses as a clean expression statement after the
+ * stray `=` is skipped, with no missing tokens of its own). Only the parse diagnostics
+ * record skipped tokens; the node walk in hasMissingOrErrorTokens cannot see them.
+ *
+ * Deliberately run on the single-statement branch too: a fragment head there is exactly
+ * as unemittable, and for the live-streaming case the diagnostic of a still-incomplete
+ * TAIL always sits beyond stmt.end, so a complete head is never held because of what
+ * follows it.
+ */
+function parsedPastSkippedText(sf: ts.SourceFile, stmt: ts.Statement): boolean {
+  const firstToken = stmt.getStart(sf);
+  const parseDiagnostics = (sf as unknown as { parseDiagnostics: ts.Diagnostic[] }).parseDiagnostics;
+  return parseDiagnostics.some((d) => (d.start ?? 0) < firstToken);
+}
+
+/**
+ * A `const` declaration with an initializer-less declarator is never a complete
+ * statement — TS requires every const declarator to be initialized — so a parse that
+ * ACCEPTS one can only mean the stream cut mid-declaration: `const f: { … }` is the
+ * grammatical no-init PREFIX of `const f: { … } = item;` (destructuring is always
+ * initializer-requiring and is covered by the same check). Emitting it fails typecheck
+ * ("'const' declarations must be initialized"), the declaring statement never commits to
+ * the session context, and every later reference dies with "Cannot find name 'f'".
+ * Hold until the `=` and its initializer arrive; a genuinely truncated FINAL statement
+ * still surfaces through flush(), where the typecheck failure names the real problem for
+ * the model. `let`/`var` declarations without an initializer ARE genuine complete
+ * statements and still emit (e.g. `let w: { ok: boolean; error?: string };`).
+ */
+function isConstWithoutInitializer(stmt: ts.Statement): boolean {
+  if (!ts.isVariableStatement(stmt)) return false;
+  if ((stmt.declarationList.flags & NodeFlags.Const) === 0) return false;
+  return stmt.declarationList.declarations.some((d) => !d.initializer);
 }
 
 /**

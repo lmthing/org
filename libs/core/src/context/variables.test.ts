@@ -24,6 +24,17 @@ describe('extractBindingNames', () => {
     expect(extractBindingNames('const [first, second] = arr')).toEqual(['first', 'second']);
   });
 
+  it('extracts nested destructuring, defaults and rest elements (regression: flat [^}]/[^]] regexes drop them)', () => {
+    // All of these bind REAL module-local names that a later statement's eval can only
+    // reach via the globalThis propagation, so every missed name is a latent
+    // "'x' is not defined" eval failure (typecheck still passes — the declaration text
+    // IS in accumulatedContext).
+    expect(extractBindingNames('const { a: { b } } = x')).toEqual(['b']); // [] — both lost
+    expect(extractBindingNames('const [a, [b, c]] = x')).toEqual(['a', 'b', 'c']); // ['a','c'] — b lost, c wrong
+    expect(extractBindingNames('const { a = 1, b: c = 2 } = x')).toEqual(['a', 'c']); // [] — defaults kill the match
+    expect(extractBindingNames('const [a, ...rest] = x')).toEqual(['a', 'rest']); // ['a'] — rest lost
+  });
+
   it('strips leading comments', () => {
     expect(extractBindingNames('// a comment\nconst val = 5')).toEqual(['val']);
     expect(extractBindingNames('// comment\nlet typed: string = "x"')).toEqual(['typed']);
@@ -85,11 +96,11 @@ describe('extractBindingNames', () => {
     expect(extractBindingNames('let cb: (a: number, b: number) => void;')).toEqual(['cb']);
     // Multi-line no-initializer declaration
     expect(extractBindingNames('let w: {\n  ok: boolean;\n  error?: string;\n};')).toEqual(['w']);
-    // A multi-line WITH-initializer declaration must NOT be mistaken for no-init just
-    // because the with-initializer regex above can't see an `=` past the first line —
-    // hasTopLevelEquals must catch the `=` on the later line and bail out (same
-    // no-names-extracted behavior as before this fix, not a regression).
-    expect(extractBindingNames('let w: {\n  ok: boolean;\n} = { ok: true };')).toEqual([]);
+    // A multi-line WITH-initializer declaration: the old regex path bailed here and
+    // extracted no names (a gap the pre-AST code had to leave, since a line-oriented
+    // regex cannot see an `=` across newlines). The AST walk reads the declarator
+    // structurally, so `w` now propagates like any other declaration.
+    expect(extractBindingNames('let w: {\n  ok: boolean;\n} = { ok: true };')).toEqual(['w']);
   });
 });
 

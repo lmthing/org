@@ -568,3 +568,66 @@ describe('ForkEngine — task-node default omits granted-only universal function
     expect(result.kind).toBe('function');
   });
 });
+
+describe('ForkEngine forced-resolve nudge context preservation', () => {
+  it('nudge turn can reference variables bound in Turn 1 without Cannot find name error', async () => {
+    let call = 0;
+    const engine = new ForkEngine({
+      maxConcurrentForks: 4,
+      parentHistory: [],
+      parentSpaceDir: '/tmp',
+      parentAgentSlug: 'test',
+      renderHost: silentHost,
+      streamFn: async (opts: StreamOpts) => {
+        call++;
+        const last = [...opts.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+        if (last.includes('currentTask.resolve()')) {
+          // Nudge turn: reference the variable declared in turn 1
+          return makeStream(`currentTask.resolve({ answer: gatheredAnswer });\n`);
+        }
+        // Turn 1: declare gatheredAnswer and end without resolving
+        return makeStream(`const gatheredAnswer = "penne";\n`);
+      },
+    });
+
+    const result = await engine.fork<{ answer: string }>({
+      instruction: 'test nudge variable reference',
+      output: { answer: 'string' },
+    });
+
+    expect(result).toEqual({ answer: 'penne' });
+  });
+
+  it('context survives across multiple nudge attempts (nudge 2 sees variables from turn 1 and nudge 1)', async () => {
+    let call = 0;
+    const engine = new ForkEngine({
+      maxConcurrentForks: 4,
+      parentHistory: [],
+      parentSpaceDir: '/tmp',
+      parentAgentSlug: 'test',
+      renderHost: silentHost,
+      streamFn: async (opts: StreamOpts) => {
+        call++;
+        const last = [...opts.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+        if (last.includes('currentTask.resolve()')) {
+          if (call === 2) {
+            // Nudge 1: declare second variable referencing turn 1, but still don't resolve
+            return makeStream(`const refinedAnswer = gatheredAnswer + " rigate";\n`);
+          }
+          // Nudge 2: resolve using the variable declared in nudge 1
+          return makeStream(`currentTask.resolve({ answer: refinedAnswer });\n`);
+        }
+        // Turn 1: declare base variable
+        return makeStream(`const gatheredAnswer = "rigatoni";\n`);
+      },
+    });
+
+    const result = await engine.fork<{ answer: string }>({
+      instruction: 'test multi-nudge context survival',
+      output: { answer: 'string' },
+    });
+
+    expect(result).toEqual({ answer: 'rigatoni rigate' });
+  });
+});
+

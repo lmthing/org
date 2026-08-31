@@ -649,12 +649,14 @@ export class ForkEngine {
           }
         }
 
+        let forkContext = preludeContext ?? '';
         const forkLoopOpts = {
           vm,
           history,
           systemBlock,
           ambientDts: turnLoopAmbient,
           initialContext: preludeContext,
+          onContextSnapshot: (c: string) => { forkContext = c; },
           renderHost: this.opts.renderHost,
           streamFn: this.opts.streamFn,
           processYield,
@@ -699,6 +701,8 @@ export class ForkEngine {
           try {
             await runTurnLoop({
               ...forkLoopOpts,
+              initialContext: forkContext,
+              onContextSnapshot: (c: string) => { forkContext = c; },
               maxRetries: 3,
               budget: new Budget({ maxEpisodes: 4 }),
               traceContext: `fork:${task.taskId ?? task.role ?? 'general'}:resolve_nudge`,

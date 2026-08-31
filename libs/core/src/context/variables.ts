@@ -1,3 +1,4 @@
+import ts from 'typescript';
 import { serialize } from '../globals/serialize.js';
 
 /** Rolling window (chars) for the ALREADY-EXECUTED echo. The full accumulated
@@ -86,18 +87,14 @@ export function emitVariables(
 
 /**
  * Extract all simple variable binding names declared in accumulated context.
- * Scans lines that start a const/let/var declaration.
+ * One parse of the whole context, then the same AST walk as extractBindingNames —
+ * line-oriented scanning missed multi-line declarations entirely and mis-read
+ * declarations nested inside a committed block statement.
  */
 export function extractScopeNamesFromContext(context: string): string[] {
   if (!context) return [];
-  const names: string[] = [];
-  for (const line of context.split('\n')) {
-    const trimmed = line.trim();
-    if (/^(?:const|let|var)\s/.test(trimmed)) {
-      names.push(...extractBindingNames(trimmed));
-    }
-  }
-  return [...new Set(names)];
+  const sf = ts.createSourceFile('_ctx.tsx', context, ts.ScriptTarget.ES2022, /*setParentNodes*/ true, ts.ScriptKind.TSX);
+  return [...new Set(declaredBindingNames(sf.statements))];
 }
 
 export type BindingKind = 'simple' | 'array' | 'object' | 'none';
@@ -123,139 +120,59 @@ export function extractBindingPattern(statement: string): { kind: BindingKind; n
 
 /**
  * Extract LHS binding identifier names from a TypeScript statement.
- * Handles: `const x = ...`, `let [a, b] = ...`, `const { x, y } = ...`
- * Strips leading line-comments (// ...) which the boundary detector may include as trivia.
+ * Handles every binding shape a declarator can have — `const x = …`, typed
+ * declarations, object/array destructuring with nesting (`{ a: { b } }`,
+ * `[a, [b, c]]`), defaults (`{ a = 1, b: c = 2 }`), rest elements
+ * (`[a, ...rest]`), multi-declarator lists (`const a = 1, b = 2`), no-init
+ * declarations with annotated types, and function/class/enum declarations.
+ *
+ * Implemented on the TypeScript AST, not regexes: binding patterns nest, a type
+ * annotation can legally contain any of `= , ; { } ( )` at depth, and the flat
+ * character-class approach failed twice before (multi-declarator splitting, then
+ * no-init declarations with structured type annotations). One `createSourceFile`
+ * parse is negligible next to the full `runTsc` program check every statement
+ * already pays. Leading comments need no stripping — they are parser trivia.
  */
 export function extractBindingNames(statement: string): string[] {
+  const sf = ts.createSourceFile('_b.tsx', statement, ts.ScriptTarget.ES2022, /*setParentNodes*/ true, ts.ScriptKind.TSX);
+  return declaredBindingNames(sf.statements);
+}
+
+/** Names bound by TOP-LEVEL declarations of a parsed file — the runtime-binding
+ *  counterpart of `typecheck/tsc.ts#declaredNames` (which shadows re-declared
+ *  bindings for typecheck; this one propagates them to globalThis). Type-only
+ *  declarations (type/interface) bind nothing and are skipped. */
+function declaredBindingNames(statements: readonly ts.Statement[]): string[] {
   const names: string[] = [];
-
-  // Strip leading single-line comments before checking for declarations
-  const stripped = statement.replace(/^(\s*\/\/[^\n]*\n)+/g, '').trimStart();
-
-  // const/let/var declarations
-  const declMatch = stripped.match(/^\s*(?:const|let|var)\s+(.+?)\s*=/);
-  if (declMatch) {
-    const lhs = declMatch[1]!.trim();
-    // Object destructuring: { a, b, c: alias } — strip optional type annotation after }
-    const objDestructMatch = lhs.match(/^\{([^}]+)\}/);
-    if (objDestructMatch) {
-      const parts = objDestructMatch[1]!.split(',');
-      for (const part of parts) {
-        const aliased = part.split(':');
-        const name = (aliased.length > 1 ? aliased[1] : aliased[0])!.trim();
-        if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name)) {
-          names.push(name);
-        }
-      }
-      return names;
+  for (const stmt of statements) {
+    if (ts.isVariableStatement(stmt)) {
+      for (const d of stmt.declarationList.declarations) walkBindingName(d.name, names);
+    } else if (
+      (ts.isFunctionDeclaration(stmt) || ts.isClassDeclaration(stmt) || ts.isEnumDeclaration(stmt)) &&
+      stmt.name
+    ) {
+      // function / class / enum declarations. Each eval statement is its own module,
+      // so a `function foo() {}` in one statement is invisible to the next unless we
+      // propagate it via globalThis like any other binding. Without this, typecheck
+      // (which sees the accumulated context) accepts a later `foo(...)` while eval
+      // throws "'foo' is not defined" — the model then re-declares and hits
+      // "Duplicate identifier" (live E4 failure shape).
+      names.push(stmt.name.text);
     }
-    // Array destructuring: [a, b, c] — strip optional type annotation after ]
-    const arrDestructMatch = lhs.match(/^\[([^\]]+)\]/);
-    if (arrDestructMatch) {
-      const parts = arrDestructMatch[1]!.split(',');
-      for (const part of parts) {
-        const name = part.trim();
-        if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name)) {
-          names.push(name);
-        }
-      }
-      return names;
-    }
-    // Simple identifier or multi-variable declaration: const a=x, b=y, c=z
-    // Split by top-level commas to extract ALL declarators (not just the first one,
-    // which was the pre-fix bug: const a=x, b=y only propagated `a` to globalThis).
-    const afterKeyword = stripped.replace(/^\s*(?:const|let|var)\s+/, '');
-    for (const part of splitByTopLevelCommas(afterKeyword)) {
-      const eqIdx = part.indexOf('=');
-      if (eqIdx === -1) continue;
-      const namePart = part.slice(0, eqIdx).replace(/\s*:.*$/, '').trim();
-      if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(namePart)) {
-        names.push(namePart);
-      }
-    }
-    return names;
   }
-
-  // Declaration with NO initializer: `let parsed;`, `let a, b;`, `let x: string;`,
-  // `let w: { ok: boolean; error?: string };`. A no-initializer declarator can only ever
-  // be a bare identifier with an optional type annotation — destructuring patterns
-  // (`{ a, b }` / `[a, b]`) require an initializer in JS/TS, so they can't appear here.
-  // The declarator list is therefore just top-level-comma-separated identifiers, but the
-  // type annotation on any of them may itself contain `;`/`,` at brace/paren/bracket
-  // depth (e.g. an inline object type's members) — a flat `[^=;]` character class can't
-  // tell those apart from real declarator separators, so it must split comma-aware
-  // (`splitByTopLevelCommas`) rather than matching the whole tail with one regex.
-  const noInitKeywordMatch = stripped.match(/^\s*(?:const|let|var)\s+([\s\S]+?);?\s*$/);
-  if (noInitKeywordMatch && !hasTopLevelEquals(noInitKeywordMatch[1]!)) {
-    for (const part of splitByTopLevelCommas(noInitKeywordMatch[1]!)) {
-      const nameMatch = part.trim().match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)/);
-      if (nameMatch) names.push(nameMatch[1]!);
-    }
-    return names;
-  }
-
-  // function / class declarations. Each eval statement is its own module, so a
-  // `function foo() {}` in one statement is invisible to the next unless we
-  // propagate it via globalThis like any other binding. Without this, typecheck
-  // (which sees the accumulated context) accepts a later `foo(...)` while eval
-  // throws "'foo' is not defined" — the model then re-declares and hits
-  // "Duplicate identifier" (live E4 failure shape). Type-only declarations
-  // (type/interface) need no runtime propagation.
-  const fnMatch = stripped.match(/^(?:export\s+)?(?:async\s+)?function\s*\*?\s*([a-zA-Z_$][a-zA-Z0-9_$]*)/);
-  if (fnMatch) {
-    names.push(fnMatch[1]!);
-    return names;
-  }
-  const classMatch = stripped.match(/^(?:export\s+)?(?:abstract\s+)?class\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/);
-  if (classMatch) {
-    names.push(classMatch[1]!);
-  }
-
   return names;
 }
 
-/**
- * Split a string by commas that are not inside brackets, braces, or parentheses.
- * Used to separate declarators in multi-variable const/let/var statements.
- */
-function splitByTopLevelCommas(str: string): string[] {
-  const parts: string[] = [];
-  let depth = 0;
-  let start = 0;
-  for (let i = 0; i < str.length; i++) {
-    const c = str[i];
-    if (c === '{' || c === '[' || c === '(') depth++;
-    else if (c === '}' || c === ']' || c === ')') depth--;
-    else if (c === ',' && depth === 0) {
-      parts.push(str.slice(start, i));
-      start = i + 1;
-    }
+/** Collect the identifiers a BindingName binds, recursing through nested
+ *  object/array patterns. Aliases (`{ b: c }`), defaults (`{ a = 1 }`) and rest
+ *  elements (`...rest`) bind their `name`, never their property key. */
+function walkBindingName(name: ts.BindingName, out: string[]): void {
+  if (ts.isIdentifier(name)) {
+    out.push(name.text);
+    return;
   }
-  parts.push(str.slice(start));
-  return parts;
-}
-
-/**
- * True if `str` contains a top-level (depth-0) assignment `=` — as opposed to one that's
- * part of a comparison/arrow (`==`, `=>`, `<=`, `>=`, `!=`) or nested inside a bracketed
- * type (a function-type member's own `=>`). Used to tell a genuine no-initializer
- * declaration (`let w: { a: () => void };`) apart from a WITH-initializer declaration
- * whose `=` simply falls outside what the single-line with-initializer regex above can see
- * (a multi-line `let w: {\n  ...\n} = value;`) — the latter must NOT be parsed as no-init.
- */
-function hasTopLevelEquals(str: string): boolean {
-  let depth = 0;
-  for (let i = 0; i < str.length; i++) {
-    const c = str[i];
-    if (c === '{' || c === '[' || c === '(') depth++;
-    else if (c === '}' || c === ']' || c === ')') depth--;
-    else if (c === '=' && depth === 0) {
-      const prev = str[i - 1];
-      const next = str[i + 1];
-      if (next === '=' || next === '>') continue; // ==, =>
-      if (prev === '=' || prev === '!' || prev === '<' || prev === '>') continue; // ==, !=, <=, >=
-      return true;
-    }
+  for (const el of name.elements) {
+    if (!ts.isBindingElement(el)) continue; // OmittedExpression (array hole)
+    walkBindingName(el.name, out);
   }
-  return false;
 }

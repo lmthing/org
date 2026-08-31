@@ -169,6 +169,74 @@ describe('runDelegate forced-resolve nudge (E4 live finding)', () => {
     expect(nudged).toBe(true);
     expect(result).toEqual({ done: true, via: 'nudge' });
   });
+
+  it('nudge turn can reference variables bound in Turn 1 without Cannot find name error', async () => {
+    const systemSpaces = await loadSystemSpaces(defaultSystemSpaceDirs());
+    const memory = systemSpaces.find((s) => s.dir.endsWith('/user-memory'));
+    expect(memory).toBeTruthy();
+    const registry = new DelegateRegistry(new Map([[memory!.dir, memory!]]));
+
+    const streamFn = createMockStreamFn((o) => {
+      const last = [...o.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+      if (last.includes('currentTask.resolve()')) {
+        // Nudge turn: reference variable bound in turn 1
+        return `currentTask.resolve({ value: computedWork });`;
+      }
+      // Main run: bind computedWork and end without resolving
+      return `const computedWork = 'result-from-turn-1';\ndisplay(computedWork);`;
+    });
+
+    const result = (await runDelegate({
+      packageName: memory!.dir,
+      agentName: 'memory',
+      registry,
+      renderHost: silentHost,
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+      systemSpaces,
+    })) as { value: string } | undefined;
+
+    expect(result).toEqual({ value: 'result-from-turn-1' });
+  });
+
+  it('context survives across multiple nudge attempts in delegate', async () => {
+    const systemSpaces = await loadSystemSpaces(defaultSystemSpaceDirs());
+    const memory = systemSpaces.find((s) => s.dir.endsWith('/user-memory'));
+    expect(memory).toBeTruthy();
+    const registry = new DelegateRegistry(new Map([[memory!.dir, memory!]]));
+
+    let nudgeCount = 0;
+    const streamFn = createMockStreamFn((o) => {
+      const last = [...o.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+      if (last.includes('currentTask.resolve()')) {
+        nudgeCount++;
+        if (nudgeCount === 1) {
+          // Nudge 1: bind step2 referencing turn 1 variable step1, but don't resolve
+          return `const step2 = step1 + ' world';`;
+        }
+        // Nudge 2: resolve using step2 from nudge 1
+        return `currentTask.resolve({ message: step2 });`;
+      }
+      // Turn 1: bind step1
+      return `const step1 = 'hello';`;
+    });
+
+    const result = (await runDelegate({
+      packageName: memory!.dir,
+      agentName: 'memory',
+      registry,
+      renderHost: silentHost,
+      streamFn,
+      depth: 0,
+      maxDepth: 5,
+      maxConcurrentForks: 4,
+      systemSpaces,
+    })) as { message: string } | undefined;
+
+    expect(result).toEqual({ message: 'hello world' });
+  });
 });
 
 /**

@@ -224,8 +224,34 @@ const ENGLISH_FUNCTION_WORDS = new Set([
  *  sentence shape AND an English function word, and bails on anything with code syntax.
  *  Exported for direct testing. */
 export function looksLikeProse(stmt: string): boolean {
-  const s = stmt.trim();
-  if (!s) return false;
+  // A sentence the model typed in code position usually ends with `;` — the ONE
+  // punctuation its prose habit shares with real statements. Strip a trailing
+  // semicolon before the code-punctuation guard: every real statement that matters
+  // still carries `=` / parens / braces elsewhere on the line, while an unstripped
+  // `;` leaked `Wait, I need to check the shell;` past the drop and burned a retry
+  // on exactly "Cannot find name 'Wait'.; Left side of comma operator is unused…".
+  const semiStripped = stmt.trim().replace(/;$/, '').trim();
+  if (!semiStripped) return false;
+  // Model prose ABOUT code quotes identifiers in backticks — "Now I'll create the
+  // `views/books/[id]` detail page." — so an English sentence hit `` ` `` and `[`/`]`
+  // and was misclassified as code, then evaluated (live: "Unexpected keyword or
+  // identifier" x2-6 per chunk, "Module declaration names may only use quoted
+  // strings"). Strip paired backtick spans and bare bracketed path segments
+  // (`[id]`, `[slug]`, `[0]` — content limited to path/identifier characters, so
+  // array literals like `['a', 1]` never match) BEFORE the punctuation guard, so
+  // the guard judges the words AROUND the quote. Conservative in both directions:
+  // an UNPAIRED backtick/bracket is left in place (it trips the guard below → the
+  // line is kept as code), stripping that empties the string → kept as code (a
+  // template-literal probe), and a real statement still carries its operators
+  // (`=`, parens, braces) OUTSIDE any literal, so it can never read as prose after
+  // stripping. Only a remainder with no code punctuation that passes every check
+  // below can be dropped.
+  const s = semiStripped
+    .replace(/`[^`\n]*`/g, ' ')
+    .replace(/\[[\w./-]*\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s) return false; // e.g. a lone `SELECT …` template-literal probe → keep as code
   // Any code punctuation → treat as code, keep it.
   if (/[=(){}[\];`<>]/.test(s)) return false;
   if (/=>|\.\w|\bawait\b/.test(s)) return false;

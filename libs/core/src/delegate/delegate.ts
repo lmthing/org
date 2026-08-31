@@ -453,12 +453,14 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
       knowledgeFallbackDirs: systemSpaces.map((s) => s.dir + '/knowledge'),
     }));
 
+    let delegateContext = '';
     try {
       await runTurnLoop({
         vm,
         history,
         systemBlock,
         ambientDts,
+        onContextSnapshot: (c: string) => { delegateContext = c; },
         renderHost: opts.renderHost,
         streamFn: opts.streamFn,
         // Structural termination: once this delegate's action tasklist result is auto-captured
@@ -579,6 +581,8 @@ export async function runDelegate(opts: RunDelegateOpts): Promise<unknown> {
             history,
             systemBlock,
             ambientDts,
+            initialContext: delegateContext,
+            onContextSnapshot: (c: string) => { delegateContext = c; },
             renderHost: opts.renderHost,
             streamFn: opts.streamFn,
             processYield: async () => undefined, // resolve-only turns: no yields serviced

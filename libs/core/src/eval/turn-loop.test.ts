@@ -27,6 +27,18 @@ describe('looksLikeProse', () => {
     expect(looksLikeProse('First load knowledge then resolve')).toBe(true);
   });
 
+  it('flags sentence prose that ends in a semicolon (live: "Cannot find name \'Wait\'")', () => {
+    // The model narrates in code position and ends the sentence with `;`. The
+    // code-punctuation guard treats ANY `;` as code, so the line survives the prose
+    // drop and burns a retry on exactly:
+    //   Cannot find name 'Wait'.; Left side of comma operator is unused and has no side effects.
+    // A comma after the first word plus English function words is still prose — a real
+    // TS statement cannot start `Wait, ` (two sequence expressions in one line is not a
+    // shape models emit as code, and the all-word-like guard below keeps it conservative).
+    expect(looksLikeProse('Wait, I need to read the shell first;')).toBe(true);
+    expect(looksLikeProse('Sure, let me check the nav entries;')).toBe(true);
+  });
+
   it('does NOT flag code that legitimately contains an apostrophe', () => {
     expect(looksLikeProse("'it is fine'")).toBe(false); // leading quote → not prose
     expect(looksLikeProse('display("message")')).toBe(false); // has ( ) → code
@@ -36,6 +48,50 @@ describe('looksLikeProse', () => {
     expect(looksLikeProse('results')).toBe(false);
     expect(looksLikeProse('inspect')).toBe(false);
     expect(looksLikeProse('x')).toBe(false);
+  });
+
+  it('drops prose that QUOTES code in backticks / bracketed paths (live: "Unexpected keyword or identifier" cascade)', () => {
+    // Model prose ABOUT code quotes identifiers — "Now I'll create the `views/books/[id]`
+    // detail page." — so the sentence hit `` ` ``/`[`/`]` and was classified as code,
+    // then evaluated, producing the largest single error group of the live build
+    // ("Unexpected keyword or identifier." 2-6x per chunk, "Module declaration names
+    // may only use quoted strings", "A type predicate is …"). Backticked spans and
+    // bare bracketed path segments are stripped BEFORE the code-punctuation guard.
+    expect(looksLikeProse('Now I\'ll create the `views/books/[id]` detail page.')).toBe(true);
+    expect(looksLikeProse('The comments I wrote outside of `//` syntax caused the parse error.')).toBe(true);
+    expect(looksLikeProse('Next, let me wire the `books-list` query into the list section.')).toBe(true);
+    expect(looksLikeProse('I\'ve added `api/book-create/POST.ts` — now the edit form.')).toBe(true);
+    // Bare bracketed path segment, no backticks at all.
+    expect(looksLikeProse('Now the page under views [id] is wired into the section.')).toBe(true);
+  });
+
+  it('does NOT drop real code that contains backticks or bracketed paths (regression guards)', () => {
+    // Real statements keep their operators (`=`, parens, braces) OUTSIDE any literal,
+    // so stripping the quoted spans can never make them read as prose.
+    expect(looksLikeProse('const q = `SELECT * FROM books`;')).toBe(false); // `=` survives the strip
+    expect(looksLikeProse("writeProjectView('books', { kind: 'list' });")).toBe(false);
+    expect(looksLikeProse('type X = { a: string };')).toBe(false);
+    expect(looksLikeProse('await writePage(`views/books/[id]`, spec);')).toBe(false); // parens + await survive
+    expect(looksLikeProse("const path = 'views/books/[id]';")).toBe(false);
+    expect(looksLikeProse('render(`books-list`)')).toBe(false);
+    expect(looksLikeProse('result[0]')).toBe(false); // strip leaves `result` → <3 words → kept
+    expect(looksLikeProse('items[i]')).toBe(false);
+  });
+
+  it('keeps a lone template literal and an UNPAIRED backtick (conservative: never drop real code)', () => {
+    // A lone template-literal probe: stripping empties the string → keep as code.
+    expect(looksLikeProse('`SELECT * FROM books`;')).toBe(false);
+    expect(looksLikeProse('db `books`')).toBe(false); // tagged template → `db` → <3 words → kept
+    // An unpaired backtick is left in place, trips the punctuation guard → kept as code,
+    // even when the surrounding text reads like prose.
+    expect(looksLikeProse('Now I\'ll create the `views/books/[id] detail page.')).toBe(false);
+  });
+
+  it('keeps comments, closers and think tags', () => {
+    expect(looksLikeProse('// creates the detail page for views/books/[id]')).toBe(false);
+    expect(looksLikeProse('}')).toBe(false);
+    expect(looksLikeProse('});')).toBe(false);
+    expect(looksLikeProse('</think>')).toBe(false); // prior regression — guard ordering handles it
   });
 
   it('does not flag word sequences without an English function word (avoids false drops)', () => {
