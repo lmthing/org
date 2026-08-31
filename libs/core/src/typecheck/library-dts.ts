@@ -366,10 +366,10 @@ import { VIEW_SPEC_TYPES } from './view-spec-dts.generated.js';
 // endpoint references and other project-specific constraints at write time.
 export const PROJECT_VIEW_DTS = VIEW_SPEC_TYPES + `
 /** Write a page as a validated VIEW SPEC (views/<route>.view.json). Sections: list|detail|create|stats|markdown|chat|toolbar|timeline|board|calendar|chart. Bindings are paths ($.field), never expressions. */
-/** define* contextually types fresh specs, including nested objects, before a variable is passed to a writer. */
-declare function defineViewSpec(spec: ViewSpec): ViewSpec;
-declare function defineViewComponent(def: ViewComponentSpec): ViewComponentSpec;
-declare function defineViewLayout(spec: ViewLayoutSpec): ViewLayoutSpec;
+/** Author the spec INLINE in the call so the parameter types the literal in place. If you must bind it
+ *  first, ANNOTATE the variable — \`const spec: ViewSpec = { ... }\` — never a bare \`const spec = { ... }\`:
+ *  an unannotated object widens \`kind\` to \`string\` and collapses every fault into one unnamed
+ *  "not assignable to ViewSpec" error instead of naming the offending property. */
 declare function defineViewShell(shell: ShellSpec): ShellSpec;
 declare function writeProjectView(route: string, spec: ViewSpec): { ok: boolean; error?: string };
 /** Write a reusable element composition with typed props, referenced from any view as { use: '<Name>' }. PascalCase. */

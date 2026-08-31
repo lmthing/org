@@ -10,11 +10,32 @@ role: general
 functions: []
 ---
 
-Write ONE page as a SPEC. Your page is in `item` = { route, purpose, endpoints, components, sections }.
-Call `writeProjectView(item.route, spec)` with ONE object literal: `{ route, title?, sections: [...] }`.
+Write ONE page as a SPEC. Your page is in `item` = { route, purpose, endpoints, components, sections }
+— that is the PLAN ARTIFACT, your INPUT. It is not a spec and never an argument: `purpose`, `endpoints`
+and `components` are planning metadata that must never be written, and `item.sections` are DESIGN NOTES
+(`{ id, kind, endpoint?, from?, component?, reveals?, bindings }`), not spec sections. You CONSTRUCT a
+fresh `ViewSpec` from the plan — plan `endpoint` becomes the section's `query` (a read) or `mutation`
+(a write), plan `bindings` become the `item:`/`cards:`/`fields:` shapes, plan `component` becomes
+`{ use: '<Name>' }` — and hand the writer ONE object literal: `{ layout?, route, sections, title? }`.
 No strings of code, no TSX, no imports, no class names, no colors. Your statement itself is plain
 TypeScript, and every runtime global it calls (`writeProjectView`, `currentTask`) is AMBIENT — already
 in scope, never imported; there is no `@lmthing/*` module.
+
+**Never pass the plan through.** `writeProjectView(item.route, item)`, a copy of `item` with three
+fields deleted, or `{ route, sections: item.sections }` forwarding the plan sections as-is — all the
+same fault, and the typecheck rejects each in its own words: `"purpose" is not a property here.
+Properties: layout, route, sections, title`, `sections[0]: "query" is required here`,
+`Type 'unknown[]' is not assignable to type 'SectionSpec[]'`. A retry of the same object cannot fix
+a wrong object; author the spec.
+
+**Author the literal INLINE, in the call.** `writeProjectView(item.route, { route, title,
+sections: [...] })`: the parameter types the literal in place, so `kind: 'list'` stays the literal it
+must be and a wrong property is rejected BY NAME. TypeScript's object-literal check fires only on a
+FRESH literal — hoist the object (`const spec = { … }; writeProjectView(r, spec)`) and you lose it:
+`kind` widens to plain `string`, stray plan fields slip through unmentioned, and every fault
+collapses into `Argument of type '{ … }' is not assignable to parameter of type 'ViewSpec'` — an
+error that names nothing and makes the retry a coin flip. If you genuinely need a binding (the
+retry below), annotate it — `const spec2: ViewSpec = { … }` — never a bare `const spec2 = { … }`.
 
 Writing the `index` route REPLACES the project's newborn placeholder chat page with a real landing —
 that is intended. Do not re-add a `chat` section to reproduce it: the assistant dock is on every page
@@ -85,8 +106,8 @@ and never delete the section to make the error go away. Resolve the final outcom
 `w.error` when it still failed. Emit one statement:
 
 ```typescript
-const pg = item;
-const spec = {
+const pg = item; // the PLAN artifact — read route/sections from it, never pass `pg` itself
+let w = writeProjectView(pg.route, {
   route: pg.route,
   title: 'Expenses',
   sections: [
@@ -108,12 +129,12 @@ const spec = {
         action: { mutate: 'remove-expense', input: { id: '$.id' }, invalidates: ['list-expenses', 'trip-totals'] } } ],
       empty: { title: 'No expenses yet', message: 'Add one above.' } },
   ],
-};
-let w = writeProjectView(pg.route, spec);
+});
 if (!w.ok) {
-  // w.error named ONE field, its instance path, and the valid values. Correct THAT field in a copy
-  // of `spec` and write once more — never the same object, never a deleted section.
-  const spec2 = spec; // replace with `spec` corrected for the field w.error named
+  // w.error named ONE field, its instance path, and the valid values. Re-author the spec with THAT
+  // ONE field corrected — annotated so the literal stays contextually typed. Never resubmit the
+  // same object, never delete the section the error named.
+  const spec2: ViewSpec = { /* the literal above, that one field corrected */ };
   w = writeProjectView(pg.route, spec2);
 }
 currentTask.resolve({ route: pg.route, ok: w.ok, error: w.ok ? '' : (w.error ?? 'write failed') });

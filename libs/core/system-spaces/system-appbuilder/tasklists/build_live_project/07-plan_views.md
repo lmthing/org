@@ -18,6 +18,12 @@ only this page. In scope: `item`, `query`, `user_stories.stories`, `plan_endpoin
 `{ name, route, purpose, tables, fields, input? }`) and `plan_view_components.components` (each
 `{ name, purpose, props }`). This is a THINKING step — no writers, no spec syntax yet.
 
+What you resolve here is a PLAN, not a view spec. `implement_views` later CONSTRUCTS a fresh spec
+from it — your `endpoint` becomes its `query`/`mutation`, your `bindings` become its `item`/`cards`
+shapes — so keep plan fields plan-shaped (`purpose`, `endpoints`, `components`, `bindings`) and spec
+fields spec-shaped (`layout`, `route`, `sections`, `title`): the plan artifact is never written to
+disk and never forwarded to a writer as-is, and no later step can fix a plan it had to guess at.
+
 **A page is an ordered list of sections. Pick each section's kind from this menu — there is no other
 kind and no escape hatch:**
 

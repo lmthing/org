@@ -218,9 +218,18 @@ describe('typed view writers', () => {
     expect(badProperty.ok).toBe(false);
   });
 
-  it('provides a contextual helper for variable-built specs, preserving nested excess checks', () => {
-    expect(check(`const spec = defineViewSpec({ route: 'books', sections: [{ kind: 'list', query: 'books-list' }] }); writeProjectView('books', spec);`).ok).toBe(true);
-    expect(check(`const spec = defineViewSpec({ route: 'books', sections: [{ kind: 'list', query: 'books-list', bogus: true }] });`).ok).toBe(false);
+  // An ANNOTATED variable keeps the excess-property check that a bare `const` loses. There is
+  // deliberately no define*() helper: it would have to exist at RUNTIME, and a declared-but-unimplemented
+  // global typechecks clean and then ReferenceErrors at eval — a landmine. Annotation costs no runtime.
+  it('preserves nested excess checks for a variable-built spec when the variable is annotated', () => {
+    expect(check(`const spec: ViewSpec = { route: 'books', sections: [{ kind: 'list', query: 'books-list' }] }; writeProjectView('books', spec);`).ok).toBe(true);
+    expect(check(`const spec: ViewSpec = { route: 'books', sections: [{ kind: 'list', query: 'books-list', bogus: true }] };`).ok).toBe(false);
+  });
+
+  it('declares no define* helper that lacks a runtime implementation', () => {
+    for (const name of ['defineViewSpec', 'defineViewComponent', 'defineViewLayout']) {
+      expect(PROJECT_VIEW_DTS).not.toContain(name);
+    }
   });
 
   it('types component, layout, and shell writers instead of accepting unknown', () => {
