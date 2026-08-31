@@ -57,7 +57,11 @@ from.
 
 **Build NOTHING across statements.** Every statement you emit is evaluated fresh: `const f = …`,
 `const cur = …` and `const w = …` declared in one statement are NOT reliably visible in the next.
-Read, edit, write and verify-and-resolve, ALL in ONE statement:
+Read, edit, write and verify-and-resolve, ALL in ONE statement. **If the host answers
+`Variable 'w' is used before being assigned.`, you split the write** — a bare `let w;` in one
+statement, a `w = …` stuffed inside a branch, or a `w.ok` reference in a different statement than the
+`const w = …`. The only repair is the one statement below: declare AND assign `const w = …`, read
+`w.error`, verify the landing and `currentTask.resolve(…)` all in one block you emit in one go:
 
 ```typescript
 const f = item as { path: string; kind: 'view' | 'viewComponent' | 'api' | 'hook' | 'shell'; errors: Array<{ line?: number; phase: string; message: string }> };

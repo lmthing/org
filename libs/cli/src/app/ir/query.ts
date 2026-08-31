@@ -315,8 +315,12 @@ export function validateQueryIr(ir: unknown, tables: Map<string, TableSchema>): 
   if (kind === 'aggregate' && (q.compute === undefined || Object.keys(q.compute as object).length === 0)) {
     push('an "aggregate" needs a "compute" block (the summary fields)');
   }
-  if ((kind === 'create' || kind === 'update') && (!q.set || typeof q.set !== 'object')) {
-    push(`a "${kind}" needs a "set" map (column → { input } | { value })`);
+  if ((kind === 'create' || kind === 'update') && (!q.set || typeof q.set !== 'object' || q.set === null || Array.isArray(q.set))) {
+    const columns = table ? ` Real columns on "${q.entity}": ${colList()}.` : '';
+    push(
+      `a "${kind}" needs a "set" map (column → { input } | { value }), e.g. ` +
+      `set: { status: { input: "status" }, source: { value: "manual" } }.${columns}`,
+    );
   }
   if (q.set !== undefined && typeof q.set === 'object' && q.set !== null) {
     for (const [col, src] of Object.entries(q.set as Record<string, SetSource | ToggleSetSource>)) {

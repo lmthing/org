@@ -97,7 +97,17 @@ not observed, which is the single most damaging thing an agent in this pipeline 
 emit, including a RETRY after a rejected write or a typecheck error, is evaluated fresh: `const f = …`,
 `const cur = …` and `const w = …` declared in one statement are NOT reliably visible in the next, and
 a retry that assumes one was burns a whole turn. There is no safe two-step split here — read, edit
-and write the artifact, then verify-and-resolve, ALL in ONE statement:
+and write the artifact, then verify-and-resolve, ALL in ONE statement.
+
+**If the host answers `Variable 'w' is used before being assigned.` (or
+`Block-scoped variable 'w' used before its declaration`), you split the write — no other repair will
+work.** That exact error is the compiler catching one of these: a bare `let w;` declared in one
+statement and assigned in a later one; the `w = …` assignment sitting inside an `if`/`else` branch so
+it is not guaranteed before the next statement reads `w`; or a `const w = …` in one statement and a
+`w.ok` reference in a separate one. All three are the SAME defect, and the only fix is the one
+statement below: declare AND assign `const w = writeProjectApi(…)` (never `let w;`), read `w.error`,
+verify the landing and `currentTask.resolve(…)` all in the same block you emit in one go — do not
+refer back to a `w` an earlier statement owns:
 
 ```typescript
 const f = item as { path: string; kind: 'view' | 'viewComponent' | 'api' | 'hook' | 'shell'; errors: Array<{ line?: number; phase: string; message: string }> };

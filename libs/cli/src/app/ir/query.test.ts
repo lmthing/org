@@ -133,9 +133,30 @@ describe('validateQueryIr', () => {
     expect(res.errors.join(' ')).toMatch(/only valid on a "toggle"/);
   });
 
-  it('rejects a create/update with no set map', () => {
-    const res = validateQueryIr({ name: 'x', kind: 'create', entity: 'job', route: 'jobs/create' }, TABLES);
-    expect(res.errors.join(' ')).toMatch(/needs a "set" map/);
+  it('rejects a create/update with no set map and gives a copyable input/literal repair', () => {
+    for (const kind of ['create', 'update'] as const) {
+      const res = validateQueryIr(
+        { name: 'x', kind, entity: 'job', route: kind === 'create' ? 'jobs/create' : 'jobs/[id]' },
+        TABLES,
+      );
+      expect(res.errors.join(' ')).toContain(`a "${kind}" needs a "set" map`);
+      expect(res.errors.join(' ')).toContain('status: { input: "status" }');
+      expect(res.errors.join(' ')).toContain('source: { value: "manual" }');
+      expect(res.errors.join(' ')).toContain('Real columns on "job": id, status, hours');
+    }
+  });
+
+  it('accepts create/update set maps with both request input and literal branches', () => {
+    for (const kind of ['create', 'update'] as const) {
+      const res = validateQueryIr(
+        {
+          name: 'x', kind, entity: 'job', route: kind === 'create' ? 'jobs/create' : 'jobs/[id]',
+          set: { status: { input: 'status' }, hours: { value: 0 } },
+        },
+        TABLES,
+      );
+      expect(res.errors).toEqual([]);
+    }
   });
 
   it('accepts a delete with a [id] param', () => {

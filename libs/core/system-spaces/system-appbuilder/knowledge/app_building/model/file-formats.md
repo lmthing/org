@@ -80,6 +80,14 @@ export default async function handler(input: Input, ctx: { db: any }): Promise<O
 `Output` become the endpoint's JSON-Schema contract. `import { HttpError } from '@app/runtime'` to
 signal 4xx/5xx.
 
+**A handler's ONLY legal import is `import { HttpError } from '@app/runtime'`** (plus a `node:`
+builtin if you truly need one). The contract `Input`/`Output` types are GLOBAL — `emit_types` wrote
+them into `types/contract.d.ts` and the typecheck loads that file as ambient, so `<Name>Input`/
+`<Name>Output` are in scope with **NO import**. Never `import ... from '../../types/contract'` or any
+relative project path, and never import an `@app/database`/`@app/db` package — the database reaches
+you as the injected `ctx` parameter. `writeProjectApi` rejects any handler whose import list is not
+`@app/runtime` / a `node:` builtin.
+
 ## Declarative query (PREFER for a plain endpoint) — `writeProjectQuery(name, query)` → `api/<name>.query.json` + `api/<route>/<METHOD>.ts`
 
 For a plain filtered/sorted list, get-by-id, sum/count/avg aggregate, create, update, or toggle — no

@@ -24,6 +24,16 @@ do not exist.** A page is a validated view spec (`writeProjectView`); a reusable
   change something. `tabs` and `accordion` are the declarative replacement for client state inside an
   element tree, the way `toolbar.reveals` is for whole sections.
 
+**A plan is not a spec.** A whole-app build plans first, and the plan entry for a page
+(`{ route, purpose, endpoints, components, sections }`, its sections design notes like
+`{ id, kind, endpoint, bindings }`) is INPUT to the page writer — never its argument. Construct the
+spec fresh: plan `endpoint` becomes the section's `query`/`mutation`, plan `bindings` become the
+`item`/`cards` shapes. And author the literal INLINE, in the `writeProjectView(route, { … })` call —
+TypeScript's object-literal check (which names the exact offending property) fires only on a fresh
+literal, so a hoisted `const spec = { … }` degrades every error to a vague `Argument of type '{ … }'
+is not assignable to parameter of type 'ViewSpec'`. If you need a binding, annotate it:
+`const spec: ViewSpec = { … }`.
+
 ## A layout — one frame for a route family
 
 `writeProjectViewLayout(prefix, { sections })` → `views/<prefix>/_layout.view.json`. Every route under

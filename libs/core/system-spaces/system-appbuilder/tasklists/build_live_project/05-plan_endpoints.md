@@ -134,6 +134,34 @@ path; the declarative IR cannot express them and must not be forced to.
 }
 ```
 
+### Create/update/deletion IR — `set` is a column map, never a flat request body
+
+A declarative **create** or **update** MUST carry `set`: its keys are real table COLUMNS, and each
+value says whether that column comes from the request (`{ input: '<Input key>' }`) or is a literal
+(`{ value: <literal> }`). Copy this shape exactly; do NOT write `set: { name: input.name }`, and do
+NOT put an object such as `{ id: ... }` in `where` (a query `where` is an ARRAY of clauses).
+
+```typescript
+// POST /jobs — Input has status; hours is always initialized to the literal 0
+{ name: 'job-create', route: 'jobs/POST', tables: ['job'], input: ['status: string'], fields: ['id: string', 'status: string'],
+  declarative: true, kind: 'create', entity: 'job',
+  set: { status: { input: 'status' }, hours: { value: 0 } } }
+
+// PATCH /jobs/[id] — [id] identifies the row; only status comes from Input
+{ name: 'job-update', route: 'jobs/[id]/PATCH', tables: ['job'], input: ['status: string'], fields: ['id: string', 'status: string'],
+  declarative: true, kind: 'update', entity: 'job',
+  set: { status: { input: 'status' }, hours: { value: 0 } } }
+
+// DELETE has NO `set`: identify its row with [id] (or a where CLAUSE ARRAY).
+{ name: 'job-delete', route: 'jobs/[id]/DELETE', tables: ['job'], fields: ['id: string'],
+  declarative: true, kind: 'delete', entity: 'job' }
+```
+
+The `hours` literal above is illustrative: substitute only columns that really exist in `plan_tables`. A delete
+has no request body and no set map. The route parameter is not included in `input`; the query writer
+gets it from `[id]`.
+
+
 **A toggle that ALSO needs to stamp a companion field on the SAME flip is STILL declarative — this is
 not the signal to hand-write it.** Give that column a `set` entry shaped `{ whenTrue, whenFalse }`
 (`"now"` = current timestamp, anything else a literal) — never `{ input }`/`{ value }` for this, since

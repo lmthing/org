@@ -441,10 +441,16 @@ declare function writeProjectEntity(name: string, entity: {
 // NOTE: `readProjectFile`'s `content` is the PLAIN unmodified text — there is deliberately NO `raw`
 // field and NO line-numbered variant (unlike the engineer's scratch `readFile`, whose `content` is
 // line-numbered for display/citation). An agent that reaches for `readProjectFile(path).raw` gets a
-// typecheck error on the first use; parse `content` directly. See org/docs/runtime-globals/session-and-utils.md.
+// typecheck error on the first use; parse `content` directly. And two more ways to trip the same
+// reader: `readProjectFile(path).content` is the field to pass on — passing the RESULT OBJECT
+// (`{ ok, content, error }`) to a `string`-taking call like `JSON.parse(readProjectFile(p))` fails
+// with "not assignable to parameter of type 'string'"; always read the body off `content` first.
+// See org/docs/runtime-globals/session-and-utils.md.
 export const PROJECT_READ_DTS = `declare function listProjectDir(dir: string): { ok: boolean; entries: string[]; error?: string };
 // \`content\` is the plain file text. There is NO \`.raw\` here (that exists only on the engineer's
-// scratch readFile, whose content is line-numbered); \`.raw\` is a typecheck error — parse content.
+// scratch readFile, whose content is line-numbered); \`.raw\` is a typecheck error. And pass
+// \`readProjectFile(path).content\`, NEVER the whole result object — \`JSON.parse(readProjectFile(p))\`
+// fails "not assignable to parameter of type 'string'"; read the body off \`content\` first.
 declare function readProjectFile(path: string): { ok: boolean; content: string; error?: string };`;
 
 // `project:manage` — the authority to create or bind a LIVE project. createProject

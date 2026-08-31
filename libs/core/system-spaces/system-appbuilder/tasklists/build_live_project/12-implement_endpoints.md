@@ -51,6 +51,14 @@ method lives only in `item.route`'s last segment, and you strip it, never carry 
 `include` is a list of relation NAME STRINGS declared on the entity (`include: ['comments']`) —
 never an object, and never a relation the entity does not have (the rejection lists them all).
 
+**Mutation fields are already an IR spec on `ep`; forward them, do not reconstruct them from the
+form plan.** For `create`/`update`, `ep.set` is a COLUMN map such as
+`{ title: { input: 'title' }, archived: { value: false } }`: `{ input }` reads the request and
+`{ value }` is a literal. It is NEVER the flat body `{ title: input.title }`. For `update`/`delete`,
+`ep.where` is either absent when the route has `[id]`, or an ARRAY such as
+`[{ field: 'status', op: '=', value: 'draft' }]` — never `{ id: ep.route }`. Do not add `name` to
+the query object: the first `writeProjectQuery(ep.name, query)` argument supplies it.
+
 ```typescript
 const ep = item;
 if (ep.declarative) {
