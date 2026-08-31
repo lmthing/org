@@ -20,8 +20,13 @@ artifact, so you reason about only this one and never hold the whole app. In sco
 `plan_endpoints` (each `{ name, route, purpose, tables, fields, input? }` — `input` is a write endpoint's request-BODY keys, and it is what a `create` section derives its form fields from), `plan_views` (each page's planned
 sections), `plan_view_components`, `plan_tables`, and `implement_view_components`.
 
-READ the artifact first — `readProjectFile(item.path).content`. Every spec artifact is JSON, so
-`JSON.parse` it, edit the ONE field the error names, and write the OBJECT back through its writer.
+READ the artifact first — `readProjectFile(item.path).content`. It returns `{ ok, content, error }`
+and hands back `content: ''` (not `undefined`) for a missing or 0-byte file, so a truthiness check on
+the result object alone does NOT protect the parse. Only `JSON.parse` once you have confirmed
+`cur.ok === true && cur.content.length > 0`; a missing artifact is recreated from your plan, never
+parsed as `''` and never written back empty (that is a skeleton that passes every gate). Every spec
+artifact is JSON, so `JSON.parse` it, edit the ONE field the error names, and write the OBJECT back
+through its writer.
 The layout (all top level): a page is `views/<route>.view.json`, a view component is
 `components/<Name>.view.json`, the shell is `shell.view.json`. There is no generated `.tsx` and no
 `pages/` dir — a spec is rendered directly by the shared renderer, so fixing the `.view.json` IS the
@@ -39,7 +44,11 @@ file, not the page.
   from the page** — that deletes the feature the user asked for and the gate will simply go quiet.
 - **`phase: 'render-smoke'` reporting an EMPTY RENDER on a page** — the page mounted and showed
   nothing. Either its sections bind fields the endpoint never returns (fix the endpoint) or the
-  section has no data-bound content at all (give it its `item`/`cards`/`fields`).
+  section has no data-bound content at all (give it its `item`/`cards`/`fields`). A cousin the gates
+  can MISS: a page stuck on grey LOADING SKELETONS renders fine, typechecks and validates — but its
+  query never FIRED, because its `input` binds something the page's own route cannot supply
+  (`$route.x` on a param-less route). Fix the `input` — a `$route.<param>` the route declares,
+  `$data` from an earlier section, or a literal — never bury it.
 - **`phase: 'views'` — an app-wide view fault.** An orphan route no nav reaches, a nav target that is
   not a real route, a `reveals`/`rowAction`/`prefill` target that resolves nowhere, a declared
   component nothing uses, a page with no data-bound section. Fix the artifact the message names: the
@@ -86,17 +95,34 @@ not observed, which is the single most damaging thing an agent in this pipeline 
 
 **Build NOTHING across statements — this is where a fix run is most often lost.** Every statement you
 emit, including a RETRY after a rejected write or a typecheck error, is evaluated fresh: `const f = …`,
-`const cur = …` and `const w = …` declared in one statement are NOT reliably visible in the next.
-`Cannot find name 'f'` / `'cur'` / `'w'` (and equally under any other name you pick — `artifact`,
-`writeResult`, `rawContent`, …) is exactly this mistake, seen live and repeatedly, and each occurrence
-burns a whole turn. There is no safe two-step split here — read, edit and write the artifact, then
-verify-and-resolve, ALL in ONE statement:
+`const cur = …` and `const w = …` declared in one statement are NOT reliably visible in the next, and
+a retry that assumes one was burns a whole turn. There is no safe two-step split here — read, edit
+and write the artifact, then verify-and-resolve, ALL in ONE statement:
 
 ```typescript
 const f = item as { path: string; kind: 'view' | 'viewComponent' | 'api' | 'hook' | 'shell'; errors: Array<{ line?: number; phase: string; message: string }> };
 const cur = readProjectFile(f.path);
 let w: { ok: boolean; error?: string };
-if (f.kind === 'view') {
+if (!cur.ok || cur.content.length === 0) {
+  // readProjectFile returns content:'' (NOT undefined) on a missing/0-byte file, so a truthiness
+  // check on the result object alone does NOT protect `JSON.parse` — JSON.parse('') throws
+  // 'Unexpected end of JSON input'. Never parse it, and never write an empty spec back: that ships a
+  // valid-but-empty skeleton that passes every gate. This is a BUILD node with the plan in scope, so
+  // RECREATE the artifact from its plan entry — the matching `plan_views` entry for a view,
+  // `plan_view_components` entry for a viewComponent — and write it through the same writer. If the
+  // kind cannot be rebuilt from the plan (api/hook need handler source), report the miss instead of
+  // inventing content: set `w` to a failed write so the landing check below resolves `ok: false` and
+  // the gate re-lists the artifact.
+  if (f.kind === 'view') {
+    const rebuilt = /* the matching plan_views entry — its route + its sections */;
+    w = writeProjectView(rebuilt.route, rebuilt);
+  } else if (f.kind === 'viewComponent') {
+    const rebuilt = /* the matching plan_view_components entry */;
+    w = writeProjectViewComponent(rebuilt.name, rebuilt);
+  } else {
+    w = { ok: false, error: 'no artifact on disk and no plan entry to rebuild this kind from — report the miss' };
+  }
+} else if (f.kind === 'view') {
   // A view is JSON: parse, correct the ONE field each error names, write the OBJECT back.
   const spec = JSON.parse(cur.content) as { route: string; sections: unknown[] };
   // …edit `spec` for every entry in f.errors — never blank it, never drop a section…

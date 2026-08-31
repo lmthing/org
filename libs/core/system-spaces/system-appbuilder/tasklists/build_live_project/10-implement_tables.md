@@ -17,7 +17,9 @@ validates the schema on write and returns `{ ok, error? }`; if `w.ok` is false, 
 invalid table name, a missing column description, a bad relation) and fix it before resolving honestly.
 **A table that fails to land is not a local failure**: every endpoint planned against it will still pass
 the compiler (the db surface is dynamic) and 500 at runtime — so the retry below is load-bearing, and the
-`name` you resolve must be the name you ACTUALLY wrote (downstream nodes wire endpoints to it).
+`name` you resolve must be the name you ACTUALLY wrote (downstream nodes wire endpoints to it). Every
+runtime global you call here (`writeProjectTable`, `listProjectDir`) is AMBIENT — already in scope,
+never imported; there is no `@lmthing/*` (or any) module to import one from.
 
 **RETRY-SAFE: check before you seed.** This element can be RETRIED with a fresh fork after a prior
 attempt already wrote the file (a bad resolve or a VM error on THIS element does not undo a write that

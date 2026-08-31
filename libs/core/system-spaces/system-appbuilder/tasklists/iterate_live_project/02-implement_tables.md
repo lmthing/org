@@ -20,8 +20,8 @@ Keep every existing column untouched. `writeProjectTable` takes the WHOLE schema
 the OLD columns plus the NEW ones merged into one object — passing only the new column(s) would
 silently drop every column that already existed.
 
-**`existing: false` — author a fresh schema, schema-only.** Never invent rows: seeding real data is
-a separate, targeted `db.insert` job once the caller actually has concrete values, not this one.
+**`existing: false` — author a fresh schema, schema-only.** Never invent rows: concrete data entry is
+handled by the sibling `enter_data` node, not by this schema writer.
 
 ```typescript
 const t = item;

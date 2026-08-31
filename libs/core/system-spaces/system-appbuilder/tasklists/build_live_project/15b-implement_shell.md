@@ -24,7 +24,8 @@ writeProjectViewShell(shell: unknown): { ok: boolean; error?: string }
 
 — ONE argument, a plain object literal (never a JSON string), landing at `shell.view.json` (top level).
 It is synchronous and returns `{ ok, error? }`: branch on `w.ok`, read `w.error`; never treat it as
-an array and never `await` it.
+an array and never `await` it. `writeProjectViewShell` is an AMBIENT runtime global like every other —
+already in scope, never imported; there is no `@lmthing/*` module.
 
 Rules the writer enforces:
 - **A nav entry's `route` must be a real, landed, STATIC route.** A parameterised route

@@ -14,7 +14,9 @@ Write ONE page as a SPEC. Your item is `{ route, purpose, existing }`. No TSX, n
 names, no colours — the twelve section kinds are `list detail create stats markdown chat toolbar
 timeline board calendar chart outlet`, and values are PATHS only: `$` `$.field` `$props.x`
 `$route.<param>` `$data.<sectionId>.<path>` `$result.<field>` `$form.<field>` `$client.timezone` —
-never an expression, a ternary or a template string.
+never an expression, a ternary or a template string. `$route.<param>` resolves ONLY on a page whose
+OWN route declares that `[param]`; bound on a param-less route the query never fires (permanent
+loading skeletons, no error), and `input` can never bind `$.x` — that is the query's own result.
 
 **`existing: true` — read the real spec, add/change the ONE thing `purpose` asks for, keep every
 other section untouched and in order.** `readProjectFile('views/' + item.route + '.view.json')`.
@@ -27,14 +29,20 @@ sections nobody asked to change.
 the nav: `readProjectFile('shell.view.json')`, append ONE entry to `nav` (`{ route: item.route, label:
 '<Human Label>' }` — only for a static, non-`[param]` route; a drill-in is reached by a `rowAction`,
 never a nav item), and `writeProjectViewShell` the WHOLE shell object back (it takes the full shell,
-not a patch — dropping the existing `nav` entries un-reaches every page already in it).
+not a patch — dropping the existing `nav` entries un-reaches every page already in it). A NEW detail
+page is a `[param]` route (`dogs/[id]`) that its list's `rowAction: { navigate: 'dogs/[id]', params:
+{ id: '$.id' } }` reaches — never a param-less `dog-detail` page in the nav. If `purpose` REPLACES a
+page at a NEW route, the superseded page must GO: `deleteProjectView('<old-route>')` deletes it —
+refused while the shell still references the route (the error names the referencing file, so repoint
+the nav first). Never leave both.
 
 `query`/`mutation` on a section must name a real endpoint **on disk**, not the plan — the writer
 resolves against `listProjectDir('api')` and names every real one in its rejection if you get a name
 wrong. Section `id`s are lowerCamelCase. `writeProjectView`/`writeProjectViewShell` are `{ ok,
 error? }` — branch on `ok`, read `error` (it names the instance path and the finite valid set), fix
 that ONE field, and write again before resolving; never delete a section or a nav entry to make the
-error go away.
+error go away. And a page still rendering grey loading placeholders is NOT done: the query never
+fired (an `input` its route cannot supply); a proper `empty:` state means it fired and found nothing.
 
 ```typescript
 const pg = item;

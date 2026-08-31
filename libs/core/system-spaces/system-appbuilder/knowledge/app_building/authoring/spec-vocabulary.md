@@ -44,6 +44,16 @@ arithmetic, no `${…}`. A binding that resolves to null renders NOTHING, which 
 `x ? … : null` guard. Colour is a semantic `tone` (or a declared `toneMap`), never a hex and never a
 class name; formatting is a `format:` modifier on the value.
 
+Routes and `input` bindings have hard rules the writer enforces at save time. A LIST page sits at a
+static route and the nav links it; a DETAIL page sits at a `[param]` route (`items/[id]`) that its
+list's `rowAction: { navigate: 'items/[id]', params: { id: '$.id' } }` reaches — never a nav entry.
+`$route.<param>` resolves ONLY on a page whose OWN route declares that `[param]` — bound on a
+param-less route the query never fires and the page shows loading skeletons forever (no error, no
+500). And never "fix" an unsatisfiable `$route.x` by swapping it to `$.x` — that is circular: `$` is
+the section's own endpoint's RESULT, and `input` is what the query is CALLED with, so it cannot read
+what the call has not produced. The legal `input` bindings are a `$route.<param>` the page's route
+actually declares, `$data.<sectionId>.<field>` from an EARLIER section, or a literal.
+
 Because there is no client code, **the endpoint must return everything the section shows.** A name
 from another table, a total, a group-by, a "which one is current" pick, a status label, a percentage,
 a boolean a control depends on — each is a COMPUTED FIELD on the one endpoint that section reads.

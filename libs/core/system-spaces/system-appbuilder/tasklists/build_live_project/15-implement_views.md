@@ -12,7 +12,9 @@ functions: []
 
 Write ONE page as a SPEC. Your page is in `item` = { route, purpose, endpoints, components, sections }.
 Call `writeProjectView(item.route, spec)` with ONE object literal: `{ route, title?, sections: [...] }`.
-No strings of code, no TSX, no imports, no class names, no colors.
+No strings of code, no TSX, no imports, no class names, no colors. Your statement itself is plain
+TypeScript, and every runtime global it calls (`writeProjectView`, `currentTask`) is AMBIENT — already
+in scope, never imported; there is no `@lmthing/*` module.
 
 Writing the `index` route REPLACES the project's newborn placeholder chat page with a real landing —
 that is intended. Do not re-add a `chat` section to reproduce it: the assistant dock is on every page
@@ -25,7 +27,8 @@ only in a layout — if the plan asks for a shared frame across a route family, 
 `writeProjectViewLayout(prefix, { sections })` instead of repeating a header on every page.
 
 Keep `item.sections` in order, and keep each section's `id` and `kind`. Per section:
-- `query` = a READ endpoint's name; `mutation` = a WRITE endpoint's name — verbatim from the plan.
+- `query` = a READ endpoint's name; `mutation` = a WRITE endpoint's name — verbatim from the plan, never
+  renamed or re-pluralised by you; a planned name you think is wrong is fixed in the plan, not tidied here.
   The writer resolves these against the endpoints **actually on disk**, not against the plan, and it
   names every real one in its rejection. So a name it does not recognise means the endpoint was
   written under a different name — take the one the error lists, never invent a spelling.
@@ -49,16 +52,26 @@ The framework spellings do NOT work here — write `$route.id` not `$params.id`,
 language has no expressions, **on purpose**. A value that needs computing is computed in the
 ENDPOINT'S OUTPUT and bound by name, or expressed as a named policy — `format`, `toneMap`,
 `poll.while`. A null binding renders NOTHING, so no guard is needed or possible.
+`$route.<param>` resolves ONLY on a page whose OWN route declares that `[param]` — bound on a
+param-less route the query never fires and the page shows loading skeletons forever (no error, no
+500) — and an `input` can never bind `$.x`: that is the section's own endpoint's RESULT, and the
+call's argument cannot be its output. Legal `input` bindings: a `$route.<param>` the route declares,
+`$data.<earlierSectionId>.<field>`, or a literal.
 
 **Navigation uses the AUTHORING route plus params** —
 `{ navigate: 'trips/[tripId]/expenses', params: { tripId: '$.id' } }`. Never `/trips/:tripId/...`,
-never a string with a binding spliced into it.
+never a string with a binding spliced into it. A DETAIL page exists only at the END of such a link:
+give it the `[param]` route and reach it from its list's `rowAction` — never a param-less
+`dog-detail` page, and never a nav entry (nav holds LIST pages only).
 
 **Make it feel finished (the UX the plan asked for).** The renderer already gives you loading, empty
 and error states, archetype layout and responsive behaviour for free — so spend your effort on the
 parts only you can set:
 - **Human copy.** Give each page and section a specific `title`, and every `list` a warm `empty:`
-  that invites the next action ("No expenses yet — add one above."), never placeholder text.
+  that invites the next action ("No expenses yet — add one above."), never placeholder text. Know the
+  difference when you check your work: grey loading placeholders that never resolve mean the query
+  never FIRED (an `input` the page's route cannot supply — see the `$route.<param>` rule above); a
+  proper `empty:` title means it fired and found nothing. Only the second is a finished page.
 - **Readable values.** Put `format` on money/dates/durations, and `tone`/`toneMap` on a status or
   badge so good and bad read apart at a glance — a raw `false` or a bare `78` beside `70.49` is a
   finding the smoke gate will flag anyway.

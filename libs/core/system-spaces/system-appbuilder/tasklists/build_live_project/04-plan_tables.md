@@ -10,9 +10,15 @@ functions:
 
 Detail EVERY table `plan_app` planned into a source-grounded data model — one entry per
 `plan_app.tables`, same set, no additions and no drops (membership was decided upstream where the whole
-app was in view). ONE table per real-world entity — never a singular plus a `_purchases`/`_records`/`_info`
-twin that holds the SAME records, because two tables for one thing make a later delete non-atomic (it
-removes the row from only one copy and any total double-counts). `query`, `read_sources` (`read_sources.summary`, the build brief), `user_stories`
+app was in view). **NAME TABLES PLURAL, ONCE.** Pick ONE canonical plural noun per entity and reuse
+it everywhere — `dogs`, `walks`, never `dog`, never a re-spelling. A table that ALREADY appears in
+`plan_app.tables` (or `read_sources`) is that name; you add detail, you never rename it. And never
+mint a NEW name that is the singular or plural of one already in the list: `dog` plus `dogs`, `walk`
+plus `walks` are the SAME entity twice. ONE table per real-world entity — never a singular plus a
+`_purchases`/`_records`/`_info` twin that holds the SAME records, because two tables for one thing
+make a later delete non-atomic (it removes the row from only one copy and any total double-counts),
+and because `reconcile_tables` now FAILS any singular/plural collision (`dog`+`dogs`) instead of
+letting both land and splitting endpoints across them. `query`, `read_sources` (`read_sources.summary`, the build brief), `user_stories`
 (`user_stories.stories` — the jobs each table must support), and `plan_app` (`plan_app.tables`, the
 BINDING list) are in scope. This is still a THINKING step — no writers.
 

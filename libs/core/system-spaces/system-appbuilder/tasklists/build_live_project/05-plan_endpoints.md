@@ -53,6 +53,15 @@ Each endpoint is `{ name, route, purpose, tables, fields, input? }`:
   the SERVER computes (see the toggle rule below: the page passes no value at all). Do not invent a body
   key to fill the field in; `input: []` and a made-up `'watered_at?: string'` are both worse than
   omitting it, because the handler then has a parameter no caller sends.
+
+  **A `[param]` route declares who can call it, and that is a SILENT-SKELETON contract.** An endpoint
+  whose route takes an id may be called only from a page whose OWN route declares that same `[param]`
+  segment. And a section's binding for that endpoint is one of: a `$route.<param>` the PAGE's route
+  actually declares, `$data.<earlierSectionId>.<field>` (output of an EARLIER section), or a literal.
+  NEVER bind a bare `$.field` — that field exists only inside the query's OWN result, so the query
+  waits on itself forever: the page answers with loading placeholders and issues ZERO requests, and
+  every gate (typecheck, smoke render, validation) still passes because a permanent skeleton is valid
+  markup.
 - `fields` — the EXACT keys of ONE item in the response (`items[0]`), each as `'key: type'`. The TYPE
   half is REQUIRED and binding: a host-run `emit_types` writes these into the project's `.d.ts` BEFORE
   any handler or page is authored, so the compiler — not a later reviewer — is what catches a field

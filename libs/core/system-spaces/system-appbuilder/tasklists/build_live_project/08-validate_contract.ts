@@ -154,10 +154,13 @@ const list = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const BASE_COLUMN_TYPES: ReadonlySet<string> = new Set(['string', 'number', 'boolean', 'date', 'json']);
 
 /**
- * The eight section kinds, verbatim from `libs/cli/src/app/view-spec/schema.ts#SECTION_KINDS`. The
- * union is FULL and capped — a ninth kind is a plan change decided by the improvement-loop ratchet,
- * never something a planner may mint. Catching an invented kind HERE, with the real menu named, is
- * far cheaper than catching it at `writeProjectView` time on every page that used it.
+ * The eleven PAGE section kinds, verbatim from `libs/cli/src/app/view-spec/schema.ts#SECTION_KINDS`
+ * minus `outlet` (the layout seam — a page plan never declares one). The union is FULL and capped:
+ * a twelfth kind is a plan change decided by the improvement-loop ratchet, never something a
+ * planner may mint. `board`/`calendar`/`chart` are collection sections (they read one GET endpoint
+ * plus a grouping/date/plot field), so a plan that uses them must still name that endpoint. Catching
+ * an invented kind HERE, with the real menu named, is far cheaper than catching it at
+ * `writeProjectView` time on every page that used it.
  */
 const SECTION_KINDS: ReadonlySet<string> = new Set([
   'list',
@@ -168,6 +171,9 @@ const SECTION_KINDS: ReadonlySet<string> = new Set([
   'chat',
   'toolbar',
   'timeline',
+  'board',
+  'calendar',
+  'chart',
 ]);
 
 /** Kinds that do not necessarily read an endpoint. Everything else must name one. */
@@ -328,9 +334,9 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
       const ref = `${route}#${id}`;
       const kind = String(s.kind ?? '');
 
-      // (V2) The kind must be one of the eight. The union is capped; there is no `custom`.
+      // (V2) The kind must be one of the eleven. The union is capped; there is no `custom`.
       if (!SECTION_KINDS.has(kind)) {
-        add('plan_views', ref, `section "${id}" on page "${route}" has kind "${kind}" — that is not a section kind. The complete menu is: ${[...SECTION_KINDS].join(', ')}. There is no ninth kind and no custom escape: if none of the eight expresses this surface, drop the section and record it in this page's \`cannotExpress\` instead of forcing it into the nearest kind.`);
+        add('plan_views', ref, `section "${id}" on page "${route}" has kind "${kind}" — that is not a section kind. The complete menu is: ${[...SECTION_KINDS].join(', ')}. There is no twelfth kind and no custom escape: if none of these expresses this surface, drop the section and record it in this page's \`cannotExpress\` instead of forcing it into the nearest kind.`);
       }
 
       // (V3) The endpoint must exist. A section naming an endpoint nobody assigned is a dead section:

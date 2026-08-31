@@ -86,6 +86,8 @@ from the material for every `<…>` (never leave a placeholder). Plan for an app
   never React and never TSX. COUNT them deliberately: name each shared shape the pages will reference
   by `{ use: '<Name>' }`, not per-page markup.
 - **pages** — an `index` home PLUS the list/detail/dashboard views the stories call for. Multiple pages.
+  A DETAIL page is ALWAYS a `[param]` route (`dogs/[id]`) reached from its list page's `rowAction` —
+  never a param-less `dog-detail` route, and never a nav entry: nav holds LIST pages only.
   Each page is a SPEC: an ordered list of sections drawn from a closed menu of 8 kinds — `list`,
   `detail`, `create`, `stats`, `markdown`, `chat`, `toolbar`, `timeline`. Plan pages you can build
   from those kinds. If a story needs a surface none of them expresses, say so PLAINLY in that page's

@@ -59,6 +59,21 @@ planned is missing. Otherwise resolve `ok: false` and CARRY the residual errors 
 failure is surfaced LOUDLY — a build that finishes with a broken page is a FAIL, not a pass. Nothing
 is ever excluded or stubbed to make it pass.
 
+**Surplus and dead artifacts FAIL the report.** The build can be green and every gate clean while the
+nav points at a page the user should never see — a replacement authored at a NEW route with the OLD
+one left on disk reports success today. Three failure modes, all resolvable before this node reports:
+- a NAV destination with no `.view.json` on disk → the tab is dead (old page deleted, a replacement
+  never wired in);
+- a `.view.json` on disk that neither the planned pages nor the nav reference → an orphaned leftover
+  from an earlier iteration;
+- a planned, landed, STATIC page missing from the nav → a page nobody can open.
+
+Each is a FAIL: add it to `errors` and leave `ok` false. REPOINT, don't delete-first —
+`deleteProjectView` / `deleteProjectApi` / `deleteProjectQuery` / `deleteProjectHook` each REFUSE
+while anything still references the artifact, so move the nav to the live route and only then delete
+the dead one. A drill-in route (`dogs/[dogId]`) is never expected as a tab — `implement_shell` already
+keeps `[`-routes out of nav, and an `_`-prefixed spec is a layout, not a reachable page.
+
 `plan_slices` (in scope) is the ordered vertical-slice grouping (W9, §8) this design WOULD promote in
 — report `plan_slices.sliceCount` as `sliceCount`, purely informational (it never gates `ok`). Emit one
 statement:
@@ -83,6 +98,37 @@ const pageResults = Array.isArray(implement_views) ? implement_views : [];
 const diskPages = (listProjectDir('views').entries || [])
   .filter((e: string) => e.endsWith('.view.json') && !e.startsWith('_'))
   .map((e: string) => e.replace(/\.view\.json$/, ''));
+// Orphaned & dead references FAIL even when every gate is green: a nav whose tab has no `.view.json`
+// is dead; a `.view.json` nothing references is a leftover from a replacement authored at a NEW route.
+// Read the shell's own nav to decide what SHOULD be reachable.
+const shFile = (typeof readProjectFile === 'function') ? readProjectFile('shell.view.json') : null;
+const sh = (shFile && shFile.ok && typeof shFile.content === 'string') ? JSON.parse(shFile.content) : null;
+const navRoutes = new Set(
+  (Array.isArray(sh?.nav) ? sh.nav : [])
+    .map((n: { route?: string }) => n.route)
+    .concat((Array.isArray(sh?.groups) ? sh.groups : [])
+      .flatMap((g: { home?: string; routes?: string[] }) => [g.home, ...(g.routes ?? [])]))
+    .filter((r: string | undefined): r is string => typeof r === 'string'),
+);
+const diskSet = new Set(diskPages);
+const landedRoutes = pageResults.filter((x: { ok: boolean }) => x.ok).map((x: { route: string }) => x.route);
+for (const nr of navRoutes) {
+  // A drill-in (`[`) route is reached by rowAction, never a tab — only `[`-free tabs must resolve.
+  if (!nr.includes('[') && !diskSet.has(nr)) {
+    allErrors.push({ file: 'shell.view.json', phase: 'orphan', message: `nav points at "${nr}" but views/${nr}.view.json does not exist — a dead page. Repoint the nav to the live route (deletes are REFUSED while anything references the artifact).` });
+  }
+}
+for (const dp of diskPages) {
+  if (!navRoutes.has(dp) && !landedRoutes.includes(dp)) {
+    allErrors.push({ file: `views/${dp}`, phase: 'orphan', message: `"${dp}" sits on disk but neither the planned pages nor the nav reference it — left over when a replacement was authored at another route. Repoint nav, then deleteProjectView("${dp}").` });
+  }
+}
+for (const lr of landedRoutes) {
+  if (lr.includes('[') || lr.startsWith('_')) continue; // drill-in / layout — not nav tabs
+  if (!navRoutes.has(lr)) {
+    allErrors.push({ file: `views/${lr}`, phase: 'orphan', message: `"${lr}" is planned, landed and static but the nav never reaches it — a page nobody can open.` });
+  }
+}
 const gaps = (Array.isArray(check_acceptance?.dataGaps) ? check_acceptance.dataGaps : []) as unknown[];
 const unproven = (Array.isArray(check_acceptance?.malformed) ? check_acceptance.malformed : []) as unknown[];
 const missing = [

@@ -68,4 +68,4 @@ unauthored.
 **`ok` is a REPORT.** Resolve `ok: true` only when the writer's result was consumed (`w.ok === true`)
 and you verified the file is really there (`readProjectFile`/`listProjectDir`). Build nothing across
 statements — declare and use `w` in the SAME statement that writes it, exactly as `02-fix_broken.md`
-warns: a `let w; w = …` split across statements throws `'w' is not defined` on the very next line.
+warns.

@@ -2,6 +2,13 @@
 input:
   query: string
   attachmentIds: array?
+output:
+  ok: boolean
+  added: array
+  changed: array
+  data: array
+  missing: array
+  errors: array
 ---
 
 Grow or change a LIVE project that already has real tables and pages — add or modify ONLY what
@@ -26,7 +33,11 @@ is no pre-computed ambient type contract here, so a written endpoint declares it
 `Input`/`Output` interfaces, exactly as `repair_live_project`'s `author_missing` does. `verify`
 (HOST-RUN) then re-checks the WHOLE app fresh from disk — the same three ground truths
 `build_live_project`'s `verify` and `repair_live_project`'s `diagnose` use — because a change to one
-part can break another (a renamed column, a duplicated route). `finalize` reports honestly and
+part can break another (a renamed column, a duplicated route). A concrete bulk-entry request (for
+example, "add these three books") is also handled here: `plan_change` puts the rows under `data`,
+and `enter_data` validates each row against the live schema and inserts it without authoring or
+repairing app artifacts. The result reports every inserted row and every row that failed, rather
+than treating a partial batch as success. `finalize` reports honestly and
 carries forward anything still broken/missing in the SAME `{ missing, errors }` shape
 `repair_live_project` accepts, so a caller with a still-imperfect result can hand it straight to
 `repair_live_project` rather than re-running this tasklist blind.

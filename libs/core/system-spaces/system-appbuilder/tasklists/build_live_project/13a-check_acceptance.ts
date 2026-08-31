@@ -331,19 +331,40 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
       return null;
     }
   };
-  /** Total known rows across an endpoint's backing tables; `null` if none are countable. */
-  const backingRows = async (ref: EndpointRef | undefined): Promise<number | null> => {
+  /** Singular <-> plural twin of a table name (drop/add a trailing `s`) — `dog` <-> `dogs`. */
+  const twinOf = (t: string): string => (t.endsWith('s') ? t.slice(0, -1) : `${t}s`);
+
+  interface BackedTable {
+    table: string;       // the spelling the handler actually queries
+    twin: string;        // its singular/plural counterpart
+    rows: number | null;       // rows under `table`
+    twinRows: number | null;   // rows under `twin`
+    /** Which spelling actually holds the data (the CANONICAL one). */
+    canonical: string;
+  }
+
+  /** Total known rows across an endpoint's backing tables, resolving each to its CANONICAL
+   *  (row-bearing) spelling. A singular+plural twin (`dog` and `dogs`) must never be judged empty
+   *  because the handler queried one spelling while the data sits in the other — count BOTH and
+   *  report the one that carries the rows. Returns `null` when nothing is countable. */
+  const backingRows = async (ref: EndpointRef | undefined): Promise<{ rows: number | null; tables: BackedTable[] } | null> => {
     if (!ref || ref.queries.length === 0) return null;
+    const tables: BackedTable[] = [];
     let total = 0;
     let known = false;
     for (const t of ref.queries) {
+      const twin = twinOf(t);
       const n = await rowCount(t);
-      if (n !== null) {
-        total += n;
+      const tn = twin === t ? null : await rowCount(twin); // a twin spelling may not exist; counting it is harmless (null)
+      const canonical = (tn ?? -1) > (n ?? 0) ? twin : t; // the spelling that actually holds the data
+      tables.push({ table: t, twin, rows: n, twinRows: tn, canonical });
+      const best = Math.max(n ?? 0, tn ?? 0);
+      if (n !== null || tn !== null) {
+        total += best;
         known = true;
       }
     }
-    return known ? total : null;
+    return { rows: known ? total : null, tables };
   };
 
   const byFile: Record<string, Finding[]> = {};
@@ -447,7 +468,8 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     // FAILED. Code fault (data exists, endpoint reports it wrong → fixable) vs extraction gap
     // (backing data short → not a code fix). rows-min needs >= min backing rows to be a code fault;
     // field-min needs >= 1 (some data the aggregate should have reflected).
-    const rows = await backingRows(ref);
+    const backing = await backingRows(ref);
+    const rows = backing ? backing.rows : null;
     const need = kind === 'rows-min' ? min : 1;
     // An EXACT-arithmetic miss that came back as a real non-zero number is NEVER a data gap: the
     // endpoint had enough data to produce a figure and produced the wrong one, so a TERM of the
@@ -457,6 +479,21 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     const wrongNotEmpty = kind === 'field-equals' && Number.isFinite(value) && value !== 0;
     const isCodeFault = wrongNotEmpty || (rows !== null && rows >= need);
 
+    // A singular/plural twin on disk must be named, not guessed: the handler may query one spelling
+    // while the data sits in the other, so surface BOTH and point at the CANONICAL (row-bearing) one.
+    const twinNote =
+      backing && backing.tables.length > 0
+        ? backing.tables
+            .map((b) => {
+              if (b.twin === b.table) return `\`${b.table}\``;
+              const twinHasMore = (b.twinRows ?? 0) > (b.rows ?? 0);
+              return twinHasMore
+                ? `\`${b.table}\` resolves to \`${b.twin}\` (canonical: it holds ${b.twinRows} row(s) vs ${b.rows ?? 0} under \`${b.table}\`)`
+                : `\`${b.table}\`${b.twinRows ? ` (a twin \`${b.twin}\` also holds ${b.twinRows} row(s))` : ''}`;
+            })
+            .join('; ')
+        : '';
+
     const detail =
       `acceptance check "${label}" FAILED: expected ${expected} ` +
       `but got ${observed}. ${check.why ? `Source basis: ${check.why}.` : ''}`;
@@ -464,8 +501,8 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     if (isCodeFault && ref) {
       const dataNote =
         rows !== null
-          ? `The backing table(s) hold ${rows} row(s), so the DATA is there`
-          : `The endpoint answered with real data`;
+          ? `The backing table(s) hold ${rows} row(s)${twinNote ? ` (${twinNote})` : ''}, so the DATA is there`
+          : `The endpoint answered with real data${twinNote ? `; ${twinNote}` : ''}`;
       const repair =
         kind === 'field-equals'
           ? `— the handler computed the WRONG FIGURE. The expected value is what the brief's own stated ` +

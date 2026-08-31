@@ -9,8 +9,12 @@ data (a table), a project EVENT, a "when X happens, do Y" RULE over this project
 data or an installed integration, OR a full app IN this project (pages + data + automation,
 served at `/app/<project>/`) — delegate straight to the **automator**. It authors the table(s)
 (seeding any known data), typed API handlers, React pages, emitter def(s), and event/cron hook(s)
-directly into the live project (no install, no separate app). Pass the request verbatim, naming any
-relevant installed-space events:
+directly into the live project (no install, no separate app). Name the automator's ACTION by what the
+project already has: **`build_live_project` creates an app that does not exist yet; `iterate_live_project`
+changes one that does** — and an addition to the project you are already living in is the second case, so
+the delegate below names `iterate_live_project`, never `build_live_project` (re-running it on a live app
+re-does the entire first-build pipeline for nothing it needed to touch). Pass the request verbatim, naming
+any relevant installed-space events:
 
 > This direct automator delegate is for an INCREMENTAL addition to a project (a table, a page, a
 > scoped app request). Organising a pile of supplied material the user asked you to sort out is a
@@ -19,7 +23,7 @@ relevant installed-space events:
 ```typescript
 // Name the automator's own declared action explicitly — omitting it lets the automator decide FOR
 // ITSELF whether to actually build or just plan/survey, and that judgment call is not reliable.
-const auto = await delegate('system-appbuilder', 'automator', 'build_live_project', {
+const auto = await delegate('system-appbuilder', 'automator', 'iterate_live_project', {
   query: '<the user request, verbatim>. Installed integration events available: '
     + '<e.g. integration-demo/message.received>',
   // If the user attached files whose data belongs in the app, hand the SAME attachment ids on

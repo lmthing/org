@@ -174,6 +174,18 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
       }
       return;
     }
+    // An orphan route is an INBOUND fault: the page itself is internally valid — what is wrong is
+    // that nothing navigates TO it, and the only artifact that can fix that is the shell (nav) or a
+    // navigate target on some OTHER page. `orphanRoute` attaches the page's own file for human
+    // display, but filed under it a fix_broken fork would be restricted to editing that page,
+    // which can never make it reachable — the item cannot resolve, and repair loops forever.
+    // Filed under the shell instead: `add` groups by path, so every orphan-route finding collapses
+    // into ONE shell.view.json entry (one fork, no parallel-write race on the shell), and `kindOf`
+    // maps SHELL_SPEC_PATH to kind 'shell' — 02-fix_broken.md's writeProjectViewShell branch.
+    if (e.code === 'orphan-route') {
+      add(SHELL_SPEC_PATH, { phase, message });
+      return;
+    }
     add(e.file || SHELL_SPEC_PATH, { phase, message });
   };
 

@@ -5,6 +5,7 @@ output:
   endpoints: array
   components: array
   views: array
+  data: array
 dependsOn: []
 role: general
 functions: []
@@ -13,7 +14,7 @@ prelude: |
   inspect(documents);
 ---
 
-Decide the SMALLEST set of table/endpoint/component/page changes that satisfies `query` — this is
+Decide the SMALLEST set of table/endpoint/component/page changes and concrete data rows that satisfies `query` — this is
 the one thinking step; there are no writers here. `attachmentIds` may be empty (most iterations are
 pure follow-up requests with no new material); when documents were supplied, the prelude has already
 surfaced their content — read it for concrete new values, never invent one.
@@ -35,6 +36,16 @@ it; that is `build_live_project` territory (a first build) or a separate future 
 one. A page that already exists and needs one more field/action/row is `existing: true` on `views`,
 not a new route.
 
+If `query` asks to add, seed, import, or enter concrete rows into an existing table, handle that
+request here rather than treating it as a feature build. Read the real table schema before planning
+`data`, use the table's exact name and column names, and put one item in `data`:
+`{ table: '<real table>', rows: [ { /* concrete values */ } ] }`. Preserve every supplied value
+verbatim; do not invent missing values. For a pure data-entry request, all four artifact arrays
+(`tables`, `endpoints`, `components`, `views`) MUST be empty: inserting rows does not require an
+endpoint, page, build, or repair. If the requested rows are not concrete enough to map to a real
+schema, put no item in `data` and explain the missing information in the final result rather than
+guessing.
+
 **Naming conventions carry over unchanged**: table names are snake_case identifiers; endpoint routes
 encode the HTTP method last (`items-list/GET`); component names are PascalCase; a `[param]` page
 segment is a route dynamic. Every endpoint you list must be read by some view you also list (or an
@@ -51,5 +62,6 @@ currentTask.resolve({
   endpoints: [ { route: '<name>/GET', purpose: '<what it must now return/do>', existing: false } ],
   components: [ { name: '<ComponentName>', purpose: '<the shape it renders>', existing: false } ],
   views: [ { route: '<page-route>', purpose: '<what changes on this page>', existing: true } ],
+  data: [ { table: '<real table>', rows: [ { /* concrete values */ } ] } ],
 });
 ```

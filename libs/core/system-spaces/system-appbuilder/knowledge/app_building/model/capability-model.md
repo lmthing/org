@@ -17,9 +17,9 @@ reaching the engine. This is least-privilege: give an agent exactly the caps its
 | `db:schema` | `writeProjectEntity` (declarative — PREFER this), `writeTableSchema`, `db.createTable`/`db.addColumn` | optional `{ tables: [...] }` |
 | `db:read` | `db.query`, `db.tables` | optional `{ tables: [...] }` |
 | `db:write` | `db.insert`, `db.update` | optional `{ tables: [...] }` |
-| `views:write` | `writeProjectView`, `writeProjectViewComponent`, `writeProjectViewShell` | bare |
-| `api:write` | `writeProjectQuery` (declarative — PREFER this), `writeApi`, `writeProjectApi` | bare |
-| `hooks:write` | `writeHook` | bare |
+| `views:write` | `writeProjectView`, `writeProjectViewComponent`, `writeProjectViewLayout`, `writeProjectViewShell`, and the matching `deleteProjectView`/`deleteProjectViewComponent`/`deleteProjectViewLayout` | bare |
+| `api:write` | `writeProjectQuery` (declarative — PREFER this), `writeApi`, `writeProjectApi`, `deleteProjectApi`, `deleteProjectQuery` | bare |
+| `hooks:write` | `writeHook`, `deleteProjectHook` | bare |
 | `api:call` | `apiCall(name, input)` | required `{ allow: [...] }` |
 | `connections:use` | `callConnection`, `integrationStatus` | optional `{ providers: [...] }` |
 | `store:read` | `storeSearch`, `storeInspect` | bare |
@@ -28,6 +28,11 @@ reaching the engine. This is least-privilege: give an agent exactly the caps its
 | `fs:scratch` | scratch-dir file access | bare |
 
 That is the complete set of recognized ids; an unknown id fails the space load.
+
+A `delete*` is gated by the SAME capability as its matching writer, and every one is REFUSED while
+anything still references the artifact — the error names the referencing file, so repoint it first.
+There is deliberately NO table/entity delete: dropping a table destroys user data, which stays a
+host-only operation.
 
 ## Declaring capabilities
 

@@ -6,7 +6,8 @@ output:
   changed: array
   missing: array
   errors: array
-dependsOn: [plan_change, implement_tables, implement_endpoints, implement_components, implement_views, verify]
+  data: array
+dependsOn: [plan_change, implement_tables, implement_endpoints, implement_components, implement_views, enter_data, verify]
 goal: true
 role: general
 functions: []
@@ -23,6 +24,13 @@ cheap, since it only touches what is still wrong — rather than re-running this
 `build_live_project` blind. Emit one statement:
 
 ```typescript
+const dataResults = Array.isArray(enter_data) ? enter_data : [];
+const data = dataResults.map((r: { table: string; inserted: unknown[]; failed: unknown[] }) => ({
+  table: r.table,
+  inserted: Array.isArray(r.inserted) ? r.inserted : [],
+  failed: Array.isArray(r.failed) ? r.failed : [],
+}));
+const dataFailures = data.some((r: { failed: unknown[] }) => r.failed.length > 0);
 const allImplemented = [
   ...(Array.isArray(implement_tables) ? implement_tables : []).map((r: { name: string; ok: boolean }) => ({ ...r, cat: 'table' as const })),
   ...(Array.isArray(implement_endpoints) ? implement_endpoints : []).map((r: { route: string; ok: boolean }) => ({ ...r, name: r.route, cat: 'endpoint' as const })),
@@ -49,10 +57,11 @@ const missing = verifyResult.toAuthor
     : { kind: 'automation', slug: t.name, error: t.hint });
 
 currentTask.resolve({
-  ok: verifyResult.ok && notLanded.length === 0,
+  ok: verifyResult.ok && notLanded.length === 0 && !dataFailures,
   added,
   changed,
   missing,
   errors,
+  data,
 });
 ```

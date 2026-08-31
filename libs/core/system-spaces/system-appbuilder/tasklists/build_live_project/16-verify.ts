@@ -53,6 +53,7 @@ export const node = {
     viewsValidated: 'boolean',
     renderSmoked: 'boolean',
     unavailable: 'array',
+    smokeUnmeasured: 'number',
   },
 };
 
@@ -197,7 +198,7 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
   // endpoint, and its findings must land in `offending` because `fix` fans out over
   // `verify.offending` and nothing else.
   const smoke = inputs['smoke_endpoints'] as
-    | { offending?: Array<{ path?: string; errors?: Finding[] }>; unavailable?: boolean; reason?: string }
+    | { offending?: Array<{ path?: string; errors?: Finding[] }>; unavailable?: boolean; reason?: string; unmeasured?: number }
     | undefined;
   if (smoke?.unavailable) {
     unavailable.push('smoke_endpoints');
@@ -206,6 +207,13 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
   for (const entry of smoke?.offending ?? []) {
     for (const e of entry.errors ?? []) add(String(entry.path ?? 'api'), e);
   }
+  // Endpoints the smoke could not certify either way: they ran, answered `{ items: [] }`, and every
+  // backing table they query is genuinely empty (a brand-new app) or no real row could be sourced to
+  // re-ask with. This is a THIRD outcome between "ran and returned rows" and "broken" — NEVER a
+  // finding (on a legitimately-empty new app it is the normal state, and putting it in `offending`
+  // would send `fix` to "repair" an empty database), but never silently folded into a pass either:
+  // it rides to `finalize` as a count so an app whose data plumbing was never exercised is visible.
+  const smokeUnmeasured = typeof smoke?.unmeasured === 'number' ? smoke.unmeasured : 0;
 
   // FOLD IN the acceptance gate the same way. Its `offending` is ONLY the code faults; the extraction
   // gaps it found go to `finalize` as `dataGaps`, never to `fix`.
@@ -359,5 +367,6 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     viewsValidated,
     renderSmoked,
     unavailable,
+    smokeUnmeasured,
   };
 }

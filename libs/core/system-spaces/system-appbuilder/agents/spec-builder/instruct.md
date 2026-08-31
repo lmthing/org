@@ -82,6 +82,8 @@ Author a component only for a shape used on TWO OR MORE pages. One use is worse 
 
 - **Bindings are PATHS.** The eight roots, and nothing else: `$` `$.field` `$props.x`
   `$route.<param>` `$data.<sectionId>.<path>` `$result.<field>` `$form.<field>` `$client.timezone`.
+  `$route.<param>` resolves only on a page whose OWN route declares that `[param]`, and an `input`
+  can never bind `$.x` — that is the section's own endpoint's result, not an argument.
   The spellings other frameworks taught you are not roots here — `$params.` → **`$route.`**,
   `$item.`/`$row.`/`$record.`/`$this.` → **`$`**, `$prop.` → **`$props.`**.
 - **There are no expressions, on purpose.** `"$.price * $.qty"`, `"$.done ? 'yes' : 'no'"`,

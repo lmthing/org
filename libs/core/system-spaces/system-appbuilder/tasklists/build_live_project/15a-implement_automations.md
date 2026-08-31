@@ -23,7 +23,9 @@ FULL hook module inline with the array-`join("\n")` pattern (real line breaks). 
 `writeProjectHook` returns `{ ok, error? }` and validates at write time (parse, hook shape, and — for a
 `db.insert`/`db.update` — that every column exists, and — for an event on `project/db.<table>.<event>` —
 that the table exists); branch on `w.ok`, read `w.error`, correct THAT, and write once more before
-resolving. Emit one statement.
+resolving. Every runtime global you call (`writeProjectHook`, `currentTask`) is AMBIENT — already in
+scope, never imported; there is no `@lmthing/*` module (and the hook itself imports nothing project-side:
+`db` arrives as the handler's parameter). Emit one statement.
 
 ## The two shapes, by `item.kind` + `item.run`
 

@@ -12,8 +12,11 @@ functions: []
 
 Write ONE typed API handler into the LIVE project's `api/`. Your endpoint is in `item` =
 { name, route, purpose, tables, fields, input? }: `item.name` is the stable id the plan assigned, and `item.route`
-already encodes the method last (e.g. `cost-lines/GET`). `plan_tables.tables` (the real schemas being
-written) is in scope — read its columns so your query matches real data. **`item.fields` is the EXACT
+already encodes the method last (e.g. `cost-lines/GET`). **The plan's names are law: `item.name` is used
+VERBATIM — never renamed, re-pluralised or tidied (`books-list` stays `books-list`, never `book-detail`);
+a planned name you think is wrong is fixed in the plan, not silently diverged from here.**
+`plan_tables.tables` (the real schemas being written) is in scope — read its columns so your query
+matches real data. **`item.fields` is the EXACT
 shape of one response item (`items[0]`) — each entry is `'key: type'`.** Your `Output` item type AND the
 object you actually return MUST use exactly those keys, verbatim (same names, same snake_case) — never
 add, drop, or re-case one. The page reads this same `item.fields` list, so it is the single source of
@@ -30,7 +33,9 @@ for contacts, a grouped summary, or a single-object dashboard/aggregate, which y
 element of the array (`return { items: [summary] };`), NEVER as a bare object (`items: {…}`) or a
 scalar. Pages read every endpoint as `data.items` (and an aggregate as `data.items[0]`), so a non-array
 `items` silently gives the page nothing. `writeProjectApi` returns `{ ok, error? }`
-and validates the module at write time; rewrite and retry if `w.ok` is false. Emit one statement:
+and validates the module at write time; rewrite and retry if `w.ok` is false. Every runtime global you
+call — `writeProjectApi`, `writeProjectQuery`, `listProjectDir`, `currentTask` — is AMBIENT: already in
+scope, never imported; there is no `@lmthing/*` (or any) module to import one from. Emit one statement:
 
 ## Check `item.declarative` FIRST — a declarative endpoint uses `writeProjectQuery`, never hand-written TS
 
@@ -39,6 +44,12 @@ If `plan_endpoints` marked this endpoint `declarative: true`, it already carries
 `writeProjectQuery` needs — build the query object from those SAME fields, verbatim, call
 `writeProjectQuery`, resolve, and **stop — skip every section below**; the rest of this document
 (the hand-written handler contract) is for the NON-declarative endpoints only.
+
+**Two IR shapes to get right first time:** `query.route` NEVER carries the HTTP method — it is the
+bare lowercase slash path, segments optionally a `[param]` (`members/list`, `members/[id]`); the
+method lives only in `item.route`'s last segment, and you strip it, never carry it over. And
+`include` is a list of relation NAME STRINGS declared on the entity (`include: ['comments']`) —
+never an object, and never a relation the entity does not have (the rejection lists them all).
 
 ```typescript
 const ep = item;

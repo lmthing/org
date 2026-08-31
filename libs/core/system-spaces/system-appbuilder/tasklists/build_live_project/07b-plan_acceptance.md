@@ -76,6 +76,15 @@ build that then shipped the wrong number:
   page's `endpoints` list — an endpoint no page reads shows the user nothing, so proving it works
   proves nothing they see. Verifying an orphaned endpoint is exactly how a broken dashboard passes
   acceptance while the real endpoint its page renders is the one that fails.
+- **A check proves the QUERY RAN, not just that the endpoint answers.** Calling the endpoint directly
+  and getting rows back cannot tell a page stuck on a permanent loading SKELETON (its query never
+  FIRED) from a page showing a genuine "No books yet" empty state (fired, returned none). Only the
+  second is success, so check an endpoint ONLY where its page can actually ISSUE that query: every
+  input the query needs must be supplyable — from a `[param]` the page's route DECLARES, a
+  `$data.<sectionId>.<field>` an EARLIER section produces, or a literal. Prefer a NON-param list
+  endpoint (a `[param]` route you cannot seed is a skeleton you cannot prove). NEVER check an endpoint
+  whose page binds a bare `$.field` into its own query `input` — that is circular, the query never
+  issues, and a green check here witnesses a skeleton.
 - **Only emit a check the SOURCE grounds.** If the brief neither states the number nor defines the
   arithmetic that produces it, do not invent a threshold — omit the check. A vague story yields NO check.
 - **`field` and `match.field` must be real `plan_endpoints` fields** of that endpoint, copied verbatim.

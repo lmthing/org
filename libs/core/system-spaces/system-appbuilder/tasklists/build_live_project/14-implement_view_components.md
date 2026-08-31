@@ -11,12 +11,16 @@ functions: []
 
 Write ONE reusable VIEW COMPONENT — a named element composition, not React. Your component is in
 `item` = { name, purpose, props }. Call `writeProjectViewComponent(item.name, def)` with ONE object
-literal. There is no source string, no TSX, no imports, no class names, no colors.
+literal. There is no source string, no TSX, no imports, no class names, no colors. Your statement itself
+is plain TypeScript, and every runtime global it calls (`writeProjectViewComponent`, `currentTask`) is
+AMBIENT — already in scope, never imported; there is no `@lmthing/*` module.
 
 `def` is `{ name, description?, props?, node }`:
 - `name` — `item.name`, PascalCase, verbatim.
 - `props` — an OBJECT mapping each prop to its type (`{ expense: 'Expense' }`). `item.props` gives them
-  as `'<key>: <type>'` strings; convert. Inside `node`, read a prop as `$props.<key>`.
+  as `'<key>: <type>'` strings; convert. A prop type is a type NAME, optionally an array —
+  `string`, `number`, `boolean`, `Book`, `Book[]` — never an inline object literal (`'{ id: string }'`
+  is rejected). Inside `node`, read a prop as `$props.<key>`.
 - `node` — the element tree. Every node is `{ el: '<kind>', …props }`, and `row`/`col`/`grid`/`surface`
   take `children: [...]`.
 
@@ -36,6 +40,18 @@ often dies:
   `{ navigate, params? }` · `{ download, filename?, input? }` · `{ print }` · `{ copy }`.
   There is no `endpoint` key — a write is `mutate`.
 
+**The section rules a save-time rejection most often teaches the hard way** — a page's `sections`
+follow the same vocabulary, so get them right before the writer does:
+- A `detail` SECTION takes `header`/`fields`/`body` — never `item` (`item` is a LIST section's row
+  template) — and its `body` is an OBJECT, not an array.
+- Every section and element `id` is a plain lowerCamelCase name — letters, digits, `_` only. NO
+  dashes: `overviewStats`, never `overview-stats`.
+- An entry in `actions[]` takes `{ action, icon, label, reveals, tone, variant }` — there is no
+  `navigate` on the entry itself; navigation rides INSIDE `action` (`{ label: 'Open', action:
+  { navigate: 'books/[id]', params: { id: '$.id' } } }`).
+- A page cannot COMPUTE. Every value a section binds must already be a field of its query's Output —
+  a value the endpoint does not return is added to the ENDPOINT's Output and computed there.
+
 **Values are PATHS, never expressions.** `'$props.expense.amount'` is a value; `'$props.a + $props.b'`,
 `'${x}'` and `'$.done ? "yes" : "no"'` are rejected — the spec language has no expressions, **on
 purpose**, so compute the value in the endpoint's Output and bind the result, or use a named policy
@@ -50,6 +66,7 @@ colour is `tone` (`neutral|accent|success|warning|danger|info|auto`) or a declar
 To let a row CHANGE something, use `field` — the one interactive element:
 `{ el: 'field', kind: 'toggle'|'rating'|'select'|'stepper'|'text', value: '$props.x.done',
 mutation: '<endpoint>', input: { id: '$props.x.id' }, invalidates: ['<endpoint>'] }`.
+The endpoint names there come from the plan VERBATIM — never renamed or tidied.
 
 **If `w.ok` is false, DO NOT resolve yet.** `w.error` names the instance path, the offense, and the
 finite set of valid values (`node.children[1].el: "chip" is not an element. Elements: row, col, …`).
@@ -57,8 +74,8 @@ Fix THAT ONE field and call `writeProjectViewComponent` again before resolving �
 never lands is a `{ use: … }` a page cannot resolve, and that page then fails to save.
 
 **Build NOTHING across statements.** Each statement you emit is typechecked and evaluated on its own,
-so a `const` declared in an earlier statement is not reliably in scope in a later one — `'props' is
-not defined` and `Cannot find name 'c'` are both that mistake, and each one costs a whole turn. In
+so a `const` declared in an earlier statement is not reliably in scope in a later one, and a retry
+that assumes one was costs a whole turn. In
 particular do NOT alias `item` (`const c = item`) and do NOT accumulate `props` in a loop. Read `item`
 directly and inline the props conversion, so the write is ONE statement:
 

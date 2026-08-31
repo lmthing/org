@@ -22,6 +22,16 @@
  * against it will pass the compiler (the db surface is dynamically typed) and 500 at runtime. That
  * alone resolves `ok: false`, carrying the names.
  *
+ * The SECOND failure a planner can cause is a SINGULAR/PLURAL DUPLICATE of one entity — `dog` AND
+ * `dogs`, `walk` AND `walks` both real on disk, endpoints split across both. `plan_tables` now
+ * bans it (one canonical plural noun per entity, reused, never re-spelled), but a build that
+ * ignores that still lands two files, and each is REAL so neither counts as missing — the old
+ * reconcile let both pass as distinct. There is no safe merge here: collapsing would rename one
+ * file and re-wire every endpoint already compiled against it, which the writer surface (free-form
+ * `writeProjectFile` only — no rename/delete) cannot do without silently dropping or copying
+ * rows. So a detected pair resolves `ok: false` and is reported as a `singular-plural-collision`
+ * drift finding NAMING both tables + the canonical one to keep — loud, never silent.
+ *
  * `ok` is a SCALAR paired with counts: the condition DSL's `getAtPath` returns `undefined` for
  * arrays, so `reconcile_tables.missing.length > 0` is not expressible in a `when:` (see
  * `libs/core/src/spaces/tasklist-load.ts#TaskOnFail`). And nothing here throws on a finding — a
@@ -55,6 +65,8 @@ export const node = {
     missingCount: 'number',
     drift: 'array',
     driftCount: 'number',
+    collisions: 'array',
+    collisionsCount: 'number',
     landed: 'array',
     error: 'string',
   },
@@ -253,6 +265,81 @@ function routeParams(route: unknown): string[] {
   for (const seg of String(route ?? '').split('/')) {
     const m = /^\[([A-Za-z0-9_]+)\]$/.exec(seg.trim());
     if (m) out.push(m[1] as string);
+  }
+  return out;
+}
+
+/** A few common English irregular plurals → singular, spelled snake_case. The regular rules in
+ *  {@link singularize} handle `walks`/`dogs`/`categories`; these are the ones those rules would
+ *  miss (`people`→`person`). Small and closed on purpose. */
+const IRREGULAR_SINGULAR: Record<string, string> = {
+  people: 'person',
+  children: 'child',
+  men: 'man',
+  women: 'woman',
+  feet: 'foot',
+  mice: 'mouse',
+  teeth: 'tooth',
+  geese: 'goose',
+};
+
+/** The best-effort singular of a snake_case plural table name. `walks` → `walk`, `categories` →
+ *  `category`, `boxes` → `box`, `people` → `person`. Terse on purpose: it only has to be right
+ *  enough to flag the duplicate-entity bug; a miss just means that particular spelling pair is not
+ *  auto-detected (safe — the plan_tables rule still forbids it), and via the irregular map the
+ *  common cases are covered. */
+function singularize(name: string): string {
+  const known = IRREGULAR_SINGULAR[name];
+  if (known) return known;
+  // ...ies -> y (bodies, categories)
+  if (name.endsWith('ies') && name.length > 3) return `${name.slice(0, -3)}y`;
+  // ...es after s/x/z/ch/sh -> strip the 'es' (boxes, addresses, crashes, branches)
+  if (/[sxz]$/.test(name) && name.endsWith('es') && name.length > 2) return name.slice(0, -2);
+  if (/(ches|shes)$/.test(name) && name.length > 4) return name.slice(0, -2);
+  // plain -s (walks, dogs) — but NOT a genuine -ss word (status, glass, address stays itself)
+  if (name.endsWith('s') && !name.endsWith('ss') && name.length > 1) return name.slice(0, -1);
+  return name;
+}
+
+/**
+ * Detect two table names that are the SAME entity under a singular/plural spelling — `dog`+`dogs`,
+ * `walk`+`walks`, `category`+`categories`, `person`+`people`. Collision is decided by comparing the
+ * REDUCED singular of both sides, which is symmetric: whichever direction the pluralizer caught, the
+ * two names collapse to the same singular iff they are the same entity. Conservative by
+ * construction: two names collide only if one is a plausible inflection of the other, so a
+ * `trips`/`cost_lines` app is untouched. Returns the pair as `[dropped, canonical]` where canonical
+ * is the plural form — the name the build should keep — or `null` when not the same entity.
+ */
+function pluralCollision(a: string, b: string): [string, string] | null {
+  if (a === b) return null;
+  const singularA = singularize(a);
+  const singularB = singularize(b);
+  // Same reduced singular ⇒ same entity (dog/dogs, category/categories, person/people). This test
+  // is symmetric, so it catches both orientations regardless of which side the pluralizer saw.
+  if (singularA !== singularB) return null;
+  // canonical = the plural; the shorter (singular) form is the one to retire.
+  return singularize(a) === a ? [a, b] : [b, a];
+}
+
+/** Reduce a landed table list to the canonical member of any singular/plural pair, naming both.
+ *  Each pair is reported exactly once; a table already consumed by one pair cannot join a second.
+ *  \`canonical\` is the plural form — the name the build should keep (convention in \`plan_tables\`). */
+function findPluralCollisions(landed: string[]): Array<{ dropped: string; canonical: string }> {
+  const out: Array<{ dropped: string; canonical: string }> = [];
+  const used = new Set<string>();
+  for (const name of [...landed].sort()) {
+    if (used.has(name)) continue;
+    for (const other of landed) {
+      if (name === other || used.has(other)) continue;
+      const pair = pluralCollision(name, other);
+      if (!pair) continue;
+      const [dropped, canonical] = pair;
+      out.push({ dropped, canonical });
+      used.add(name);
+      used.add(other);
+      break;
+    }
+    used.add(name);
   }
   return out;
 }
@@ -624,10 +711,12 @@ function pick<T>(inputs: Record<string, unknown>, field: string, own: string): T
 
 // ── the node ────────────────────────────────────────────────────────────────
 
-/** One reconciled difference between the plan and what is on disk. Reported, never failed on. */
+/** One reconciled difference between the plan and what is on disk. Most are reported, never
+ *  failed on; `singular-plural-collision` is the exception — it FAILS the node (see the module
+ *  doc: a duplicate entity split across two tables cannot be merged safely, only surfaced). */
 interface Drift {
   table: string;
-  kind: 'extra-columns' | 'absent-columns' | 'unplanned-table' | 'unreadable-schema';
+  kind: 'extra-columns' | 'absent-columns' | 'unplanned-table' | 'unreadable-schema' | 'singular-plural-collision';
   columns?: string[];
   detail?: string;
 }
@@ -681,6 +770,19 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
   // ── the ONE failure: a planned table that is entirely absent ──
   const missing = planned.map((t) => String(t.name)).filter((n) => !landedNames.includes(n));
 
+  // ── the SECOND failure: a singular/plural duplicate of one entity (dog AND dogs, walk AND walks).
+  // Both are REAL on disk, so neither lands in `missing` — old reconcile let both pass as distinct.
+  // There is no safe automatic merge (no rename/delete writer; collapsing would orphan every
+  // endpoint already compiled against one name), so report each pair LOUDLY and fail.
+  const collisions = findPluralCollisions(landedNames);
+  for (const c of collisions) {
+    drift.push({
+      table: c.dropped,
+      kind: 'singular-plural-collision',
+      detail: `"${c.dropped}" and "${c.canonical}" are the SAME entity under singular/plural spelling — keep ONLY "${c.canonical}" (plural) and remove "${c.dropped}"; endpoints are split across both and would double-count.`,
+    });
+  }
+
   // ── re-emit, preserving any section this node's inputs cannot rebuild ──
   const previous = await ctx.readProjectFile(CONTRACT_PATH);
   const prior = previous?.ok ? sectionsOf(previous.content || '') : null;
@@ -716,9 +818,10 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
   }
 
   return {
-    // Column drift is reconciled, not failed on. ONLY a table that never landed is a failure —
-    // every endpoint planned against it compiles clean and 500s at runtime.
-    ok: missing.length === 0,
+    // Column drift is reconciled, not failed on. A failure is a table that never landed — every
+    // endpoint planned against it compiles clean and 500s at runtime — OR a singular/plural
+    // duplicate that landed, which would split endpoints across two copies. Both fail loudly.
+    ok: missing.length === 0 && collisions.length === 0,
     written,
     path: CONTRACT_PATH,
     dts,
@@ -726,6 +829,8 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     missingCount: missing.length,
     drift,
     driftCount: drift.length,
+    collisions,
+    collisionsCount: collisions.length,
     landed: landedNames,
     error,
   };

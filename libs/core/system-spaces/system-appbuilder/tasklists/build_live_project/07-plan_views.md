@@ -51,7 +51,7 @@ failure this pipeline measures.
 
 **Build NOTHING across statements.** Each statement you emit — and each RETRY after a typecheck error
 or a `validate_contract` re-run — is evaluated fresh: a `const` declared earlier is not reliably in
-scope later (`Cannot find name 'pg'` is exactly that mistake, seen live). Do NOT alias `item`
+scope later. Do NOT alias `item`
 (`const pg = item`). Read `item.route` / `item.purpose` directly inline, so the whole plan is ONE
 statement with no local binding to lose:
 
