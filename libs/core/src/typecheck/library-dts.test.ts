@@ -228,6 +228,24 @@ describe('standalone capability fragments', () => {
     expect(PROJECT_API_DTS).toContain('declare function writeProjectApi(route: string, src: string)');
     expect(PROJECT_API_DTS).toContain('declare function writeProjectQuery(');
   });
+
+  it('the delete twins are declared on the SAME fragments as the writes they mirror (repair must be able to retire artifacts)', () => {
+    // views:write → the three view-artifact deletes
+    expect(PROJECT_VIEW_DTS).toContain('declare function deleteProjectView(route: string): { ok: boolean; error?: string }');
+    expect(PROJECT_VIEW_DTS).toContain('declare function deleteProjectViewComponent(name: string): { ok: boolean; error?: string }');
+    expect(PROJECT_VIEW_DTS).toContain('declare function deleteProjectViewLayout(prefix: string): { ok: boolean; error?: string }');
+    expect(CAPABILITY_DTS_FRAGMENTS['views:write']).toContain('deleteProjectView(');
+    // api:write → the endpoint deletes
+    expect(PROJECT_API_DTS).toContain('declare function deleteProjectApi(route: string): { ok: boolean; error?: string }');
+    expect(PROJECT_API_DTS).toContain('declare function deleteProjectQuery(name: string): { ok: boolean; error?: string }');
+    expect(CAPABILITY_DTS_FRAGMENTS['api:write']).toContain('deleteProjectApi(');
+    expect(CAPABILITY_DTS_FRAGMENTS['api:write']).toContain('deleteProjectQuery(');
+    // hooks:write → the hook delete
+    expect(PROJECT_AUTHORING_DTS).toContain('declare function deleteProjectHook(slug: string): { ok: boolean; error?: string }');
+    expect(CAPABILITY_DTS_FRAGMENTS['hooks:write']).toContain('deleteProjectHook(');
+    // No table delete exists — deleting a table destroys user data (db.remove is host-only).
+    expect(PROJECT_TABLE_DTS).not.toContain('deleteProjectTable');
+  });
 });
 
 // process-exit-typecheck-regression: PROCESS_EXIT_DTS is the env-free fragment buildAmbientDts

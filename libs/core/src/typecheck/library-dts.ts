@@ -341,7 +341,11 @@ declare function writeProjectQuery(name: string, query: {
   // depending on the flip direction (e.g. collectedDate: { whenTrue: 'now', whenFalse: null }).
   set?: Record<string, { input: string; optional?: boolean } | { value: unknown } | { whenTrue: unknown; whenFalse: unknown }>;
   toggleField?: string;
-}): { ok: boolean; error?: string };`;
+}): { ok: boolean; error?: string };
+/** Delete an endpoint handler (api/<path>/<METHOD>.ts — route encodes the method last, like writeProjectApi). REFUSED while any view still queries/mutates its name — the error names the page(s); repoint or delete those first. */
+declare function deleteProjectApi(route: string): { ok: boolean; error?: string };
+/** Delete a declarative query (api/<name>.query.json) AND the handler it generated. Same reference guard as deleteProjectApi. */
+declare function deleteProjectQuery(name: string): { ok: boolean; error?: string };`;
 
 // `views:write` — the ONLY UI-authoring capability, and the mechanism behind the zero-WebView
 // guarantee. It earns the VIEW-SPEC writers: a page is DATA (a validated object literal) rather
@@ -365,7 +369,13 @@ declare function writeProjectViewComponent(name: string, def: unknown): { ok: bo
 /** Write a nested LAYOUT (views/<prefix>/_layout.view.json) — the frame every route under <prefix> renders inside. Exactly one section is { kind: 'outlet' }, where the child route draws. */
 declare function writeProjectViewLayout(prefix: string, spec: unknown): { ok: boolean; error?: string };
 /** Write the app shell — nav entries/groups, per-entity subnav, brand, assistant dock. Every target must be a real static route. */
-declare function writeProjectViewShell(shell: unknown): { ok: boolean; error?: string };`;
+declare function writeProjectViewShell(shell: unknown): { ok: boolean; error?: string };
+/** Delete a page (views/<route>.view.json). REFUSED while anything still references the route — shell nav/groups/subnav or another page's navigate/link — the error names the referencing file(s); repoint or delete those first. */
+declare function deleteProjectView(route: string): { ok: boolean; error?: string };
+/** Delete a view component. REFUSED while any view/layout still references it as { use: '<Name>' }. */
+declare function deleteProjectViewComponent(name: string): { ok: boolean; error?: string };
+/** Delete a nested layout (views/<prefix>/_layout.view.json). REFUSED when a page under the prefix would become unreachable or the app would fault. */
+declare function deleteProjectViewLayout(prefix: string): { ok: boolean; error?: string };`;
 
 // `hooks:write` earns the plan-S11 LIVE-PROJECT authoring writers — the automator
 // authors event hooks (`hooks/<slug>.ts`) + emitter defs (`events/<name>.ts`) and the
@@ -374,7 +384,9 @@ declare function writeProjectViewShell(shell: unknown): { ok: boolean; error?: s
 // goes live immediately. Synchronous host calls. This is the whole `hooks:write` fragment.
 export const PROJECT_AUTHORING_DTS = `declare function writeProjectHook(slug: string, src: string): { ok: boolean; error?: string };
 declare function writeProjectEvent(name: string, src: string): { ok: boolean; error?: string };
-declare function writeProjectFunction(name: string, src: string): { ok: boolean; error?: string };`;
+declare function writeProjectFunction(name: string, src: string): { ok: boolean; error?: string };
+/** Delete a hook (hooks/<slug>.ts); the webhook manifest + crontab re-derive from what remains. */
+declare function deleteProjectHook(slug: string): { ok: boolean; error?: string };`;
 
 // `db:schema` earns the LIVE-PROJECT table writer, the twin of the S11 live hook/
 // event/function writers (the store-catalog `writeTableSchema` writer is gone):
