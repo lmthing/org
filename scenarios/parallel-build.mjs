@@ -208,15 +208,20 @@ async function execute(job, slot) {
   const log = existsSync(run.logFile) ? readFileSync(run.logFile, 'utf8') : '';
   const result = { runId: run.id, idea: run.idea, slot: slot.id, model: slot.model, logFile: run.logFile,
     void: voided(log, turnError), repairInvoked: invokedRepair(turn), errorLines: errorLineCount(log), census: errorCensus(log), turnError,
+    // Raw [error] count conflates HOW BUGGY a run was with HOW MUCH it attempted: a run that gets
+    // further emits more statements and so more errors. Track the rate alongside the count — a
+    // run can double its raw errors while improving. (Zero remains the bar; the rate is for trend.)
+    logLines: log.split('\n').length,
+    errorsPerKLine: Math.round((errorLineCount(log) * 1000) / Math.max(1, log.split('\n').length) * 10) / 10,
     pass: false };
   result.pass = !result.void && !result.repairInvoked && !turnError && result.errorLines === 0;
   writeFileSync(join(run.dir, 'result.json'), JSON.stringify(result, null, 2));
   return result;
 }
 function table(results) {
-  console.log('\nrun  slot                    errors  repair  result  idea');
-  console.log('---  ----------------------  ------  ------  ------  ----');
-  for (const r of results) console.log(`${String(r.runId).padEnd(3)}  ${r.slot.padEnd(22)}  ${String(r.errorLines).padStart(6)}  ${String(r.repairInvoked).padEnd(6)}  ${(r.void ? 'VOID' : r.pass ? 'PASS' : 'FAIL').padEnd(6)}  ${r.idea}`);
+  console.log('\nrun  slot                    errors   err/1k  repair  result  idea');
+  console.log('---  ----------------------  ------  -------  ------  ------  ----');
+  for (const r of results) console.log(`${String(r.runId).padEnd(3)}  ${r.slot.padEnd(22)}  ${String(r.errorLines).padStart(6)}  ${String(r.errorsPerKLine).padStart(7)}  ${String(r.repairInvoked).padEnd(6)}  ${(r.void ? 'VOID' : r.pass ? 'PASS' : 'FAIL').padEnd(6)}  ${r.idea}`);
   for (const r of results) {
     console.log(`\n[run ${r.runId}] ${r.void ? 'VOID (not a result)' : r.pass ? 'PASS' : 'FAIL'}`);
     if (r.census.length) console.log(censusText(r.census)); else console.log('0  [error] lines');
