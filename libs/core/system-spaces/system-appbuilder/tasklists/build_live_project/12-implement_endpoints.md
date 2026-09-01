@@ -26,7 +26,9 @@ return it as `{ items: [thatObject] }`. Write the
 FULL endpoint ESM module inline with the array-`join("\n")` pattern (real line breaks): it MUST export
 `name` set to `item.name` VERBATIM (the stable id the page passes to `useApi` — do NOT re-derive it
 from the route or transform it; without the exact match the loader rejects the whole app), a
-`description`, an `Input` interface, an `Output` interface, and a default `async (input, ctx) => Output`
+`description`, `export type Input = <Name>Input;` and `export type Output = <Name>Output;` — ALIASES to
+the global contract types, never a local `interface Output { … }`, which is rejected outright — and a
+default `async (input, ctx) => Output`
 handler that reads/writes through `ctx.db` (`await ctx.db.query/insert/update/remove`). Every read
 endpoint returns `{ items: T[] }` where **`items` is ALWAYS an ARRAY** — keep that exact envelope even
 for contacts, a grouped summary, or a single-object dashboard/aggregate, which you return as the ONE
