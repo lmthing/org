@@ -93,6 +93,59 @@ async function flowThatPassesOnAttempt(passOn: number, maxAttempts?: number) {
   return { result, calls, checkRuns };
 }
 
+/**
+ * A sibling that is still RUNNING when a check fails must not be disturbed by the resume.
+ *
+ * `resumeSet` un-does `goto`, the failing node, and the tasks between them — i.e. only ancestors of
+ * the failing node. Every ancestor of a task that just ran is necessarily already complete, so no
+ * in-flight task can be in that set. This test pins that property, because it is what makes it safe
+ * to commit each task as it settles instead of at end-of-wave: without it, a scheduler that
+ * re-evaluates readiness mid-wave could launch a second copy of a node that is already running.
+ */
+describe('onFail — a resume does not disturb an in-flight sibling', () => {
+  it('runs a slow unrelated branch exactly once across a resume', async () => {
+    const dir = await makeTasklistSpace({
+      '01-design.ts': `export const node = { output: { spec: 'string' } };\nexport async function run() { return {}; }`,
+      // Depends on design, so it is READY at the same moment `check` is — and it takes long enough
+      // that `check` settles first. It is on an unrelated branch, so `resumeSet` must leave it alone.
+      '02-slow.ts': `export const node = { dependsOn: ['design'], output: { done: 'boolean' } };\nexport async function run() { return {}; }`,
+      '03-check.ts': `export const node = { dependsOn: ['design'], output: { ok: 'boolean', errors: 'array' }, onFail: { goto: 'design', carry: 'errors' } };\nexport async function run() { return {}; }`,
+      '04-done.ts': `export const node = { dependsOn: ['check', 'slow'], goal: true, output: { finished: 'boolean' } };\nexport async function run() { return {}; }`,
+    });
+    const space = await loadSpace(dir);
+    const calls: Array<{ id: string; inputs: Record<string, unknown> }> = [];
+    let checkRuns = 0;
+    let slowConcurrent = 0;
+    let slowMaxConcurrent = 0;
+    const factory = factoryFrom(
+      {
+        design: (inputs) => ({ spec: `spec-${(inputs['attempt'] as number) ?? 0}` }),
+        slow: async () => {
+          slowConcurrent += 1;
+          slowMaxConcurrent = Math.max(slowMaxConcurrent, slowConcurrent);
+          await new Promise((r) => setTimeout(r, 120));
+          slowConcurrent -= 1;
+          return { done: true };
+        },
+        check: () => {
+          checkRuns += 1;
+          return checkRuns >= 2 ? { ok: true, errors: [] } : { ok: false, errors: ['nope'] };
+        },
+        done: () => ({ finished: true }),
+      },
+      calls,
+    );
+    const result = await runTasklist({ name: 'flow', space, forkEngine: engineFor(dir), codeNodeCtxFactory: factory });
+
+    expect(checkRuns).toBe(2); // failed once, then passed
+    expect(calls.filter((c) => c.id === 'design')).toHaveLength(2); // design redone by the resume
+    // The point: `slow` is NOT in the resume set, so it is neither re-run nor double-launched.
+    expect(calls.filter((c) => c.id === 'slow')).toHaveLength(1);
+    expect(slowMaxConcurrent).toBe(1);
+    expect(result.ok).toBe(true);
+  });
+});
+
 describe('onFail — resume an earlier step carrying the reason', () => {
   it('resumes until the check passes, then continues to the goal', async () => {
     const { result, calls, checkRuns } = await flowThatPassesOnAttempt(3);

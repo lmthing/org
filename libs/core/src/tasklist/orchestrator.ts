@@ -368,12 +368,31 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
     }
   };
 
-  try {
-    // Run until all tasks are done/skipped
-    while (done.size + skipped.size < Object.keys(tasks).length) {
-      const ready = findReadyTasks(tasks, done, skipped, allOutputs);
+  // Scopes and in-flight work outlive one iteration: a task launched now can settle several
+  // iterations later, so neither may be re-minted per pass.
+  const taskScopes = new Map<string, TraceScope | undefined>();
+  type Settled =
+    | { id: string; ok: true; value: { task: TaskNode; output: unknown } }
+    | { id: string; ok: false; reason: unknown };
+  const inflight = new Map<string, Promise<Settled>>();
 
-      if (ready.length === 0) {
+  try {
+    // ROLLING, not wave-barrier. The previous loop awaited `Promise.allSettled` over every ready
+    // task and committed nothing until the slowest finished — so a node started at *max(finish of
+    // the whole previous wave)* rather than max of its own dependencies, and `implement_endpoints`
+    // (which needs only `checkpoint_tables`) waited on an unrelated multi-fork fan-out that happened
+    // to share a wave. Each task's output is now committed the moment it settles and readiness is
+    // re-evaluated immediately.
+    //
+    // Safe against `onFail`: `resumeSet` un-does `goto`, the failing node, and the tasks between
+    // them — all of which are ancestors of the failing node, hence necessarily already complete. No
+    // in-flight task can be in that set, so a resume cannot double-launch running work. Pinned by
+    // "a resume does not disturb an in-flight sibling" in orchestrator.onfail.test.ts.
+    while (done.size + skipped.size < Object.keys(tasks).length) {
+      // Never relaunch something already running — the whole point of re-evaluating mid-flight.
+      const ready = findReadyTasks(tasks, done, skipped, allOutputs).filter((t) => !inflight.has(t.id));
+
+      if (ready.length === 0 && inflight.size === 0) {
         // Check if there are tasks remaining but none are ready (stuck)
         const remaining = Object.keys(tasks).filter((id) => !done.has(id) && !skipped.has(id));
         if (remaining.length > 0) {
@@ -400,12 +419,8 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
         continue;
       }
 
-      // Mint each ready task's scope up front so we can end it on success OR failure.
-      const taskScopes = new Map<string, TraceScope | undefined>();
-
-      // Run all ready tasks in parallel (within fork concurrency cap)
-      const results = await Promise.allSettled(
-        ready.map(async (task) => {
+      // Launch everything newly ready, then wait for the FIRST to settle rather than all of them.
+      const launch = async (task: TaskNode) => {
           const upstreamOutputs = getUpstreamOutputs(task);
           const upstreamOutputSchemas = getUpstreamOutputSchemas(task);
           const taskScope = tracer && tasklistScope
@@ -612,30 +627,44 @@ export async function runTasklist(opts: RunTasklistOptions): Promise<TaskEnvelop
           const meta = await runFork();
           if (meta.degraded) noteDegraded(task.id, meta.reason);
           return { task, output: meta.value };
-        }),
-      );
+      };
 
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          const { task, output } = result.value;
-          done.add(task.id);
-          allOutputs[task.id] = output;
-          if (tracer) { const ts = taskScopes.get(task.id); if (ts) tracer.end(ts, 'done', { result: output }); }
-          if (goalTask && task.id === goalTask.id) goalOutput = output;
-          maybeResume(task, output);
+      for (const task of ready) {
+        inflight.set(
+          task.id,
+          launch(task).then(
+            (value): Settled => ({ id: task.id, ok: true, value }),
+            (reason): Settled => ({ id: task.id, ok: false, reason }),
+          ),
+        );
+      }
+
+      // Wait for the first task to settle, commit it, and loop — so a node whose dependencies are
+      // already satisfied starts immediately instead of waiting on an unrelated slow sibling.
+      const settled = await Promise.race(inflight.values());
+      inflight.delete(settled.id);
+
+      if (settled.ok) {
+        const { task, output } = settled.value;
+        done.add(task.id);
+        allOutputs[task.id] = output;
+        if (tracer) { const ts = taskScopes.get(task.id); if (ts) tracer.end(ts, 'done', { result: output }); }
+        if (goalTask && task.id === goalTask.id) goalOutput = output;
+        maybeResume(task, output);
+      } else {
+        const failedTask = tasks[settled.id]!;
+        const ts = taskScopes.get(failedTask.id);
+        if (failedTask.optional) {
+          skipped.add(failedTask.id);
+          skippedEmitted.add(failedTask.id);
+          if (tracer && ts) tracer.end(ts, 'skipped');
         } else {
-          // Fork failed
-          const failedTask = ready[results.indexOf(result)]!;
-          const ts = taskScopes.get(failedTask.id);
-          if (failedTask.optional) {
-            skipped.add(failedTask.id);
-            skippedEmitted.add(failedTask.id);
-            if (tracer && ts) tracer.end(ts, 'skipped');
-          } else {
-            const errMsg = result.reason instanceof Error ? result.reason.message : String(result.reason);
-            if (tracer && ts) tracer.end(ts, 'error', { error: errMsg });
-            throw new Error(`Required task "${failedTask.id}" failed: ${errMsg}`);
-          }
+          const errMsg = settled.reason instanceof Error ? settled.reason.message : String(settled.reason);
+          if (tracer && ts) tracer.end(ts, 'error', { error: errMsg });
+          // Work still running is abandoned, exactly as the wave scheduler abandoned the rest of its
+          // wave. Attach a no-op catch so an abandoned rejection is never an unhandled one.
+          for (const p of inflight.values()) void p.catch(() => {});
+          throw new Error(`Required task "${failedTask.id}" failed: ${errMsg}`);
         }
       }
     }
