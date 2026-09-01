@@ -226,6 +226,20 @@ describe('typed view writers', () => {
     expect(check(`const spec: ViewSpec = { route: 'books', sections: [{ kind: 'list', query: 'books-list', bogus: true }] };`).ok).toBe(false);
   });
 
+  // A dangling base is invisible: the type still LOOKS declared, but every member it should have
+  // inherited is silently absent from the DTS the agent typechecks against. `SectionBase` was missed
+  // because an `extends` clause is an ExpressionWithTypeArguments, not a TypeReferenceNode — so
+  // `id` vanished from every section and became the top error class in a live run.
+  it('emits every type that another emitted type extends', () => {
+    const declared = new Set([...VIEW_SPEC_TYPES.matchAll(/(?:interface|type)\s+(\w+)/g)].map((m) => m[1]));
+    const extended = [...VIEW_SPEC_TYPES.matchAll(/extends\s+(\w+)/g)].map((m) => m[1]);
+    expect(extended.filter((name) => !declared.has(name))).toEqual([]);
+  });
+
+  it('keeps inherited section members reachable (id comes from SectionBase)', () => {
+    expect(check(`writeProjectView('r', { route: 'r', sections: [{ kind: 'list', id: 'main', query: 'q' }] });`).ok).toBe(true);
+  });
+
   it('declares no define* helper that lacks a runtime implementation', () => {
     for (const name of ['defineViewSpec', 'defineViewComponent', 'defineViewLayout']) {
       expect(PROJECT_VIEW_DTS).not.toContain(name);

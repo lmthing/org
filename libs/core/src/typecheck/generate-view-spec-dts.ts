@@ -34,6 +34,10 @@ export function generateViewSpecTypes(source = readFileSync(VIEW_SCHEMA_SOURCE, 
     const visit = (child: ts.Node): void => {
       if (ts.isTypeReferenceNode(child)) names.push(child.typeName.getText(sf).split('.').pop()!);
       if (ts.isTypeQueryNode(child)) names.push(child.exprName.getText(sf).split('.').pop()!);
+      // An `extends` clause is an ExpressionWithTypeArguments, NOT a TypeReferenceNode — miss it and
+      // every section type is emitted extending a base that was never selected, so the base's own
+      // members (`id`, …) silently vanish from the DTS the agent typechecks against.
+      if (ts.isExpressionWithTypeArguments(child)) names.push(child.expression.getText(sf).split('.').pop()!);
       ts.forEachChild(child, visit);
     };
     visit(node);

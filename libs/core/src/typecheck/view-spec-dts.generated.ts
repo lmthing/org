@@ -80,13 +80,20 @@ interface ListSection extends SectionBase {
   empty?: Value | EmptyState;
 }
 
+interface SectionBase {
+  /** Stable id — the handle for \`$data.<id>.…\` and for a \`reveals\` target. */
+  id?: string;
+  /** Section heading. Optional; a renderer default is derived from the endpoint. */
+  title?: Value;
+}
+
+type Value = string;
+
 type From = Binding;
 
 type Binding = string;
 
 type Arg = Value | number | boolean;
-
-type Value = string;
 
 type ListLayout = (typeof LIST_LAYOUTS)[number];
 
@@ -178,6 +185,14 @@ interface SurfaceEl extends Toned {
   action?: Action;
 }
 
+interface Toned {
+  tone?: Tone;
+  toneMap?: Record<string, Tone>;
+  toneOf?: Binding;
+}
+
+type Tone = (typeof TONES)[number];
+
 type Action =
   | MutateAction
   /** Navigate to another page of the same app. */
@@ -243,6 +258,13 @@ interface TextEl extends Formatted, Toned {
   maxLines?: number;
 }
 
+interface Formatted {
+  format?: Format;
+  currencyField?: Binding;
+}
+
+type Format = (typeof FORMATS)[number];
+
 interface CaptionEl extends Formatted, Toned {
   el: 'caption';
   text: Value;
@@ -297,13 +319,6 @@ interface KeyValueEl {
   pairs: ({ label: Value; value: Value } & Formatted)[];
   layout?: 'stacked' | 'inline';
 }
-
-interface Formatted {
-  format?: Format;
-  currencyField?: Binding;
-}
-
-type Format = (typeof FORMATS)[number];
 
 interface TableEl {
   el: 'table';
@@ -380,8 +395,6 @@ interface IconEl {
   tone?: Tone;
 }
 
-type Tone = (typeof TONES)[number];
-
 interface AvatarEl {
   el: 'avatar';
   src?: Value;
@@ -398,6 +411,31 @@ interface BannerEl extends Toned {
 
 interface EmptyEl extends EmptyState {
   el: 'empty';
+}
+
+interface EmptyState {
+  el?: 'empty';
+  title?: Value;
+  /**
+   * The explanatory line under the title.
+   *
+   * Spelled \`message\`, not \`text\`, because the desk check reached for \`message\` **8 times
+   * out of 8** unprompted. For a weak-model interface, measured evidence about what the
+   * model actually writes beats internal consistency with \`banner.text\`. One spelling; no
+   * alias.
+   */
+  message?: Value;
+  icon?: IconName;
+  action?: ActionItem;
+}
+
+interface ActionItem {
+  label: Value;
+  action?: Action;
+  reveals?: string[];
+  icon?: IconName;
+  tone?: Tone;
+  variant?: 'primary' | 'secondary' | 'ghost';
 }
 
 interface ButtonEl {
@@ -497,21 +535,6 @@ type FlatValue =
   | Value
   | ({ value: Value; suffix?: Value; maxLines?: number } & Formatted & Toned);
 
-interface Toned {
-  tone?: Tone;
-  toneMap?: Record<string, Tone>;
-  toneOf?: Binding;
-}
-
-interface ActionItem {
-  label: Value;
-  action?: Action;
-  reveals?: string[];
-  icon?: IconName;
-  tone?: Tone;
-  variant?: 'primary' | 'secondary' | 'ghost';
-}
-
 interface Facet {
   field: Binding;
   label?: Value;
@@ -528,22 +551,6 @@ interface SortOption {
 interface Poll {
   everyMs: number;
   while?: { field: Binding; in: (string | number | boolean)[] };
-}
-
-interface EmptyState {
-  el?: 'empty';
-  title?: Value;
-  /**
-   * The explanatory line under the title.
-   *
-   * Spelled \`message\`, not \`text\`, because the desk check reached for \`message\` **8 times
-   * out of 8** unprompted. For a weak-model interface, measured evidence about what the
-   * model actually writes beats internal consistency with \`banner.text\`. One spelling; no
-   * alias.
-   */
-  message?: Value;
-  icon?: IconName;
-  action?: ActionItem;
 }
 
 interface DetailSection extends SectionBase {
@@ -807,11 +814,11 @@ declare const PAGE_ARCHETYPES: readonly ['dashboard', 'list', 'detail', 'master-
 
 declare const LIST_LAYOUTS: readonly ['cards', 'rows', 'table', 'grid'];
 
-declare const ICON_NAMES: readonly ['home', 'search', 'plus', 'edit', 'trash', 'check', 'close', 'chevron-right', 'chevron-down', 'arrow-left', 'filter', 'more', 'refresh', 'calendar', 'clock', 'user', 'users', 'tag', 'file', 'map-pin', 'alert', 'info', 'star', 'bell', 'chart', 'list', 'link', 'external-link', 'download', 'upload', 'mail', 'settings'];
+declare const TONES: readonly ['neutral', 'accent', 'success', 'warning', 'danger', 'info', 'auto'];
 
 declare const FORMATS: readonly ['currency', 'date', 'datetime', 'time', 'relative-time', 'number', 'percent', 'humanize'];
 
-declare const TONES: readonly ['neutral', 'accent', 'success', 'warning', 'danger', 'info', 'auto'];
+declare const ICON_NAMES: readonly ['home', 'search', 'plus', 'edit', 'trash', 'check', 'close', 'chevron-right', 'chevron-down', 'arrow-left', 'filter', 'more', 'refresh', 'calendar', 'clock', 'user', 'users', 'tag', 'file', 'map-pin', 'alert', 'info', 'star', 'bell', 'chart', 'list', 'link', 'external-link', 'download', 'upload', 'mail', 'settings'];
 
 declare const FIELD_KINDS: readonly ['toggle', 'rating', 'select', 'stepper', 'text', 'date', 'number', 'textarea', 'multiselect', 'slider'];
 
