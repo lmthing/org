@@ -625,17 +625,17 @@ describe('shipped system spaces load + validate', () => {
     ]);
     // Implementation hangs off the VALIDATED contract and the EMITTED types, so every generated
     // file is typechecked against declarations that already exist — plus `reconcile_tables`, which
-    // is what re-grounds endpoints in the tables that actually reached disk. `checkpoint_tables`
-    // (W9) is the durable "tables landed" resume barrier: a crash after this point resumes straight
-    // into endpoint authoring instead of re-seeding every table.
+    // re-grounds endpoints in the tables that actually reached disk. No checkpoint intermediary is
+    // needed: the headless runner installs no snapshot callback, so it would add only a scheduling
+    // round without adding a durable resume point.
     expect(live['implement_endpoints']!.dependsOn).toEqual([
-      'plan_endpoints', 'plan_tables', 'emit_types', 'reconcile_tables', 'checkpoint_tables',
+      'plan_endpoints', 'plan_tables', 'emit_types', 'reconcile_tables',
     ]);
     expect(live['implement_tables']!.dependsOn).toEqual(['plan_tables', 'emit_types']);
-    // `checkpoint_endpoints` (W9) is the durable "API surface landed + smoke-tested" resume
-    // barrier: a crash after this point resumes straight into UI authoring.
+    // UI implementation waits directly for the API surface and both endpoint proof gates. These are
+    // the substantive predecessors that the removed checkpoint previously represented.
     expect(live['implement_view_components']!.dependsOn).toEqual([
-      'plan_view_components', 'plan_endpoints', 'implement_endpoints', 'emit_types', 'checkpoint_endpoints',
+      'plan_view_components', 'plan_endpoints', 'implement_endpoints', 'emit_types', 'smoke_endpoints', 'check_acceptance',
     ]);
     // THE SHELL is a node of its own and it runs BEFORE the gate, not after: the app-wide checks
     // ask "is every route reachable from the nav?", so a shell written after `verify` would be a
@@ -724,7 +724,7 @@ describe('shipped system spaces load + validate', () => {
     // fully express carries `cannotExpress`, and with no second builder to hand that to, reporting
     // it to the user IS the deliverable — a dependency drop would silently bury it.
     expect(live['finalize']!.dependsOn).toEqual([
-      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'check_acceptance', 'implement_view_components', 'implement_views', 'implement_shell', 'implement_automations', 'verify', 'fix', 'plan_views', 'checkpoint_ui', 'plan_slices',
+      'implement_tables', 'implement_endpoints', 'smoke_endpoints', 'check_acceptance', 'implement_view_components', 'implement_views', 'implement_shell', 'implement_automations', 'verify', 'fix', 'plan_views', 'plan_slices',
     ]);
     // Every implement node is model-driven (a code node would need codeNodeCtxFactory threaded through
     // the delegate path THING uses; a model node needs no host factory and writes via writeProjectTable).

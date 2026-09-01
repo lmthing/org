@@ -13,7 +13,7 @@ output:
   cannotExpress: array
   errors: array
   sliceCount: number
-dependsOn: [implement_tables, implement_endpoints, smoke_endpoints, check_acceptance, implement_view_components, implement_views, implement_shell, implement_automations, verify, fix, plan_views, checkpoint_ui, plan_slices]
+dependsOn: [implement_tables, implement_endpoints, smoke_endpoints, check_acceptance, implement_view_components, implement_views, implement_shell, implement_automations, verify, fix, plan_views, plan_slices]
 goal: true
 role: general
 functions: []
