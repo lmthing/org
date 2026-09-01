@@ -54,10 +54,20 @@ Three patterns. Note WHERE each belongs — the properties are per-kind, not uni
 - **add** — a `create` section bound to the POST endpoint. On the list page, or on a page of its own.
 - **edit** — a `create` section bound to the PATCH/PUT endpoint, plus `prefill` (load the current
   values) and `input: { id: '$route.id' }` (which record). Same `create` kind: a form bound to a
-  mutation is a form whether it inserts or updates.
+  mutation is a form whether it inserts or updates. Put it ON the detail page. If you do give it its own
+  route it is a `[param]` route (`items/[id]/edit`) — which means it must NOT appear in nav (see below).
 - **delete** — from a LIST row, a `rowActions` entry with `confirm`. From a DETAIL page, a
   `detail.actions` entry with `confirm` plus `onSuccess: { navigate: '<the list route>' }` — the record
   is gone, so the page it was showing must not remain.
+
+**Any `navigate` to a `[param]` route must supply the param.** `{ navigate: 'items/[id]' }` alone is
+rejected — "needs a value for [id] and nothing supplies one". Pair it:
+`rowAction: { navigate: 'items/[id]', params: { id: '$.id' } }`. Never flatten `navigate` and `params`
+onto one object, and never give one action both `mutate` and `navigate` — pick exactly one.
+
+**A `[param]` route is NEVER a nav destination.** Nav entries are static routes only; a detail or edit
+page is reached from its list row's `rowAction`, not from the nav bar. `nav[N].route:
+"items/[id]/edit" is not valid here` is this mistake, and adding edit pages is when it happens.
 
 **`rowAction`/`rowActions` are LIST properties.** They do not exist on `detail` (the typecheck says so:
 `Property 'rowActions' does not exist on type 'DetailSection'`). A detail page's actions live under
