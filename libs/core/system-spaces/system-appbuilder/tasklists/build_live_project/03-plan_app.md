@@ -80,7 +80,13 @@ from the material for every `<…>` (never leave a placeholder). Plan for an app
   every value the section shows. So plan an endpoint PER VIEW, not per table — a page with a stats
   strip and a list needs two endpoints, and a list that shows a name from another table needs that
   name as a field on its OWN endpoint. Joins and selections are the endpoint's job here, never the
-  page's.
+  page's. **An endpoint's `route` is a FIXED contract, set once here.** The route path and the
+  endpoint's `name` are ONE logical artefact: a later step that re-spells the same endpoint's route
+  differently (e.g. writing the same handler to `exercise-summary/GET` in one pass and to
+  `exercises/summary/GET` in the next) leaves TWO files, each `export const name` a unique-per-project
+  value, so the second writer is rejected with "the name \"exercise-summary\" is already used by …".
+  Pick ONE `route` for each endpoint and reuse that EXACT string everywhere downstream — never a
+  different spelling, never a singular/plural variant, never a path that renames the same endpoint.
 - **components** — a few REUSABLE VIEW COMPONENTS (a card, a row, a stat shape) that repeat across
   pages. These are **spec fragments — compositions of the element vocabulary with declared props** —
   never React and never TSX. COUNT them deliberately: name each shared shape the pages will reference

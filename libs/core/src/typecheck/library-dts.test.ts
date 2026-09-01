@@ -230,6 +230,14 @@ describe('typed view writers', () => {
   // inherited is silently absent from the DTS the agent typechecks against. `SectionBase` was missed
   // because an `extends` clause is an ExpressionWithTypeArguments, not a TypeReferenceNode — so
   // `id` vanished from every section and became the top error class in a live run.
+  // listProjectDir().entries is string[]. The model repeatedly wrote `(e: any) => e.name…`, which
+  // typechecks (the `any` defeats it) and then throws `cannot read property 'replace' of undefined`
+  // in the sandbox. The DTS has to say the shape, since the type alone cannot stop an `any`.
+  it('states that listProjectDir entries are plain file-name strings', () => {
+    expect(PROJECT_READ_DTS).toContain('entries: string[]');
+    expect(PROJECT_READ_DTS).toMatch(/plain FILE NAMES|not objects/);
+  });
+
   it('emits every type that another emitted type extends', () => {
     const declared = new Set([...VIEW_SPEC_TYPES.matchAll(/(?:interface|type)\s+(\w+)/g)].map((m) => m[1]));
     const extended = [...VIEW_SPEC_TYPES.matchAll(/extends\s+(\w+)/g)].map((m) => m[1]);

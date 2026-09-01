@@ -172,6 +172,11 @@ ambient DTS (`declare function writeProjectQuery`) — read it there, not from m
 }
 ```
 
+An action is EXACTLY ONE of `copy` / `download` / `mutate` / `navigate` / `print` — never two at once.
+A mutation that must then leave the page puts its navigation in the mutation's OWN `onSuccess`:
+`action: { mutate: 'delete-item', input: { id: '$route.id' }, onSuccess: { navigate: 'items', … }, confirm: true }`.
+See `spec-vocabulary` for the full action rules.
+
 - `kind` is one of exactly twelve: `list` `detail` `create` `stats` `markdown` `chat` `toolbar`
   `timeline` `board` `calendar` `chart` `outlet`. There is no thirteenth and no `custom`.
 - `query`/`mutation` name an endpoint's `export const name` — never a URL, never a route.

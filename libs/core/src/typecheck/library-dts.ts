@@ -447,6 +447,9 @@ declare function writeProjectEntity(name: string, entity: {
 // with "not assignable to parameter of type 'string'"; always read the body off `content` first.
 // See org/docs/runtime-globals/session-and-utils.md.
 export const PROJECT_READ_DTS = `declare function listProjectDir(dir: string): { ok: boolean; entries: string[]; error?: string };
+// \`entries\` are plain FILE NAMES (strings) — not objects. There is no \`.name\`, \`.isDir\` or \`.path\`
+// on them; \`e.name.replace(...)\` throws at runtime. Annotating the callback \`(e: any)\` hides this
+// from the typecheck — type it \`(e: string)\` or leave it inferred, and use the string itself.
 // \`content\` is the plain file text. There is NO \`.raw\` here (that exists only on the engineer's
 // scratch readFile, whose content is line-numbered); \`.raw\` is a typecheck error. And pass
 // \`readProjectFile(path).content\`, NEVER the whole result object — \`JSON.parse(readProjectFile(p))\`

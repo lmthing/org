@@ -54,6 +54,25 @@ arithmetic, no `${…}`. A binding that resolves to null renders NOTHING, which 
 `x ? … : null` guard. Colour is a semantic `tone` (or a declared `toneMap`), never a hex and never a
 class name; formatting is a `format:` modifier on the value.
 
+**An action gets exactly ONE verb — a mutation's follow-up is its `onSuccess`, never a sibling key.**
+Every `action`/`rowAction` (and `button`) is a discriminated union keyed by exactly one of
+`copy` / `download` / `mutate` / `navigate` / `print`. Put TWO verbs on one action (`{ mutate: …, navigate: … }`)
+and the writer rejects it: "`mutate` and `navigate` — pick exactly ONE." A mutation that should then
+navigate wires that through the mutation's own `onSuccess` (an ACTION itself), not as a parallel key:
+
+```js
+// DELETE, then leave the page — the navigate lives on onSuccess, never as a sibling of mutate:
+{ mutate: 'exercise-delete', input: { id: '$route.id' },
+  onSuccess: { navigate: 'workouts/[id]', params: { id: '$data.exerciseInfo.workout_id' } }, confirm: true }
+
+// A pre-determined drill-in is a plain navigate action (no mutate):
+{ navigate: 'items/[id]', params: { id: '$.id' } }
+```
+
+A `mutate` action carries `onSuccess`, `input`, `confirm`, `invalidates`; a `navigate` action carries
+`navigate` + `params`. Never flatten the two onto one object — `$result.<field>` also only binds
+inside the mutation's `onSuccess`, where it is that mutation's own output.
+
 Routes and `input` bindings have hard rules the writer enforces at save time. A LIST page sits at a
 static route and the nav links it; a DETAIL page sits at a `[param]` route (`items/[id]`) that its
 list's `rowAction: { navigate: 'items/[id]', params: { id: '$.id' } }` reaches — never a nav entry.

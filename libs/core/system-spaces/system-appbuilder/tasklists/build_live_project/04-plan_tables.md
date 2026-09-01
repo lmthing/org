@@ -11,7 +11,13 @@ functions:
 Detail EVERY table `plan_app` planned into a source-grounded data model — one entry per
 `plan_app.tables`, same set, no additions and no drops (membership was decided upstream where the whole
 app was in view). **NAME TABLES PLURAL, ONCE.** Pick ONE canonical plural noun per entity and reuse
-it everywhere — `dogs`, `walks`, never `dog`, never a re-spelling. A table that ALREADY appears in
+it everywhere — `dogs`, `walks`, never `dog`, never a re-spelling. That EXACT table `name` is the
+one token every downstream consumer references: a query's `entity:` is the table `name` VERBATIM
+(`entity: 'dogs'`, never `entity: 'dog'`), an `include:` relation is a key you explicitly declare
+on this schema (below), and an endpoint route addresses the same table. If the model later writes a
+singular `entity:` while the table `name` is plural, the query is REJECTED with "no table …" —
+`entity` is a hard table-name equality check against the written `database/*.json` names, not a
+fuzzy match. A table that ALREADY appears in
 `plan_app.tables` (or `read_sources`) is that name; you add detail, you never rename it. And never
 mint a NEW name that is the singular or plural of one already in the list: `dog` plus `dogs`, `walk`
 plus `walks` are the SAME entity twice. ONE table per real-world entity — never a singular plus a
@@ -50,6 +56,29 @@ the default), and the value is just missing/null at runtime; a column that must 
 insert sets `required: true`. Nullability is a FLAG (`required`), never encoded in `type`. Every column
 also needs a non-empty `description` — the write-time validator rejects a column with no description as
 loudly as it rejects a bad `type`.
+
+**DECLARE RELATIONS when one planned table holds a foreign key to another.** A child table whose
+column points at a parent (e.g. an `ingredients.recipeId` column referencing `recipes`) only makes
+that linkage visible to the query layer if the PARENT schema declares a navigable relation. Without
+it, an endpoint that tries `include: ['ingredients']` fails at write time with "include: no relation
+\"ingredients\" on \"recipes\". Relations: (none)." — the relation is NOT implied by the FK column
+alone. So, for every FK you author between two planned tables, declare the relation on the parent
+schema AND the FK column on the child in the SAME pass (they are a single contract):
+
+```json
+// on the PARENT table (recipes): makes `include: ['ingredients']` legal
+"relations": {
+  "ingredients": { "hasMany": "ingredients", "via": "recipeId", "description": "the ingredients of this recipe" }
+}
+// on the CHILD table (ingredients): the FK column that holds the link
+"recipeId": { "type": "string", "description": "foreign key to the owning recipes row", "required": true }
+```
+
+The relation KEY (`ingredients`) is exactly the name a downstream `include: ['ingredients']` uses;
+the `hasMany` value is the child TABLE name; `via` is the child's FK column. `writeProjectTable`
+writes `schema.relations` straight into `database/<name>.json`, and the query validator checks
+`include` against it — so a relation you want addressable in an endpoint MUST be declared here, never
+assumed.
 
 **Closed domains — set `enum` on a `string` column whose values are a small, FIXED set the source
 makes explicit** (a `status` of `['paid', 'owed', 'unconfirmed']`, a `currency`, a `category`). List
@@ -111,6 +140,9 @@ currentTask.resolve({
           // amount_usd: { type: 'number', description: 'stated cost in USD', required: false },
           // tags: { type: 'json', description: 'list of topic tags', required: false },
         },
+        // Only when a CHILD table holds a FK back to this table — declare the relation HERE so a
+        // downstream `include: ['<child>']` is legal (see "DECLARE RELATIONS" above):
+        // relations: { ingredients: { hasMany: 'ingredients', via: 'recipeId', description: 'the ingredients of this recipe' } },
       },
       // One object per record READ FROM THE MATERIAL. NO `id` key (the system generates it),
       // unless this row is a relation target — then set id to a minted const (e.g. `id: arushaStayId`).

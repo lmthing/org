@@ -15,6 +15,13 @@ Write ONE table's schema + rows into the LIVE project's `database/`. Your table 
 records land as rows at creation — never write an empty table when `item.rows` has data. `writeProjectTable`
 validates the schema on write and returns `{ ok, error? }`; if `w.ok` is false, read `w.error` (an
 invalid table name, a missing column description, a bad relation) and fix it before resolving honestly.
+`writeProjectTable(item.name, item.schema, …)` writes the WHOLE schema object — including any
+`schema.relations` — verbatim into `database/<name>.json`. That relations block is what makes a
+later declarative `include: ['<relation>']` in an endpoint legal: an `include` is rejected with
+"no relation … Relations: (none)" unless THE PARENT TABLE's `relations` declares it. So when your
+schema is missing a relation another endpoint will need, do NOT drop it here — fix the schema (add
+the `relations` block, see 04-plan_tables.md) rather than land a relation-less table and leave every
+including endpoint to fail at write time.
 **A table that fails to land is not a local failure**: every endpoint planned against it will still pass
 the compiler (the db surface is dynamic) and 500 at runtime — so the retry below is load-bearing, and the
 `name` you resolve must be the name you ACTUALLY wrote (downstream nodes wire endpoints to it). Every
