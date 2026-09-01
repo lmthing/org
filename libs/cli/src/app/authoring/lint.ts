@@ -102,7 +102,7 @@ export function lintApiHandler(
     if (owner) {
       // The owner path is a file (`api/items-detail/GET.ts`); `deleteProjectApi` takes the route
       // form (`items-detail/GET`) — convert so the rejection names a command that actually runs.
-      const ownerRoute = owner.replace(/^api\//, '').replace(/\/(?:GET|POST|PUT|PATCH|DELETE)\.ts$/, '');
+      const ownerRoute = owner.replace(/^api\//, '').replace(/\.ts$/, '');
       const here = opts.writeRoute ? ` (you are writing ${opts.writeRoute})` : '';
       return (
         `api endpoint rejected (not saved): the name "${name}" is already used by ${owner}${here} — ` +
@@ -114,7 +114,33 @@ export function lintApiHandler(
       );
     }
   }
+  const detailRouteError = flatDetailRouteError(name, opts.writeRoute);
+  if (detailRouteError) return detailRouteError;
   return null;
+}
+
+/**
+ * A detail endpoint represents one record, so its identity belongs in a dynamic route segment.
+ * A flat `recipes-detail/GET` cannot advertise or enforce that requirement in its URL; generated
+ * detail pages then mount it without an id and receive the input-schema 400 before the handler runs.
+ *
+ * This deliberately keys on the stable endpoint name rather than trying to infer semantics from a
+ * handler body: filters such as `search/GET?q=` are valid flat GETs, while `*-detail` is the
+ * appbuilder's explicit single-record convention. Keeping the repair at the writer means a model
+ * receives it while it can rewrite the route, rather than after a page or smoke gate has failed.
+ */
+export function flatDetailRouteError(name: string | null | undefined, writeRoute?: string): string | null {
+  if (!name || !writeRoute || !/(?:^|-)detail$/.test(name)) return null;
+  const segments = writeRoute.split('/');
+  if (segments.at(-1) !== 'GET' || segments.some((segment) => /^\[[A-Za-z0-9_]+\]$/.test(segment))) return null;
+  const resource = name.slice(0, -'-detail'.length) || segments[0] || 'items';
+  return (
+    `api endpoint rejected (not saved): "${name}" is a single-record detail endpoint, but "${writeRoute}" is ` +
+    'a flat GET route with no `[param]` to carry the record id. A detail page mounts with one route record; ' +
+    'without a dynamic segment its request has no required id and the input schema answers 400 before the handler runs. ' +
+    `Write this endpoint at \`${resource}/[id]/GET\` (or the planned collection's equivalent) and let the detail ` +
+    'view pass `$route.id`; do not add a fake optional id or make the handler guess a record.'
+  );
 }
 
 /** `cost-lines` / `dashboard-stats` → `CostLines` / `DashboardStats` — the PascalCase base the

@@ -12,6 +12,7 @@ import {
   apiHandlerTypingError,
   discoverApiEndpoints,
   existingApiNames,
+  flatDetailRouteError,
   lintApiHandler,
   lintHookSource,
 } from './lint.js';
@@ -47,6 +48,20 @@ describe('lintApiHandler', () => {
     expect(msg).toMatch(/already used by api\/recipes-detail\/GET\.ts \(you are writing recipes\/\[id\]\/GET\)/);
     expect(msg).toMatch(/deleteProjectApi\('recipes-detail\/GET'\)/); // route form, executable as-is
     expect(msg).toMatch(/never a new name/);
+  });
+  it('rejects a flat GET route for a single-record detail endpoint and gives the route repair', () => {
+    // Run 13's repaired handler was written to recipes-detail/GET while its required id lived
+    // only in the Input contract. The page's mount request therefore failed schema validation (400)
+    // before its handler could run. The writer must refuse that route, not wait for smoke.
+    const msg = lintApiHandler(named.replace(/itemsList/, 'recipes-detail'), {
+      writeRoute: 'recipes-detail/GET',
+    });
+    expect(msg).toMatch(/single-record detail endpoint/);
+    expect(msg).toMatch(/recipes\/\[id\]\/GET/);
+    expect(msg).toMatch(/\$route\.id/);
+  });
+  it('allows a detail endpoint whose GET route carries its record parameter', () => {
+    expect(flatDetailRouteError('recipes-detail', 'recipes/[id]/GET')).toBeNull();
   });
   it('allows a name that belongs to no other file', () => {
     expect(lintApiHandler(named, { existingNames: new Map() })).toBeNull();
