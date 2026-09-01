@@ -79,6 +79,7 @@ import {
   badOutletCount,
   type ViewError,
   type ViewValidationResult,
+  updateFormNeedsPrefill,
 } from './messages.js';
 import {
   isBinding,
@@ -880,6 +881,29 @@ function isDeleteMutation(ep: ViewEndpoint): boolean {
   return ep.method === 'DELETE' || /(?:^|[-_])(delete|remove)(?:$|[-_])/i.test(ep.name);
 }
 
+/**
+ * An UPDATE mutation — the same detection style as `isDeleteMutation`, by method and by the naming
+ * convention the planner uses, because a wrongly file-routed POST still named `*-update` is an update.
+ */
+function isUpdateMutation(ep: ViewEndpoint): boolean {
+  return ep.method === 'PATCH' || ep.method === 'PUT' || /(?:^|[-_])(update|edit)(?:$|[-_])/i.test(ep.name);
+}
+
+/**
+ * A `create` section bound to an UPDATE must prefill, or it opens blank over an existing record.
+ *
+ * Measured in a browser census of seven generated apps: 7 of 7 had exactly this shape and every one
+ * showed the user an empty edit form. It is invisible to every other gate — the spec is structurally
+ * valid, the endpoint answers, the page renders. Only the values are missing.
+ */
+function checkUpdateFormPrefill(section: Record<string, unknown>, ep: ViewEndpoint | undefined, path: string, ctx: WalkCtx): void {
+  if (!ep || !isUpdateMutation(ep) || isDeleteMutation(ep)) return;
+  const prefill = section['prefill'];
+  if (prefill && typeof prefill === 'object' && !Array.isArray(prefill)) return;
+  const readers = ctx.queries.filter((name) => /(?:^|[-_])(detail|get|byid|by_id)(?:$|[-_])/i.test(name));
+  ctx.errors.push(updateFormNeedsPrefill(path, ep.name, readers));
+}
+
 /** Reject the semantic inversion of a create form bound to a deletion. */
 function checkCreateMutationKind(ep: ViewEndpoint | undefined, path: string, ctx: WalkCtx): void {
   if (!ep || !isDeleteMutation(ep)) return;
@@ -1311,6 +1335,7 @@ function walkSpec(
 
     if (String(rec['kind']) === 'create') {
       checkCreateMutationKind(scope.ep, path, ctx);
+      checkUpdateFormPrefill(rec, scope.ep, path, ctx);
       checkFormDerives(rec, scope.ep, path, ctx);
       const prefill = rec['prefill'] as Record<string, unknown> | undefined;
       if (prefill && typeof prefill['endpoint'] === 'string') {

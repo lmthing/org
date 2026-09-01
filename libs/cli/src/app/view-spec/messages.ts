@@ -677,6 +677,30 @@ export function createCannotDelete(
 }
 
 /** A list row action aimed at its collection's new-record route cannot identify the clicked row. */
+/**
+ * An EDIT form that opens blank — the single most prevalent defect in generated apps.
+ *
+ * A browser census of seven built apps found this in **7 of 7**: the edit view is a `create` section
+ * bound to an update mutation, with no `prefill`, so every input renders `value=""`. The user is shown
+ * an empty form over an existing record; saving it either fails required-field validation or wipes the
+ * columns they did not retype. Nothing caught it — the spec is structurally valid and the page renders.
+ */
+export function updateFormNeedsPrefill(path: string, mutation: string, detailEndpoints: string[]): ViewError {
+  const suggestion = detailEndpoints.length
+    ? ` Point it at the endpoint that reads the record: \`prefill: { endpoint: '${detailEndpoints[0]}', input: { id: '$route.id' } }\`.`
+    : ' Add a `prefill` naming the endpoint that reads this record.';
+  return err(
+    'empty-form',
+    path,
+    at(
+      path,
+      `this create section is bound to the update mutation "${mutation}" but declares no prefill, so every ` +
+        `input renders EMPTY over an existing record. The user sees a blank edit form, and saving it either ` +
+        `fails the required-field check or blanks every column they did not retype.` + suggestion,
+    ),
+  );
+}
+
 export function rowActionToNew(path: string, route: string): ViewError {
   return err(
     'dead-control',
