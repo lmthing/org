@@ -58,6 +58,10 @@ interface EndpointSpec {
   fields?: unknown[];
   /** A write endpoint's request-body keys, as `'key: type'`. See check (1b). */
   input?: unknown[];
+  /** The declarative query kind — `list get aggregate create update toggle delete`. Every endpoint
+   *  carries one since endpoints became declarative-only; absent means the model omitted it, and
+   *  check (K) stays SILENT rather than guessing. */
+  kind?: string;
 }
 interface ComponentSpec {
   name?: string;
@@ -613,6 +617,76 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
         add('plan_endpoints', table, `"${table}" is shown on a page but has NO delete endpoint, so the user can never remove one. Plan "${table}-delete" (DELETE, declarative kind 'delete') and reach it from a row action or the detail page.`);
       } else if (!reached.has(nameOf(remove))) {
         add('plan_views', nameOf(remove), `"${nameOf(remove)}" exists but no page reaches it, so "${table}" can never be deleted from the UI. Add a rowAction on the list or an action on the detail page.`);
+      }
+    }
+  }
+
+  // (K) SECTION KIND ↔ QUERY KIND — what the section RENDERS must be what the endpoint ANSWERS.
+  //
+  // The Recipes page of a generated app rendered ONE card reading "2 recipes / 75 min / 0 ingredients"
+  // over a database holding two real recipes. The user never saw a recipe and never saw a real empty
+  // state — just a single synthetic card of totals. Cause: a `list` SECTION pointed at an AGGREGATE
+  // endpoint. An aggregate answers ONE object, so the list renders exactly one row and that row IS the
+  // summary. Every existing gate passed it, because the spec and the data are perfectly consistent:
+  // the endpoint genuinely returns what it declares. Nothing anywhere compared the two kinds.
+  //
+  // Only high-confidence disagreements fire. A gate that trips on a correct plan gets the whole
+  // feedback channel dismissed as noise — that has already cost this pipeline both onFail attempts
+  // once — so where a pairing is legitimately ambiguous it is ALLOWED and said so below.
+  {
+    // Sections that render MANY rows. All are built by `listLike`/`sourced` and source rows the same
+    // way (`libs/cli/src/app/view-spec/schema.ts#SECTION_KINDS`), so all need a `list` query.
+    const COLLECTION = new Set(['list', 'timeline', 'board', 'calendar', 'chart']);
+    // Sections that DISPLAY. None of them may read a mutation.
+    const DISPLAY = new Set([...COLLECTION, 'detail', 'stats']);
+    const WRITE_KINDS = new Set(['create', 'update', 'toggle', 'delete']);
+    const READ_KINDS = new Set(['list', 'get', 'aggregate']);
+    // DELIBERATELY PERMISSIVE, each for a real reason:
+    //  - `stats` and `detail` on either `get` or `aggregate`: both answer ONE object, and a summary
+    //    panel is a legitimate reading of each.
+    //  - `stats`/`detail` on `list`: a bad binding there is already caught by the `$.`-binding check,
+    //    which names the exact field — a second, vaguer finding on the same fault is noise.
+    //  - a `create` section on an `update` query: an edit form IS `kind: 'create'` with an update
+    //    mutation. That is the normal shape of every edit page, not a fault.
+    const kindOf = new Map<string, string>();
+    for (const e of endpoints) {
+      const n = String(e.name ?? '');
+      const k = String(e.kind ?? '').trim();
+      if (n && k) kindOf.set(n, k);
+    }
+    for (const page of pages) {
+      const route = String(page.route ?? '?');
+      for (const sec of sectionsOf(page)) {
+        const secKind = String(sec.kind ?? '');
+        const epName = String(sec.endpoint ?? '').trim();
+        // A section sourced by `from` reads another SECTION, not an endpoint — nothing to compare.
+        if (!epName) continue;
+        const qKind = kindOf.get(epName);
+        // An endpoint whose `kind` the model omitted is checked by (D) as a declarative-IR gap. Do not
+        // guess a kind from the name here: a wrong guess is a false positive on a correct plan.
+        if (!qKind) continue;
+        const id = String(sec.id ?? '?');
+
+        if (DISPLAY.has(secKind) && WRITE_KINDS.has(qKind)) {
+          add('plan_views', id, `section "${id}" on page "${route}" is a \`${secKind}\` — it DISPLAYS — but reads "${epName}", a \`${qKind}\` mutation. A mutation returns the result of a write, not the rows to show, so this section renders that write's echo and takes its heading from it: the recipe-box build shipped a create form headed "Recipes Delete" this exact way. Point the section at a read endpoint, or move the mutation to a \`toolbar\` action / \`rowAction\`, which is where a write belongs.`);
+          continue;
+        }
+        if (COLLECTION.has(secKind) && qKind !== 'list') {
+          const sameTable = endpoints.find(
+            (e) => String(e.kind ?? '') === 'list'
+              && (e.tables ?? []).some((t) => (endpoints.find((x) => String(x.name ?? '') === epName)?.tables ?? []).includes(t as string)),
+          );
+          const alt = sameTable ? String(sameTable.name ?? '') : '';
+          if (qKind === 'aggregate') {
+            add(alt ? 'plan_views' : 'plan_endpoints', id, `section "${id}" on page "${route}" is a \`${secKind}\` — it renders ONE ROW PER RECORD — but reads "${epName}", an \`aggregate\` query. An aggregate answers a SINGLE object of totals, so this renders exactly one row and that row is the summary: the user sees a card reading "2 recipes / 75 min" where their two recipes should be, and never sees a real empty state either. ${alt ? `Point it at "${alt}", the \`list\` query over the same table.` : `Plan a \`list\` query over the same table and point this section at it.`} If a totals TILE is what this page wants, keep "${epName}" and make the section \`stats\`, which is what an aggregate is for — but a page that shows only totals still needs the list.`);
+          } else {
+            add(alt ? 'plan_views' : 'plan_endpoints', id, `section "${id}" on page "${route}" is a \`${secKind}\` — it renders ONE ROW PER RECORD — but reads "${epName}", a \`${qKind}\` query, which answers a single record. It will render one row, or none. ${alt ? `Point it at "${alt}", the \`list\` query over the same table.` : `Plan a \`list\` query over the same table and point this section at it.`} If ONE record is genuinely what this section shows, make it a \`detail\` section.`);
+          }
+          continue;
+        }
+        if (secKind === 'create' && READ_KINDS.has(qKind)) {
+          add('plan_views', id, `section "${id}" on page "${route}" is a \`create\` — a FORM the user submits — but reads "${epName}", a \`${qKind}\` read query. A form submitting to a read writes nothing: the user fills it in, presses Save, and their record is silently never stored. Point it at the \`create\` (or \`update\`, for an edit form) endpoint for this entity.`);
+        }
       }
     }
   }

@@ -56,9 +56,9 @@ const OK = {
   plan_tables: { tables: [table('costs', ['id', 'label', 'amount_usd'])] },
   plan_endpoints: {
     endpoints: [
-      { name: 'costs-list', route: 'costs-list/GET', tables: ['costs'], fields: ['label: string', 'amount_usd: number'] },
-      { name: 'costs-create', route: 'costs/POST', tables: ['costs'], fields: ['id: string'], input: ['label: string', 'amount_usd: number'] },
-      { name: 'costs-delete', route: 'costs/[id]/DELETE', tables: ['costs'], fields: ['id: string'] },
+      { name: 'costs-list', route: 'costs-list/GET', tables: ['costs'], fields: ['label: string', 'amount_usd: number'], kind: 'list' },
+      { name: 'costs-create', route: 'costs/POST', tables: ['costs'], fields: ['id: string'], input: ['label: string', 'amount_usd: number'], kind: 'create' },
+      { name: 'costs-delete', route: 'costs/[id]/DELETE', tables: ['costs'], fields: ['id: string'], kind: 'delete' },
     ],
   },
   plan_view_components: { components: [{ name: 'CostRow', props: ['label: string', 'amount_usd: number'] }] },
@@ -300,6 +300,97 @@ describe('build_live_project — the contract gate (08-validate_contract.ts)', (
     expect(r.ok).toBe(false);
     expect(refs(r)).toContain('costs#costs');
     expect(msgs(r)).toContain('silently points at whichever came first');
+  });
+
+  // ── (K) SECTION KIND ↔ QUERY KIND ────────────────────────────────────────────────────────────
+  // The recipe-box build rendered ONE card — "2 recipes / 75 min / 0 ingredients" — over a database
+  // holding two real recipes, because a `list` section read an AGGREGATE endpoint. Every other gate
+  // passed it: the endpoint returned exactly what it declared.
+
+  it('flags a `list` section reading an aggregate endpoint — the summary-card defect', async () => {
+    const c = clone();
+    c.plan_endpoints.endpoints.push({
+      name: 'costs-summary', route: 'costs-summary/GET', tables: ['costs'], fields: ['total: number'], kind: 'aggregate',
+    } as unknown as (typeof OK)['plan_endpoints']['endpoints'][0]);
+    section(c).endpoint = 'costs-summary';
+    section(c).bindings = ['$.total'];
+    c.plan_views[0]!.endpoints.push('costs-summary');
+    const r = await run({}, c as unknown as Record<string, unknown>);
+    expect(r.ok).toBe(false);
+    const fault = r.errors.find((e) => e.message.includes('aggregate'))!;
+    expect(fault).toBeDefined();
+    // It must say what the USER sees, and it must name the real list endpoint to point at.
+    expect(fault.message).toContain('where their two recipes should be');
+    expect(fault.message).toContain('costs-list');
+    // A totals tile is a legitimate thing to want — the message offers that repair too.
+    expect(fault.message).toContain('`stats`');
+  });
+
+  it('routes the aggregate fault to plan_endpoints when there is no list query to point at', async () => {
+    const c = clone();
+    // Replace the list endpoint entirely: now no `list` query over `costs` exists, so the repair is
+    // to PLAN one, not to re-point the section.
+    c.plan_endpoints.endpoints[0] = {
+      name: 'costs-list', route: 'costs-list/GET', tables: ['costs'], fields: ['total: number'], kind: 'aggregate',
+    } as unknown as (typeof OK)['plan_endpoints']['endpoints'][0];
+    section(c).bindings = ['$.total'];
+    const r = await run({}, c as unknown as Record<string, unknown>);
+    const fault = r.errors.find((e) => e.message.includes('aggregate'))!;
+    expect(fault.node).toBe('plan_endpoints');
+    expect(fault.message).toContain('Plan a `list` query');
+  });
+
+  it('flags a DISPLAY section reading a mutation — the "Recipes Delete" heading', async () => {
+    const c = clone();
+    section(c).endpoint = 'costs-delete';
+    section(c).bindings = [];
+    const r = await run({}, c as unknown as Record<string, unknown>);
+    expect(r.ok).toBe(false);
+    expect(msgs(r)).toContain('it DISPLAYS');
+    expect(msgs(r)).toContain('Recipes Delete');
+  });
+
+  it('flags a `create` section submitting to a READ query — the form that stores nothing', async () => {
+    const c = clone();
+    c.plan_views[0]!.sections[1]!.endpoint = 'costs-list';
+    const r = await run({}, c as unknown as Record<string, unknown>);
+    expect(r.ok).toBe(false);
+    expect(msgs(r)).toContain('their record is silently never stored');
+  });
+
+  it('does NOT flag an edit form — a `create` section on an `update` query is the normal shape', async () => {
+    const c = clone();
+    c.plan_endpoints.endpoints.push({
+      name: 'costs-update', route: 'costs/[id]/PUT', tables: ['costs'], fields: ['id: string'],
+      input: ['label: string'], kind: 'update',
+    } as unknown as (typeof OK)['plan_endpoints']['endpoints'][0]);
+    c.plan_views[0]!.endpoints.push('costs-update');
+    c.plan_views[0]!.sections.push({ id: 'costsEdit', kind: 'create', endpoint: 'costs-update' } as unknown as (typeof OK)['plan_views'][0]['sections'][0]);
+    const r = await run({}, c as unknown as Record<string, unknown>);
+    expect(msgs(r)).not.toContain('never stored');
+    expect(r.ok).toBe(true);
+  });
+
+  it('does NOT flag a `stats` section on an aggregate — that is what an aggregate is FOR', async () => {
+    const c = clone();
+    c.plan_endpoints.endpoints.push({
+      name: 'costs-total', route: 'costs-total/GET', tables: ['costs'], fields: ['total: number'], kind: 'aggregate',
+    } as unknown as (typeof OK)['plan_endpoints']['endpoints'][0]);
+    c.plan_views[0]!.endpoints.push('costs-total');
+    c.plan_views[0]!.sections.push({ id: 'totals', kind: 'stats', endpoint: 'costs-total', bindings: ['$.total'] } as unknown as (typeof OK)['plan_views'][0]['sections'][0]);
+    const r = await run({}, c as unknown as Record<string, unknown>);
+    expect(msgs(r)).not.toContain('SECTION KIND');
+    expect(r.ok).toBe(true);
+  });
+
+  it('stays SILENT when the endpoint declares no `kind` — it never guesses one from the name', async () => {
+    // A missing `kind` is a declarative-IR gap other checks own. Guessing here would fire on plans
+    // this check cannot actually read.
+    const c = clone();
+    delete (c.plan_endpoints.endpoints[0] as unknown as { kind?: string }).kind;
+    section(c).kind = 'list';
+    const r = await run({}, c as unknown as Record<string, unknown>);
+    expect(r.ok).toBe(true);
   });
 
   it('flags a $data / reveals target that is not a section on THIS page', async () => {
@@ -574,7 +665,9 @@ describe('build_live_project — the contract gate (08-validate_contract.ts)', (
   // and plan_acceptance "verified" an orphaned one while the page's real dashboard-stats was broken.
   it('flags an unparameterized endpoint no section reads and no automation runs', async () => {
     const c = clone();
-    c.plan_endpoints.endpoints.push({ name: 'dashboard-upcoming', route: 'dashboard-upcoming/GET', tables: ['costs'], fields: ['label: string'] });
+    c.plan_endpoints.endpoints.push({
+      name: 'dashboard-upcoming', route: 'dashboard-upcoming/GET', tables: ['costs'], fields: ['label: string'], kind: 'list',
+    } as unknown as (typeof OK)['plan_endpoints']['endpoints'][0]);
     const r = await run({}, c as unknown as Record<string, unknown>);
     expect(r.ok).toBe(false);
     expect(refs(r)).toContain('dashboard-upcoming');
@@ -584,8 +677,10 @@ describe('build_live_project — the contract gate (08-validate_contract.ts)', (
 
   it('does NOT flag an endpoint a section actually reads', async () => {
     const c = clone();
-    c.plan_endpoints.endpoints.push({ name: 'costs-summary', route: 'costs-summary/GET', tables: ['costs'], fields: ['total: number'] });
-    c.plan_views[0]!.endpoints = ['costs-list', 'costs-summary'];
+    c.plan_endpoints.endpoints.push({
+      name: 'costs-summary', route: 'costs-summary/GET', tables: ['costs'], fields: ['total: number'], kind: 'aggregate',
+    } as unknown as (typeof OK)['plan_endpoints']['endpoints'][0]);
+    c.plan_views[0]!.endpoints = ['costs-list', 'costs-summary', 'costs-create', 'costs-delete'];
     c.plan_views[0]!.sections.push({
       id: 'totals', kind: 'stats', endpoint: 'costs-summary', bindings: ['$.total'],
     } as unknown as (typeof OK)['plan_views'][0]['sections'][0]);
