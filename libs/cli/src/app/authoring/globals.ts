@@ -27,7 +27,6 @@ import { transformSync } from 'esbuild';
 import { validateTableSchema, parseFrontmatter, type TableSchema } from '@lmthing/core';
 import {
   LintError,
-  apiHandlerTypingError,
   braceBody,
   existingApiNames,
   lintApiHandler,
@@ -222,17 +221,13 @@ export interface ProjectAuthoringGlobals {
    *  gate that can see a page which is structurally perfect and empty. Absent api runtime ⇒ it
    *  reports `unavailable: true` rather than an empty (i.e. "clean") finding list. */
   renderSmokeViews: () => Promise<RenderSmokeResult>;
-  /** Write `<projectRoot>/api/<path>/<METHOD>.ts` (a typed API handler) — the
-   *  LIVE-project counterpart of the catalog's `writeApi`. */
+  /** REFUSED legacy hand-written endpoint writer. Every endpoint must be authored with
+   *  {@link ProjectAuthoringGlobals.writeProjectQuery}; use `include` and row `compute` for
+   *  parent/child reads. */
   writeProjectApi: (route: string, src: string) => { ok: boolean; error?: string };
-  /** Write `<projectRoot>/api/<name>.query.json` (W7 — declarative endpoint) and GENERATE its handler
-   *  straight to `<projectRoot>/api/<route>/<METHOD>.ts` — the declarative counterpart of
-   *  `writeProjectApi`. Most endpoints are projections (`list` `get` `aggregate` `create` `update`
-   *  `toggle`), not programs: the handler is generated FROM this same IR, so it cannot disagree with
-   *  its own contract (no invented field, no `ctx.params`, no import that doesn't exist) — the whole
-   *  class of build-burning repair rounds a hand-written handler risked stops existing. The generated
-   *  handler still passes every gate a hand-written one does (lint, typing, project typecheck); a
-   *  genuinely bespoke endpoint keeps `writeProjectApi`/`api/<name>.handler.ts` as its escape hatch. */
+  /** Write `<projectRoot>/api/<name>.query.json` and GENERATE its handler straight to
+   *  `<projectRoot>/api/<route>/<METHOD>.ts`. Every endpoint is declarative: the handler is generated
+   *  FROM this same IR, so it cannot disagree with its own contract. */
   writeProjectQuery: (name: string, query: unknown) => { ok: boolean; error?: string };
   /** Delete `views/<route>.view.json` — the delete twin of {@link ProjectAuthoringGlobals.writeProjectView},
    *  for retiring a superseded/broken page. REFUSED while anything still references the route
@@ -946,50 +941,17 @@ export function createProjectAuthoringGlobals(opts: {
   }
 
   /**
-   * Write a typed API handler into the LIVE project (`api/<path>/<METHOD>.ts`) and tell the
-   * host to drop its cached endpoint contracts. The live twin of the catalog `writeApi`;
-   * the route encodes its HTTP method last (`items-list/GET`). Path + method validation
-   * mirror the catalog writer.
+   * Refuse the retired freeform TypeScript endpoint path. Queries are the only endpoint source:
+   * use `writeProjectQuery(name, { kind, entity, route, include?, compute?, ... })`; declare table
+   * relations, then express parent/child detail with `include` and child counts/totals with `compute`.
    */
-  function writeProjectApi(route: string, src: string): { ok: boolean; error?: string } {
+  function writeProjectApi(_route: string, _src: string): { ok: boolean; error?: string } {
     if (nonBuildableId) return refuseNonBuildable('writeProjectApi');
-    let target: string;
-    try {
-      const rel = assertPathSegments('api route', route);
-      const segments = rel.split('/');
-      const method = segments.pop() as string;
-      if (!METHODS.has(method)) {
-        throw new Error(`api route "${route}" has an invalid method "${method}" (expected one of ${[...METHODS].join(', ')})`);
-      }
-      if (segments.length === 0) {
-        throw new Error(`api route "${route}" is missing an endpoint path before the method`);
-      }
-      assertSourceParses(src, 'ts');
-      target = join('api', ...segments, `${method}.ts`);
-      // An API route that writes the wrong columns fails exactly like a hook that does — the POST
-      // 500s (or worse, is caught) and the user's submission is silently gone. Same gate.
-      const cols = unknownColumnsIn(src);
-      if (cols) return { ok: false, error: cols };
-      // Loader contract: every endpoint needs a unique `export const name` + a default/handler fn.
-      throwLint(lintApiHandler(src, { existingNames: existingApiNames(projectRoot, safeResolve(projectRoot, target)), writeRoute: route }));
-      // Typed boundary: the handler's `input`/return must be REAL types — never `any`/`Promise<any>` —
-      // and the return must BE the contract's `<Base>Output`, so the endpoint↔page field divergence
-      // that the vacuous `Promise<any>` hides (the €0.00/"undefined" dashboard defect) is caught here.
-      throwLint(apiHandlerTypingError(src, { projectRoot }));
-      throwLint(saveTypecheckError({ projectRoot, relPath: `api/${[...segments, method].join('/')}.ts`, src, kind: 'api endpoint' }));
-    } catch (e) {
-      if (e instanceof LintError) throw e;
-      return { ok: false, error: String(e instanceof Error ? e.message : e) };
-    }
-    const out = writeUnder(target, src);
-    if (out.ok) {
-      try {
-        onAppWrite?.('api', route);
-      } catch {
-        /* best-effort — the handler file already landed */
-      }
-    }
-    return out;
+    throw new LintError(
+      'writeProjectApi is retired: hand-written TypeScript endpoints are not supported. ' +
+        'Use writeProjectQuery(name, { kind, entity, route, ... }). For parent/child data, declare the table relation, ' +
+        'use include: ["children"] to attach children, and compute: { childCount: { count: "$children.id" } } to count them.',
+    );
   }
 
   /**
@@ -997,16 +959,8 @@ export function createProjectAuthoringGlobals(opts: {
    * `api/<route>/<METHOD>.ts` — the live twin of `writeProjectApi` for the tier-1 kinds (W7, §7).
    *
    * Runs `lintApiHandler` (name/shape existence) and `saveTypecheckError` (the real project
-   * typecheck) — the same defense-in-depth a hand-written handler faces, so a bug in the COMPILER
-   * itself is still caught. Deliberately does NOT run `apiHandlerTypingError`: that check's rule
-   * "the return must reference the contract's GLOBAL AMBIENT `<Pascal>Output`" is written for a
-   * hand-written handler that could otherwise invent a competing shape — exactly the class of bug
-   * that cannot happen here, because the generated `Output` interface and the handler body come
-   * from the SAME IR in the SAME call. Enforcing it anyway made every declarative endpoint reject
-   * outright the moment `emit_types` had already run (which it always has, in the real pipeline) —
-   * found live, 30-bike-workshop: `writeProjectQuery` failed 100% of the time with "an inline or
-   * invented Output", and the model, seeing every declarative attempt bounce, abandoned the whole
-   * path and fell back to hand-writing every endpoint.
+   * typecheck). Its generated `Output` interface and handler body come from the SAME IR call, so
+   * no author can invent a competing response shape.
    */
   function writeProjectQuery(name: string, query: unknown): { ok: boolean; error?: string } {
     if (nonBuildableId) return refuseNonBuildable('writeProjectQuery');

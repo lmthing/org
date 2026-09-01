@@ -16,8 +16,8 @@ reads ONLY through the typed readers. If you reach for a generic-fs name, the re
 - **READ** — `readProjectFile(path)` (project) / `readSpaceFile(path)` (space); **list** —
   `listProjectDir(dir)` (project) / `listSpaceDir(dir)` (space).
 - **WRITE / PERSIST** — a typed `writeProject*` writer, ALL of them listed below on this page:
-  `writeProjectTable` · `writeProjectEntity` · `writeProjectQuery` · `writeProjectApi` ·
-  `writeProjectHook` · `writeProjectEvent` · `writeProjectFunction` · `writeProjectView` ·
+  `writeProjectTable` · `writeProjectEntity` · `writeProjectQuery` · `writeProjectHook` ·
+  `writeProjectEvent` · `writeProjectFunction` · `writeProjectView` ·
   `writeProjectViewComponent` · `writeProjectViewLayout` · `writeProjectViewShell`.
 - `readFileRaw` / `writeFileRaw` are internal host primitives — never available to you. The only
   generic fs/shell anywhere is the ENGINEER's scratch sandbox (`createScratch()` then its
@@ -81,41 +81,12 @@ fact, forever); `type: "money"` needs `currencyField` naming another string/enum
 entity. `fact` is a stable key — reusing it for a different column name on a rebuild is rejected.
 `writeProjectTable` still exists for a table not worth modeling as facts, but prefer this.
 
-## API handler (hand-written — use for the genuinely bespoke endpoint) — `writeProjectApi('<name>/<METHOD>', src)` → `api/<name>/<METHOD>.ts`
+## Declarative query (every endpoint) — `writeProjectQuery(name, query)` → `api/<name>.query.json` + `api/<route>/<METHOD>.ts`
 
-The route's LAST segment is the HTTP method (`GET`|`POST`|`PUT`|`PATCH`|`DELETE`); the rest is the
-endpoint path. `src` is a full ESM handler module:
-
-```ts
-export const name = 'items-list';
-export const description = 'List all items, newest first.';
-export type Input = ItemsListInput;   // global ambient — never import
-export type Output = ItemsListOutput; // global ambient — never import
-export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {
-  const items = await ctx.db.query('items', { orderBy: { column: 'createdAt', dir: 'desc' } });
-  return { items };
-}
-```
-
-`ctx.db` is the async data API: `await ctx.db.query/insert/update/remove/tables(...)`. Type `ctx`
-as the global `ApiCtx` (there is no `ctx.params` — a `[id]` route value arrives as `input.id`).
-`Input`/`Output` are type ALIASES to the global contract types — `writeProjectApi` REJECTS an
-invented inline `Output` when the contract declares `<Name>Output` (an alias is not optional), and
-every Output is `{ items: [...] }`. `import { HttpError } from '@app/runtime'` to signal 4xx/5xx.
-
-**A handler's ONLY legal import is `import { HttpError } from '@app/runtime'`** (plus a `node:`
-builtin if you truly need one). The contract `Input`/`Output` types are GLOBAL — `emit_types` wrote
-them into `types/contract.d.ts` and the typecheck loads that file as ambient, so `<Name>Input`/
-`<Name>Output` are in scope with **NO import**. Never `import ... from '../../types/contract'` or any
-relative project path, and never import an `@app/database`/`@app/db` package — the database reaches
-you as the injected `ctx` parameter. `writeProjectApi` rejects any handler whose import list is not
-`@app/runtime` / a `node:` builtin.
-
-## Declarative query (PREFER for a plain endpoint) — `writeProjectQuery(name, query)` → `api/<name>.query.json` + `api/<route>/<METHOD>.ts`
-
-For a plain filtered/sorted list, get-by-id, sum/count/avg aggregate, create, update, toggle, or
-delete-by-id — no cross-table lookup, no grouped breakdown, no date pick, no classification label —
-author the query as DATA and the handler is GENERATED, so it cannot disagree with its own contract:
+Every endpoint is query DATA and its handler is GENERATED, so it cannot disagree with its contract.
+Use a list/get/aggregate/create/update/toggle/delete query. Parent/child work is also declarative:
+declare the table relation, use `include` to attach children, and use row `compute` to count or sum
+children. If a future behavior cannot be represented, extend this IR; never write a handler module.
 
 ```json
 {
@@ -130,7 +101,7 @@ author the query as DATA and the handler is GENERATED, so it cannot disagree wit
 lte contains is-null not-null`. `compute` (aggregates, and computed fields on a list/get) is a closed
 formula AST — `add sub mul div min max round coalesce` (arithmetic) and `sum count avg first`
 (reduce over an `include`d relation, or over the whole set inside an aggregate) — NOT TypeScript; a
-formula outside that set means this endpoint is NOT declarative, hand-write it above instead. `set`
+formula outside that set means the IR needs an extension before the endpoint can be authored. `set`
 (create/update) maps a column to `{ "input": "<field>" }` or `{ "value": <literal> }`; `toggleField`
 (toggle) names the boolean column the handler flips. A `delete` needs a `[param]` in its route (or a
 `where`) to name the row; its method defaults to DELETE.
@@ -148,9 +119,8 @@ timestamp, anything else is a literal.
 }
 ```
 
-This is the exact shape a "mark collected, stamp the date; un-mark, clear it" toggle needs — reach for
-it BEFORE deciding a toggle-with-a-timestamp must be hand-written. The exact IR shape is in your
-ambient DTS (`declare function writeProjectQuery`) — read it there, not from memory.
+This is the exact shape a "mark collected, stamp the date; un-mark, clear it" toggle needs. The exact
+IR shape is in your ambient DTS (`declare function writeProjectQuery`) — read it there, not from memory.
 
 ## Page — `writeProjectView(route, spec)` → `views/<route>.view.json`
 

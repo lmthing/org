@@ -10,8 +10,8 @@
  * The point (§7): the handler is GENERATED from the same IR that defines its Output contract, so the
  * two cannot disagree — the whole "handler returns a field its own Output never declared", "invented
  * import", "`ctx.params` instead of `input.id`" class of build-burning repair rounds stops *existing*,
- * because there is no hand-written handler to get wrong. A genuinely bespoke endpoint keeps its
- * `api/<route>/<METHOD>.ts` escape hatch (tier 3) unchanged.
+ * because there is no hand-written handler to get wrong. Every endpoint uses this declarative
+ * representation; parent/child reads use declared relations plus `include` and row `compute`.
  *
  * The generated handler is deliberately **self-contained**: it declares its own `Input`/`Output` and a
  * local `_Ctx` for `ctx`, and depends on NO ambient (`ApiCtx`, `<Pascal>Output`, `types/contract.d.ts`)
@@ -306,6 +306,16 @@ export function validateQueryIr(ir: unknown, tables: Map<string, TableSchema>): 
       for (const [key, formula] of Object.entries(q.compute)) {
         const err = validateFormula(formula as Formula, { ...scope, priorKeys: new Set(priorKeys) });
         if (err) push(`compute.${key}: ${err}`);
+        // A row compute such as `{ count: '$ingredients.id' }` implicitly includes its
+        // relation. Validate that implicit include here, rather than generating a handler that
+        // asks the DB for an undeclared relation and fails only at execution time.
+        if (kind !== 'aggregate' && table) {
+          for (const rel of relationRefsInFormula(formula as Formula)) {
+            if (!table.relations?.[rel]) {
+              push(`compute.${key}: no relation "${rel}" on "${q.entity}". Relations: ${Object.keys(table.relations ?? {}).join(', ') || '(none)'}.`);
+            }
+          }
+        }
         priorKeys.add(key);
       }
     }

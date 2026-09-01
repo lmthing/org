@@ -89,11 +89,24 @@ if (!cur.ok || cur.content.length === 0) {
 } else if (f.kind === 'shell') {
   const shell = JSON.parse(cur.content) as ShellSpec;   // the REAL type
   w = writeProjectViewShell(shell);
-} else {
+} else if (f.kind === 'hook') {
   const fixed = cur.content; // replace with cur.content corrected for f.errors
-  w = f.kind === 'hook'
-    ? writeProjectHook(f.path.replace(/^hooks\//, '').replace(/\.ts$/, ''), fixed)
-    : writeProjectApi(f.path.replace(/^api\//, '').replace(/\.ts$/, ''), fixed);
+  w = writeProjectHook(f.path.replace(/^hooks\//, '').replace(/\.ts$/, ''), fixed);
+} else {
+  // API handlers are generated. Repair their query JSON and regenerate; never edit handler TS.
+  const match = cur.content.match(/@generated from api\/([a-z][a-z0-9-]*)\.query\.json/);
+  if (!match) {
+    w = { ok: false, error: 'API handler has no generated query source; report the missing IR' };
+  } else {
+    const queryFile = `api/${match[1]}.query.json`;
+    const stored = readProjectFile(queryFile);
+    if (!stored.ok || !stored.content) w = { ok: false, error: `missing ${queryFile}` };
+    else {
+      const query = JSON.parse(stored.content);
+      // …correct query for f.errors before regenerating…
+      w = writeProjectQuery(match[1], query);
+    }
+  }
 }
 const landed = w.ok && readProjectFile(f.path).content !== cur.content;
 currentTask.resolve({ path: f.path, ok: landed });

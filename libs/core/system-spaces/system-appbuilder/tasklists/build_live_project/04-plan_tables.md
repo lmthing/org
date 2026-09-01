@@ -70,8 +70,11 @@ schema AND the FK column on the child in the SAME pass (they are a single contra
 "relations": {
   "ingredients": { "hasMany": "ingredients", "via": "recipeId", "description": "the ingredients of this recipe" }
 }
-// on the CHILD table (ingredients): the FK column that holds the link
-"recipeId": { "type": "string", "description": "foreign key to the owning recipes row", "required": true }
+// on the CHILD table (ingredients): the FK column and reciprocal relation
+"recipeId": { "type": "string", "description": "foreign key to the owning recipes row", "required": true },
+"relations": {
+  "recipe": { "belongsTo": "recipes", "via": "recipeId", "description": "the recipe this ingredient belongs to" }
+}
 ```
 
 The relation KEY (`ingredients`) is exactly the name a downstream `include: ['ingredients']` uses;

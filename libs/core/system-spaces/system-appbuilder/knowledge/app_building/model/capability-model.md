@@ -18,7 +18,7 @@ reaching the engine. This is least-privilege: give an agent exactly the caps its
 | `db:read` | `db.query`, `db.tables` | optional `{ tables: [...] }` |
 | `db:write` | `db.insert`, `db.update` | optional `{ tables: [...] }` |
 | `views:write` | `writeProjectView`, `writeProjectViewComponent`, `writeProjectViewLayout`, `writeProjectViewShell`, and the matching `deleteProjectView`/`deleteProjectViewComponent`/`deleteProjectViewLayout` | bare |
-| `api:write` | `writeProjectQuery` (declarative — PREFER this), `writeApi`, `writeProjectApi`, `deleteProjectApi`, `deleteProjectQuery` | bare |
+| `api:write` | `writeProjectQuery` (the only endpoint authoring path), `deleteProjectApi`, `deleteProjectQuery` | bare |
 | `hooks:write` | `writeHook`, `deleteProjectHook` | bare |
 | `api:call` | `apiCall(name, input)` | required `{ allow: [...] }` |
 | `connections:use` | `callConnection`, `integrationStatus` | optional `{ providers: [...] }` |

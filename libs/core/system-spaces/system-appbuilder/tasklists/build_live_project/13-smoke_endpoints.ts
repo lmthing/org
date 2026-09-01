@@ -2,7 +2,7 @@
  * The endpoint smoke gate — HOST-RUN, and the ONLY thing in this pipeline that ever CALLS a
  * generated endpoint.
  *
- * Everything upstream is static. `writeProjectApi` parses the module, `verify` typechecks it and
+ * Everything upstream is static. `writeProjectQuery` generates the module, `verify` typechecks it and
  * bundles it, and the scans in `16-verify.ts` read the source with a regex. None of that executes a
  * handler, so an endpoint whose body is structurally perfect and semantically empty sails through
  * every gate:

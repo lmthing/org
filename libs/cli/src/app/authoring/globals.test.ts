@@ -265,27 +265,22 @@ describe('createProjectAuthoringGlobals', () => {
       expect(existsSync(join(projectRoot, 'hooks', 'good.ts'))).toBe(true);
     });
 
-    it('gates writeProjectApi the same way — a POST route that writes the wrong columns loses the submission', () => {
+    it('retires writeProjectApi — malformed and apparently valid handlers both refuse before landing', () => {
       const pa = withRecipes();
-      const bad = pa.writeProjectApi(
-        'recipes-create/POST',
+      for (const src of [
         `export default async function handler({ body, db }: any) {
            await db.insert('recipes', { title: body.title });
            return { ok: true };
          }`,
-      );
-      expect(bad.ok).toBe(false);
-      expect(bad.error).toContain('did you mean "title_gr"');
-      expect(
-        pa.writeProjectApi(
-          'recipes-create/POST',
-          `export const name = 'recipesCreate';
-           export default async function handler(input: Record<string, unknown>, ctx: any) {
-             await ctx.db.insert('recipes', { title_gr: input.title });
-             return { ok: true };
-           }`,
-        ).ok,
-      ).toBe(true);
+        `export const name = 'recipesCreate';
+         export default async function handler(input: Record<string, unknown>, ctx: any) {
+           await ctx.db.insert('recipes', { title_gr: input.title });
+           return { ok: true };
+         }`,
+      ]) {
+        expect(() => pa.writeProjectApi('recipes-create/POST', src)).toThrow(/writeProjectQuery/);
+      }
+      expect(existsSync(join(projectRoot, 'api', 'recipes-create', 'POST.ts'))).toBe(false);
     });
 
     it('stays out of the way when it cannot know the keys (a spread) or the table (no schema)', () => {
@@ -465,7 +460,7 @@ describe('createProjectAuthoringGlobals', () => {
     expect(pa.deleteProjectHook('../evil').ok).toBe(false);
   });
 
-  it('writeProjectApi lands api/<path>/<METHOD>.ts and fires onAppWrite(api)', () => {
+  it('writeProjectApi refuses a handler and never fires onAppWrite(api)', () => {
     const appWrites: Array<[string, string]> = [];
     const pa = createProjectAuthoringGlobals({
       projectId: 'liveproj',
@@ -473,10 +468,9 @@ describe('createProjectAuthoringGlobals', () => {
       republish: () => {},
       onAppWrite: (kind, route) => appWrites.push([kind, route]),
     });
-    const res = pa.writeProjectApi('bookings-list/GET', "export const name = 'bookingsList';\nexport default async () => ({ items: [] });");
-    expect(res.ok).toBe(true);
-    expect(existsSync(join(projectRoot, 'api', 'bookings-list', 'GET.ts'))).toBe(true);
-    expect(appWrites).toEqual([['api', 'bookings-list/GET']]);
+    expect(() => pa.writeProjectApi('bookings-list/GET', "export const name = 'bookingsList';\nexport default async () => ({ items: [] });")).toThrow(/writeProjectQuery/);
+    expect(existsSync(join(projectRoot, 'api', 'bookings-list', 'GET.ts'))).toBe(false);
+    expect(appWrites).toEqual([]);
   });
 
   it('rejects UNPARSEABLE source (literal \\n instead of newlines) before it lands — hook/event/api', () => {
@@ -488,7 +482,7 @@ describe('createProjectAuthoringGlobals', () => {
     expect(h.error).toMatch(/failed to parse/i);
     expect(existsSync(join(projectRoot, 'hooks', 'broken-hook.ts'))).toBe(false); // never landed
     expect(pa.writeProjectEvent('broken-evt', broken).ok).toBe(false);
-    expect(pa.writeProjectApi('broken-list/GET', broken).ok).toBe(false);
+    expect(() => pa.writeProjectApi('broken-list/GET', broken)).toThrow(/writeProjectQuery/);
     // A well-formed multi-line hook (real newlines) still writes.
     const good = ["export default {", "  type: 'event',", "  on: { event: 'x/y' },", "};"].join('\n');
     expect(pa.writeProjectHook('good-hook', good).ok).toBe(true);
@@ -505,8 +499,8 @@ describe('createProjectAuthoringGlobals', () => {
         appWrites += 1;
       },
     });
-    expect(pa.writeProjectApi('bookings/FETCH', 'x').ok).toBe(false); // not a real HTTP method
-    expect(pa.writeProjectApi('../evil/GET', 'x').ok).toBe(false); // traversal
+    expect(() => pa.writeProjectApi('bookings/FETCH', 'x')).toThrow(/writeProjectQuery/);
+    expect(() => pa.writeProjectApi('../evil/GET', 'x')).toThrow(/writeProjectQuery/);
     expect(appWrites).toBe(0);
     expect(existsSync(join(projectRoot, 'api'))).toBe(false);
   });
@@ -515,24 +509,23 @@ describe('createProjectAuthoringGlobals', () => {
   // write with a thrown, retryable error (like a typecheck failure) — not accepted here to fail
   // later at app compile/serve. The model sees the throw and re-writes.
   describe('write-time lint (loader contract) throws a retryable error, writes nothing', () => {
-    it('writeProjectApi: missing `export const name` throws and leaves no file (the round-1 regression)', () => {
+    it('writeProjectApi: refuses missing-name and named handlers alike, leaving no file', () => {
       const pa = make();
-      expect(() => pa.writeProjectApi('dash/GET', 'export default async () => ({ items: [] });')).toThrow(
-        /export const name/,
-      );
+      for (const [route, src] of [
+        ['dash/GET', 'export default async () => ({ items: [] });'],
+        ['dash/GET', "export const name = 'dashGet';\nexport default async () => ({ items: [] });"],
+      ] as const) {
+        expect(() => pa.writeProjectApi(route, src)).toThrow(/writeProjectQuery/);
+      }
       expect(existsSync(join(projectRoot, 'api', 'dash', 'GET.ts'))).toBe(false);
-      // A corrected re-write (with a name) succeeds.
-      expect(
-        pa.writeProjectApi('dash/GET', "export const name = 'dashGet';\nexport default async () => ({ items: [] });").ok,
-      ).toBe(true);
     });
 
-    it('writeProjectApi: a duplicate endpoint name throws', () => {
+    it('writeProjectApi: refuses duplicate names before either handler can land', () => {
       const pa = make();
-      expect(pa.writeProjectApi('a/GET', "export const name = 'shared';\nexport default () => ({});").ok).toBe(true);
-      expect(() =>
-        pa.writeProjectApi('b/GET', "export const name = 'shared';\nexport default () => ({});"),
-      ).toThrow(/already used by/);
+      for (const route of ['a/GET', 'b/GET']) {
+        expect(() => pa.writeProjectApi(route, "export const name = 'shared';\nexport default () => ({});")).toThrow(/writeProjectQuery/);
+      }
+      expect(existsSync(join(projectRoot, 'api'))).toBe(false);
     });
 
     it('writeProjectHook: a non-object / unknown-type hook throws', () => {
@@ -569,7 +562,7 @@ describe('writeProjectApi save-time typecheck', () => {
     );
   }
 
-  it('REJECTS an api handler using `apiHandler` (an invented wrapper — should be `handler`)', () => {
+  it('REJECTS an api handler before handler syntax is considered', () => {
     endpoint(['trips'], 'GET', 'tripsList'); // another endpoint present so the project is mid-build
     const pa = make();
     expect(() =>
@@ -577,12 +570,12 @@ describe('writeProjectApi save-time typecheck', () => {
         'itinerary/[id]/GET',
         "export const name = 'itineraryGet';\nexport default apiHandler(async (req, ctx) => ({ id: req.id }));",
       ),
-    ).toThrow(/apiHandler/);
+    ).toThrow(/writeProjectQuery/);
     expect(existsSync(join(projectRoot, 'api', 'itinerary', '[id]', 'GET.ts'))).toBe(false);
   });
 });
 
-describe('writeProjectApi — the endpoint boundary is TYPED and CHECKED at save (no `any` escape)', () => {
+describe('writeProjectApi — retired endpoint writer refuses every handler', () => {
   // Reproduces the €0.00/"undefined" dashboard defect (scenario 07-life-admin run 26): a handler typed
   // `(input: any, ctx: ApiCtx): Promise<any>` returning fields the contract Output never declared
   // typechecked clean and shipped a landing page rendering `undefined` over a full database.
@@ -616,7 +609,7 @@ describe('writeProjectApi — the endpoint boundary is TYPED and CHECKED at save
       '  return { items: [{ monthly_total: 5 }] };\n' + // field the contract Output does NOT declare
       '}';
     expect(() => pa.writeProjectApi('dashboard-stats/GET', escape)).toThrow(LintError);
-    expect(() => pa.writeProjectApi('dashboard-stats/GET', escape)).toThrow(/any/);
+    expect(() => pa.writeProjectApi('dashboard-stats/GET', escape)).toThrow(/writeProjectQuery/);
     expect(existsSync(join(projectRoot, 'api', 'dashboard-stats', 'GET.ts'))).toBe(false);
   });
 
@@ -631,21 +624,21 @@ describe('writeProjectApi — the endpoint boundary is TYPED and CHECKED at save
       'export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {\n' +
       '  return { items: [{ monthly_total: 5 }] };\n' + // `monthly_total` ≠ contract `total_monthly`
       '}';
-    expect(() => pa.writeProjectApi('dashboard-stats/GET', diverged)).toThrow(LintError);
+    expect(() => pa.writeProjectApi('dashboard-stats/GET', diverged)).toThrow(/writeProjectQuery/);
     expect(existsSync(join(projectRoot, 'api', 'dashboard-stats', 'GET.ts'))).toBe(false);
   });
 
-  it('ACCEPTS a correctly-typed handler returning the contract Output shape', () => {
+  it('REJECTS even a correctly-typed handler; query IR is the only endpoint source', () => {
     const pa = make();
-    const ok =
+    const src =
       "export const name = 'dashboard-stats';\n" +
       'export type Input = DashboardStatsInput;\n' +
       'export type Output = DashboardStatsOutput;\n' +
       'export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {\n' +
       '  return { items: [{ total_monthly: 5 }] };\n' +
       '}';
-    expect(pa.writeProjectApi('dashboard-stats/GET', ok).ok).toBe(true);
-    expect(existsSync(join(projectRoot, 'api', 'dashboard-stats', 'GET.ts'))).toBe(true);
+    expect(() => pa.writeProjectApi('dashboard-stats/GET', src)).toThrow(/writeProjectQuery/);
+    expect(existsSync(join(projectRoot, 'api', 'dashboard-stats', 'GET.ts'))).toBe(false);
   });
 });
 
@@ -1039,13 +1032,13 @@ describe('the personal-workspace guard (user / system can never hold a built app
     expect(res.error).toContain('personal THING workspace');
   });
 
-  it('does NOT fire for an ordinary project — the same writers work as before', () => {
+  it('does NOT fire for an ordinary project, but writeProjectApi remains retired there', () => {
     const root = join(tmpRoot, 'bookclub');
     mkdirSync(root, { recursive: true });
     const pa = createProjectAuthoringGlobals({ projectId: 'bookclub', projectRoot: root });
     expect(pa.writeProjectTable('books', TIPS).ok).toBe(true);
-    expect(pa.writeProjectApi('books-list/GET', "export const name = 'booksList';\nexport default async () => ({ items: [] });").ok).toBe(true);
+    expect(() => pa.writeProjectApi('books-list/GET', "export const name = 'booksList';\nexport default async () => ({ items: [] });")).toThrow(/writeProjectQuery/);
     expect(existsSync(join(root, 'database', 'books.json'))).toBe(true);
-    expect(existsSync(join(root, 'api', 'books-list', 'GET.ts'))).toBe(true);
+    expect(existsSync(join(root, 'api', 'books-list', 'GET.ts'))).toBe(false);
   });
 });

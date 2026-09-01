@@ -37,9 +37,9 @@ project the session is running in — with these synchronous writer globals (eac
 - `writeProjectTable(name, schema, rows?)` → a TABLE, optionally SEEDED with known rows at creation.
   A project with no table has no database at all, so author the table FIRST. **Prefer
   `writeProjectEntity`** (facts, not columns; the table is COMPILED) — see `model` knowledge.
-- `writeProjectApi(route, src)` → `api/<path>/<METHOD>.ts` — a typed handler (the route encodes its
-  HTTP method last, e.g. `bookings-list/GET`). **Prefer `writeProjectQuery`** for a plain list/get/
-  aggregate/create/update/toggle — its handler is GENERATED; keep `writeProjectApi` for the rest.
+- `writeProjectQuery(name, query)` → `api/<name>.query.json` plus its generated
+  `api/<path>/<METHOD>.ts` handler. **Every endpoint uses this declarative path**; use declared
+  relations with `include`/row `compute` for parent-child work and extend the IR if needed.
 - `writeProjectView(route, spec)` → `views/<route>.view.json` — a PAGE, as a spec object.
 - `writeProjectViewLayout(prefix, spec)` → a nested LAYOUT framing every route under `prefix`, with
   one `{ kind: 'outlet' }` where the child page draws.

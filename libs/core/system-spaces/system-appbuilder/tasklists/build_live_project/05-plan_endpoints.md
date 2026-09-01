@@ -101,7 +101,7 @@ Each endpoint is `{ name, route, purpose, tables, fields, input? }`:
 Read endpoints return `{ items: [...] }` (an aggregate is the single summary at `items[0]`), so plan
 read endpoints the pages consume as `data.items`.
 
-## DECLARATIVE IS THE DEFAULT. A hand-written endpoint must EARN its place.
+## DECLARATIVE IS THE ONLY ENDPOINT PATH
 
 Measured across ten generated apps: every one hand-wrote **7 to 16** TypeScript endpoints. In the
 error census of those builds, **32% of all errors are the writer rejecting a hand-written endpoint**
@@ -109,28 +109,23 @@ and a further **27% are typecheck failures on model-written TypeScript** — so 
 come from writing a handler by hand. A declarative query is a JSON object: it cannot fail typecheck,
 it cannot be rejected by the writer, and it cannot disagree with its own contract.
 
-So the rule is not "mark the plain ones declarative". It is: **plan every endpoint declarative unless
-you can name the specific thing the query IR cannot express** — a cross-table lookup, a grouped
-breakdown, a date/timezone pick, a classification label. If you cannot name it, it is declarative.
-State the reason in `purpose` for any endpoint you leave hand-written, so the choice is reviewable
-rather than accidental.
+**Plan every endpoint with `declarative: true` and complete query IR.** `12-implement_endpoints` calls
+only `writeProjectQuery`; hand-written TypeScript handlers do not exist. If a proposed behavior does
+not fit the current IR, stop and extend the declarative mechanism — do not omit `declarative` or retain
+a bespoke path.
 
-## Mark the PLAIN endpoints declarative — they get a GENERATED handler, not a hand-written one
+Parent/child work is already declarative. `04-plan_tables` must declare the relationship on the parent,
+e.g. `ingredients: { hasMany: 'ingredients', via: 'recipe_id' }`. Use
+`include: ['ingredients']` to attach child rows, or
+`compute: { ingredientCount: { count: '$ingredients.id' } }` to count them. A relation referenced by a
+row compute is included automatically, but it must be declared. This covers recipe detail/list,
+exercise summaries, workout lists, and workout detail without a TypeScript join.
 
-Most endpoints in a typical app are a plain filtered/sorted list, a get-by-id, a straightforward sum/
-count/avg aggregate, a create, an update, a **delete**, or a toggle — with NO cross-table lookup, NO
-grouped breakdown, NO date/timezone-based pick, and NO classification label. **Every ordinary DELETE
-MUST be declarative with `kind: 'delete'`**: do not leave it for a hand-written handler merely because it
-is destructive. It has no body and no `set`; its `[id]` route segment (or a declarative `where` clause)
-identifies the row. Only an explicitly required operation the query IR cannot express belongs on the
-bespoke path. For exactly those, add
-`declarative: true` plus the IR fields below; `12-implement_endpoints` then calls `writeProjectQuery`
-instead of hand-writing a TS module, and the handler is GENERATED straight from this same plan — it
-cannot disagree with its own contract, so the handler↔contract mismatches this file spends most of its
-words guarding against (an invented field, a re-cased column, a body key nothing sends) stop being
-possible for these endpoints. Keep every OTHER endpoint (cross-table lookups, grouped totals, date
-picks, labels — everything §"ONE SECTION, ONE ENDPOINT" above describes) on the existing hand-written
-path; the declarative IR cannot express them and must not be forced to.
+## Mark every endpoint declarative — it gets a GENERATED handler
+
+Plain lists, gets, aggregates, creates, updates, deletes, and toggles all carry `declarative: true` plus
+the IR fields below. **Every DELETE is declarative with `kind: 'delete'`**: it has no body or `set`, and
+its `[id]` route segment (or declarative `where` clause) identifies the row.
 
 ```typescript
 {
@@ -208,9 +203,9 @@ The declarative IR shape (`kind`/`entity`/`where`/`order`/`limit`/`include`/`com
 `where` op set (`= != in not-in gt gte lt lte contains is-null not-null`) rather than guessing. `compute`
 is a closed formula AST over `add sub mul div min max round coalesce` (arithmetic) and
 `sum count avg first` (aggregation over a row's `include`d relation, or — inside an `aggregate` — over
-the whole filtered set); it is NOT TypeScript, and a formula that does not fit this set (a cross-table
-lookup, a grouped breakdown, a conditional label) is exactly the signal to leave the endpoint OFF this
-declarative path and hand-write it in `12-implement_endpoints` instead.
+the whole filtered set); it is NOT TypeScript. If a requirement truly does not fit this closed data
+shape, stop and extend the IR before resolving the plan; never route around it with a hand-written
+handler.
 
 ## ONE SECTION, ONE ENDPOINT — shape the endpoint for the view that reads it
 
@@ -305,16 +300,8 @@ currentTask.resolve({
       kind: 'list', entity: 'job',
       order: [ { field: 'createdAt', dir: 'desc' } ],
     },
-    // A BESPOKE endpoint — cross-table lookup / grouped breakdown / date pick / label. No `declarative`
-    // key at all (never `declarative: false` — simply omit it), so `implement_endpoints` hand-writes it.
-    {
-      name: '<unique-hyphen-id>',
-      route: '<path>/GET',
-      purpose: '<what it returns or does>',
-      tables: [ '<table from plan_tables.tables>' ],
-      // Exact keys of items[0], verbatim — snake_case table columns for a list, computed keys for an aggregate:
-      fields: [ 'id: string', 'amount_usd: number', '<real column or computed key>: <type>' ],
-    },
+    // Every endpoint is declarative. Use declared relations plus include/compute for parent-child
+    // work; if a future requirement does not fit the IR, extend the IR before this plan resolves.
   ],
 });
 ```

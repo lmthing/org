@@ -211,6 +211,14 @@ describe('validateQueryIr', () => {
     );
     expect(res.errors.join(' ')).toMatch(/no relation "nope" on "job"/);
   });
+
+  it('rejects an undeclared relation implicitly referenced by a row compute', () => {
+    const res = validateQueryIr(
+      { name: 'x', kind: 'list', entity: 'job', route: 'x', compute: { missingCount: { count: '$missing.id' } } },
+      TABLES,
+    );
+    expect(res.errors.join(' ')).toMatch(/compute\.missingCount: no relation "missing" on "job"/);
+  });
 });
 
 // ── Generation: parse + typecheck every kind ─────────────────────────────────
@@ -434,6 +442,46 @@ describe('generateQueryHandler — end-to-end execution against a real project d
     expect(items[0].partsTotalMinor).toBe(2000);
     expect(items[1].id).toBe(j1.id);
     expect(items[1].partsTotalMinor).toBe(1500);
+  });
+
+  it('covers all five formerly freeform parent/child endpoint shapes declaratively', async () => {
+    const root = await scratch();
+    const queries: QueryIr[] = [
+      // recipes-detail: read one parent and attach its children.
+      { name: 'recipes-detail', kind: 'get', entity: 'job', route: 'recipes/[id]', include: ['parts'] },
+      // recipes/list: read parent rows and count each child collection. `parts` is implicit.
+      { name: 'recipes-list', kind: 'list', entity: 'job', route: 'recipes/list', compute: { ingredientCount: { count: '$parts.id' } } },
+      // exercise-summary: a parent summary is a get plus a child count.
+      { name: 'exercise-summary', kind: 'get', entity: 'job', route: 'exercises/[id]/summary', compute: { setCount: { count: '$parts.id' } } },
+      // workout-list: list parents with per-parent child counts.
+      { name: 'workout-list', kind: 'list', entity: 'job', route: 'workouts/list', compute: { exerciseCount: { count: '$parts.id' } } },
+      // workouts/[id]/detail: read one parent and attach its children.
+      { name: 'workout-detail', kind: 'get', entity: 'job', route: 'workouts/[id]/detail', include: ['parts'] },
+    ];
+    for (const query of queries) {
+      expect(validateQueryIr(query, TABLES).errors, query.name).toEqual([]);
+      const { source } = generateQueryHandler(query, TABLES);
+      // Explicit include and formula-derived include both lower to the DB include option.
+      expect(source).toContain('include: ["parts"]');
+      await writeHandler(root, query);
+    }
+    const { runtime, project } = await runtimeFor(root);
+    const first = project.db.insert('job', { status: 'quoted', hours: 1 }) as { id: string };
+    const second = project.db.insert('job', { status: 'in-progress', hours: 2 }) as { id: string };
+    project.db.insert('part', { jobId: first.id, priceMinor: 10 });
+    project.db.insert('part', { jobId: first.id, priceMinor: 20 });
+    project.db.insert('part', { jobId: second.id, priceMinor: 30 });
+
+    const recipeDetail = await runtime.handle('GET', `/recipes/${first.id}`);
+    expect((recipeDetail.body as { items: Array<{ parts: unknown[] }> }).items[0].parts).toHaveLength(2);
+    const recipeList = await runtime.handle('GET', '/recipes/list');
+    expect((recipeList.body as { items: Array<{ ingredientCount: number }> }).items.map((r) => r.ingredientCount).sort()).toEqual([1, 2]);
+    const exerciseSummary = await runtime.handle('GET', `/exercises/${first.id}/summary`);
+    expect((exerciseSummary.body as { items: Array<{ setCount: number }> }).items[0].setCount).toBe(2);
+    const workoutList = await runtime.handle('GET', '/workouts/list');
+    expect((workoutList.body as { items: Array<{ exerciseCount: number }> }).items.map((r) => r.exerciseCount).sort()).toEqual([1, 2]);
+    const workoutDetail = await runtime.handle('GET', `/workouts/${second.id}/detail`);
+    expect((workoutDetail.body as { items: Array<{ parts: unknown[] }> }).items[0].parts).toHaveLength(1);
   });
 
   it('get by [id] returns exactly one row, envelope-wrapped', async () => {

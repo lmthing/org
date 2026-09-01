@@ -21,30 +21,20 @@ a section whose `query`/`mutation` equals `item.name`. That section's `id`, its 
 `$.field`/`item`/`keyvalue` paths, and any `input`/`param` it sends tell you exactly what fields the
 Output needs and what the Input takes. Read `database/*.json` for the real table(s) it should query.
 
-Write the module with `writeProjectApi(route, src)` where `route` is `<item.name>/<METHOD>` (`GET` for
-a read, the write verb for a mutation). **Declare `Input`/`Output` as LOCAL interfaces in the file
-itself — do NOT reference an ambient `<Name>Input`/`<Name>Output` global.** Those globals exist only
-when `emit_types` ran as part of a fresh `build_live_project` plan; this endpoint was never in that
-contract, so the global does not exist and referencing it is `Cannot find name`. A handler typed
-`(input: Input, ctx: ApiCtx): Promise<Output>` against interfaces YOU declare is exactly as sound —
-`ctx.db` is still typed to the real tables either way.
+Author a declarative query with `writeProjectQuery(item.name, query)`. Infer the real `entity`, route,
+kind, fields, and declared relations from the live tables and callers. The query route has no HTTP
+method suffix. Every read returns generated `{ items: [...] }`; a `[param]` route names the selected
+row. Parent/child data uses a declared `include` relation and row `compute`, never a handler join.
 
 ```typescript
-export const name = 'sessions-list';               // === item.name, character-for-character
-export const description = 'Upcoming class sessions';
-interface Input {}
-interface Output { items: { id: string; title: string; date_time: string }[] }
-export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {
-  const items = await ctx.db.query('class_sessions');
-  return { items };
-}
+const w = writeProjectQuery('sessions-list', {
+  kind: 'list', entity: 'class_sessions', route: 'sessions',
+  order: [{ field: 'date_time', dir: 'asc' }],
+});
 ```
 
-Every read endpoint returns `{ items: T[] }` — an aggregate returns its ONE summary object as
-`items: [summary]`, never a bare object. A `[param]` route reads the value off `input.<param>` — there
-is no `ctx.params`. A handler's only legal import is `import { HttpError } from '@app/runtime'`; no
-`@app/database`, no relative import. `w = writeProjectApi(route, src)` is `{ ok, error? }` — branch on
-`w.ok`, read `w.error`, fix the ONE thing it names, and rewrite.
+If the required behavior cannot be expressed by the query IR, resolve `ok: false` with the missing
+capability; never author a TypeScript endpoint.
 
 **`kind: 'page'`.** Read 1-2 sibling pages already on disk (`listProjectDir('views')`,
 `readProjectFile` each) for the section-shape/style this app already uses, and read `database/*.json`

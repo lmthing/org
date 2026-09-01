@@ -105,8 +105,8 @@ work.** That exact error is the compiler catching one of these: a bare `let w;` 
 statement and assigned in a later one; the `w = …` assignment sitting inside an `if`/`else` branch so
 it is not guaranteed before the next statement reads `w`; or a `const w = …` in one statement and a
 `w.ok` reference in a separate one. All three are the SAME defect, and the only fix is the one
-statement below: declare AND assign `const w = writeProjectApi(…)` (never `let w;`), read `w.error`,
-verify the landing and `currentTask.resolve(…)` all in the same block you emit in one go — do not
+statement below: declare AND assign `const w = writeProjectQuery(…)` (never `let w;`), read `w.error`,
+verify the regenerated artifact and `currentTask.resolve(…)` all in the same block you emit in one go — do not
 refer back to a `w` an earlier statement owns:
 
 ```typescript
@@ -120,8 +120,8 @@ if (!cur.ok || cur.content.length === 0) {
   // valid-but-empty skeleton that passes every gate. This is a BUILD node with the plan in scope, so
   // RECREATE the artifact from its plan entry — the matching `plan_views` entry for a view,
   // `plan_view_components` entry for a viewComponent — and write it through the same writer. If the
-  // kind cannot be rebuilt from the plan (api/hook need handler source), report the miss instead of
-  // inventing content: set `w` to a failed write so the landing check below resolves `ok: false` and
+  // kind cannot be rebuilt from the plan (a hook needs source; an API must be rebuilt from its
+  // query JSON), report the miss instead of inventing content: set `w` to a failed write so the landing check below resolves `ok: false` and
   // the gate re-lists the artifact.
   if (f.kind === 'view') {
     const rebuilt = /* the matching plan_views entry — its route + its sections */;
@@ -148,14 +148,29 @@ if (!cur.ok || cur.content.length === 0) {
   const shell = JSON.parse(cur.content) as ShellSpec;   // the REAL type
   // …edit `shell` (nav targets must be real routes; a [param] route is never a nav item)…
   w = writeProjectViewShell(shell);
-} else {
-  // api / hook — real TypeScript. Correct the named lines; NEVER resubmit the same string.
+} else if (f.kind === 'hook') {
+  // A hook is source: correct the named lines; NEVER resubmit the same string.
   const fixed = cur.content; // replace with cur.content corrected for f.errors
-  w = f.kind === 'hook'
-    ? writeProjectHook(f.path.replace(/^hooks\//, '').replace(/\.ts$/, ''), fixed)
-    : writeProjectApi(f.path.replace(/^api\//, '').replace(/\.ts$/, ''), fixed);
+  w = writeProjectHook(f.path.replace(/^hooks\//, '').replace(/\.ts$/, ''), fixed);
+} else {
+  // An API handler is generated. Recover its source query name from the generated banner, correct
+  // that JSON IR, then regenerate with writeProjectQuery — never edit api/<route>/<METHOD>.ts.
+  const match = cur.content.match(/@generated from api\/([a-z][a-z0-9-]*)\.query\.json/);
+  if (!match) {
+    w = { ok: false, error: 'API handler is not a generated query; report the missing IR rather than writing TypeScript' };
+  } else {
+    const queryFile = `api/${match[1]}.query.json`;
+    const stored = readProjectFile(queryFile);
+    if (!stored.ok || !stored.content) {
+      w = { ok: false, error: `missing declarative source ${queryFile}` };
+    } else {
+      const query = JSON.parse(stored.content);
+      // …correct query for f.errors (columns, relations, formula, route) before regenerating…
+      w = writeProjectQuery(match[1], query);
+    }
+  }
 }
-// VERIFY the fix LANDED before claiming it — a writer that said ok AND a file that changed on disk.
+// VERIFY the fix LANDED before claiming it — a writer that said ok AND a regenerated file on disk.
 const landed = w.ok && readProjectFile(f.path).content !== cur.content;
 currentTask.resolve({ path: f.path, ok: landed });
 ```
