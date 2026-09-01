@@ -342,6 +342,48 @@ export async function run(ctx: Ctx, inputs: Record<string, unknown>): Promise<Re
     }
   }
 
+  // (C) THE BUILD FLOOR — an app that is still the NEWBORN SCAFFOLD is not a built app.
+  //
+  // Every other gate here answers "does what is on disk work". None answers "did anything get
+  // BUILT". A freshly-scaffolded project already ships ONE view — `views/index.view.json`, a single
+  // full-height `chat` section on the project's own `thing` agent (`libs/cli/src/server/projects.ts`
+  // `#newbornIndexViewSpec`) — and that placeholder typechecks, mounts and renders perfectly. So a
+  // build that produced NOTHING is indistinguishable from a working app to every check above: the
+  // zero-artifact guard in (A) sees `checked: 1`, not 0, and `POST .../app/check` answers
+  // `{ok:true, built:true, routes:["/"]}` — measured, not hypothesised, on a scaffolded-then-untouched
+  // project. That is what shipped as a "successful" reading-list build whose only page was the chat
+  // placeholder.
+  //
+  // The signal is exact rather than heuristic: the builder REPLACES the newborn index as soon as it
+  // authors a real page, so "the ONLY view is the untouched newborn chat index" cannot describe any
+  // app this tasklist actually built.
+  const viewPaths = (await walkFiles(ctx, 'views')).filter((p) => p.endsWith('.view.json'));
+  let stillNewborn = viewPaths.length === 1;
+  if (stillNewborn) {
+    try {
+      const spec = JSON.parse(await read(ctx, viewPaths[0] as string)) as {
+        route?: string;
+        sections?: Array<{ kind?: string }>;
+      };
+      const sections = spec.sections ?? [];
+      stillNewborn = spec.route === 'index' && sections.length === 1 && sections[0]?.kind === 'chat';
+    } catch {
+      stillNewborn = false;
+    }
+  }
+  if (stillNewborn) {
+    add(SHELL_SPEC_PATH, {
+      phase: 'gate',
+      message:
+        'nothing was built: the app is still the newborn scaffold — its only view is the placeholder ' +
+        `chat index every new project is created with, and database/ holds ${tables.length} table(s). ` +
+        'This passes typecheck, app-wide view validation and the render smoke, because the placeholder ' +
+        'itself is valid; it is not a page any part of this build authored. Do not "fix" this file — ' +
+        'the planned tables, endpoints and views never reached disk, so re-run the implement steps ' +
+        'and report honestly in `finalize` if they cannot.',
+    });
+  }
+
   // ORDER MATTERS: shell and component paths must be tested BEFORE the generic view fallback, or a
   // component/shell would be handed to the fixer as a view.
   const kindOf = (path: string): string => {

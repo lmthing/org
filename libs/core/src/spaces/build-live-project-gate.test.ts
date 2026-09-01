@@ -143,7 +143,62 @@ const CLEAN = {
   'shell.view.json': '{"nav":[]}',
 };
 
+/** The scaffold every new project is born with — `libs/cli/src/server/projects.ts#newbornIndexViewSpec`
+ *  plus `#NEWBORN_SHELL_SPEC`. No table, no endpoint, one placeholder chat page. */
+const NEWBORN = {
+  'views/index.view.json':
+    '{"route":"index","title":"Reading List","sections":[{"id":"chat","kind":"chat","agent":"thing","height":"full"}]}',
+  'shell.view.json': '{"assistant":false}',
+};
+
 describe('build_live_project — the verify gate (16-verify.ts)', () => {
+  it('flags a build that produced NOTHING — the app is still the newborn scaffold', async () => {
+    // Measured, not hypothesised: `runProjectAppCheck` answers `{ok:true,built:true,routes:["/"]}` on
+    // exactly this project, because the placeholder chat page is genuinely valid. Every gate in this
+    // node agreed with it — `validateAppViews` sees `checked: 1`, so even the zero-artifact guard
+    // passes — and a reading-list build whose only page was that placeholder shipped as a success.
+    const r = await run(ctxFor(NEWBORN), {});
+    expect(r.ok).toBe(false);
+    expect(findingsFor(r, 'shell.view.json')).toContain('nothing was built');
+    // It must NOT read as a broken file, or `fix` would edit the placeholder instead of re-running
+    // the implement steps.
+    expect(findingsFor(r, 'shell.view.json')).toContain('Do not "fix" this file');
+  });
+
+  it('does NOT flag a real app that happens to have one view', async () => {
+    // The floor is exact, not a "small app" heuristic: one REAL page is a legitimate app. Only the
+    // untouched newborn chat index — route `index`, a single `chat` section — counts as unbuilt.
+    const r = await run(
+      ctxFor({
+        'database/costs.json': '{}',
+        'api/costs-list/GET.ts': LIST_ENDPOINT,
+        'views/costs.view.json':
+          '{"route":"costs","sections":[{"id":"costs","kind":"list","endpoint":"costs-list"}]}',
+        'shell.view.json': '{"nav":[]}',
+      }),
+      {},
+    );
+    expect(findingsFor(r, 'shell.view.json')).not.toContain('nothing was built');
+  });
+
+  it('does NOT flag a real app whose index page is a chat among other pages', async () => {
+    // A built app may legitimately KEEP a chat index; what makes the scaffold the scaffold is that
+    // it is the ONLY view.
+    const r = await run(
+      ctxFor({
+        'database/costs.json': '{}',
+        'api/costs-list/GET.ts': LIST_ENDPOINT,
+        'views/index.view.json':
+          '{"route":"index","sections":[{"id":"chat","kind":"chat","agent":"thing"}]}',
+        'views/costs.view.json':
+          '{"route":"costs","sections":[{"id":"costs","kind":"list","endpoint":"costs-list"}]}',
+        'shell.view.json': '{"nav":[]}',
+      }),
+      {},
+    );
+    expect(findingsFor(r, 'shell.view.json')).not.toContain('nothing was built');
+  });
+
   it('passes a clean project', async () => {
     const r = await run(ctxFor(CLEAN), {});
     expect(r.offending).toEqual([]);
