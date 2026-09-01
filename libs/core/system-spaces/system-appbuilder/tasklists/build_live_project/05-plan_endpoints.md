@@ -62,7 +62,12 @@ Each endpoint is `{ name, route, purpose, tables, fields, input? }`:
   waits on itself forever: the page answers with loading placeholders and issues ZERO requests, and
   every gate (typecheck, smoke render, validation) still passes because a permanent skeleton is valid
   markup.
-- `fields` — the EXACT keys of ONE item in the response (`items[0]`), each as `'key: type'`. The TYPE
+- `fields` — the EXACT keys of ONE item in the response (`items[0]`), each as `'key: type'`. **For a
+  LIST endpoint one item is ONE RECORD**, so `fields` are that record's own columns
+  (`['id: string', 'name: string']`) — NEVER a wrapper holding the collection
+  (`['recipes: RecipeItem[]']`). A wrapper makes `items` one element long, so the list section renders a
+  single BLANK row while the data sits one level below it: it typechecks, the endpoint 200s, and the
+  page looks empty with no `[error]` anywhere. Only a genuine aggregate/dashboard has one item. The TYPE
   half is REQUIRED and binding: a host-run `emit_types` writes these into the project's `.d.ts` BEFORE
   any handler or page is authored, so the compiler — not a later reviewer — is what catches a field
   the page reads at the wrong type. Use real TypeScript (`string`, `number`, `boolean`, `string[]`,
