@@ -144,6 +144,9 @@ function invokedRepair(turn) { return JSON.stringify(turn?.events ?? []).include
 function voided(log, turnError) {
   // The scenario runner's explicit marker is authoritative. Provider saturation/outage is also
   // treated as VOID, never as an application result, if a local runner reports it this way.
+  // A timed-out lane is VOID, not FAIL: its log is a PARTIAL run, so scoring it would understate the
+  // work attempted and feed a truncated census into the trend.
+  if (/RUN-TIMEOUT/.test(turnError ?? '')) return true;
   return /🚫\s*VOID\b|\bVOID\s*[—-]\s*this run is NOT a result/i.test(log) || /provider unreachable|429\s*\{?"?code"?\s*:\s*"?1302/i.test(`${log}\n${turnError ?? ''}`);
 }
 function prompt(idea) {
@@ -188,6 +191,8 @@ async function preflightSlots() {
     : `PREFLIGHT-VOID ${r.slot} (${r.model}): ${r.error?.split('\\n')[0] ?? 'unresolvable model'}`);
   return results;
 }
+const RUN_TIMEOUT_MS = Number(process.env.PARALLEL_BUILD_TIMEOUT_MS ?? 45 * 60 * 1000);
+
 async function execute(job, slot) {
   const reserved = nextIntegerDir(RUNS);
   const run = { ...reserved, idea: job.idea, slot, dataDir: join(reserved.dir, 'data'), logFile: join(reserved.dir, 'sessions.log'), port: await port() };
@@ -202,7 +207,15 @@ async function execute(job, slot) {
     const projectId = project.id ?? project.project?.id ?? `parallel-build-${run.id}`;
     const thing = new ThingSession(pod, { projectId }); // no resumeSessionId: always a new chat
     await thing.start();
-    turn = await thing.send(prompt(run.idea));
+    // A lane CAN hang: run 10 went silent mid-turn with 0% CPU and never returned, blocking the whole
+    // batch indefinitely — fatal for unattended cycles. Bound it, and report a timeout as its own
+    // outcome (never as a build FAIL, which would poison the census with a partial run).
+    turn = await Promise.race([
+      thing.send(prompt(run.idea)),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`RUN-TIMEOUT after ${Math.round(RUN_TIMEOUT_MS / 60000)}m — lane hung`)), RUN_TIMEOUT_MS),
+      ),
+    ]);
   } catch (e) { turnError = String(e?.stack ?? e); }
   finally { stop(run); }
   const log = existsSync(run.logFile) ? readFileSync(run.logFile, 'utf8') : '';
