@@ -134,15 +134,18 @@ if (!cur.ok || cur.content.length === 0) {
   }
 } else if (f.kind === 'view') {
   // A view is JSON: parse, correct the ONE field each error names, write the OBJECT back.
-  const spec = JSON.parse(cur.content) as { route: string; sections: unknown[] };
+  // Cast to the REAL ambient type. A hand-written shape (`as { route: string; sections: unknown[] }`)
+  // becomes the rejection verbatim — `Argument of type '{ route: string; sections: unknown[]; }' is
+  // not assignable to parameter of type 'ViewSpec'` — and no retry of the same cast can pass.
+  const spec = JSON.parse(cur.content) as ViewSpec;   // the REAL type — never a hand-written shape
   // …edit `spec` for every entry in f.errors — never blank it, never drop a section…
   w = writeProjectView(spec.route, spec);
 } else if (f.kind === 'viewComponent') {
-  const def = JSON.parse(cur.content) as { name: string };
+  const def = JSON.parse(cur.content) as ViewComponentSpec;   // the REAL type
   // …edit `def` for every entry in f.errors…
   w = writeProjectViewComponent(def.name, def);
 } else if (f.kind === 'shell') {
-  const shell = JSON.parse(cur.content) as Record<string, unknown>;
+  const shell = JSON.parse(cur.content) as ShellSpec;   // the REAL type
   // …edit `shell` (nav targets must be real routes; a [param] route is never a nav item)…
   w = writeProjectViewShell(shell);
 } else {

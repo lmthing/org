@@ -77,14 +77,17 @@ if (!cur.ok || cur.content.length === 0) {
   // genuinely missing file is a toAuthor job, not a guess).
   w = { ok: false, error: 'no artifact to fix — report the miss to diagnose' };
 } else if (f.kind === 'view') {
-  const spec = JSON.parse(cur.content) as { route: string; sections: unknown[] };
+  // Cast to the REAL ambient type. A hand-written shape (`as { route: string; sections: unknown[] }`)
+  // becomes the rejection verbatim — `Argument of type '{ route: string; sections: unknown[]; }' is
+  // not assignable to parameter of type 'ViewSpec'` — and no retry of the same cast can pass.
+  const spec = JSON.parse(cur.content) as ViewSpec;   // the REAL type — never a hand-written shape
   // …edit `spec` for every entry in f.errors — never blank it, never drop a section…
   w = writeProjectView(spec.route, spec);
 } else if (f.kind === 'viewComponent') {
-  const def = JSON.parse(cur.content) as { name: string };
+  const def = JSON.parse(cur.content) as ViewComponentSpec;   // the REAL type
   w = writeProjectViewComponent(def.name, def);
 } else if (f.kind === 'shell') {
-  const shell = JSON.parse(cur.content) as Record<string, unknown>;
+  const shell = JSON.parse(cur.content) as ShellSpec;   // the REAL type
   w = writeProjectViewShell(shell);
 } else {
   const fixed = cur.content; // replace with cur.content corrected for f.errors
