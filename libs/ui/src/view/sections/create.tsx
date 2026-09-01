@@ -26,6 +26,21 @@
 import * as React from 'react'
 import * as Prim from '../../elements/primitives/index'
 import type { Arg, CreateSection } from '../types'
+
+/**
+ * A prefill source is either the record itself, or the standard `{ items: T[] }` envelope every
+ * endpoint returns — in which case the record is `items[0]`, exactly as a `detail` section reads it.
+ * Without this, field-name matching runs against the envelope, finds only `items`, and the form
+ * silently stays empty; no `from` binding can reach the index because the binding PATH is
+ * dot-segments only.
+ */
+function unwrapRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  if (Array.isArray(value)) return (value[0] ?? undefined) as Record<string, unknown> | undefined
+  const items = (value as { items?: unknown }).items
+  if (Array.isArray(items)) return (items[0] ?? undefined) as Record<string, unknown> | undefined
+  return value as Record<string, unknown>
+}
 import { resolveInputs, resolveOptional, type Scope } from '../bind'
 import { stringify } from '../format'
 import { useViewMutation, useViewQuery, useViewRuntime } from '../runtime'
@@ -64,13 +79,20 @@ export function CreateSectionView({ section, scope }: { section: CreateSection; 
     enabled: onMount && prefillInputs.ready,
   })
 
+    // A prefill source is either the record itself or the standard single-record envelope.
   const seeded = React.useRef(false)
   React.useEffect(() => {
     if (seeded.current || !onMount || prefillQuery.data === undefined) return
     seeded.current = true
-    const incoming = prefill?.from
-      ? (resolveOptional(prefill.from, { ...scope, self: prefillQuery.data }) as Record<string, unknown>)
-      : (prefillQuery.data as Record<string, unknown>)
+    const resolved = prefill?.from
+      ? (resolveOptional(prefill.from, { ...scope, self: prefillQuery.data }) as unknown)
+      : (prefillQuery.data as unknown)
+    // Every endpoint returns the `{ items: T[] }` envelope, and the record's fields live at
+    // `items[0]` — the same unwrap a `detail` section does. Field-name matching against the raw
+    // envelope finds only `items`, so a prefill would silently seed NOTHING, and no binding can
+    // express the index (PATH is dot-segments only, no `[0]`). Unwrap a single-record envelope
+    // here so `prefill` works against an ordinary endpoint.
+    const incoming = unwrapRecord(resolved)
     if (incoming && typeof incoming === 'object') {
       setValues((prev) => mergeFillEmpty(prev, incoming, fields))
     }
