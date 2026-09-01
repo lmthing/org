@@ -67,12 +67,28 @@ export function readViewRoutes(projectRoot) {
       if (!entry.endsWith('.view.json')) continue;
       try {
         const spec = JSON.parse(readFileSync(full, 'utf8'));
-        if (typeof spec?.route === 'string') out.push({ route: spec.route, file: relative(projectRoot, full) });
+        if (typeof spec?.route === 'string') out.push({ route: spec.route, file: relative(projectRoot, full), spec });
       } catch { /* a malformed spec is the writer's problem; it fails its own gate */ }
     }
   };
   walk(root);
   return out;
+}
+
+/**
+ * Query names used as a list's OWN row collection. A `from` path deliberately opts into an
+ * embedded collection on a summary/detail response, so it is not a direct-list caller.
+ */
+export function directListQueries(viewRoutes) {
+  const names = new Set();
+  for (const { spec } of viewRoutes) {
+    for (const section of Array.isArray(spec?.sections) ? spec.sections : []) {
+      if (section?.kind !== 'list' || typeof section.query !== 'string') continue;
+      if (typeof section.from === 'string' && section.from.trim()) continue;
+      names.add(section.query);
+    }
+  }
+  return names;
 }
 
 /** Every endpoint under `<projectRoot>/api`, as `{ name, method, routePath }`. */
@@ -111,7 +127,7 @@ const hasParam = (s) => /\[[A-Za-z0-9_]+\]|:[A-Za-z0-9_]+/.test(String(s));
  * never guessed at with `/recipes/undefined`, which would invent a failure, and never counted as a
  * pass, which would hide one.
  */
-export async function probeEndpoints({ base, projectId, endpoints, timeoutMs = 15000 }) {
+export async function probeEndpoints({ base, projectId, endpoints, directListQueries = new Set(), timeoutMs = 15000 }) {
   const findings = [];
   const responses = {};
   let measured = 0, skipped = 0;
@@ -145,6 +161,8 @@ export async function probeEndpoints({ base, projectId, endpoints, timeoutMs = 1
         responses[ep.name] = body;
         const wrapped = wrapperEnvelopeFinding(ep.name, body);
         if (wrapped) findings.push(wrapped);
+        const summaryAsList = directListSummaryFinding(ep.name, body, directListQueries);
+        if (summaryAsList) findings.push(summaryAsList);
       } catch { /* a non-JSON body is the writer's gate, not this one */ }
     } catch (e) {
       measured++;
@@ -183,6 +201,34 @@ export function wrapperEnvelopeFinding(name, body) {
     message: `${name} returned its collection WRAPPED as one item — items[0].${keys[0]} holds ${inner.length} records. `
       + `A list section iterates \`items\`, so it sees ONE element and renders ONE blank row over ${inner.length} real records. `
       + `Return one item PER RECORD: { items: [ {...}, {...} ] }.` };
+}
+
+/**
+ * A broader wrapper shape that only becomes broken in a direct list caller.
+ *
+ * A summary can legitimately be one item with scalar metrics plus an embedded `rows` array; that
+ * is how stats/detail sections expose a child collection, and a list with `from` intentionally
+ * consumes it. It is broken only when a `kind: 'list'` names this endpoint with no `from`: that
+ * section iterates the outer singleton and renders the summary as one record. This is run 9's
+ * `recipes-list` shape (`name`/totals plus `recipes: [...]`), which the one-key wrapper rule cannot
+ * see. The caller set is therefore part of the signature, not a heuristic about aggregate names.
+ */
+export function directListSummaryFinding(name, body, directLists = new Set()) {
+  if (!directLists.has(name)) return null;
+  const items = Array.isArray(body?.items) ? body.items : null;
+  if (!items || items.length !== 1) return null;
+  const summary = items[0];
+  if (!summary || typeof summary !== 'object' || Array.isArray(summary)) return null;
+  const entries = Object.entries(summary);
+  const collections = entries.filter(([, value]) =>
+    Array.isArray(value) && value.every((row) => row && typeof row === 'object' && !Array.isArray(row)));
+  const scalarFields = entries.filter(([, value]) => !Array.isArray(value));
+  if (!collections.length || !scalarFields.length) return null;
+  const fields = collections.map(([key, value]) => `${key}[${value.length}]`).join(', ');
+  return { code: 'directListSummary', route: name, severity: 'error',
+    message: `${name} returned one summary object (${scalarFields.map(([key]) => key).join(', ')}) with embedded collection(s) ${fields}, `
+      + 'but a list section calls it without `from`. That section iterates outer `items` and renders the summary as ONE nonsense row. '
+      + 'Return one item per record, or keep this aggregate and set the list section `from` to its embedded collection.' };
 }
 
 /**
@@ -263,7 +309,7 @@ export async function appSmoke({ base, runtimeRoot, projectId: hintedId, project
       projectId, endpoints: null, render: null, findings: [] };
   }
 
-  const probe = await probeEndpoints({ base, projectId, endpoints });
+  const probe = await probeEndpoints({ base, projectId, endpoints, directListQueries: directListQueries(viewRoutes) });
 
   const routes = viewRoutes.map(({ route, file }) => ({
     route: `/${toColonRoute(route).replace(/^\/+/, '')}`,
