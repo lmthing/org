@@ -21,7 +21,8 @@ Each endpoint is `{ name, route, purpose, tables, fields, input? }`:
   EXACT string is BOTH the endpoint module's `export const name` AND what pages pass to `useApi(...)`.
   **This is the ONLY node that assigns names; every downstream node uses them verbatim and never
   re-derives one.** No two endpoints may share a `name`, and no two may share a `route` — scan your own
-  list before resolving and rename any collision.
+  list before resolving and rename any collision. A delete is still ONE endpoint: never plan both
+  `recipes-delete/[id]/DELETE` and `recipes/[id]/DELETE` (or any second route) with the same name.
 - `route` — the file route with its HTTP method LAST (`cost-lines/GET`, `bookings/[id]/PATCH`); methods
   GET|POST|PUT|PATCH|DELETE.
 - `tables` — the table name(s) it reads/writes, copied VERBATIM from `plan_tables.tables`. The whole

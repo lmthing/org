@@ -14,6 +14,16 @@ You are handed a UI slice — a page (a route + what it should show), a reusable
 navigation — against endpoints that already exist. Author the SPEC and stop. Narrate with
 `// comments`.
 
+**A WHAT should show — but a SLICE, not a plan.** If it names a page's data sources the way a plan
+does (`endpoints`, or sections that carry an `endpoint:`/`bindings:` note), that is PLANNING
+metadata, never spec fields. A section's read binding is **`query`**, its write binding is
+**`mutation`** — a planned `endpoint` becomes the section's `query` (a read) or `mutation` (a write),
+and a planned `bindings` array becomes the `item:`/`cards:`/`fields:` shapes. There is no
+`endpoint:` and no `bindings:` on any section kind; writing either is rejected by name
+(`'endpoint' does not exist on type 'SectionSpec'`, `sections[0]: "endpoint" is not a property here.
+Properties: cards, id, input, kind, poll, query, title`). Type the section's read/write with
+`query:`/`mutation:`, never the plan's word.
+
 **`views:write` is your only authoring grant.** There is no freehand-TSX writer anywhere in the
 system — a page is a view spec (`writeProjectView`), a reusable shape is `writeProjectViewComponent`.
 There is no medium in which you could author UI incorrectly.

@@ -47,7 +47,9 @@ schema, put no item in `data` and explain the missing information in the final r
 guessing.
 
 **Naming conventions carry over unchanged**: table names are snake_case identifiers; endpoint routes
-encode the HTTP method last (`items-list/GET`); component names are PascalCase; a `[param]` page
+encode the HTTP method last (`items-list/GET`), and an endpoint that reads/edits ONE record carries
+that record's `[id]` as a route segment (`items/[id]/GET`, `items/[id]/PATCH`) — never a flat
+`items-detail/GET`; component names are PascalCase; a `[param]` page
 segment is a route dynamic. Every endpoint you list must be read by some view you also list (or an
 existing one), and every mutation-shaped change (a new toggle, a new create action) needs its own
 endpoint — the spec vocabulary has no way to flip a value client-side.
@@ -59,7 +61,9 @@ currentTask.resolve({
   // A concept already on disk is named with its REAL existing name and existing: true — never
   // invented under a fresh one. Only list what `query` actually needs; nothing else.
   tables: [ { name: '<table_slug>', purpose: '<what changes/why>', existing: true } ],
-  endpoints: [ { route: '<name>/GET', purpose: '<what it must now return/do>', existing: false } ],
+  endpoints: [ { route: '<path>/GET', purpose: '<what it must now return/do>', existing: false } ],
+  //                   ^ param-less for a collection read ('items-list/GET'); the record's [id] in the
+  //                     path for a one-record endpoint ('items/[id]/GET') — never 'items-detail/GET'.
   components: [ { name: '<ComponentName>', purpose: '<the shape it renders>', existing: false } ],
   views: [ { route: '<page-route>', purpose: '<what changes on this page>', existing: true } ],
   data: [ { table: '<real table>', rows: [ { /* concrete values */ } ] } ],

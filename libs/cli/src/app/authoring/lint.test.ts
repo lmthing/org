@@ -35,6 +35,19 @@ describe('lintApiHandler', () => {
     const existing = new Map([['itemsList', 'api/other/GET.ts']]);
     expect(lintApiHandler(named, { existingNames: existing })).toMatch(/already used by api\/other\/GET\.ts/);
   });
+  it('carries the repair when the collision is the SAME endpoint at two route spellings', () => {
+    // Run 13: the plan pinned `recipes-detail/GET`; a later node re-spelled it `recipes/[id]/GET`;
+    // the duplicate-name rejection then read "pick a different name", which steered the model to
+    // keep the flat file. The rejection must carry the move-the-endpoint repair instead.
+    const existing = new Map([['recipesDetail', 'api/recipes-detail/GET.ts']]);
+    const msg = lintApiHandler(named.replace(/itemsList/, 'recipesDetail'), {
+      existingNames: existing,
+      writeRoute: 'recipes/[id]/GET',
+    });
+    expect(msg).toMatch(/already used by api\/recipes-detail\/GET\.ts \(you are writing recipes\/\[id\]\/GET\)/);
+    expect(msg).toMatch(/deleteProjectApi\('recipes-detail\/GET'\)/); // route form, executable as-is
+    expect(msg).toMatch(/never a new name/);
+  });
   it('allows a name that belongs to no other file', () => {
     expect(lintApiHandler(named, { existingNames: new Map() })).toBeNull();
   });
@@ -102,6 +115,18 @@ describe('apiHandlerTypingError — the handler boundary must be REAL, never `an
       '  return { items: [{ total_monthly: 5 }] };\n' +
       '}';
     expect(apiHandlerTypingError(src, { projectRoot })).toBeNull();
+  });
+
+  it('REJECTS another endpoint’s real-looking Output type and says why it is wrong', () => {
+    const src =
+      "export const name = 'dashboard-stats';\n" +
+      'export type Input = DashboardStatsInput;\n' +
+      'export default async function handler(input: Input, ctx: ApiCtx): Promise<ExercisesDeleteOutput> {\n' +
+      '  return { items: [{ total_monthly: 5 }] } as never;\n' +
+      '}';
+    const msg = apiHandlerTypingError(src, { projectRoot });
+    expect(msg).toMatch(/DashboardStatsOutput/);
+    expect(msg).toMatch(/ANOTHER endpoint/);
   });
 
   it('ACCEPTS the doc form — `export type Output = <Base>Output` + `Promise<Output>` (aliased)', () => {

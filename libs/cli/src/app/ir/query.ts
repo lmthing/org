@@ -338,10 +338,18 @@ export function validateQueryIr(ir: unknown, tables: Map<string, TableSchema>): 
     }
   }
   if (kind === 'update' && routeParams(String(q.route)).length === 0 && !(q.where && (q.where as unknown[]).length)) {
-    push('an "update" needs a [param] in its route (or a "where") to identify the row to change');
+    push(
+      'an "update" needs a [param] in its route (or a "where") to identify the row to change. ' +
+        'Use a member route such as `jobs/[id]` (the handler receives `input.id`), or add a where CLAUSE ARRAY, ' +
+        'e.g. `where: [{ field: "id", op: "=", input: "id" }]` — never a bare collection route such as `jobs`.',
+    );
   }
   if (kind === 'delete' && routeParams(String(q.route)).length === 0 && !(q.where && (q.where as unknown[]).length)) {
-    push('a "delete" needs a [param] in its route (or a "where") to identify the row to remove');
+    push(
+      'a "delete" needs a [param] in its route (or a "where") to identify the row to remove. ' +
+        'Use a member route such as `jobs/[id]` (the handler receives `input.id`), or add a where CLAUSE ARRAY, ' +
+        'e.g. `where: [{ field: "id", op: "=", input: "id" }]` — never a bare collection route such as `jobs`.',
+    );
   }
   if (kind === 'toggle') {
     if (typeof q.toggleField !== 'string') push('a "toggle" needs "toggleField" (the boolean column to flip)');

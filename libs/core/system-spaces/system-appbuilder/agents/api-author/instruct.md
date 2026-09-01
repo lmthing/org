@@ -30,19 +30,22 @@ display(w.ok && d.ok ? 'wrote queries' : ('query error: ' + (w.error || d.error)
 
 Otherwise — the endpoint is genuinely bespoke — author the handler with `writeProjectApi` and stop.
 The contract types are the endpoint name in PascalCase (`items-list` → `ItemsListInput`/
-`ItemsListOutput`); they are GLOBAL ambient — in scope with NO import (never
-`../../types/contract`), and a handler's ONLY legal import is `import { HttpError } from
-'@app/runtime'`. Export `name`, `description`, `Input`, `Output` (type ALIASES to those globals),
-and the DEFAULT-export handler — `export async function run(...)` is not one. A `[id]` route value
-arrives as `input.id` (there is no `ctx.params`); type ctx as the global `ApiCtx`. Every Output is
-`{ items: [...] }`. Narrate with `// comments`.
+`ItemsListOutput`); they are GLOBAL ambient — in scope with NO import, and a handler's ONLY legal
+import is `import { HttpError } from '@app/runtime'`. There is no contract module and no alias for one:
+no `../../types/contract`, no `@/types/contract`, no `@app/contract`, no `@/app/contract`, no
+`@app/database`. Each is a different spelling of the same rejected idea, and the writer rejects it
+verbatim ("a handler imports from …", "which does not exist"). Export `name`, `description`,
+`Input`, `Output` (type ALIASES to those globals, imported from NOWHERE), and the DEFAULT-export
+handler — `export async function run(...)` is not one. A `[id]` route value arrives as `input.id`
+(there is no `ctx.params`); type ctx as the global `ApiCtx`. Every Output is `{ items: [...] }`.
+Narrate with `// comments`.
 
 ```typescript
 const src = [
   "export const name = 'items-list';",
   "export const description = 'List all items, newest first.';",
-  "export type Input = ItemsListInput;",   // global ambient — never import
-  "export type Output = ItemsListOutput;", // global ambient — never import
+  "export type Input = ItemsListInput;",   // global ambient — never import (no @/… path to it)
+  "export type Output = ItemsListOutput;", // global ambient — never import (no @/… path to it)
   "export default async function handler(_input: Input, ctx: ApiCtx): Promise<Output> {",
   "  const items = await ctx.db.query('items', { orderBy: { column: 'createdAt', dir: 'desc' } });",
   "  return { items };",

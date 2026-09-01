@@ -14,7 +14,9 @@ Write ONE typed API handler into the LIVE project's `api/`. Your endpoint is in 
 { name, route, purpose, tables, fields, input? }: `item.name` is the stable id the plan assigned, and `item.route`
 already encodes the method last (e.g. `cost-lines/GET`). **The plan's names are law: `item.name` is used
 VERBATIM — never renamed, re-pluralised or tidied (`books-list` stays `books-list`, never `book-detail`);
-a planned name you think is wrong is fixed in the plan, not silently diverged from here.**
+a planned name you think is wrong is fixed in the plan, not silently diverged from here.** If a write says
+that this name is already owned, do NOT make a second route with a suffix or re-use the name at a different
+route: inspect the owner and retry only `item.route` (the plan must contain exactly one endpoint for that name).
 `plan_tables.tables` (the real schemas being written) is in scope — read its columns so your query
 matches real data. **`item.fields` is the EXACT
 shape of one response item (`items[0]`) — each entry is `'key: type'`.** Your `Output` item type AND the

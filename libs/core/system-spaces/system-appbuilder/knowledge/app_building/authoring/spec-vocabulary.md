@@ -27,8 +27,12 @@ do not exist.** A page is a validated view spec (`writeProjectView`); a reusable
 **A plan is not a spec.** A whole-app build plans first, and the plan entry for a page
 (`{ route, purpose, endpoints, components, sections }`, its sections design notes like
 `{ id, kind, endpoint, bindings }`) is INPUT to the page writer — never its argument. Construct the
-spec fresh: plan `endpoint` becomes the section's `query`/`mutation`, plan `bindings` become the
-`item`/`cards` shapes. And author the literal INLINE, in the `writeProjectView(route, { … })` call —
+spec fresh: plan `endpoint` becomes the section's `query` (a read) or `mutation` (a write), plan
+`bindings` become the `item`/`cards` shapes. There is no `endpoint:` and no `bindings:` on any
+section kind — the plan's words are notes, and writing one into a section is the same
+conflation as passing the plan through (rejected by name: `"endpoint" is not a property here.
+Properties: cards, id, input, kind, poll, query, title`, `'endpoint' does not exist on type
+'SectionSpec'`). And author the literal INLINE, in the `writeProjectView(route, { … })` call —
 TypeScript's object-literal check (which names the exact offending property) fires only on a fresh
 literal, so a hoisted `const spec = { … }` degrades every error to a vague `Argument of type '{ … }'
 is not assignable to parameter of type 'ViewSpec'`. If you need a binding, annotate it:

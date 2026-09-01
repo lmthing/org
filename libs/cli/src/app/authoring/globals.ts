@@ -971,7 +971,7 @@ export function createProjectAuthoringGlobals(opts: {
       const cols = unknownColumnsIn(src);
       if (cols) return { ok: false, error: cols };
       // Loader contract: every endpoint needs a unique `export const name` + a default/handler fn.
-      throwLint(lintApiHandler(src, { existingNames: existingApiNames(projectRoot, safeResolve(projectRoot, target)) }));
+      throwLint(lintApiHandler(src, { existingNames: existingApiNames(projectRoot, safeResolve(projectRoot, target)), writeRoute: route }));
       // Typed boundary: the handler's `input`/return must be REAL types — never `any`/`Promise<any>` —
       // and the return must BE the contract's `<Base>Output`, so the endpoint↔page field divergence
       // that the vacuous `Promise<any>` hides (the €0.00/"undefined" dashboard defect) is caught here.
@@ -1037,7 +1037,7 @@ export function createProjectAuthoringGlobals(opts: {
 
       const cols = unknownColumnsIn(generated.source);
       if (cols) return { ok: false, error: cols };
-      throwLint(lintApiHandler(generated.source, { existingNames: existingApiNames(projectRoot, safeResolve(projectRoot, target)) }));
+      throwLint(lintApiHandler(generated.source, { existingNames: existingApiNames(projectRoot, safeResolve(projectRoot, target)), writeRoute: `${generated.apiRoute}/${generated.method}` }));
       throwLint(
         saveTypecheckError({
           projectRoot,

@@ -76,7 +76,10 @@ function illegalHandlerImport(src: string): string | null {
  * ({@link apiEndpointContractError}), a default/`handler` export (the runtime handler-module
  * contract, `api/handler-module.ts#loadHandlerFromCode`), and a project-unique name.
  */
-export function lintApiHandler(src: string, opts: { existingNames?: Map<string, string> } = {}): string | null {
+export function lintApiHandler(
+  src: string,
+  opts: { existingNames?: Map<string, string>; writeRoute?: string } = {},
+): string | null {
   const contractErr = apiEndpointContractError(src);
   if (contractErr) {
     return `api endpoint rejected (not saved): ${contractErr}. Add e.g. \`export const name = 'itemsList'\` and re-write.`;
@@ -97,9 +100,17 @@ export function lintApiHandler(src: string, opts: { existingNames?: Map<string, 
   if (name && opts.existingNames) {
     const owner = opts.existingNames.get(name);
     if (owner) {
+      // The owner path is a file (`api/items-detail/GET.ts`); `deleteProjectApi` takes the route
+      // form (`items-detail/GET`) — convert so the rejection names a command that actually runs.
+      const ownerRoute = owner.replace(/^api\//, '').replace(/\/(?:GET|POST|PUT|PATCH|DELETE)\.ts$/, '');
+      const here = opts.writeRoute ? ` (you are writing ${opts.writeRoute})` : '';
       return (
-        `api endpoint rejected (not saved): the name "${name}" is already used by ${owner} — endpoint ` +
-        'names are unique per project. Pick a different `export const name` (or edit that file).'
+        `api endpoint rejected (not saved): the name "${name}" is already used by ${owner}${here} — ` +
+        'endpoint names are unique per project, and ONE endpoint is ONE file at ONE route. If the two ' +
+        'files are the SAME endpoint at two spellings of its route (the plan re-spelled it — e.g. a ' +
+        'flat `items-detail/GET` vs the planned `items/[id]/GET`), the fix is deleteProjectApi(\'' +
+        ownerRoute + `') then re-write THIS route — never a new name, and never leaving both files. ` +
+        'If they are genuinely two different endpoints, rename this one\'s `export const name`.'
       );
     }
   }
@@ -310,11 +321,12 @@ export function apiHandlerTypingError(src: string, opts: { projectRoot?: string 
     return REJ(
       `the handler returns \`${ret ? ret.getText(sf) : '(no return annotation)'}\`, but the contract declares ` +
       `this endpoint's response as \`${outputType}\` (\`emit_types\` wrote it into types/contract.d.ts from the ` +
-      "plan's `fields`, and the page reads it via `useApi<" + outputType + '>(...)`). Return the contract type ' +
-      `so the endpoint and the page share ONE shape: \`export type Output = ${outputType};\` then ` +
-      `\`): Promise<Output>\` (or \`Promise<${outputType}>\` directly). An inline or invented Output lets this ` +
-      'endpoint drift from what the page reads — the exact divergence that ships a page rendering `undefined` ' +
-      'over real data.',
+      "plan's `fields`, and the page reads it via `useApi<" + outputType + '>(...)`). A real Output type for ' +
+      `ANOTHER endpoint (for example \`Promise<OtherEndpointOutput>\`) is still wrong here: the endpoint name ` +
+      `selects exactly \`${outputType}\`. Return the contract type so the endpoint and the page share ONE shape: ` +
+      `\`export type Output = ${outputType};\` then \`): Promise<Output>\` (or \`Promise<${outputType}>\` directly). ` +
+      'An inline or invented Output lets this endpoint drift from what the page reads — the exact divergence that ' +
+      'ships a page rendering `undefined` over real data.',
     );
   }
   return null;

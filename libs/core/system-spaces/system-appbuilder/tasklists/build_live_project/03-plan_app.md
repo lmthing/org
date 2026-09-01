@@ -80,7 +80,14 @@ from the material for every `<…>` (never leave a placeholder). Plan for an app
   every value the section shows. So plan an endpoint PER VIEW, not per table — a page with a stats
   strip and a list needs two endpoints, and a list that shows a name from another table needs that
   name as a field on its OWN endpoint. Joins and selections are the endpoint's job here, never the
-  page's. **An endpoint's `route` is a FIXED contract, set once here.** The route path and the
+  page's. **Shape the route for what identifies the record.** A collection-wide read sits at a
+  param-less route (`items-list/GET`, `orders/stats/GET`). An endpoint that reads/edits/deletes ONE
+  record takes that record's id as a `[param]` ROUTE segment — `items/[id]/GET`, `items/[id]/PATCH`,
+  `items/[id]/DELETE` — the same `[param]` its detail page's route declares (below): the page's
+  `$route.id` fills that segment, and that is what puts the id on the handler's input. Never spell a
+  single-record endpoint flat (`items-detail/GET`): a flat route carries nothing that tells a caller
+  an id is required, it desyncs from the `items/[id]` page that calls it, and it invites the
+  second-spelling collision warned about below. **An endpoint's `route` is a FIXED contract, set once here.** The route path and the
   endpoint's `name` are ONE logical artefact: a later step that re-spells the same endpoint's route
   differently (e.g. writing the same handler to `exercise-summary/GET` in one pass and to
   `exercises/summary/GET` in the next) leaves TWO files, each `export const name` a unique-per-project
@@ -133,8 +140,13 @@ currentTask.resolve({
   // For a concept an existingTables entry already covers, reuse its REAL name (strip the
   // '.json') — never a fresh, differently-spelled table for the same thing.
   tables: [ { name: '<table_slug>', purpose: '<what it stores + which stories it serves, from the source>' } ],
-  // Each route encodes its HTTP method last, e.g. 'items-list/GET'. Methods: GET|POST|PUT|PATCH|DELETE.
-  endpoints: [ { route: '<name>/GET', purpose: '<what it returns or does>' } ],
+  // Each route encodes its HTTP method last; methods: GET|POST|PUT|PATCH|DELETE. A collection-wide
+  // read is param-less ('items-list/GET'); a ONE-record endpoint carries the record's [id]
+  // ('items/[id]/GET', 'items/[id]/PATCH', 'items/[id]/DELETE') — never a flat 'items-detail/GET'.
+  endpoints: [
+    { route: 'items-list/GET', purpose: '<what it returns or does>' },
+    { route: 'items/[id]/GET', purpose: '<the one record it returns/edits>' },
+  ],
   // Reusable VIEW components the pages share — a card/row/stat SHAPE, PascalCase name. Count them.
   // These are element compositions (spec fragments), never React.
   components: [ { name: '<ComponentName>', purpose: '<the repeated UI it renders>' } ],

@@ -14,9 +14,26 @@ Write ONE page as a SPEC. Your page is in `item` = { route, purpose, endpoints, 
 — that is the PLAN ARTIFACT, your INPUT. It is not a spec and never an argument: `purpose`, `endpoints`
 and `components` are planning metadata that must never be written, and `item.sections` are DESIGN NOTES
 (`{ id, kind, endpoint?, from?, component?, reveals?, bindings }`), not spec sections. You CONSTRUCT a
-fresh `ViewSpec` from the plan — plan `endpoint` becomes the section's `query` (a read) or `mutation`
-(a write), plan `bindings` become the `item:`/`cards:`/`fields:` shapes, plan `component` becomes
-`{ use: '<Name>' }` — and hand the writer ONE object literal: `{ layout?, route, sections, title? }`.
+fresh `ViewSpec` from the plan — hand the writer ONE object literal: `{ layout?, route, sections, title? }`.
+
+**A section is written with the SPEC's words, never the plan's.** Plan sections are design notes
+(`{ id, kind, endpoint?, from?, component?, reveals?, bindings }`); the note words that read like
+spec fields are NOT spec fields, and writing one into a section is the same conflation as passing the
+plan through. Translate, field by field:
+
+| plan section note | spec field it becomes |
+|---|---|
+| `endpoint` | `query:` for a READ section, `mutation:` for a WRITE section — **never `endpoint:`** |
+| `bindings` | the `cards:`/`item:`/`fields:` shapes (a bare plan `bindings` array is not a spec field) |
+| `component` | `{ use: '<Name>' }` |
+| `from` | `from:` (kept, it is already a spec field) |
+
+There is no `endpoint:` and no `bindings:` on any section kind (`StatsSection`/`ListSection`/…). If
+your section carries a plan note verbatim — `endpoint:` where the section needs `query:`/`mutation:`, or
+a raw `bindings:` array — the typecheck rejects it by name: `"endpoint" is not a property here.
+Properties: cards, id, input, kind, poll, query, title` / `'endpoint' does not exist in type
+'StatsSection'` / `'bindings' does not exist on type 'SectionSpec'`. Do not double down on the plan's
+word ("the plan shows endpoint so it must accept it" — it does not); rename it to the spec field.
 No strings of code, no TSX, no imports, no class names, no colors. Your statement itself is plain
 TypeScript, and every runtime global it calls (`writeProjectView`, `currentTask`) is AMBIENT — already
 in scope, never imported; there is no `@lmthing/*` module.
@@ -151,3 +168,15 @@ if (!w.ok) {
 }
 currentTask.resolve({ route: pg.route, ok: w.ok, error: w.ok ? '' : (w.error ?? 'write failed') });
 ```
+
+**Keep the whole read-author-write-resolve in ONE statement — the retry is NOT a separate statement.**
+Each statement you emit is evaluated in a FRESH scope: a `let w`/`const w` you declared in an earlier
+statement is gone by the next one, so splitting the flow — e.g. writing
+`const spec2: ViewSpec = { … }` in one statement and then a bare `w = writeProjectView(pg.route,
+spec2)` as a follow-up — dies with `Cannot find name 'w'`, because that follow-up's fresh scope has
+no `w`. The retried write must re-declare in the same statement it assigns: `const w =
+writeProjectView(pg.route, spec2)` (or keep the whole `if (!w.ok) { … }` block inside the single
+statement that declared `let w`). `Cannot find name 'w'` and `Variable 'w' is used before being
+assigned` are the SAME defect viewed twice — a write split across statements (a later reuse of a
+`w` an earlier statement owns, or a `let w;` assigned only inside a branch) — and the only repair is
+the one statement above, never a follow-up that reaches back to an earlier statement's `w`.

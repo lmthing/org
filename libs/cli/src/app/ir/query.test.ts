@@ -165,9 +165,21 @@ describe('validateQueryIr', () => {
     expect(res.ok).toBe(true);
   });
 
-  it('rejects a delete with no [param] and no where', () => {
+  it('rejects a delete with no [param] and no where, naming both copyable repairs', () => {
     const res = validateQueryIr({ name: 'x', kind: 'delete', entity: 'job', route: 'jobs/all' }, TABLES);
     expect(res.errors.join(' ')).toMatch(/needs a \[param\]/);
+    expect(res.errors.join(' ')).toContain('jobs/[id]');
+    expect(res.errors.join(' ')).toContain('where: [{ field: "id", op: "=", input: "id" }]');
+  });
+
+  it('rejects an update with no [param] and no where, naming both copyable repairs', () => {
+    const res = validateQueryIr(
+      { name: 'x', kind: 'update', entity: 'job', route: 'jobs', set: { status: { input: 'status' } } },
+      TABLES,
+    );
+    expect(res.errors.join(' ')).toMatch(/needs a \[param\]/);
+    expect(res.errors.join(' ')).toContain('jobs/[id]');
+    expect(res.errors.join(' ')).toContain('where: [{ field: "id", op: "=", input: "id" }]');
   });
 
   it('rejects a set targeting an unknown column', () => {
