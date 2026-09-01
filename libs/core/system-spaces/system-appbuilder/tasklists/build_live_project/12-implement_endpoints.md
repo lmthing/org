@@ -34,7 +34,15 @@ endpoint returns `{ items: T[] }` where **`items` is ALWAYS an ARRAY** — keep 
 for contacts, a grouped summary, or a single-object dashboard/aggregate, which you return as the ONE
 element of the array (`return { items: [summary] };`), NEVER as a bare object (`items: {…}`) or a
 scalar. Pages read every endpoint as `data.items` (and an aggregate as `data.items[0]`), so a non-array
-`items` silently gives the page nothing. `writeProjectApi` returns `{ ok, error? }`
+`items` silently gives the page nothing.
+
+**For a LIST endpoint, `items` has ONE ELEMENT PER RECORD.** The single-element form above is ONLY for a
+genuine aggregate/dashboard. Do NOT wrap a collection as one element —
+`{ items: [{ recipes: [...] }] }` is wrong: the list section iterates `items`, so it sees ONE row (the
+wrapper), binds `$.recipes.name` against an ARRAY, and the page renders a single BLANK row. It
+typechecks, the endpoint 200s, no `[error]` is logged, and the app looks empty. Return
+`{ items: [ {id, name, …}, {id, name, …} ] }` and bind `$.name` — one item per record, fields at the
+top level of the item. `writeProjectApi` returns `{ ok, error? }`
 and validates the module at write time; rewrite and retry if `w.ok` is false. Every runtime global you
 call — `writeProjectApi`, `writeProjectQuery`, `listProjectDir`, `currentTask` — is AMBIENT: already in
 scope, never imported; there is no `@lmthing/*` (or any) module to import one from. Emit one statement:
