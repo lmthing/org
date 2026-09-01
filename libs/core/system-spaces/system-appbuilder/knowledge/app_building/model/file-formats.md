@@ -68,17 +68,19 @@ endpoint path. `src` is a full ESM handler module:
 ```ts
 export const name = 'items-list';
 export const description = 'List all items, newest first.';
-export interface Input {}
-export interface Output { items: { id: string; title: string }[] }
-export default async function handler(input: Input, ctx: { db: any }): Promise<Output> {
+export type Input = ItemsListInput;   // global ambient — never import
+export type Output = ItemsListOutput; // global ambient — never import
+export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {
   const items = await ctx.db.query('items', { orderBy: { column: 'createdAt', dir: 'desc' } });
   return { items };
 }
 ```
 
-`ctx.db` is the async data API: `await ctx.db.query/insert/update/remove/tables(...)`. `Input`/
-`Output` become the endpoint's JSON-Schema contract. `import { HttpError } from '@app/runtime'` to
-signal 4xx/5xx.
+`ctx.db` is the async data API: `await ctx.db.query/insert/update/remove/tables(...)`. Type `ctx`
+as the global `ApiCtx` (there is no `ctx.params` — a `[id]` route value arrives as `input.id`).
+`Input`/`Output` are type ALIASES to the global contract types — `writeProjectApi` REJECTS an
+invented inline `Output` when the contract declares `<Name>Output` (an alias is not optional), and
+every Output is `{ items: [...] }`. `import { HttpError } from '@app/runtime'` to signal 4xx/5xx.
 
 **A handler's ONLY legal import is `import { HttpError } from '@app/runtime'`** (plus a `node:`
 builtin if you truly need one). The contract `Input`/`Output` types are GLOBAL — `emit_types` wrote
@@ -90,9 +92,9 @@ you as the injected `ctx` parameter. `writeProjectApi` rejects any handler whose
 
 ## Declarative query (PREFER for a plain endpoint) — `writeProjectQuery(name, query)` → `api/<name>.query.json` + `api/<route>/<METHOD>.ts`
 
-For a plain filtered/sorted list, get-by-id, sum/count/avg aggregate, create, update, or toggle — no
-cross-table lookup, no grouped breakdown, no date pick, no classification label — author the query as
-DATA and the handler is GENERATED, so it cannot disagree with its own contract:
+For a plain filtered/sorted list, get-by-id, sum/count/avg aggregate, create, update, toggle, or
+delete-by-id — no cross-table lookup, no grouped breakdown, no date pick, no classification label —
+author the query as DATA and the handler is GENERATED, so it cannot disagree with its own contract:
 
 ```json
 {
@@ -103,13 +105,14 @@ DATA and the handler is GENERATED, so it cannot disagree with its own contract:
 }
 ```
 
-`kind`: `list`|`get`|`aggregate`|`create`|`update`|`toggle`. `where[].op`: `= != in not-in gt gte lt
+`kind`: `list`|`get`|`aggregate`|`create`|`update`|`toggle`|`delete`. `where[].op`: `= != in not-in gt gte lt
 lte contains is-null not-null`. `compute` (aggregates, and computed fields on a list/get) is a closed
 formula AST — `add sub mul div min max round coalesce` (arithmetic) and `sum count avg first`
 (reduce over an `include`d relation, or over the whole set inside an aggregate) — NOT TypeScript; a
 formula outside that set means this endpoint is NOT declarative, hand-write it above instead. `set`
 (create/update) maps a column to `{ "input": "<field>" }` or `{ "value": <literal> }`; `toggleField`
-(toggle) names the boolean column the handler flips.
+(toggle) names the boolean column the handler flips. A `delete` needs a `[param]` in its route (or a
+`where`) to name the row; its method defaults to DELETE.
 
 **A toggle that ALSO needs to stamp a companion field is STILL declarative** — do not hand-write it.
 Give that column a `set` entry shaped `{ "whenTrue": ..., "whenFalse": ... }` (not `{ input }`/

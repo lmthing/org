@@ -13,11 +13,12 @@ LIVE project directory, each written by a synchronous, validated authoring globa
   `writeProjectEntity(name, entity)` → `model/<name>.entity.json`, which authors FACTS (not columns)
   and COMPILES the table — never hand-written — for any table worth modeling that way.
 - **`api/<path>/<METHOD>.ts`** — typed HTTP handlers. `writeProjectApi('<name>/<METHOD>', src)`. Each
-  exports `name`, `description`, `Input`, `Output`, and a default async handler using `ctx.db`. **Prefer**
-  `writeProjectQuery(name, query)` → `api/<name>.query.json`, a declarative list/get/aggregate/create/
-  update/toggle whose handler is GENERATED from the same IR — it cannot disagree with its own
-  contract. Keep `writeProjectApi` for the endpoint a cross-table lookup, a grouped breakdown, a date
-  pick, or a classification label makes genuinely bespoke.
+  exports `name`, `description`, `Input`/`Output` as type ALIASES to the global contract types, and a
+  default async handler using `ctx.db`. **Prefer** `writeProjectQuery(name, query)` →
+  `api/<name>.query.json`, a declarative list/get/aggregate/create/update/toggle/delete whose
+  handler is GENERATED from the same IR — it cannot disagree with its own contract. Keep
+  `writeProjectApi` for the endpoint a cross-table lookup, a grouped breakdown, a date pick, or a
+  classification label makes genuinely bespoke.
 - **`views/<route>.view.json`** — pages, as SPECS. `writeProjectView(route, spec)`. A page is an
   ordered list of sections from a closed menu of twelve kinds; values are bound by PATH (`$.field`)
   into the ONE endpoint each section names.
