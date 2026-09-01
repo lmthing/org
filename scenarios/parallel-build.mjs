@@ -222,7 +222,7 @@ async function execute(job, slot) {
     // the server is still up. Its own failure must never masquerade as a build failure, hence the
     // separate catch.
     try {
-      smoke = await appSmoke({ base: run.base, projectId, projectRoot: join(run.dataDir, '.lmthing', projectId), interact: false, sdkRoot: ORG });
+      smoke = await appSmoke({ base: run.base, runtimeRoot: join(run.dataDir, '.lmthing'), projectId, interact: false, sdkRoot: ORG });
     } catch (e) { smoke = { ok: null, unavailable: true, reason: `app smoke failed to run: ${e instanceof Error ? e.message : String(e)}`, findings: [] }; }
   } catch (e) { turnError = String(e?.stack ?? e); }
   finally { stop(run); }

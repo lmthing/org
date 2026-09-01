@@ -29,6 +29,32 @@ import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { renderCheck } from './render-rig.mjs';
 
+/**
+ * Find the project the app was actually built INTO.
+ *
+ * The harness creates `parallel-build-<n>` and hands it to THING, but THING creates a DEDICATED
+ * project for the app (`recipe-box`) — building into the shared default is explicitly forbidden by
+ * its own instructions. Pointing at the harness project finds an empty scaffold, and a gate that
+ * measures nothing must never report a pass: this exact mistake made run 13 report `ok: true` with
+ * `measured: 0` over a build that emitted 118 errors.
+ *
+ * `user` and `system` are never app projects.
+ */
+export function findAppProject(runtimeRoot) {
+  if (!existsSync(runtimeRoot)) return null;
+  const candidates = [];
+  for (const entry of readdirSync(runtimeRoot)) {
+    if (entry === 'user' || entry === 'system') continue;
+    const dir = join(runtimeRoot, entry);
+    if (!statSync(dir).isDirectory()) continue;
+    const api = existsSync(join(dir, 'api')) ? readdirSync(join(dir, 'api')).length : 0;
+    const views = existsSync(join(dir, 'views')) ? readdirSync(join(dir, 'views')).length : 0;
+    if (api + views > 0) candidates.push({ id: entry, dir, weight: api + views });
+  }
+  candidates.sort((a, b) => b.weight - a.weight);
+  return candidates[0] ?? null;
+}
+
 /** Every `*.view.json` under `<projectRoot>/views`, as `{ route, file }`. */
 export function readViewRoutes(projectRoot) {
   const root = join(projectRoot, 'views');
@@ -172,12 +198,22 @@ export function paramsForRoute(route, responses) {
  * @returns {{ok: boolean|null, endpoints: object, render: object|null, findings: Array}}
  *   `ok: null` means UNMEASURED, not passing.
  */
-export async function appSmoke({ base, projectId, projectRoot, interact = false, screenshotDir = null, sdkRoot = undefined }) {
+export async function appSmoke({ base, runtimeRoot, projectId: hintedId, projectRoot: hintedRoot, interact = false, screenshotDir = null, sdkRoot = undefined }) {
+  // Prefer discovery over the caller's id: the harness knows the project it CREATED, not the one
+  // THING built the app into.
+  const found = runtimeRoot ? findAppProject(runtimeRoot) : null;
+  const projectId = found?.id ?? hintedId;
+  const projectRoot = found?.dir ?? hintedRoot;
+  if (!projectRoot || !projectId) {
+    return { ok: null, unavailable: true, reason: 'no project with api/ or views/ under the runtime root — the build produced no app to check',
+      projectId: null, endpoints: null, render: null, findings: [] };
+  }
+
   const endpoints = readEndpoints(projectRoot);
   const viewRoutes = readViewRoutes(projectRoot);
   if (!endpoints.length && !viewRoutes.length) {
-    return { ok: null, unavailable: true, reason: 'no api/ or views/ on disk — the build produced no app to check',
-      endpoints: null, render: null, findings: [] };
+    return { ok: null, unavailable: true, reason: `project "${projectId}" has no api/ or views/ — nothing to check`,
+      projectId, endpoints: null, render: null, findings: [] };
   }
 
   const probe = await probeEndpoints({ base, projectId, endpoints });
@@ -196,10 +232,20 @@ export async function appSmoke({ base, projectId, projectRoot, interact = false,
   }
 
   const findings = [...probe.findings, ...(render?.findings ?? [])];
-  // `ok` is only TRUE when both halves actually ran clean. If the rig could not launch a browser the
-  // verdict is null — unmeasured — because "we could not look" is not "it looks fine".
-  const ok = !probe.ok ? false : render?.unavailable ? null : render?.ok === false ? false : render?.ok === true ? true : null;
-  return { ok, endpoints: { ok: probe.ok, measured: probe.measured, skipped: probe.skipped, findingCount: probe.findings.length },
+  // `ok` is TRUE only when both halves actually MEASURED something and came back clean.
+  //
+  // "Nothing went wrong" is not "it works": run 13 reported ok:true having probed ZERO endpoints,
+  // because it was pointed at an empty scaffold — a clean verdict over an app it never found. An
+  // empty measurement is now `null` (UNMEASURED), which does not pass and is not a failure either.
+  const measuredAnything = probe.measured > 0 || (render?.counts?.measured ?? 0) > 0;
+  const ok = !probe.ok ? false
+    : render?.ok === false ? false
+    : !measuredAnything ? null
+    : render?.unavailable ? null
+    : render?.ok === true ? true
+    : null;
+  return { ok, projectId,
+    endpoints: { ok: probe.ok, measured: probe.measured, skipped: probe.skipped, findingCount: probe.findings.length },
     render: render?.unavailable ? { ok: null, unavailable: true, reason: render.reason }
       : { ok: render?.ok ?? null, counts: render?.counts ?? null, errorCount: render?.errorCount ?? null },
     findings: findings.slice(0, 20).map((f) => ({ code: f.code, route: f.route, viewport: f.viewport, message: f.message })) };
