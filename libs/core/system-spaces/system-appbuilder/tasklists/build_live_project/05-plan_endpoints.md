@@ -98,8 +98,12 @@ read endpoints the pages consume as `data.items`.
 ## Mark the PLAIN endpoints declarative — they get a GENERATED handler, not a hand-written one
 
 Most endpoints in a typical app are a plain filtered/sorted list, a get-by-id, a straightforward sum/
-count/avg aggregate, a create, an update, or a toggle — with NO cross-table lookup, NO grouped
-breakdown, NO date/timezone-based pick, and NO classification label. For exactly those, add
+count/avg aggregate, a create, an update, a **delete**, or a toggle — with NO cross-table lookup, NO
+grouped breakdown, NO date/timezone-based pick, and NO classification label. **Every ordinary DELETE
+MUST be declarative with `kind: 'delete'`**: do not leave it for a hand-written handler merely because it
+is destructive. It has no body and no `set`; its `[id]` route segment (or a declarative `where` clause)
+identifies the row. Only an explicitly required operation the query IR cannot express belongs on the
+bespoke path. For exactly those, add
 `declarative: true` plus the IR fields below; `12-implement_endpoints` then calls `writeProjectQuery`
 instead of hand-writing a TS module, and the handler is GENERATED straight from this same plan — it
 cannot disagree with its own contract, so the handler↔contract mismatches this file spends most of its

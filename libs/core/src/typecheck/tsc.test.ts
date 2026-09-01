@@ -69,6 +69,42 @@ describe('runTsc', () => {
     expect(askUndefined).toBe(false);
   });
 
+  it('decorates an absent-by-design fs global with the correct replacement', () => {
+    const result = runTsc({
+      ambientDts: LIBRARY_DTS,
+      sessionContext: '',
+      statement: 'const x = readFile("views/index.view.json");',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics[0]!.message).toMatch(/Cannot find name 'readFile'/);
+    // The repair names the real reader so the retry lands one step instead of guessing.
+    expect(result.diagnostics[0]!.message).toMatch(/readProjectFile\(path\)/);
+    expect(result.diagnostics[0]!.message).toMatch(/no generic fs/);
+  });
+
+  it('decorates writeFileRaw with the typed writer alternative', () => {
+    const result = runTsc({
+      ambientDts: LIBRARY_DTS,
+      sessionContext: '',
+      statement: 'await writeFileRaw("api/x/POST.ts", src);',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics[0]!.message).toMatch(/Cannot find name 'writeFileRaw'/);
+    expect(result.diagnostics[0]!.message).toMatch(/writeProjectApi\(route, src\)/);
+  });
+
+  it('does NOT decorate a name that is merely undeclared, only the absent-by-design set', () => {
+    const result = runTsc({
+      ambientDts: LIBRARY_DTS,
+      sessionContext: '',
+      statement: 'const y = someUnknownThing + 1;',
+    });
+    expect(result.ok).toBe(false);
+    // Not in the absent-by-design set → no HINT appended.
+    expect(result.diagnostics[0]!.message).not.toMatch(/HINT:/);
+    expect(result.diagnostics[0]!.message).toMatch(/Cannot find name 'someUnknownThing'/);
+  });
+
   it('reports line 0 for single-line statement error', () => {
     const result = runTsc({
       ambientDts: LIBRARY_DTS,

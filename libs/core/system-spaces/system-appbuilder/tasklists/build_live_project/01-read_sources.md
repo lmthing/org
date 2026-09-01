@@ -8,7 +8,7 @@ role: explore
 functions: []
 prelude: |
   const documents = await Promise.all((attachmentIds as string[]).map((id) => readDocument(id)));
-  inspect(documents);
+  await inspect(documents);
 ---
 
 Read every supplied document before building. `query`, `attachmentIds`, and `documents` are in

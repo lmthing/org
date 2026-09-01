@@ -115,6 +115,19 @@ describe('apiHandlerTypingError — the handler boundary must be REAL, never `an
     expect(apiHandlerTypingError(src, { projectRoot })).toBeNull();
   });
 
+  it('REJECTS a local `interface Output` behind `Promise<Output>` — it is not the global contract alias', () => {
+    // This is materially different from `type Output = DashboardStatsOutput`: a local interface can
+    // silently drift from what the page reads, so accepting it would re-open the response-shape hole.
+    const src =
+      "export const name = 'dashboard-stats';\n" +
+      'export type Input = DashboardStatsInput;\n' +
+      'export interface Output { items: Array<{ monthly_total: number }> }\n' +
+      'export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {\n' +
+      '  return { items: [{ monthly_total: 5 }] };\n' +
+      '}';
+    expect(apiHandlerTypingError(src, { projectRoot })).toMatch(/DashboardStatsOutput|contract/);
+  });
+
   it('bans `any` even with NO contract for the endpoint — an explicit type is the only escape', () => {
     const src =
       "export const name = 'no-plan-endpoint';\n" + // no <Base>Output in the contract

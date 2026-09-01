@@ -42,10 +42,14 @@ that is intended. Do not re-add a `chat` section to reproduce it: the assistant 
 already, so the conversation stays one tap away as a floating modal.
 
 The twelve kinds are `list detail create stats markdown chat toolbar timeline board calendar chart
-outlet`. Three carry one extra required field each: `board` needs `group` (the column key),
-`calendar` needs `date` (the row's date), `chart` needs `charts: [{ kind, x, y }]`. `outlet` is legal
-only in a layout — if the plan asks for a shared frame across a route family, write it with
-`writeProjectViewLayout(prefix, { sections })` instead of repeating a header on every page.
+outlet`. Only `list`/`timeline`/`board`/`calendar`/`chart`/`markdown` may serve a page without a
+read endpoint (`from` on an earlier section's Output, or `markdown`'s literal `source`). **`detail`
+and `stats` require `query`, `create` requires `mutation`** — a plan section forwarded without one
+is rejected (`sections[0]: "query" is required here. Properties: cards, id, input, kind, poll, query,
+title`). A further required field per kind: `stats` needs `cards: [...]`, `board` needs `group` (the
+column key), `calendar` needs `date` (the row's date), `chart` needs `charts: [{ kind, x, y }]`.
+`outlet` is legal only in a layout — if the plan asks for a shared frame across a route family, write
+it with `writeProjectViewLayout(prefix, { sections })` instead of repeating a header on every page.
 
 Keep `item.sections` in order, and keep each section's `id` and `kind`. Per section:
 - `query` = a READ endpoint's name; `mutation` = a WRITE endpoint's name — verbatim from the plan, never
@@ -61,6 +65,14 @@ Keep `item.sections` in order, and keep each section's `id` and `kind`. Per sect
 - `item: { … }` is a row's flat shape. The keys are exactly: `title subtitle caption meta value suffix
   note markdown badge status image icon badges keyvalue action actions`. The first eleven take a
   string or `{ value, format?, currencyField?, tone?, toneMap?, maxLines? }`.
+- **That rich `{ value, suffix, … }` object form is for ROW fields ONLY — a `stats` card's `value` is
+  a plain binding, never an object.** `cards: [{ label, value, … }]` types each card's `value` as a
+  bare string; passing `value: { value: '$.total', suffix: ' min' }` there fails
+  (`Type '{ value: string; suffix: string; }' is not assignable to type 'string'`). A card formats its
+  number the fragment way — `format`/`currencyField`/`tone`/`toneMap` sit AT THE CARD TOP LEVEL,
+  next to `label`/`value`, not inside a `value` object: `cards: [{ label: 'Spent', value: '$.total',
+  format: 'currency', currencyField: '$.currency' }]`. Reuse the object form only under a row's
+  (`item`/`header` field), never under a card.
 - Instead of a flat item you may write `{ use: '<ComponentName>', props: { … } }` for a component that
   `implement_view_components` landed, or an element tree (`{ el: 'row', children: [...] }`).
 - `empty: { title, message? }` overrides the default empty state. Loading/error states are automatic.

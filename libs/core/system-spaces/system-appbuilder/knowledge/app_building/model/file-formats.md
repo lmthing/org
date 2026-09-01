@@ -6,6 +6,27 @@ description: LOAD WHEN you are hand-authoring a file kind freeform and want its 
 
 The exact on-disk shapes each authoring global writes.
 
+## There is NO generic filesystem — only the typed readers and writers by name
+
+`readFile` / `writeFile` / `editFile` / `listDir` / `glob` / `grep` and raw `execShell` /
+`readFileRaw` / `writeFileRaw` do NOT exist on your surface — a call to any of them FAILS typecheck
+(`Cannot find name …`). That absence is deliberate: persistence goes ONLY through the typed writers,
+reads ONLY through the typed readers. If you reach for a generic-fs name, the replacement is:
+
+- **READ** — `readProjectFile(path)` (project) / `readSpaceFile(path)` (space); **list** —
+  `listProjectDir(dir)` (project) / `listSpaceDir(dir)` (space).
+- **WRITE / PERSIST** — a typed `writeProject*` writer, ALL of them listed below on this page:
+  `writeProjectTable` · `writeProjectEntity` · `writeProjectQuery` · `writeProjectApi` ·
+  `writeProjectHook` · `writeProjectEvent` · `writeProjectFunction` · `writeProjectView` ·
+  `writeProjectViewComponent` · `writeProjectViewLayout` · `writeProjectViewShell`.
+- `readFileRaw` / `writeFileRaw` are internal host primitives — never available to you. The only
+  generic fs/shell anywhere is the ENGINEER's scratch sandbox (`createScratch()` then its
+  `readFile`/`writeFile`/`execShell` inside `.lmthing/scratch/<random>`); if you are not the
+  engineer, delegate the code to it and persist what it returns with a typed writer.
+
+Reaching for a generic fs name is how a build burns its retry budget on a capability it will never
+get — the reader/writer you actually want is on this page, by name.
+
 ## Table schema — `writeProjectTable(name, schema)` → `database/<name>.json`
 
 `name` is a lowercase slug. `schema` is an object:

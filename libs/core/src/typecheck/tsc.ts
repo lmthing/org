@@ -24,6 +24,58 @@ export interface TscOpts {
 const AMBIENT_FILE = '__ambient__.d.ts';
 const SESSION_FILE = '__session__.tsx'; // .tsx so JSX syntax is allowed
 
+/**
+ * Absent-by-design GENERIC-FS/SHELL globals → the correct typed surface, named per global.
+ *
+ * There is NO generic filesystem on the model surface (see sdk/org/CLAUDE.md and
+ * typecheck/library-dts.ts): `readFile`/`writeFile`/`editFile`/`listDir`/`glob`/`grep`/raw
+ * `execShell`/`readFileRaw`/`writeFileRaw` are deliberately absent from every agent's DTS (the ONE
+ * exception is the engineer's scratch root, `fs:scratch`). Persistence goes ONLY through the typed
+ * root-scoped writers (`writeProject*`); reads through `readProjectFile`/`listProjectDir` (project)
+ * or `readSpaceFile`/`listSpaceDir` (space).
+ *
+ * `Cannot find name 'X'` names what is MISSING but not what to reach for instead, so the model reads
+ * the absence and flails (it even reaches through `(globalThis as any).readFileRaw` to dodge the
+ * gate). Decorate the diagnostic with the concrete replacement so a retry lands the correct call in
+ * ONE step instead of guessing. The message carries the repair at the point the typecheck produces
+ * it, so every consumer (the turn-loop's error block, `typecheckSource`, …) sees it.
+ */
+const ABSENT_GLOBAL_REPLACEMENT: Record<string, string> = {
+  readFile:
+    'there is no generic fs — read with `readProjectFile(path)` (project) or `readSpaceFile(path)` (space)',
+  readFileRaw:
+    '`readFileRaw` is an internal host primitive, NOT available to you — read with `readProjectFile(path)` (project) or `readSpaceFile(path)` (space)',
+  writeFile:
+    'there is no generic fs — persist ONLY through a typed `writeProject*` writer (writeProjectTable / writeProjectEntity / writeProjectQuery / writeProjectApi / writeProjectHook / writeProjectEvent / writeProjectFunction / writeProjectView / writeProjectViewComponent / …)',
+  writeFileRaw:
+    '`writeFileRaw` is an internal host primitive, NOT available to you — persist through a typed `writeProject*` writer (e.g. `writeProjectApi(route, src)` to write an API handler)',
+  editFile:
+    'there is no generic fs — read with `readProjectFile(path)` (project) / `readSpaceFile(path)` (space) and re-write through a `writeProject*` writer',
+  listDir:
+    'use `listProjectDir(dir)` (project) or `listSpaceDir(dir)` (space); there is no generic fs',
+  glob:
+    'use `listProjectDir(dir)` (project) / `listSpaceDir(dir)` (space) — list, don\'t glob; there is no generic fs',
+  grep:
+    'read with `readProjectFile(path)` (project) / `readSpaceFile(path)` (space) and scan the content (or `localSearch` inside a granted desktop folder); there is no generic fs',
+  execShell:
+    '`execShell` is not on the model surface — only the engineer has a scratch sandbox (its `execShell`, after `createScratch()`); otherwise delegate the code to the engineer and persist what it returns with a typed `writeProject*` writer',
+};
+
+/**
+ * Append the correct alternative to a `Cannot find name '<absentGlobal>'` diagnostic, so the message
+ * names the repair rather than just the absence. Returns the message unchanged when it does not
+ * match a known absent-by-design generic-fs/shell name.
+ */
+function decorateAbsentGlobal(message: string): string {
+  const m = message.match(/Cannot find name '([^']+)'/);
+  if (!m) return message;
+  const replacement = ABSENT_GLOBAL_REPLACEMENT[m[1] as keyof typeof ABSENT_GLOBAL_REPLACEMENT];
+  if (!replacement) return message;
+  // Drop any trailing TypeScript suggestion ("Did you mean …?") and append the known repair.
+  const base = message.split(". Did you mean")[0]!.replace(/\.$/, '');
+  return `${base}. HINT: ${replacement}.`;
+}
+
 export function runTsc(opts: TscOpts): TscResult {
   const { ambientDts, statement } = opts;
 
@@ -102,7 +154,9 @@ export function runTsc(opts: TscOpts): TscResult {
     // Filter to only diagnostics in the statement's line range
     if (line < statementStartLine) continue;
 
-    const message = ts.flattenDiagnosticMessageText(diag.messageText, '\n');
+    const message = decorateAbsentGlobal(
+      ts.flattenDiagnosticMessageText(diag.messageText, '\n'),
+    );
     diagnostics.push({
       line: line - statementStartLine,
       col: character,

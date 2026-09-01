@@ -39,6 +39,14 @@ scope, never imported; there is no `@lmthing/*` (or any) module to import one fr
 
 ## Check `item.declarative` FIRST — a declarative endpoint uses `writeProjectQuery`, never hand-written TS
 
+**DELETE is declarative.** If `item.route` ends in `/DELETE`, it must have arrived from planning as
+`declarative: true, kind: 'delete'`; call `writeProjectQuery` with that IR. Do not write a `DELETE.ts`
+handler, do not add a manual `ctx.db.remove`, and do not replace or "repair" the generated file with
+`writeProjectApi`. The generated handler owns its local `Input`/`Output` declarations; copying one into
+a hand-written module and changing `Promise<Output>` is not a contract alias and is rejected. A delete
+needs custom behavior only if the planner explicitly made it non-declarative; otherwise fix its query IR,
+not its generated TypeScript.
+
 If `plan_endpoints` marked this endpoint `declarative: true`, it already carries the IR fields
 (`kind`, `entity`, `where`, `order`, `limit`, `include`, `compute`, `set`, `toggleField`) that
 `writeProjectQuery` needs — build the query object from those SAME fields, verbatim, call
@@ -56,7 +64,8 @@ form plan.** For `create`/`update`, `ep.set` is a COLUMN map such as
 `{ title: { input: 'title' }, archived: { value: false } }`: `{ input }` reads the request and
 `{ value }` is a literal. It is NEVER the flat body `{ title: input.title }`. For `update`/`delete`,
 `ep.where` is either absent when the route has `[id]`, or an ARRAY such as
-`[{ field: 'status', op: '=', value: 'draft' }]` — never `{ id: ep.route }`. Do not add `name` to
+`[{ field: 'status', op: '=', value: 'draft' }]` — never `{ id: ep.route }`. A `delete` forwards no
+`set` and no body fields: its `[id]` route parameter identifies the row. Do not add `name` to
 the query object: the first `writeProjectQuery(ep.name, query)` argument supplies it.
 
 ```typescript
@@ -262,7 +271,7 @@ export type Output = ToggleSavedOutput;
 export default async function handler(input: Input, ctx: ApiCtx): Promise<Output> {
   const [row] = (await ctx.db.query('articles')).filter((r) => r.id === input.id);
   if (!row) throw new HttpError(404, 'no such article');
-  await ctx.db.update('articles', { id: input.id }, { saved: !row.saved });
+  await ctx.db.update('articles', { where: { id: input.id }, set: { saved: !row.saved } });
   return { items: [{ id: input.id, saved: !row.saved }] };
 }
 ```

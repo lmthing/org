@@ -11,7 +11,7 @@ role: general
 functions: []
 prelude: |
   const documents = await Promise.all((attachmentIds as string[]).map((id) => readDocument(id)));
-  inspect(documents);
+  await inspect(documents);
 ---
 
 Decide the SMALLEST set of table/endpoint/component/page changes and concrete data rows that satisfies `query` — this is
