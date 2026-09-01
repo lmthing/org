@@ -465,7 +465,12 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
     const name = String(e.name ?? '');
     if (!name) continue;
     const usedByAuto = automations.some((a) => String(a.run ?? '') === name);
-    if (!readsEndpoint(name) && !usedByAuto) {
+    // A write endpoint is EXEMPT from "drop it". Check (W) below requires every shown entity to have a
+    // create and a delete, so telling the model to drop an unreached one here would contradict that
+    // directly — it would oscillate between deleting the endpoint and being told to add it back. (W)
+    // reports the same endpoint with the OPPOSITE and correct repair: add the section that reaches it.
+    const isWrite = /(?:^|[-_])(create|add|new|update|edit|delete|remove)(?:$|[-_])/i.test(name);
+    if (!readsEndpoint(name) && !usedByAuto && !isWrite) {
       add('plan_endpoints', name, `endpoint "${name}" is declared but no page section reads it and no automation runs it — drop it, or have a section use it. An unused endpoint is never seen and cannot be meaningfully acceptance-checked.`);
     }
   }
@@ -566,6 +571,50 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
 
     for (const t of list<string>(a.reads)) refTable(a, t, 'reads');
     for (const t of list<string>(a.writes)) refTable(a, t, 'writes');
+  }
+
+  // (W) THE WRITE FLOOR — every entity a user can SEE, they must be able to add to and remove from.
+  //
+  // This is the most prevalent defect in generated apps, measured by driving seven of them in a
+  // browser: delete was missing or unreachable in 6 of 7, and 3 of 7 had no way to create a record at
+  // all — a read-only list the user can do nothing with. `07-plan_views.md` already tells the model
+  // "a read-only app is a FAILED app, and 08-validate_contract.ts rejects one". Until now that
+  // sentence was false: no such check existed, so the promise was prose.
+  //
+  // Reachable means a PAGE SECTION names it. An endpoint that exists but no page reaches is dead
+  // weight — the user still cannot use it — which is why this checks the pages, not the endpoint list.
+  {
+    const reached = new Set<string>();
+    for (const page of pages) {
+      for (const name of page.endpoints ?? []) if (typeof name === 'string') reached.add(name);
+      for (const sec of page.sections ?? []) if (typeof sec.endpoint === 'string') reached.add(sec.endpoint);
+    }
+    const nameOf = (e: EndpointSpec): string => (typeof e.name === 'string' ? e.name : '');
+    const isKind = (e: EndpointSpec, re: RegExp): boolean => re.test(nameOf(e));
+    // Only entities the user can actually SEE need a write surface: a lookup table nothing displays
+    // does not, and demanding one would be noise.
+    const shown = new Set<string>();
+    for (const e of endpoints) {
+      if (!reached.has(nameOf(e))) continue;
+      if (isKind(e, /(?:^|[-_])(create|add|new|update|edit|delete|remove)(?:$|[-_])/i)) continue;
+      for (const t of e.tables ?? []) if (typeof t === 'string') shown.add(t);
+    }
+    for (const table of shown) {
+      const forTable = endpoints.filter((e) => (e.tables ?? []).includes(table));
+      const has = (re: RegExp): EndpointSpec | undefined => forTable.find((e) => isKind(e, re));
+      const create = has(/(?:^|[-_])(create|add|new)(?:$|[-_])/i);
+      const remove = has(/(?:^|[-_])(delete|remove)(?:$|[-_])/i);
+      if (!create) {
+        add('plan_endpoints', table, `"${table}" is shown on a page but has NO create endpoint, so the user can never add one. Plan "${table}-create" (POST) and give it a form section.`);
+      } else if (!reached.has(nameOf(create))) {
+        add('plan_views', nameOf(create), `"${nameOf(create)}" exists but no page reaches it, so "${table}" is read-only on screen. Add a \`create\` section bound to it.`);
+      }
+      if (!remove) {
+        add('plan_endpoints', table, `"${table}" is shown on a page but has NO delete endpoint, so the user can never remove one. Plan "${table}-delete" (DELETE, declarative kind 'delete') and reach it from a row action or the detail page.`);
+      } else if (!reached.has(nameOf(remove))) {
+        add('plan_views', nameOf(remove), `"${nameOf(remove)}" exists but no page reaches it, so "${table}" can never be deleted from the UI. Add a rowAction on the list or an action on the detail page.`);
+      }
+    }
   }
 
   return { ok: errors.length === 0, errorCount: errors.length, errors };

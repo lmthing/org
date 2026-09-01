@@ -48,19 +48,29 @@ const table = (name: string, cols: string[]) => ({
  * reads that endpoint, renders the declared view component, and binds only fields the endpoint
  * declares. `plan_views` is a per-page forEach, so it arrives as a bare ARRAY of page specs.
  */
+// The baseline is a COMPLETE app, not merely a coherent one: an entity the user can see must also be
+// one they can add to and remove from. A browser census of seven generated apps found delete missing
+// or unreachable in 6 of 7 and no way to create a record at all in 3 of 7, so check (W) now rejects a
+// read-only app — and this fixture has to satisfy it, or every clone of it inherits that failure.
 const OK = {
   plan_tables: { tables: [table('costs', ['id', 'label', 'amount_usd'])] },
   plan_endpoints: {
-    endpoints: [{ name: 'costs-list', route: 'costs-list/GET', tables: ['costs'], fields: ['label: string', 'amount_usd: number'] }],
+    endpoints: [
+      { name: 'costs-list', route: 'costs-list/GET', tables: ['costs'], fields: ['label: string', 'amount_usd: number'] },
+      { name: 'costs-create', route: 'costs/POST', tables: ['costs'], fields: ['id: string'], input: ['label: string', 'amount_usd: number'] },
+      { name: 'costs-delete', route: 'costs/[id]/DELETE', tables: ['costs'], fields: ['id: string'] },
+    ],
   },
   plan_view_components: { components: [{ name: 'CostRow', props: ['label: string', 'amount_usd: number'] }] },
   plan_views: [
     {
       route: 'costs',
-      endpoints: ['costs-list'],
+      endpoints: ['costs-list', 'costs-create', 'costs-delete'],
       components: ['CostRow'],
       sections: [
         { id: 'costs', kind: 'list', endpoint: 'costs-list', component: 'CostRow', bindings: ['$.label', '$.amount_usd'] },
+        { id: 'costsCreateForm', kind: 'create', endpoint: 'costs-create' },
+        { id: 'costsDeleteBar', kind: 'toolbar', endpoint: 'costs-delete' },
       ],
     },
   ],
@@ -321,7 +331,7 @@ describe('build_live_project — the contract gate (08-validate_contract.ts)', (
     // button — and buildApp, validateAppViews and renderSmokeViews ALL pass, because the spec and
     // the data are perfectly consistent with a body nobody ever specified.
     const c = clone();
-    c.plan_endpoints.endpoints.push({ name: 'add-cost', route: 'costs/POST', tables: ['costs'], fields: ['id: string'] });
+    c.plan_endpoints.endpoints.push({ name: 'add-cost', route: 'costs/quick/POST', tables: ['costs'], fields: ['id: string'] });
     c.plan_views[0]!.sections.push({
       id: 'addCost', kind: 'create', endpoint: 'add-cost', bindings: [],
     } as unknown as (typeof OK)['plan_views'][0]['sections'][0]);
@@ -336,7 +346,10 @@ describe('build_live_project — the contract gate (08-validate_contract.ts)', (
     // Declaring the body clears it.
     // `input` is optional on the fixture's endpoint literal — the whole point of the check above is
     // that it may be ABSENT — so the contract type does not carry it and the assignment needs the cast.
-    (c.plan_endpoints.endpoints[1] as unknown as { input: string[] }).input = ['label: string', 'amount_usd: number'];
+    // Found by NAME: the baseline carries its own create/delete endpoints (check (W)), so the pushed
+    // one is not at a fixed index.
+    const added = c.plan_endpoints.endpoints.find((e) => e.name === 'add-cost')!;
+    (added as unknown as { input: string[] }).input = ['label: string', 'amount_usd: number'];
     const fixed = await run({}, c as unknown as Record<string, unknown>);
     expect(fixed.errors).toEqual([]);
   });
@@ -526,17 +539,27 @@ describe('build_live_project — the contract gate (08-validate_contract.ts)', (
         endpoints: [
           { name: 'pets-list', route: 'pets-list/GET', tables: ['pets'], fields: ['name: string'] },
           { name: 'vax-list', route: 'vax-list/GET', tables: ['pet_vaccinations'], fields: ['vaccine: string'] },
+          // Both entities are shown, so check (W) requires each to be addable and removable.
+          { name: 'pets-create', route: 'pets/POST', tables: ['pets'], fields: ['id: string'], input: ['name: string'] },
+          { name: 'pets-delete', route: 'pets/[id]/DELETE', tables: ['pets'], fields: ['id: string'] },
+          { name: 'vax-create', route: 'vax/POST', tables: ['pet_vaccinations'], fields: ['id: string'], input: ['vaccine: string'] },
+          { name: 'vax-delete', route: 'vax/[id]/DELETE', tables: ['pet_vaccinations'], fields: ['id: string'] },
         ],
       },
       plan_view_components: { components: [] },
       plan_views: [
         {
           route: 'pets',
-          endpoints: ['pets-list', 'vax-list'],
+          endpoints: ['pets-list', 'vax-list', 'pets-create', 'pets-delete', 'vax-create', 'vax-delete'],
           components: [],
           sections: [
             { id: 'pets', kind: 'list', endpoint: 'pets-list', bindings: ['$.name'] },
             { id: 'vax', kind: 'list', endpoint: 'vax-list', bindings: ['$.vaccine'] },
+            // Declaring a write is not enough — check (W) demands a section actually reach it.
+            { id: 'petsCreate', kind: 'create', endpoint: 'pets-create' },
+            { id: 'petsDelete', kind: 'toolbar', endpoint: 'pets-delete' },
+            { id: 'vaxCreate', kind: 'create', endpoint: 'vax-create' },
+            { id: 'vaxDelete', kind: 'toolbar', endpoint: 'vax-delete' },
           ],
         },
       ],
