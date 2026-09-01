@@ -96,6 +96,8 @@ export type ViewErrorCode =
   | 'no-data'
   /** A `create` section whose mutation Input derives no form fields — "Nothing to fill in." */
   | 'empty-form'
+  /** A `create` section points at a delete mutation, which can only remove data. */
+  | 'wrong-mutation-kind'
   /** A section bound to an Output of the wrong ARITY: rows where it draws a record, or the reverse. */
   | 'wrong-arity'
   /** An interactive element that paints, is reachable, and resolves to no effect when tapped. */
@@ -656,6 +658,38 @@ export function wrongArity(
  * user is a *button*, not a form, and naming that alternative is what stops the model deleting the
  * section to make the rejection go away.
  */
+/** A create form cannot submit a deletion, even if the endpoint name otherwise resolves. */
+export function createCannotDelete(
+  path: string,
+  endpoint: string,
+  candidates: readonly string[],
+): ViewError {
+  return err(
+    'wrong-mutation-kind',
+    path,
+    at(
+      path,
+      `"${endpoint}" is a delete mutation, so a create section would remove data instead of saving the ` +
+        `form. Use a create or update mutation. ${menu('Create/update mutations', candidates)}`,
+    ),
+    { endpoint },
+  );
+}
+
+/** A list row action aimed at its collection's new-record route cannot identify the clicked row. */
+export function rowActionToNew(path: string, route: string): ViewError {
+  return err(
+    'dead-control',
+    path,
+    at(
+      path,
+      `"${route}" is a new-record route with no [param], so every row opens the same blank create ` +
+        `form and the clicked row's id is discarded. Navigate to that record's detail route with ` +
+        `params: { id: '$.id' } instead.`,
+    ),
+  );
+}
+
 export function emptyForm(
   path: string,
   endpoint: string,

@@ -236,6 +236,37 @@ describe("validate_contract — a FORM's endpoint must describe its body", () =>
     expect(findings(r)).toHaveLength(1);
   });
 
+  it('rejects an array or unknown input on a generated create form — it only submits scalar controls', async () => {
+    const { ctx } = writerCtx();
+    const r = await validate(
+      ctx,
+      withCreatePage([
+        {
+          name: 'create-recipe',
+          route: 'recipes/POST',
+          tables: [],
+          fields: ['id: string'],
+          input: ['name: string', 'ingredients: { ingredientId: string }[]', 'notes: unknown'],
+        },
+      ], 'create-recipe'),
+    );
+    const faults = r.errors.filter((e) => e.ref.startsWith('create-recipe.'));
+    expect(faults).toHaveLength(2);
+    expect(faults.map((e) => e.message).join(' ')).toContain('no array, object, or unknown-value editor');
+    expect(r.ok).toBe(false);
+  });
+
+  it('accepts scalar create inputs', async () => {
+    const { ctx } = writerCtx();
+    const r = await validate(
+      ctx,
+      withCreatePage([
+        { name: 'create-plant', route: 'plants/POST', tables: [], fields: ['id: string'], input: ['name: string', 'days: number'] },
+      ]),
+    );
+    expect(r.errors).toEqual([]);
+  });
+
   /**
    * The regression that cost `13-plant-care` run 8 both of its `onFail` attempts. The first version of
    * this check asked EVERY POST/PUT/PATCH for a body, so the two toggle/action endpoints — whose only

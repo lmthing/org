@@ -7,7 +7,7 @@
  * say so out loud.
  */
 import { afterAll, describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -109,6 +109,26 @@ describe('validateViewSpec — name resolution (the menu)', () => {
       'sections[0].mutation: "addRecipies" is not an endpoint. Did you mean addRecipe? ' +
         'Mutations: addRecipe, importRecipe, importRecipeText',
     );
+  });
+
+  it('rejects a create section bound to a delete mutation and names the create/update alternatives', () => {
+    const contracts: ViewContracts = {
+      ...CONTRACTS,
+      endpoints: [...CONTRACTS.endpoints, { name: 'recipes-delete', method: 'DELETE', inputKeys: ['id'] }],
+    };
+    const res = validateViewSpec(page({ kind: 'create', mutation: 'recipes-delete' }), contracts);
+    expect(res.errors.map((e) => e.message)).toEqual([
+      'sections[0].mutation: "recipes-delete" is a delete mutation, so a create section would remove data instead of saving the form. ' +
+        'Use a create or update mutation. Create/update mutations: addRecipe, importRecipe, importRecipeText',
+    ]);
+  });
+
+  it('also rejects a wrongly POST-filed mutation whose declared name says it deletes', () => {
+    const contracts: ViewContracts = {
+      ...CONTRACTS,
+      endpoints: [...CONTRACTS.endpoints, { name: 'recipes-delete', method: 'POST', inputKeys: ['name'] }],
+    };
+    expect(validateViewSpec(page({ kind: 'create', mutation: 'recipes-delete' }), contracts).errors[0]?.code).toBe('wrong-mutation-kind');
   });
 
   it('reports the instance path of the offending section, not the page', () => {
@@ -358,6 +378,27 @@ describe('validateViewSpec — a control that paints and does nothing', () => {
         'pass params: { id: \'$.id\' }. If it should change the data rather than the page, use ' +
         '{ mutate: … }.',
     );
+  });
+
+  it('rejects a record rowAction that opens the collection’s static new-record route', () => {
+    const e = validateViewSpec(
+      page({ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipes/new' } }),
+      { ...CONTRACTS, routes: [...CONTRACTS.routes!, 'recipes/new'] },
+    ).errors[0]!;
+    expect(e.code).toBe('dead-control');
+    expect(e.message).toBe(
+      'sections[0].rowAction.navigate: "recipes/new" is a new-record route with no [param], so every row opens the same blank create form and the clicked row\'s id is discarded. ' +
+        "Navigate to that record's detail route with params: { id: '$.id' } instead.",
+    );
+  });
+
+  it('allows a rowAction to a non-new static page — it can be a legitimate overview link', () => {
+    expect(
+      validateViewSpec(page({ kind: 'list', query: 'listRecipes', rowAction: { navigate: 'recipes/help' } }), {
+        ...CONTRACTS,
+        routes: [...CONTRACTS.routes!, 'recipes/help'],
+      }).errors,
+    ).toEqual([]);
   });
 
   it('rejects a navigate whose [param] nothing can fill — it lands on a literal "[id]"', () => {
@@ -783,6 +824,24 @@ describe('loadViewContracts — the writers\' synchronous contract source', () =
       'api/things/GET.ts': `export const name = 'listThings';\nexport type Output = ThingList;\nexport default async function h() {}\n`,
     });
     expect(loadViewContracts(root).endpoints[0].outputFields).toBeUndefined();
+  });
+});
+
+describe('the browser-found recipe-box spec (parallel-build run 9)', () => {
+  const run9 = join(process.cwd(), 'scenarios/parallel-build/runs/9/data/.lmthing/recipe-box');
+
+  it('rejects its create→delete binding and row→new route from the on-disk view', async () => {
+    const spec = JSON.parse(await readFile(join(run9, 'views/recipes.view.json'), 'utf8')) as ViewSpec;
+    const res = validateViewSpec(spec, {
+      endpoints: [
+        { name: 'recipes-delete', method: 'POST', inputKeys: ['name'] },
+        { name: 'recipes-list', method: 'GET', outputFields: ['id', 'name', 'prep_time', 'ingredient_count'] },
+        { name: 'recipes-update', method: 'PUT', inputKeys: ['name'] },
+      ],
+      routes: ['recipes', 'recipes/new', 'recipes/[id]'],
+    });
+    expect(res.errors.map((e) => e.code)).toEqual(['wrong-mutation-kind', 'dead-control']);
+    expect(res.errors.map((e) => e.path)).toEqual(['sections[1].mutation', 'sections[2].rowAction.navigate']);
   });
 });
 

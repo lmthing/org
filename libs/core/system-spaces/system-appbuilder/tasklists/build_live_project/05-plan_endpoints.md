@@ -101,6 +101,20 @@ Each endpoint is `{ name, route, purpose, tables, fields, input? }`:
 Read endpoints return `{ items: [...] }` (an aggregate is the single summary at `items[0]`), so plan
 read endpoints the pages consume as `data.items`.
 
+## DECLARATIVE IS THE DEFAULT. A hand-written endpoint must EARN its place.
+
+Measured across ten generated apps: every one hand-wrote **7 to 16** TypeScript endpoints. In the
+error census of those builds, **32% of all errors are the writer rejecting a hand-written endpoint**
+and a further **27% are typecheck failures on model-written TypeScript** — so nearly six errors in ten
+come from writing a handler by hand. A declarative query is a JSON object: it cannot fail typecheck,
+it cannot be rejected by the writer, and it cannot disagree with its own contract.
+
+So the rule is not "mark the plain ones declarative". It is: **plan every endpoint declarative unless
+you can name the specific thing the query IR cannot express** — a cross-table lookup, a grouped
+breakdown, a date/timezone pick, a classification label. If you cannot name it, it is declarative.
+State the reason in `purpose` for any endpoint you leave hand-written, so the choice is reviewable
+rather than accidental.
+
 ## Mark the PLAIN endpoints declarative — they get a GENERATED handler, not a hand-written one
 
 Most endpoints in a typical app are a plain filtered/sorted list, a get-by-id, a straightforward sum/

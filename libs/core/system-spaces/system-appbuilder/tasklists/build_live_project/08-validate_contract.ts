@@ -100,6 +100,26 @@ function fieldName(entry: string): string {
   return String(entry).split(':')[0]!.trim();
 }
 
+/** The scalar values SchemaForm can submit from one ordinary generated form control. */
+const FORM_SCALAR_TYPES: ReadonlySet<string> = new Set([
+  'string', 'number', 'boolean', 'date', 'Date', 'ISO', 'text', 'int', 'integer', 'float', 'bool',
+]);
+
+/**
+ * A create section has one generated control per Input property; it has no repeater/object editor.
+ * Keep this deliberately narrower than `09-emit_types.ts#tsTypeOf`: that emitter may represent an
+ * array in TypeScript, but the form would still submit one text value for it.
+ */
+function formInputCanProduce(entry: unknown): boolean {
+  if (typeof entry !== 'string') return false;
+  const colon = entry.indexOf(':');
+  if (colon < 0) return false;
+  const type = entry.slice(colon + 1).trim();
+  if (!type || type.includes('[]')) return false;
+  const parts = type.split('|').map((part) => part.trim()).filter(Boolean);
+  return parts.length > 0 && parts.every((part) => FORM_SCALAR_TYPES.has(part));
+}
+
 /**
  * The declared key names of one endpoint's response item. `05-plan_endpoints` allows TWO shapes per
  * entry — a `'key: type'` string for a scalar, and a `{ name, list?, nullable?, item: [...] }` object
@@ -281,18 +301,32 @@ export async function run(_ctx: Ctx, inputs: Record<string, unknown>): Promise<R
     const name = String(e.name ?? r);
     if (!formEndpoints.has(name)) continue;
     const body = Array.isArray(e.input) ? e.input.filter((x) => String(x ?? '').trim() !== '') : [];
-    if (body.length > 0) continue;
-    add(
-      'plan_endpoints',
-      name,
-      `"${name}" is what a \`create\` section submits, but it declares no \`input\` — the request body is ` +
-        `undescribed, so its Input type degrades to \`Record<string, unknown>\` and the page renders an ` +
-        `EMPTY form ("Nothing to fill in.") above a Save button. A \`create\` section declares no fields ` +
-        `of its own BY DESIGN; this endpoint's \`input\` is the only place they can come from. Add it, ` +
-        `listing the body keys as 'key: type' (\`?\` suffix = optional), e.g. \`input: ['name: string', ` +
-        `'room: string', 'waterIntervalDays: number', 'lastWatered?: string']\`. Route \`[param]\`s do ` +
-        `NOT go here — emit_types adds those.`,
-    );
+    if (body.length === 0) {
+      add(
+        'plan_endpoints',
+        name,
+        `"${name}" is what a \`create\` section submits, but it declares no \`input\` — the request body is ` +
+          `undescribed, so its Input type degrades to \`Record<string, unknown>\` and the page renders an ` +
+          `EMPTY form ("Nothing to fill in.") above a Save button. A \`create\` section declares no fields ` +
+          `of its own BY DESIGN; this endpoint's \`input\` is the only place they can come from. Add it, ` +
+          `listing the body keys as 'key: type' (\`?\` suffix = optional), e.g. \`input: ['name: string', ` +
+          `'room: string', 'waterIntervalDays: number', 'lastWatered?: string']\`. Route \`[param]\`s do ` +
+          `NOT go here — emit_types adds those.`,
+      );
+      continue;
+    }
+    for (const input of body) {
+      if (formInputCanProduce(input)) continue;
+      add(
+        'plan_endpoints',
+        `${name}.${fieldName(String(input)) || '(unnamed)'}`,
+        `"${name}" is submitted by a \`create\` section, but input "${String(input)}" is not a scalar ` +
+          `value its generated form can produce. SchemaForm has one text/number/boolean control per ` +
+          `field; it has no array, object, or unknown-value editor, so this would submit a string and ` +
+          `the handler would fail when it maps the value. Split this into scalar fields or add a real ` +
+          `structured form control before declaring an array/object input.`,
+      );
+    }
   }
 
   // (2) An endpoint declaring a table that was never planned. The db surface is dynamically typed,

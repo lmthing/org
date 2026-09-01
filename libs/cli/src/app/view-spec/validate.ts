@@ -46,6 +46,7 @@ import {
   badBindingRoot,
   badProp,
   classifyBadBinding,
+  createCannotDelete,
   deadComponent,
   deadLink,
   emptyForm,
@@ -60,6 +61,7 @@ import {
   prettyPath,
   renderThrew,
   resultOf,
+  rowActionToNew,
   shapeErrorsToViewErrors,
   unknownAgent,
   unknownComponent,
@@ -873,6 +875,35 @@ function checkSectionArity(
  * wrong method) or an Input the contract reader could not read (`inputKeys === undefined`, never
  * `[]` — the {@link ViewEndpoint} invariant this depends on).
  */
+/** DELETE endpoints — including a wrongly file-routed POST still named `*-delete`/`*-remove` — cannot create. */
+function isDeleteMutation(ep: ViewEndpoint): boolean {
+  return ep.method === 'DELETE' || /(?:^|[-_])(delete|remove)(?:$|[-_])/i.test(ep.name);
+}
+
+/** Reject the semantic inversion of a create form bound to a deletion. */
+function checkCreateMutationKind(ep: ViewEndpoint | undefined, path: string, ctx: WalkCtx): void {
+  if (!ep || !isDeleteMutation(ep)) return;
+  const candidates = ctx.mutations.filter((name) => {
+    const candidate = ctx.byName.get(name);
+    return candidate !== undefined && !isDeleteMutation(candidate);
+  });
+  ctx.errors.push(createCannotDelete(childPath(path, 'mutation'), ep.name, candidates));
+}
+
+/**
+ * A list row represents one record, unlike a toolbar action. We therefore reject only the
+ * unambiguous accidental static target: the conventional terminal `new` route. Static row links
+ * to overview/help pages remain legal, while `recipes/new` can never identify the clicked recipe.
+ */
+function checkRowActionTarget(section: Record<string, unknown>, path: string, fields: Set<string> | undefined, ctx: WalkCtx): void {
+  if (!fields?.has('id')) return;
+  const action = section['rowAction'];
+  if (!action || typeof action !== 'object' || Array.isArray(action)) return;
+  const route = (action as Record<string, unknown>)['navigate'];
+  if (typeof route !== 'string' || /\[[A-Za-z][A-Za-z0-9]*\]/.test(route) || !/(?:^|\/)new$/.test(route)) return;
+  ctx.errors.push(rowActionToNew(childPath(path, 'rowAction.navigate'), route));
+}
+
 function checkFormDerives(
   section: Record<string, unknown>,
   ep: ViewEndpoint | undefined,
@@ -1279,6 +1310,7 @@ function walkSpec(
     }
 
     if (String(rec['kind']) === 'create') {
+      checkCreateMutationKind(scope.ep, path, ctx);
       checkFormDerives(rec, scope.ep, path, ctx);
       const prefill = rec['prefill'] as Record<string, unknown> | undefined;
       if (prefill && typeof prefill['endpoint'] === 'string') {
@@ -1291,6 +1323,8 @@ function walkSpec(
         ctx.resultFields = scope.ep?.outputFields ? new Set(scope.ep.outputFields) : undefined;
       }
     }
+
+    if (String(rec['kind']) === 'list') checkRowActionTarget(rec, path, scope.fields, ctx);
 
     for (const [k, v] of Object.entries(rec)) {
       if (k === 'kind' || k === 'id' || k === 'query' || k === 'mutation' || k === 'from') continue;
