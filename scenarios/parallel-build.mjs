@@ -19,6 +19,7 @@ import { mkdtempSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { Pod } from './harness/lib/pod.mjs';
 import { ThingSession } from './harness/lib/thing.mjs';
+import { appSmoke } from './harness/lib/app-smoke.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ORG = resolve(HERE, '..');
@@ -199,7 +200,7 @@ async function execute(job, slot) {
   run.base = `http://localhost:${run.port}`;
   writeFileSync(join(run.dir, 'run.json'), JSON.stringify({ runId: run.id, idea: run.idea, slot: slot.id, model: slot.model, port: run.port, createdAt: new Date().toISOString() }, null, 2));
   updateLatest(run.id);
-  let turn, turnError = null;
+  let turn, turnError = null, smoke = null;
   try {
     startServer(run); await waitUp(run.base);
     const pod = new Pod({ base: run.base });
@@ -216,6 +217,13 @@ async function execute(job, slot) {
         setTimeout(() => reject(new Error(`RUN-TIMEOUT after ${Math.round(RUN_TIMEOUT_MS / 60000)}m — lane hung`)), RUN_TIMEOUT_MS),
       ),
     ]);
+    // Does the app WORK? Every other gate in the pipeline is static or in-process — nothing requests
+    // an endpoint over HTTP and nothing looks at a painted page. Runs here, before `stop(run)`, while
+    // the server is still up. Its own failure must never masquerade as a build failure, hence the
+    // separate catch.
+    try {
+      smoke = await appSmoke({ base: run.base, projectId, projectRoot: join(run.dataDir, '.lmthing', projectId), interact: false, sdkRoot: ORG });
+    } catch (e) { smoke = { ok: null, unavailable: true, reason: `app smoke failed to run: ${e instanceof Error ? e.message : String(e)}`, findings: [] }; }
   } catch (e) { turnError = String(e?.stack ?? e); }
   finally { stop(run); }
   const log = existsSync(run.logFile) ? readFileSync(run.logFile, 'utf8') : '';
@@ -226,15 +234,22 @@ async function execute(job, slot) {
     // run can double its raw errors while improving. (Zero remains the bar; the rate is for trend.)
     logLines: log.split('\n').length,
     errorsPerKLine: Math.round((errorLineCount(log) * 1000) / Math.max(1, log.split('\n').length) * 10) / 10,
+    appSmoke: smoke,
     pass: false };
-  result.pass = !result.void && !result.repairInvoked && !turnError && result.errorLines === 0;
+  // A clean [error] count is not a working app: the build that shipped a 500 on its main page, a list
+  // rendering one blank row over two records, and an edit form that could never populate scored 84
+  // errors and passed every static gate. `pass` therefore requires the app to have been LOOKED at and
+  // found working. `smoke.ok === null` is UNMEASURED (no browser, no app on disk) — it does not pass,
+  // and it is not counted as a failure either; it is reported as what it is.
+  result.pass = !result.void && !result.repairInvoked && !turnError && result.errorLines === 0 && smoke?.ok === true;
   writeFileSync(join(run.dir, 'result.json'), JSON.stringify(result, null, 2));
   return result;
 }
 function table(results) {
-  console.log('\nrun  slot                    errors   err/1k  repair  result  idea');
-  console.log('---  ----------------------  ------  -------  ------  ------  ----');
-  for (const r of results) console.log(`${String(r.runId).padEnd(3)}  ${r.slot.padEnd(22)}  ${String(r.errorLines).padStart(6)}  ${String(r.errorsPerKLine).padStart(7)}  ${String(r.repairInvoked).padEnd(6)}  ${(r.void ? 'VOID' : r.pass ? 'PASS' : 'FAIL').padEnd(6)}  ${r.idea}`);
+  console.log('\nrun  slot                    errors   err/1k  repair  app     result  idea');
+  console.log('---  ----------------------  ------  -------  ------  ------  ------  ----');
+  const appCol = (r) => (r.appSmoke?.ok === true ? 'works' : r.appSmoke?.ok === false ? 'BROKEN' : '?');
+  for (const r of results) console.log(`${String(r.runId).padEnd(3)}  ${r.slot.padEnd(22)}  ${String(r.errorLines).padStart(6)}  ${String(r.errorsPerKLine).padStart(7)}  ${String(r.repairInvoked).padEnd(6)}  ${appCol(r).padEnd(6)}  ${(r.void ? 'VOID' : r.pass ? 'PASS' : 'FAIL').padEnd(6)}  ${r.idea}`);
   for (const r of results) {
     console.log(`\n[run ${r.runId}] ${r.void ? 'VOID (not a result)' : r.pass ? 'PASS' : 'FAIL'}`);
     if (r.census.length) console.log(censusText(r.census)); else console.log('0  [error] lines');
