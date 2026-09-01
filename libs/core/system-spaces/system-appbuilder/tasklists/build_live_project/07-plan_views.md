@@ -43,6 +43,26 @@ kind and no escape hatch:**
 
 Section ORDER is what the user sees, top to bottom. Put the thing the page exists for FIRST.
 
+## Every entity must be ADDABLE, EDITABLE and DELETABLE from the UI
+
+`05-plan_endpoints.md` guarantees create/update/delete endpoints exist for every table behind a list or
+detail page. An endpoint no page reaches is dead: plan the section that reaches it. A read-only app is a
+FAILED app, and `08-validate_contract.ts` rejects one.
+
+Three patterns. Note WHERE each belongs — the properties are per-kind, not universal:
+
+- **add** — a `create` section bound to the POST endpoint. On the list page, or on a page of its own.
+- **edit** — a `create` section bound to the PATCH/PUT endpoint, plus `prefill` (load the current
+  values) and `input: { id: '$route.id' }` (which record). Same `create` kind: a form bound to a
+  mutation is a form whether it inserts or updates.
+- **delete** — from a LIST row, a `rowActions` entry with `confirm`. From a DETAIL page, a
+  `detail.actions` entry with `confirm` plus `onSuccess: { navigate: '<the list route>' }` — the record
+  is gone, so the page it was showing must not remain.
+
+**`rowAction`/`rowActions` are LIST properties.** They do not exist on `detail` (the typecheck says so:
+`Property 'rowActions' does not exist on type 'DetailSection'`). A detail page's actions live under
+`detail.actions`. Putting a row action on a detail section is the single most common way this goes wrong.
+
 **One section reads ONE endpoint, and that endpoint must carry every value the section shows.** For
 each section list `bindings` — the exact fields it will read, as `$.<field>` paths — and check each
 one against that endpoint's `fields` in `plan_endpoints.endpoints`. A binding with no matching field
