@@ -182,14 +182,11 @@ describe('iterate_live_project — tasklist shape', () => {
     }
   });
 
-  it('implement_endpoints declares LOCAL Input/Output interfaces, never the ambient <Name>Input/<Name>Output globals', () => {
-    // Those globals only exist when emit_types ran as part of a fresh build_live_project plan — this
-    // tasklist never runs emit_types, so referencing the ambient name is `Cannot find name`, not a
-    // convenience.
+  it('implement_endpoints updates every endpoint through declarative query IR', () => {
     const src = readFileSync(join(ITERATE_DIR, '03-implement_endpoints.md'), 'utf8');
-    expect(src).toMatch(/interface Input/);
-    expect(src).toMatch(/interface Output/);
-    expect(src).toMatch(/never an ambient/i);
+    expect(src).toMatch(/writeProjectQuery/);
+    expect(src).toMatch(/generated handler/);
+    expect(src).toMatch(/never write or edit a handler module/i);
   });
 
   it('plan_change CONVERGES before naming anything new — reads the real project state first', () => {

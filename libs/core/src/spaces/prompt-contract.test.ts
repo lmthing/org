@@ -479,13 +479,13 @@ describe('system-appbuilder live-project build action', () => {
     // implement_tables forwards the plan's schema + rows through writeProjectTable.
     expect(read('10-implement_tables.md')).toMatch(/writeProjectTable\(/);
     expect(read('10-implement_tables.md')).toMatch(/forEach: plan_tables\.tables/);
-    expect(read('12-implement_endpoints.md')).toMatch(/writeProjectApi\(/);
+    expect(read('12-implement_endpoints.md')).toMatch(/writeProjectQuery\(/);
     // Endpoint name is the single source of truth: plan_endpoints ASSIGNS a unique `name`,
-    // implement_endpoints uses `item.name` VERBATIM (never re-derives from the route), and pages
-    // reference that exact name — the fix for the cross-node name-drift + duplicate-name failures.
+    // implement_endpoints passes `ep.name` directly to the query writer, and pages reference that
+    // exact name — the fix for cross-node name drift and duplicate names.
     expect(read('05-plan_endpoints.md')).toMatch(/UNIQUE lowercase-hyphen id/);
-    expect(read('12-implement_endpoints.md')).toMatch(/const name = ep\.name;/);
-    expect(read('12-implement_endpoints.md')).toMatch(/VERBATIM/);
+    expect(read('12-implement_endpoints.md')).toMatch(/writeProjectQuery\(ep\.name, query\)/);
+    expect(read('12-implement_endpoints.md')).toMatch(/Every endpoint uses/);
     expect(read('07-plan_views.md')).toMatch(/plan_endpoints\.endpoints\[\]\.name/);
 
     // Reusable components are their own plan → implement pair.
@@ -507,11 +507,11 @@ describe('system-appbuilder live-project build action', () => {
     // else — no expression can be written that could dereference a null in the first place.
     expect(pages).toMatch(/No `\?:`, no `\+`, no `\$\{…\}`/);
 
-    // The ONE node that still emits real TypeScript keeps its ✅do/❌never examples, grounded in real
-    // generated-code failures — the NO-DOM `console` trap being the recurring one.
-    expect(read('12-implement_endpoints.md')).toMatch(/console/);
-    expect(read('12-implement_endpoints.md')).toMatch(/NO-DOM ambient/);
-    expect(read('12-implement_endpoints.md')).toMatch(/❌/);
+    // Endpoints are generated query IR, not a remaining TypeScript authoring node. The endpoint
+    // instruction must preserve the query-only boundary and parent/child declarative forms.
+    expect(read('12-implement_endpoints.md')).toMatch(/Never write a TypeScript handler/);
+    expect(read('12-implement_endpoints.md')).toMatch(/writeProjectQuery/);
+    expect(read('12-implement_endpoints.md')).toMatch(/ingredientCount/);
 
     // IDs are system-generated: plan_tables tells the model to OMIT the id, and reach for the `uuid()`
     // space function only to wire a relation. (The store also regenerates a blank generated PK.)
@@ -520,11 +520,12 @@ describe('system-appbuilder live-project build action', () => {
     expect(read('04-plan_tables.md')).toMatch(/^\s*-\s*uuid\s*$/m); // the node scopes the uuid function
 
     // The endpoint response SHAPE is a single source of truth: plan_endpoints declares each endpoint's
-    // `fields`, implement_endpoints emits exactly those keys, implement_pages reads exactly those keys
-    // (verbatim, never re-cased) — the fix for the endpoint↔page field-name mismatch that crashed pages.
+    // `fields`, implement_endpoints explicitly reconciles that binding contract with the query IR,
+    // and pages read those planned keys verbatim.
     expect(read('05-plan_endpoints.md')).toMatch(/`fields`/);
     expect(read('05-plan_endpoints.md')).toMatch(/EXACT keys of ONE item/);
     expect(read('12-implement_endpoints.md')).toMatch(/item\.fields/);
+    expect(read('12-implement_endpoints.md')).toMatch(/reconcile it with the query output/);
     expect(read('15-implement_views.md')).toMatch(/plan_endpoints/);
     expect(read('15-implement_views.md')).toMatch(/verbatim/i);
 
@@ -657,7 +658,7 @@ describe('system-appbuilder repair turns', () => {
       'utf8',
     );
     // The actual write happens here, not a listing: an author turn must call the real writers.
-    expect(authorMissing).toMatch(/writeProjectApi\(route, src\)/);
+    expect(authorMissing).toMatch(/writeProjectQuery\(item\.name, query\)/);
     expect(authorMissing).toMatch(/writeProjectView\(item\.name, spec\)/);
   });
 });

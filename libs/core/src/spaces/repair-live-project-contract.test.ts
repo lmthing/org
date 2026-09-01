@@ -235,13 +235,10 @@ describe('repair_live_project — tasklist shape', () => {
     }
   });
 
-  it('author_missing declares LOCAL Input/Output interfaces, never the ambient <Name>Input/<Name>Output globals', () => {
-    // Those globals only exist when emit_types ran as part of a fresh build_live_project plan — an
-    // endpoint authored here was never in that contract, so referencing the ambient name is
-    // `Cannot find name`, not a convenience.
+  it('author_missing authors every endpoint with declarative query IR', () => {
     const src = readFileSync(join(REPAIR_DIR, '03-author_missing.md'), 'utf8');
-    expect(src).toMatch(/interface Input/);
-    expect(src).toMatch(/interface Output/);
-    expect(src).toMatch(/do NOT reference an ambient/i);
+    expect(src).toMatch(/writeProjectQuery/);
+    expect(src).toMatch(/include/);
+    expect(src).toMatch(/never author a TypeScript endpoint/i);
   });
 });

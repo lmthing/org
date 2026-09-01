@@ -50,7 +50,7 @@ describe('system-appbuilder/automator — what must survive a skipped load', () 
   it('advertises every writer in the always-on body', () => {
     const src = instruct();
     for (const w of [
-      'writeProjectTable', 'writeProjectHook', 'writeProjectEvent', 'writeProjectApi',
+      'writeProjectTable', 'writeProjectQuery', 'writeProjectHook', 'writeProjectEvent',
       'writeProjectView', 'writeProjectViewComponent', 'writeProjectViewShell', 'writeProjectFunction',
     ]) {
       expect(src, `${w} must stay advertised in the body — you cannot decide to load detail about a writer you cannot see`).toMatch(new RegExp(`${w}\\(`));
