@@ -115,6 +115,32 @@ describe('apiHandlerTypingError — the handler boundary must be REAL, never `an
     expect(apiHandlerTypingError(src, { projectRoot })).toBeNull();
   });
 
+  // A live browser test of a BUILT app found this: the recipes list 500'd because the handler declared
+  // `handler(ctx: { db: ... })` — one parameter. The runtime calls `handler(input, ctx)`, so `ctx` bound
+  // to the request body and `ctx.db` was undefined. The gate had SAVED it: check 1 only asks whether
+  // parameter[0] is typed, and `ctx: { db: ... }` is a real type. Nothing checked the arity.
+  it('REJECTS a one-parameter handler that uses the ctx members (they live on the 2nd parameter)', () => {
+    const src =
+      "export const name = 'recipes-list';\n" +
+      'export type Output = RecipesListOutput;\n' +
+      'export async function handler(ctx: { db: { query: (t: string) => Promise<unknown[]> } }): Promise<Output> {\n' +
+      "  const rows = await ctx.db.query('recipes');\n" +
+      '  return { items: rows as never[] };\n' +
+      '}';
+    expect(apiHandlerTypingError(src, { projectRoot })).toMatch(/ONE parameter|SECOND parameter/);
+  });
+
+  it('ACCEPTS a one-parameter handler that does NOT touch the ctx members', () => {
+    const src =
+      "export const name = 'ping';\n" +
+      'export type Output = PingOutput;\n' +
+      'export default async function handler(input: Record<string, unknown>): Promise<Output> {\n' +
+      '  return { items: [] };\n' +
+      '}';
+    const err = apiHandlerTypingError(src, { projectRoot });
+    expect(err === null || !/ONE parameter/.test(err)).toBe(true);
+  });
+
   it('REJECTS a local `interface Output` behind `Promise<Output>` — it is not the global contract alias', () => {
     // This is materially different from `type Output = DashboardStatsOutput`: a local interface can
     // silently drift from what the page reads, so accepting it would re-open the response-shape hole.

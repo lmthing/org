@@ -271,6 +271,25 @@ export function apiHandlerTypingError(src: string, opts: { projectRoot?: string 
     }
   }
 
+  // 1b — a handler that USES the context must DECLARE it as the SECOND parameter. The runtime calls
+  //      `handler(input, ctx)`, so a lone `handler(ctx: {...})` binds the request body to `ctx` and
+  //      every `ctx.db.*` is `undefined` at runtime — a 500 on the first request, from an endpoint the
+  //      gate had accepted. Check 1 passes it because `ctx: { db: ... }` IS a real type; nothing looked
+  //      at the arity. Found by opening a built app in a browser, not by any log census.
+  if (inputParam && fn.parameters.length < 2) {
+    const soleName = inputParam.name.getText(sf);
+    const usesCtx = new RegExp(`\\b${soleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\.\\s*(db|apiCall|spawn)\\b`).test(src);
+    if (usesCtx) {
+      return REJ(
+        `the handler declares ONE parameter (\`${soleName}\`) but uses \`${soleName}.db\`/\`.apiCall\`/\`.spawn\` — ` +
+        'those live on the SECOND parameter. The runtime calls `handler(input, ctx)`, so a single parameter ' +
+        `receives the REQUEST BODY, and \`${soleName}.db\` is \`undefined\` at runtime (a 500 on the first ` +
+        'request). Declare both: `export default async function handler(input: Input, ctx: ApiCtx): ' +
+        'Promise<Output>` — read request fields off `input`, reach the database through `ctx.db`.',
+      );
+    }
+  }
+
   // 2 — the return must never be `any` / `Promise<any>`, the vacuous shape that satisfies every Output
   //     type and lets a divergent response compile clean.
   if (ret && isAnyReturn(ret)) {
