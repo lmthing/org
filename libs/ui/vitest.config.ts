@@ -14,6 +14,17 @@ export default defineConfig({
   esbuild: { jsx: 'automatic', jsxImportSource: 'react' },
   test: {
     environment: 'jsdom',
+    // INLINE jest-dom, or the whole suite dies before its first assertion. `sdk/org/libs/*` is claimed
+    // by BOTH pnpm workspaces, and the repo root overrides `vitest` to `@voidzero-dev/vite-plus-test`
+    // (a v4 fork). Whichever install ran last owns `libs/ui/node_modules`, and when it is the root one,
+    // jest-dom's `import { expect } from 'vitest'` resolves to v4 — whose `setState` defines `testPath`
+    // with `Object.defineProperties` (getter-only). Vitest 1.6's runner then calls its own `setState`,
+    // an `Object.assign`, and throws in `onBeforeTryTask` — before EVERY test body, which is why even
+    // pure-node files that never import jest-dom fail. Inlining makes vite-node transform it, so the
+    // import resolves through Vite from this root to vitest@1.6.1. A `resolve.alias` does NOT work:
+    // externalised modules bypass Vite aliases. `pnpm install` here also fixes it, but only until the
+    // next root install re-links it. See sdk/org/CLAUDE.md on the two-workspace trap.
+    server: { deps: { inline: [/@testing-library\/jest-dom/] } },
     include: [
       'src/elements/primitives/**/*.test.tsx',
       'src/elements/overlays/**/*.test.tsx',
