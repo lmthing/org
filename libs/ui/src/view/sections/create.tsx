@@ -89,9 +89,13 @@ export function CreateSectionView({ section, scope }: { section: CreateSection; 
       : (prefillQuery.data as unknown)
     // Every endpoint returns the `{ items: T[] }` envelope, and the record's fields live at
     // `items[0]` — the same unwrap a `detail` section does. Field-name matching against the raw
-    // envelope finds only `items`, so a prefill would silently seed NOTHING, and no binding can
-    // express the index (PATH is dot-segments only, no `[0]`). Unwrap a single-record envelope
-    // here so `prefill` works against an ordinary endpoint.
+    // envelope finds only `items`, so a prefill with no `from` silently seeds NOTHING.
+    //
+    // (An earlier version of this comment claimed no binding could reach the index. That was WRONG:
+    // `$.items[0]` both validates and resolves — `bind.ts` reads `[n]` segments. So an explicit
+    // `prefill.from: '$.items[0]'` is a legitimate alternative. This unwrap exists so the COMMON
+    // case works without every spec having to spell the index out, not because the index is
+    // unreachable.)
     const incoming = unwrapRecord(resolved)
     if (incoming && typeof incoming === 'object') {
       setValues((prev) => mergeFillEmpty(prev, incoming, fields))

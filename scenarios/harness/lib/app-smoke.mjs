@@ -104,17 +104,34 @@ const hasParam = (s) => /\[[A-Za-z0-9_]+\]|:[A-Za-z0-9_]+/.test(String(s));
  * Request every parameter-free read endpoint over HTTP.
  *
  * A non-2xx is a finding, full stop: an endpoint the app's own page calls on mount, answering 500,
- * is a broken app no matter how clean its spec is. Parameterised endpoints are SKIPPED rather than
- * guessed at — an unmeasured endpoint is reported as such, never counted as passing.
+ * is a broken app no matter how clean its spec is.
+ *
+ * Parameter-free GETs run first so their rows can supply real ids for the parameterised ones, which
+ * are then probed too. A parameterised endpoint with no honest id available is reported UNMEASURED —
+ * never guessed at with `/recipes/undefined`, which would invent a failure, and never counted as a
+ * pass, which would hide one.
  */
 export async function probeEndpoints({ base, projectId, endpoints, timeoutMs = 15000 }) {
   const findings = [];
   const responses = {};
   let measured = 0, skipped = 0;
-  for (const ep of endpoints) {
+  // Parameter-free GETs first, so their rows can supply ids for the parameterised ones. Without this
+  // second pass the gate skipped 10 of 12 endpoints and would have MISSED the very defect that
+  // motivated it: `recipes-detail` answering 400 on mount was caught only because that endpoint had
+  // been written at a flat route, hence accidentally parameter-free. A correctly dynamic detail
+  // endpoint — the majority — went unprobed.
+  const ordered = [...endpoints].sort((a, b) => Number(hasParam(a.routePath)) - Number(hasParam(b.routePath)));
+  for (const ep of ordered) {
     if (ep.method !== 'GET') { skipped++; continue; }
-    if (hasParam(ep.routePath)) { skipped++; continue; }
-    const url = `${base}/app/${projectId}/api/${ep.routePath}`;
+    let routePath = ep.routePath;
+    if (hasParam(routePath)) {
+      const filled = fillRouteParams(routePath, responses);
+      // No real id to use is UNMEASURED, not a pass: probing `/recipes/undefined` would invent a
+      // failure, and probing nothing at all must not read as success.
+      if (!filled) { skipped++; continue; }
+      routePath = filled;
+    }
+    const url = `${base}/app/${projectId}/api/${routePath}`;
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
       measured++;
@@ -166,6 +183,36 @@ export function wrapperEnvelopeFinding(name, body) {
     message: `${name} returned its collection WRAPPED as one item — items[0].${keys[0]} holds ${inner.length} records. `
       + `A list section iterates \`items\`, so it sees ONE element and renders ONE blank row over ${inner.length} real records. `
       + `Return one item PER RECORD: { items: [ {...}, {...} ] }.` };
+}
+
+/**
+ * Substitute a real id into an endpoint's `[param]` segments, using rows an earlier probe returned.
+ *
+ * Scoped exactly like `paramsForRoute`: the id comes only from a response whose endpoint name shares
+ * the route's own collection segment, never a global pool. Returns null when no honest id exists, so
+ * the caller reports the endpoint UNMEASURED rather than probing a made-up value.
+ */
+export function fillRouteParams(routePath, responses) {
+  const segs = String(routePath).split('/');
+  const out = [];
+  for (let i = 0; i < segs.length; i++) {
+    const seg = segs[i];
+    const m = /^\[([A-Za-z0-9_]+)\]$/.exec(seg);
+    if (!m) { out.push(seg); continue; }
+    const collection = (segs[i - 1] ?? '').toLowerCase();
+    if (!collection) return null;
+    let id = null;
+    for (const [name, body] of Object.entries(responses)) {
+      if (!name.toLowerCase().includes(collection)) continue;
+      const items = Array.isArray(body?.items) ? body.items : null;
+      const first = items && items.length ? items[0] : null;
+      const v = first && typeof first === 'object' ? first.id ?? first.uuid ?? first.slug : null;
+      if (v !== undefined && v !== null && v !== '') { id = String(v); break; }
+    }
+    if (!id) return null;
+    out.push(encodeURIComponent(id));
+  }
+  return out.join('/');
 }
 
 /**
