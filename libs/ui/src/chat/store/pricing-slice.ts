@@ -3,7 +3,7 @@
 // math used by both the session slice (feedLive) and the WS client
 // (trace_snapshot rebuild).
 
-import type { TraceEvent } from '@lmthing/core';
+import type { TraceEvent } from './trace-protocol';
 import type { WireEvent } from './model';
 import type { AppState, ModelPricing } from './types';
 

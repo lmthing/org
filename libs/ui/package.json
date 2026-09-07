@@ -61,7 +61,6 @@
   },
   "dependencies": {
     "@lmthing/auth": "workspace:*",
-    "@lmthing/core": "workspace:*",
     "@lmthing/css": "workspace:*",
     "@tamagui/animations-css": "2.5.1",
     "@tamagui/animations-react-native": "2.5.1",

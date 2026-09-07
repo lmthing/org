@@ -1,6 +1,6 @@
 import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { isRenderableType, parseDescriptorPayload } from '@lmthing/core/ui';
+import { isRenderableType, parseDescriptorPayload } from './descriptor-protocol';
 import { Markdown } from '../../elements/content/markdown';
 import { CodeBlock } from '../../elements/content/code-block';
 import { preview } from '../app/common';

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useStore } from './store';
 import type { WireEvent } from './model';
-import type { TraceEvent } from '@lmthing/core';
+import type { TraceEvent } from './trace-protocol';
 
 let seq = 0;
 const wire = (event: TraceEvent): WireEvent => ({ seq: ++seq, event });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildModel, parentNodeIds, type WireEvent } from './model';
-import type { TraceEvent } from '@lmthing/core';
+import type { TraceEvent } from './trace-protocol';
 
 let seq = 0;
 const ev = (event: TraceEvent): WireEvent => ({ seq: ++seq, event });

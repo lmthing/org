@@ -1,6 +1,6 @@
 import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { isFormDescriptor } from '@lmthing/core/ui';
+import { isFormDescriptor } from './forms/form-protocol';
 import { ConsentCard, isConsentDescriptor, consentPropsFromDescriptor } from './ConsentCard';
 import { CatalogForm } from './forms/CatalogForm';
 

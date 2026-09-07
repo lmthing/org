@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildModel, type WireEvent } from '../store/model';
-import type { TraceEvent } from '@lmthing/core';
+import type { TraceEvent } from '../store/trace-protocol';
 import {
   narrationOf,
   latestSubtreeStatement,

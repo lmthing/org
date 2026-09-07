@@ -10,7 +10,7 @@ import { buildModel, parentNodeIds, type WireEvent } from './model';
 import { computeTotalCostFromEvents, inflightTurns } from './pricing-slice';
 import type { AppState, InspectorTab } from './types';
 import type { StoreApi } from 'zustand';
-import type { TraceEvent } from '@lmthing/core';
+import type { TraceEvent } from './trace-protocol';
 
 export interface UiControl {
   select?: string;

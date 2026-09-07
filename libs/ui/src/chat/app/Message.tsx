@@ -1,9 +1,9 @@
 import * as Prim from '../../elements/primitives/index';
 import React from 'react';
-import { isFormDescriptor } from '@lmthing/core/ui';
+import { isFormDescriptor } from '../components/forms/form-protocol';
 import { useStore } from '../store/store';
 import type { ConvoBlock } from '../store/model';
-import type { TraceAttachment } from '@lmthing/core';
+import type { TraceAttachment } from '../store/trace-protocol';
 import { preview } from './common';
 import { CatalogForm } from '../components/forms/CatalogForm';
 import { ConsentCard, isConsentDescriptor, consentPropsFromDescriptor } from '../components/ConsentCard';

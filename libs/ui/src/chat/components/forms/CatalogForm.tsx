@@ -7,8 +7,8 @@
  */
 import * as Prim from '../../../elements/primitives/index';
 import React from 'react';
-import { flattenForm, coerceValue, defaultFor } from '@lmthing/core/ui';
-import type { FieldSpec } from '@lmthing/core/ui';
+import { flattenForm, coerceValue, defaultFor } from './form-protocol';
+import type { FieldSpec } from './form-protocol';
 
 // `font: 'inherit'` used to sit here. It is REDUNDANT: preflight already declares
 // `button, input, select, optgroup, textarea, ::file-selector-button { font: inherit }`

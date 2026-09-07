@@ -1,4 +1,4 @@
-import type { TraceEvent, TraceAttachment } from '@lmthing/core';
+import type { TraceEvent, TraceAttachment } from './trace-protocol';
 
 /** A user attachment as returned by POST /api/uploads and held by the composer
  *  until send. Superset of {@link TraceAttachment} with the server-side `id` the
